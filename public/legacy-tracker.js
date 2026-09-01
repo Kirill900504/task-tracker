@@ -1400,6 +1400,24 @@
       });
     }
 
+    var telegramLinkBtn = document.getElementById("telegramLinkBtn");
+    if(telegramLinkBtn){
+      telegramLinkBtn.addEventListener("click", function(){
+        fetch("/api/telegram/link-code", { method: "POST" })
+          .then(function(r){ return r.json(); })
+          .then(function(data){
+            if(data.error){ alert("Не получилось: " + data.error); return; }
+            var bot = data.botUsername ? "@" + data.botUsername : "боту";
+            alert(
+              "Откройте в Telegram " + bot + " и отправьте:\n\n" +
+              "/start " + data.code + "\n\n" +
+              "Код действует 15 минут."
+            );
+          })
+          .catch(function(e){ alert("Не получилось: " + e); });
+      });
+    }
+
     var results;
     try{
       results = await Promise.all([
@@ -1450,6 +1468,90 @@
     setInterval(checkDueTasks, 60000);
     setInterval(checkMeetingReminders, 60000);
   }
+
+  // ---------- Bridge for the quick-add bar (separate React component) ----------
+  // Reuses the exact same fields/status defaults and save/render calls as the
+  // manual "+ Новая задача"/"+" forms, so quick-added items behave identically.
+  window.trackerAPI = {
+    getAssignees: function(){ return assignees.slice(); },
+    // Opens the real "new task" modal pre-filled with Claude's guess, so the
+    // user reviews/fixes fields in the exact same UI as manual entry, then
+    // saves or cancels with the modal's own buttons.
+    prefillNewTask: function(f){
+      resetForm();
+      refreshSelectsGlobal();
+      document.getElementById("fTitle").value = f.title || "";
+      document.getElementById("fDesc").value = f.description || "";
+      if (f.assignee) document.getElementById("fAssignee").value = f.assignee;
+      document.getElementById("fPriority").value = f.priority === "high" ? "high" : "med";
+      document.getElementById("fTerm").value = f.term === "long" ? "long" : "short";
+      document.getElementById("fDeadline").value = f.deadline || "";
+      overlay.classList.add("open");
+    },
+    prefillNewMeeting: function(f){
+      openMeetingModal(null, f.date || todayStr());
+      document.getElementById("mTitle").value = f.title || "";
+      if (f.time) document.getElementById("mTime").value = f.time;
+      var wanted = sanitizeAssigneeList(f.participants || []);
+      Array.prototype.forEach.call(document.querySelectorAll("#mParticipants input"), function(cb){
+        cb.checked = wanted.indexOf(cb.value) !== -1;
+      });
+      updateParticipantsTriggerLabel();
+    },
+    createTask: function(f){
+      var task = {
+        id: uid(),
+        title: f.title,
+        desc: f.description || "",
+        assignee: f.assignee || "",
+        priority: f.priority === "high" ? "high" : "med",
+        term: f.term === "long" ? "long" : "short",
+        status: "in_progress",
+        deadline: f.deadline || "",
+        recur: "none",
+        recurWeekday: "1",
+        recurMonthday: "",
+        recurYearDay: "",
+        recurYearMonth: "1",
+        lastCompletedOn: ""
+      };
+      tasks.push(task);
+      persistAll();
+      render();
+      return task;
+    },
+    createMeeting: function(f){
+      var meeting = {
+        id: uid(),
+        date: f.date,
+        time: f.time || "",
+        title: f.title,
+        participants: sanitizeAssigneeList(f.participants || []),
+        status: "planned",
+        result: "",
+        movedToDate: ""
+      };
+      meetings.push(meeting);
+      persistAll();
+      renderCalendar();
+      renderAllMeetings();
+      return meeting;
+    },
+    createIdea: function(f){
+      var d = new Date();
+      var idea = {
+        id: uid(),
+        text: f.text,
+        important: !!f.important,
+        done: false,
+        createdAt: pad(d.getDate()) + "." + pad(d.getMonth()+1) + "." + d.getFullYear() + " " + pad(d.getHours()) + ":" + pad(d.getMinutes())
+      };
+      ideas.push(idea);
+      persistAll();
+      renderIdeas();
+      return idea;
+    }
+  };
 
   boot();
 

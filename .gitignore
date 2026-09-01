@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+# public CA cert (not a secret) needed at runtime for GigaChat's TLS chain
+!certs/russian-trusted-root-ca.pem
 
 # debug
 npm-debug.log*
@@ -42,3 +44,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+.env*

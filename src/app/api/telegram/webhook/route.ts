@@ -1,0 +1,178 @@
+import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sendTelegramMessage } from "@/lib/telegram";
+import { parseQuickAdd } from "@/lib/quickAdd";
+
+function uid(): string {
+  return "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function fmtDate(iso: string): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+async function replyForResult(chatId: number, admin: ReturnType<typeof createAdminClient>, userId: string, tool: string, input: Record<string, unknown>) {
+  if (tool === "create_task") {
+    const row = {
+      id: uid(),
+      user_id: userId,
+      title: String(input.title || ""),
+      description: String(input.description || ""),
+      assignee: String(input.assignee || ""),
+      priority: input.priority === "high" ? "high" : "med",
+      term: input.term === "long" ? "long" : "short",
+      status: "in_progress",
+      deadline: input.deadline || null,
+      recur: "none",
+    };
+    const { error } = await admin.from("tasks").insert(row);
+    if (error) {
+      await sendTelegramMessage(chatId, "Не получилось сохранить задачу: " + error.message);
+      return;
+    }
+    const lines = [`✓ Задача: «${row.title}»`];
+    if (row.deadline) lines.push("Срок: " + fmtDate(row.deadline as string));
+    if (row.assignee) lines.push("Исполнитель: " + row.assignee);
+    if (row.priority === "high") lines.push("Приоритет: высокий");
+    await sendTelegramMessage(chatId, lines.join("\n"));
+    return;
+  }
+
+  if (tool === "create_meeting") {
+    const row = {
+      id: uid(),
+      user_id: userId,
+      date: String(input.date || ""),
+      time: String(input.time || ""),
+      title: String(input.title || ""),
+      participants: Array.isArray(input.participants) ? input.participants : [],
+      status: "planned",
+      result: "",
+    };
+    if (!row.date) {
+      await sendTelegramMessage(chatId, "Не понял дату встречи — уточните, пожалуйста.");
+      return;
+    }
+    const { error } = await admin.from("meetings").insert(row);
+    if (error) {
+      await sendTelegramMessage(chatId, "Не получилось сохранить встречу: " + error.message);
+      return;
+    }
+    const lines = [`✓ Встреча: «${row.title}»`, `${fmtDate(row.date)}${row.time ? ", " + row.time : ""}`];
+    if (row.participants.length) lines.push("Участники: " + row.participants.join(", "));
+    await sendTelegramMessage(chatId, lines.join("\n"));
+    return;
+  }
+
+  if (tool === "create_idea") {
+    const row = {
+      id: uid(),
+      user_id: userId,
+      text: String(input.text || ""),
+      important: !!input.important,
+      done: false,
+    };
+    const { error } = await admin.from("ideas").insert(row);
+    if (error) {
+      await sendTelegramMessage(chatId, "Не получилось сохранить идею: " + error.message);
+      return;
+    }
+    await sendTelegramMessage(chatId, `💡 Идея сохранена: «${row.text}»`);
+    return;
+  }
+
+  if (tool === "ask_clarifying_question") {
+    await sendTelegramMessage(chatId, String(input.question || "Уточните, пожалуйста."));
+    return;
+  }
+}
+
+export async function POST(req: Request) {
+  const secret = req.headers.get("x-telegram-bot-api-secret-token");
+  if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const update = await req.json().catch(() => null);
+  const message = update?.message;
+  const chatId: number | undefined = message?.chat?.id;
+  const text: string | undefined = message?.text;
+
+  // Always 200 — Telegram retries aggressively on non-2xx, and there's
+  // nothing useful to retry here (bad/irrelevant updates, missing text).
+  if (!chatId || typeof text !== "string" || !text.trim()) {
+    return NextResponse.json({ ok: true });
+  }
+
+  const admin = createAdminClient();
+
+  if (text.startsWith("/start")) {
+    const code = text.replace("/start", "").trim();
+    if (!code) {
+      await sendTelegramMessage(chatId, "Откройте трекер на сайте и нажмите «Подключить Telegram», чтобы получить код.");
+      return NextResponse.json({ ok: true });
+    }
+    const { data: linkRow, error: lookupError } = await admin
+      .from("telegram_link_codes")
+      .select("user_id, expires_at")
+      .eq("code", code)
+      .maybeSingle();
+
+    if (lookupError) {
+      await sendTelegramMessage(chatId, "Внутренняя ошибка базы: " + lookupError.message);
+      return NextResponse.json({ ok: true });
+    }
+    if (!linkRow || new Date(linkRow.expires_at).getTime() < Date.now()) {
+      await sendTelegramMessage(chatId, "Код неверный или уже истёк. Запросите новый в приложении.");
+      return NextResponse.json({ ok: true });
+    }
+
+    const { error: upsertError } = await admin
+      .from("telegram_accounts")
+      .upsert({ telegram_chat_id: chatId, user_id: linkRow.user_id });
+    if (upsertError) {
+      await sendTelegramMessage(chatId, "Не удалось привязать аккаунт: " + upsertError.message);
+      return NextResponse.json({ ok: true });
+    }
+    await admin.from("telegram_link_codes").delete().eq("code", code);
+    await sendTelegramMessage(chatId, "✓ Готово, аккаунт привязан. Теперь просто пишите сюда — например «завтра позвонить Сергею».");
+    return NextResponse.json({ ok: true });
+  }
+
+  const { data: account, error: accountError } = await admin
+    .from("telegram_accounts")
+    .select("user_id, pending_context")
+    .eq("telegram_chat_id", chatId)
+    .maybeSingle();
+
+  if (accountError) {
+    await sendTelegramMessage(chatId, "Внутренняя ошибка базы: " + accountError.message);
+    return NextResponse.json({ ok: true });
+  }
+  if (!account) {
+    await sendTelegramMessage(chatId, "Этот чат ещё не привязан. Откройте трекер на сайте → «Подключить Telegram».");
+    return NextResponse.json({ ok: true });
+  }
+
+  const effectiveText = account.pending_context ? `${account.pending_context}. Уточнение: ${text.trim()}` : text.trim();
+  if (account.pending_context) {
+    await admin.from("telegram_accounts").update({ pending_context: null }).eq("telegram_chat_id", chatId);
+  }
+
+  const { data: assigneeRows } = await admin.from("assignees").select("name").eq("user_id", account.user_id);
+  const assignees = (assigneeRows || []).map((r) => r.name as string);
+
+  try {
+    const { tool, input } = await parseQuickAdd(effectiveText, assignees);
+    if (tool === "ask_clarifying_question") {
+      await admin.from("telegram_accounts").update({ pending_context: effectiveText }).eq("telegram_chat_id", chatId);
+    }
+    await replyForResult(chatId, admin, account.user_id, tool, input);
+  } catch (e) {
+    await sendTelegramMessage(chatId, "Не получилось разобрать сообщение: " + (e instanceof Error ? e.message : String(e)));
+  }
+
+  return NextResponse.json({ ok: true });
+}

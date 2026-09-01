@@ -28,6 +28,13 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isLoginPage = request.nextUrl.pathname.startsWith("/login");
+  // Telegram and the external cron pinger call these with their own
+  // secret-token checks, not a browser session — never gate them behind
+  // the login redirect.
+  const isServerToServerRoute =
+    request.nextUrl.pathname.startsWith("/api/telegram/webhook") ||
+    request.nextUrl.pathname.startsWith("/api/cron/");
+  if (isServerToServerRoute) return supabaseResponse;
 
   if (!user && !isLoginPage) {
     const url = request.nextUrl.clone();
