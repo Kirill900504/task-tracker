@@ -19,6 +19,7 @@ export const TRACKER_BODY_HTML = `
       <button class="btn active" id="ideasToggleBtn">💡 Идеи</button>
       <button class="btn active" id="calToggleBtn">📅 Календарь</button>
       <button class="btn" id="notifPermBtn">🔔 Включить уведомления</button>
+      <button class="btn" id="signOutBtn">Выйти</button>
     </div>
   </div>
 </header>

@@ -2,11 +2,10 @@
   "use strict";
 
   // ---------- Storage ----------
-  var LS_TASKS = "kkt_tasks_v2";
-  var LS_ASSIGNEES = "kkt_assignees_v2";
+  // Tasks/meetings/ideas/assignees live in Supabase (see the sync section
+  // below); LS_NOTIFIED stays in localStorage — it's just a per-device
+  // "already showed this notification" cache with no reason to sync.
   var LS_NOTIFIED = "kkt_notified_v2";
-  var LS_IDEAS = "kkt_ideas_v1";
-  var LS_MEETINGS = "kkt_meetings_v1";
 
   var DEFAULT_ASSIGNEES = [
     "Кирилл (я)",
@@ -32,29 +31,11 @@
     try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
   }
 
-  var tasks = load(LS_TASKS, null);
-  if(tasks === null){
-    var old = load("kkt_tasks_v1", []);
-    tasks = (Array.isArray(old) ? old : []).map(function(t){
-      return {
-        id: t.id,
-        title: t.title,
-        desc: t.desc || "",
-        assignee: t.assignee || "",
-        priority: t.priority === "low" ? "med" : t.priority,
-        term: t.term,
-        status: t.status === "done" ? "done" : "in_progress",
-        deadline: t.deadline || "",
-        recur: t.recur || "none",
-        recurWeekday: t.recurWeekday || "1",
-        recurMonthday: t.recurMonthday || "",
-        recurYearDay: t.recurYearDay || "",
-        recurYearMonth: t.recurYearMonth || "1",
-        lastCompletedOn: t.lastCompletedOn || ""
-      };
-    });
-  }
-  if(!Array.isArray(tasks)) tasks = [];
+  var tasks = [];
+  var meetings = [];
+  var ideas = [];
+  var assignees = [];
+  var notified = load(LS_NOTIFIED, {});
 
   function sanitizeAssigneeList(list){
     var out = [];
@@ -71,47 +52,154 @@
     return out;
   }
 
-  var rawAssignees = load(LS_ASSIGNEES, null);
-  var assignees;
-  if(rawAssignees === null){
-    var oldRaw = load("kkt_assignees_v1", DEFAULT_ASSIGNEES.slice());
-    assignees = sanitizeAssigneeList(oldRaw);
-  } else {
-    assignees = sanitizeAssigneeList(rawAssignees);
-  }
-  if(assignees.length === 0){
-    assignees = DEFAULT_ASSIGNEES.slice();
-  }
-  tasks.forEach(function(t){
-    if(t.assignee && typeof t.assignee === "string" && t.assignee.trim() && assignees.indexOf(t.assignee.trim()) === -1){
-      assignees.push(t.assignee.trim());
-    }
-  });
+  // ---------- Supabase sync ----------
+  // Every user action still mutates the in-memory tasks/meetings/ideas/assignees
+  // arrays exactly as before and calls persistAll(). Only persistAll() itself
+  // changed: instead of writing to localStorage, it diffs the current arrays
+  // against the last-synced snapshot ("shadow") and pushes just the changed
+  // rows to Supabase. Calls are chained on syncChain so they run in order.
+  var db = null;
+  var shadow = { tasks: [], meetings: [], ideas: [], assignees: [] };
+  var syncChain = Promise.resolve();
 
-  var notified = load(LS_NOTIFIED, {});
-  var ideas = load(LS_IDEAS, []);
-  if(!Array.isArray(ideas)) ideas = [];
-  ideas.forEach(function(i){
-    if(typeof i.important !== "boolean") i.important = false;
-    if(typeof i.done !== "boolean") i.done = false;
-  });
-  var meetings = load(LS_MEETINGS, []);
-  if(!Array.isArray(meetings)) meetings = [];
-  meetings.forEach(function(m){
-    m.participants = sanitizeAssigneeList(m.participants);
-    if(typeof m.status !== "string") m.status = "planned";
-    if(typeof m.result !== "string") m.result = "";
-    if(typeof m.movedToDate !== "string") m.movedToDate = "";
-  });
+  function taskToRow(t){
+    return {
+      id: t.id,
+      title: t.title,
+      description: t.desc || "",
+      assignee: t.assignee || "",
+      priority: t.priority,
+      term: t.term,
+      status: t.status,
+      deadline: t.deadline || null,
+      recur: t.recur || "none",
+      recur_weekday: (t.recurWeekday !== "" && t.recurWeekday != null) ? Number(t.recurWeekday) : null,
+      recur_monthday: (t.recurMonthday !== "" && t.recurMonthday != null) ? Number(t.recurMonthday) : null,
+      recur_year_day: (t.recurYearDay !== "" && t.recurYearDay != null) ? Number(t.recurYearDay) : null,
+      recur_year_month: (t.recurYearMonth !== "" && t.recurYearMonth != null) ? Number(t.recurYearMonth) : null,
+      last_completed_on: t.lastCompletedOn || null
+    };
+  }
+  function taskFromRow(r){
+    return {
+      id: r.id,
+      title: r.title,
+      desc: r.description || "",
+      assignee: r.assignee || "",
+      priority: r.priority,
+      term: r.term,
+      status: r.status,
+      deadline: r.deadline || "",
+      recur: r.recur || "none",
+      recurWeekday: r.recur_weekday != null ? String(r.recur_weekday) : "1",
+      recurMonthday: r.recur_monthday != null ? String(r.recur_monthday) : "",
+      recurYearDay: r.recur_year_day != null ? String(r.recur_year_day) : "",
+      recurYearMonth: r.recur_year_month != null ? String(r.recur_year_month) : "1",
+      lastCompletedOn: r.last_completed_on || ""
+    };
+  }
+
+  function meetingToRow(m){
+    return {
+      id: m.id,
+      date: m.date,
+      time: m.time || "",
+      title: m.title,
+      participants: sanitizeAssigneeList(m.participants),
+      status: m.status || "planned",
+      result: m.result || "",
+      moved_to_date: m.movedToDate || null
+    };
+  }
+  function meetingFromRow(r){
+    return {
+      id: r.id,
+      date: r.date,
+      time: r.time || "",
+      title: r.title,
+      participants: sanitizeAssigneeList(r.participants),
+      status: r.status || "planned",
+      result: r.result || "",
+      movedToDate: r.moved_to_date || ""
+    };
+  }
+
+  function ideaToRow(i){
+    return { id: i.id, text: i.text, important: !!i.important, done: !!i.done };
+  }
+  function formatIdeaCreatedAt(iso){
+    var d = new Date(iso);
+    return pad(d.getDate()) + "." + pad(d.getMonth()+1) + "." + d.getFullYear() + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function ideaFromRow(r){
+    return { id: r.id, text: r.text, important: !!r.important, done: !!r.done, createdAt: formatIdeaCreatedAt(r.created_at) };
+  }
+
+  function sameJson(a, b){ return JSON.stringify(a) === JSON.stringify(b); }
+
+  function diffAndSync(table, current, shadowList, toRow){
+    var byIdCurrent = {}; current.forEach(function(x){ byIdCurrent[x.id] = x; });
+    var byIdShadow = {}; shadowList.forEach(function(x){ byIdShadow[x.id] = x; });
+
+    var upserts = [];
+    current.forEach(function(x){
+      var prev = byIdShadow[x.id];
+      if(!prev || !sameJson(toRow(x), toRow(prev))) upserts.push(toRow(x));
+    });
+    var deletes = shadowList.filter(function(x){ return !byIdCurrent[x.id]; }).map(function(x){ return x.id; });
+
+    var chain = Promise.resolve();
+    if(upserts.length){
+      chain = chain.then(function(){ return db.from(table).upsert(upserts); })
+        .then(function(res){ if(res.error) throw res.error; });
+    }
+    if(deletes.length){
+      chain = chain.then(function(){ return db.from(table).delete().in("id", deletes); })
+        .then(function(res){ if(res.error) throw res.error; });
+    }
+    return chain;
+  }
+
+  function diffAndSyncAssignees(current, shadowList){
+    var added = current.filter(function(name){ return shadowList.indexOf(name) === -1; });
+    var removed = shadowList.filter(function(name){ return current.indexOf(name) === -1; });
+
+    var chain = Promise.resolve();
+    if(added.length){
+      chain = chain.then(function(){
+        return db.from("assignees").upsert(added.map(function(name){ return { name: name }; }), { onConflict: "user_id,name" });
+      }).then(function(res){ if(res.error) throw res.error; });
+    }
+    if(removed.length){
+      chain = chain.then(function(){ return db.from("assignees").delete().in("name", removed); })
+        .then(function(res){ if(res.error) throw res.error; });
+    }
+    return chain;
+  }
 
   function persistAll(){
-    save(LS_TASKS, tasks);
-    save(LS_ASSIGNEES, assignees);
     save(LS_NOTIFIED, notified);
-    save(LS_IDEAS, ideas);
-    save(LS_MEETINGS, meetings);
+    if(!db) return;
+
+    var tasksNow = tasks.slice();
+    var meetingsNow = meetings.slice();
+    var ideasNow = ideas.slice();
+    var assigneesNow = assignees.slice();
+
+    syncChain = syncChain
+      .then(function(){ return diffAndSync("tasks", tasksNow, shadow.tasks, taskToRow); })
+      .then(function(){ shadow.tasks = tasksNow; })
+      .then(function(){ return diffAndSync("meetings", meetingsNow, shadow.meetings, meetingToRow); })
+      .then(function(){ shadow.meetings = meetingsNow; })
+      .then(function(){ return diffAndSync("ideas", ideasNow, shadow.ideas, ideaToRow); })
+      .then(function(){ shadow.ideas = ideasNow; })
+      .then(function(){ return diffAndSyncAssignees(assigneesNow, shadow.assignees); })
+      .then(function(){ shadow.assignees = assigneesNow; })
+      .catch(function(err){
+        console.error("Supabase sync error:", err);
+        showToast("Не сохранилось в облако", (err && err.message) || "Проверьте интернет-соединение");
+      });
   }
-  persistAll();
 
   // ---------- Helpers ----------
   function uid(){ return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -1278,18 +1366,91 @@
   });
 
   // ---------- Init ----------
-  refreshSelectsGlobal();
-  refreshRecurringStatuses();
-  updateLayoutColumns();
-  renderIdeas();
-  renderCalendar();
-  renderAllMeetings();
-  render();
-  updateClock();
-  checkDueTasks();
-  checkMeetingReminders();
-  setInterval(updateClock, 30000);
-  setInterval(checkDueTasks, 60000);
-  setInterval(checkMeetingReminders, 60000);
+  // window.supabase is created by a React bootstrap component that runs
+  // independently of this script tag; poll briefly rather than assume
+  // load order between the two.
+  function waitForSupabaseClient(){
+    return new Promise(function(resolve){
+      (function poll(){
+        if(window.supabase) resolve(window.supabase);
+        else setTimeout(poll, 20);
+      })();
+    });
+  }
+
+  function showLoadError(message){
+    document.body.insertAdjacentHTML("afterbegin",
+      '<div style="padding:16px;background:#4A2E28;color:#E07A5F;font-family:sans-serif;">' +
+      'Не удалось загрузить данные из облака: ' + message + '. Обновите страницу или проверьте интернет.</div>');
+  }
+
+  async function boot(){
+    db = await waitForSupabaseClient();
+
+    var authRes = await db.auth.getSession();
+    if(!authRes.data.session){
+      window.location.href = "/login";
+      return;
+    }
+
+    var signOutBtn = document.getElementById("signOutBtn");
+    if(signOutBtn){
+      signOutBtn.addEventListener("click", function(){
+        db.auth.signOut().then(function(){ window.location.href = "/login"; });
+      });
+    }
+
+    var results;
+    try{
+      results = await Promise.all([
+        db.from("tasks").select("*"),
+        db.from("meetings").select("*"),
+        db.from("ideas").select("*").order("created_at", { ascending: true }),
+        db.from("assignees").select("*").order("created_at", { ascending: true })
+      ]);
+    }catch(e){
+      showLoadError(e && e.message || String(e));
+      return;
+    }
+    var failed = results.find(function(r){ return r.error; });
+    if(failed){
+      console.error("Supabase load error:", failed.error);
+      showLoadError(failed.error.message || "");
+      return;
+    }
+
+    tasks = results[0].data.map(taskFromRow);
+    meetings = results[1].data.map(meetingFromRow);
+    ideas = results[2].data.map(ideaFromRow);
+    assignees = sanitizeAssigneeList(results[3].data.map(function(r){ return r.name; }));
+
+    // Baseline "already in the database" snapshot — taken before any of the
+    // startup reconciliation below, so persistAll() only pushes what's new.
+    shadow = { tasks: tasks.slice(), meetings: meetings.slice(), ideas: ideas.slice(), assignees: assignees.slice() };
+
+    if(assignees.length === 0){
+      assignees = DEFAULT_ASSIGNEES.slice();
+    }
+    tasks.forEach(function(t){
+      if(t.assignee && assignees.indexOf(t.assignee) === -1) assignees.push(t.assignee);
+    });
+    persistAll();
+
+    refreshSelectsGlobal();
+    refreshRecurringStatuses();
+    updateLayoutColumns();
+    renderIdeas();
+    renderCalendar();
+    renderAllMeetings();
+    render();
+    updateClock();
+    checkDueTasks();
+    checkMeetingReminders();
+    setInterval(updateClock, 30000);
+    setInterval(checkDueTasks, 60000);
+    setInterval(checkMeetingReminders, 60000);
+  }
+
+  boot();
 
 })();

@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# personal data — never commit real business data
+/import-data
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
