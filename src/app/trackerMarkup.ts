@@ -1,6 +1,7 @@
 export const TRACKER_BODY_HTML = `
 
 <div id="toast-stack"></div>
+<div id="syncStatus"></div>
 <div class="people-tooltip" id="peopleTooltip"></div>
 
 <header>
@@ -19,6 +20,7 @@ export const TRACKER_BODY_HTML = `
       <button class="btn active" id="ideasToggleBtn">💡 Идеи</button>
       <button class="btn active" id="calToggleBtn">📅 Календарь</button>
       <button class="btn" id="notifPermBtn">🔔 Включить уведомления</button>
+      <button class="btn btn-primary" id="installAppBtn" style="display:none;">📥 Установить приложение</button>
       <button class="btn" id="telegramLinkBtn">🔗 Telegram</button>
       <button class="btn" id="signOutBtn">Выйти</button>
     </div>
@@ -57,6 +59,7 @@ export const TRACKER_BODY_HTML = `
   <!-- Center: tasks -->
   <div class="main-col" id="mainCol">
     <div class="notif-banner" id="notifBanner"></div>
+    <div class="notif-banner" id="syncErrorBanner" style="display:none;"></div>
 
     <div class="toolbar">
       <button class="btn btn-primary" id="newTaskBtn">+ Новая задача</button>

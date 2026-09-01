@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 function randomCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
@@ -16,6 +17,11 @@ export async function POST() {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  }
+
+  const { allowed } = await checkRateLimit(supabase, user.id, "telegram-link-code", 5, 600);
+  if (!allowed) {
+    return NextResponse.json({ error: "Слишком много попыток, подождите немного" }, { status: 429 });
   }
 
   const code = randomCode();

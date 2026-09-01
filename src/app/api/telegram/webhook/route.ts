@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { parseQuickAdd } from "@/lib/quickAdd";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 function uid(): string {
   return "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -153,6 +154,12 @@ export async function POST(req: Request) {
   }
   if (!account) {
     await sendTelegramMessage(chatId, "Этот чат ещё не привязан. Откройте трекер на сайте → «Подключить Telegram».");
+    return NextResponse.json({ ok: true });
+  }
+
+  const { allowed } = await checkRateLimit(admin, account.user_id, "telegram", 20, 60);
+  if (!allowed) {
+    await sendTelegramMessage(chatId, "Слишком много сообщений подряд, подождите минуту.");
     return NextResponse.json({ ok: true });
   }
 

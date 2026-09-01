@@ -6,10 +6,10 @@ import { gigaChatComplete } from "@/lib/gigachat/client";
 
 const WEEKDAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 
-function isoDate(d: Date): string {
+export function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-function addDays(now: Date, days: number): Date {
+export function addDays(now: Date, days: number): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
 }
 
@@ -17,7 +17,7 @@ function addDays(now: Date, days: number): Date {
 // a full calendar table in the prompt got ignored in testing. Handing over
 // each weekday's *already-resolved next date* (computed here in code, not
 // left for the model to work out) is what actually produced correct results.
-function nextWeekdayMap(now: Date): string {
+export function nextWeekdayMap(now: Date): string {
   const map = new Map<number, string>();
   for (let i = 0; i < 7; i++) {
     const d = addDays(now, i);
@@ -70,7 +70,7 @@ export const TOOL_BY_TYPE: Record<string, string> = {
 
 // Belt-and-suspenders: never trust the model to have actually honored the
 // "only names from the list" instruction — enforce it here regardless.
-function sanitizeAgainstKnown(input: Record<string, unknown>, known: string[]) {
+export function sanitizeAgainstKnown(input: Record<string, unknown>, known: string[]) {
   if (typeof input.assignee === "string" && !known.includes(input.assignee)) {
     input.assignee = "";
   }

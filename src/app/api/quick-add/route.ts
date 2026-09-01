@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { parseQuickAdd } from "@/lib/quickAdd";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -9,6 +10,11 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  }
+
+  const { allowed } = await checkRateLimit(supabase, user.id, "quick-add", 20, 60);
+  if (!allowed) {
+    return NextResponse.json({ error: "Слишком много запросов, подождите минуту" }, { status: 429 });
   }
 
   const body = await req.json().catch(() => null);

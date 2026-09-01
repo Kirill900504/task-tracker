@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTelegramMessage } from "@/lib/telegram";
+import { moscowNow, dateStr, minutesOfDay, isDueToday, isOverdue, type TaskRow } from "@/lib/taskLogic";
 
 // Called every few minutes by an external pinger (Vercel's own free cron is
 // once-a-day only, too coarse for "meeting in 15 minutes"). Checks every
@@ -8,31 +9,6 @@ import { sendTelegramMessage } from "@/lib/telegram";
 // mirrors checkDueTasks()/checkMeetingReminders() in legacy-tracker.js, but
 // server-side so it fires even when no browser tab is open.
 
-// Russia has used a single UTC+3 offset (no DST) since 2014 — shifting the
-// UTC timestamp and reading it back with the UTC getters gives Moscow local
-// wall-clock fields without needing a timezone library.
-function moscowNow(): Date {
-  return new Date(Date.now() + 3 * 60 * 60 * 1000);
-}
-function dateStr(d: Date): string {
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-}
-function minutesOfDay(d: Date): number {
-  return d.getUTCHours() * 60 + d.getUTCMinutes();
-}
-
-type TaskRow = {
-  id: string;
-  title: string;
-  assignee: string;
-  status: string;
-  deadline: string | null;
-  recur: string;
-  recur_weekday: number | null;
-  recur_monthday: number | null;
-  recur_year_day: number | null;
-  recur_year_month: number | null;
-};
 type MeetingRow = {
   id: string;
   title: string;
@@ -41,21 +17,6 @@ type MeetingRow = {
   participants: string[];
   status: string;
 };
-
-function isDueToday(t: TaskRow, now: Date, today: string): boolean {
-  if (t.recur === "none") return t.deadline === today;
-  if (t.recur === "daily") return true;
-  if (t.recur === "weekly") return now.getUTCDay() === t.recur_weekday;
-  if (t.recur === "monthly") return now.getUTCDate() === t.recur_monthday;
-  if (t.recur === "yearly") return now.getUTCDate() === t.recur_year_day && now.getUTCMonth() + 1 === t.recur_year_month;
-  return false;
-}
-function isOverdue(t: TaskRow, today: string): boolean {
-  if (t.status === "done") return false;
-  if (t.recur !== "none") return false;
-  if (!t.deadline) return false;
-  return t.deadline < today;
-}
 
 export async function GET(req: Request) {
   const url = new URL(req.url);

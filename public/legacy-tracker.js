@@ -1,6 +1,32 @@
 ﻿(function(){
   "use strict";
 
+  // ---------- Install prompt (PWA) ----------
+  // Registered at top level, before boot()'s async data load, so we don't
+  // miss the event if Chrome fires it early. installAppBtn is part of the
+  // static markup, already in the DOM by the time this script runs.
+  var deferredInstallPrompt = null;
+  var installAppBtn = document.getElementById("installAppBtn");
+  window.addEventListener("beforeinstallprompt", function(e){
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if(installAppBtn) installAppBtn.style.display = "inline-block";
+  });
+  window.addEventListener("appinstalled", function(){
+    if(installAppBtn) installAppBtn.style.display = "none";
+    deferredInstallPrompt = null;
+  });
+  if(installAppBtn){
+    installAppBtn.addEventListener("click", function(){
+      if(!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.then(function(){
+        deferredInstallPrompt = null;
+        installAppBtn.style.display = "none";
+      });
+    });
+  }
+
   // ---------- Storage ----------
   // Tasks/meetings/ideas/assignees live in Supabase (see the sync section
   // below); LS_NOTIFIED stays in localStorage — it's just a per-device
@@ -177,6 +203,19 @@
     return chain;
   }
 
+  var syncPendingCount = 0;
+  var syncStatusHideTimer = null;
+  function setSyncStatus(text, autoHide){
+    var el = document.getElementById("syncStatus");
+    if(!el) return;
+    clearTimeout(syncStatusHideTimer);
+    el.textContent = text;
+    el.classList.add("show");
+    if(autoHide){
+      syncStatusHideTimer = setTimeout(function(){ el.classList.remove("show"); }, 2000);
+    }
+  }
+
   function persistAll(){
     save(LS_NOTIFIED, notified);
     if(!db) return;
@@ -185,6 +224,10 @@
     var meetingsNow = meetings.slice();
     var ideasNow = ideas.slice();
     var assigneesNow = assignees.slice();
+
+    syncPendingCount++;
+    setSyncStatus("Сохраняю…", false);
+    var hadError = false;
 
     syncChain = syncChain
       .then(function(){ return diffAndSync("tasks", tasksNow, shadow.tasks, taskToRow); })
@@ -196,8 +239,19 @@
       .then(function(){ return diffAndSyncAssignees(assigneesNow, shadow.assignees); })
       .then(function(){ shadow.assignees = assigneesNow; })
       .catch(function(err){
+        hadError = true;
         console.error("Supabase sync error:", err);
         showToast("Не сохранилось в облако", (err && err.message) || "Проверьте интернет-соединение");
+        // Best-effort durable record — a toast disappears with the tab, this
+        // survives so a later session can surface "you had a sync failure".
+        try{
+          db.from("sync_errors").insert({ message: (err && err.message) || String(err) });
+        }catch(e){}
+      })
+      .then(function(){
+        syncPendingCount--;
+        if(syncPendingCount <= 0) syncPendingCount = 0;
+        setSyncStatus(hadError ? "⚠ Ошибка сохранения" : "✓ Сохранено", true);
       });
   }
 
@@ -1416,6 +1470,11 @@
           })
           .catch(function(e){ alert("Не получилось: " + e); });
       });
+      // Already linked — no need for this button to sit in the header
+      // permanently, it's a one-time setup action.
+      db.from("telegram_accounts").select("telegram_chat_id").limit(1).then(function(res){
+        if(res.data && res.data.length) telegramLinkBtn.style.display = "none";
+      });
     }
 
     var results;
@@ -1467,6 +1526,34 @@
     setInterval(updateClock, 30000);
     setInterval(checkDueTasks, 60000);
     setInterval(checkMeetingReminders, 60000);
+    checkSyncErrors();
+  }
+
+  // Surfaces sync failures that happened in a *previous* session (the toast
+  // at the time is long gone once a tab is closed) — a dismissable banner
+  // listing how many, and the most recent message.
+  function checkSyncErrors(){
+    db.from("sync_errors").select("id, message, created_at").eq("acknowledged", false)
+      .order("created_at", { ascending: false }).limit(20)
+      .then(function(res){
+        if(res.error || !res.data || !res.data.length) return;
+        var banner = document.getElementById("syncErrorBanner");
+        var ids = res.data.map(function(r){ return r.id; });
+        var latest = res.data[0];
+        banner.innerHTML = "";
+        var text = document.createElement("span");
+        text.textContent = "⚠ Не всё сохранилось в облако (" + res.data.length + "): " + latest.message;
+        var dismiss = document.createElement("button");
+        dismiss.className = "btn btn-small"; dismiss.textContent = "Скрыть"; dismiss.style.marginLeft = "10px";
+        dismiss.addEventListener("click", function(){
+          banner.classList.remove("show");
+          db.from("sync_errors").update({ acknowledged: true }).in("id", ids);
+        });
+        banner.appendChild(text); banner.appendChild(dismiss);
+        banner.style.display = "flex";
+        banner.classList.add("show");
+      })
+      .catch(function(){});
   }
 
   // ---------- Bridge for the quick-add bar (separate React component) ----------
