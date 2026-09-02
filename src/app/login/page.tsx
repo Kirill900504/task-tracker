@@ -8,6 +8,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -53,24 +54,46 @@ export default function LoginPage() {
 
         <div className="field">
           <label htmlFor="password">Пароль</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{
-              width: "100%",
-              padding: "8px 10px",
-              border: "1px solid var(--line)",
-              borderRadius: 6,
-              fontFamily: "var(--sans)",
-              fontSize: 13,
-              background: "var(--paper-soft)",
-              color: "var(--ink)",
-            }}
-          />
+          <div style={{ position: "relative" }}>
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{
+                width: "100%",
+                padding: "8px 34px 8px 10px",
+                border: "1px solid var(--line)",
+                borderRadius: 6,
+                fontFamily: "var(--sans)",
+                fontSize: 13,
+                background: "var(--paper-soft)",
+                color: "var(--ink)",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              title={showPassword ? "Скрыть пароль" : "Показать пароль"}
+              style={{
+                position: "absolute",
+                right: 4,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 15,
+                padding: "4px 6px",
+                lineHeight: 1,
+                color: "var(--ink-soft)",
+              }}
+            >
+              {showPassword ? "🙈" : "👁"}
+            </button>
+          </div>
         </div>
 
         {error && (
