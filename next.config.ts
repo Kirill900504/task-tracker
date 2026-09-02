@@ -5,7 +5,14 @@ const nextConfig: NextConfig = {
   // Whisper model — large, and does dynamic requires that Next's bundler
   // shouldn't try to trace/tree-shake. Keep them as plain node_modules
   // requires in the serverless function instead of bundling them.
-  serverExternalPackages: ["@huggingface/transformers", "onnxruntime-node", "onnxruntime-web", "sharp", "ogg-opus-decoder"],
+  serverExternalPackages: [
+    "@huggingface/transformers",
+    "onnxruntime-node",
+    "onnxruntime-web",
+    "onnxruntime-common",
+    "sharp",
+    "ogg-opus-decoder",
+  ],
   // onnxruntime-node ships prebuilt native binaries for darwin/linux/win32
   // in one package (~210MB total) — Vercel only ever runs on linux, and the
   // speech-to-text feature is forced onto the WASM backend anyway (see
@@ -29,6 +36,7 @@ const nextConfig: NextConfig = {
       "./node_modules/@huggingface/jinja/**",
       "./node_modules/@huggingface/tokenizers/**",
       "./node_modules/onnxruntime-web/**",
+      "./node_modules/onnxruntime-common/**",
     ],
   },
 };

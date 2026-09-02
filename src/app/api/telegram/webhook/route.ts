@@ -139,6 +139,7 @@ export async function POST(req: Request) {
   }
 
   const update = await req.json().catch(() => null);
+  const updateId: number | undefined = update?.update_id;
   const message = update?.message;
   const chatId: number | undefined = message?.chat?.id;
   const voiceFileId: string | undefined = message?.voice?.file_id;
@@ -146,6 +147,26 @@ export async function POST(req: Request) {
 
   if (!chatId) {
     return NextResponse.json({ ok: true });
+  }
+
+  const admin = createAdminClient();
+
+  // Telegram redelivers an update it didn't get a fast/successful response
+  // to — observed in production as the bot repeating the same reply to the
+  // same voice message minutes apart while a bug made that message fail.
+  // Insert-or-skip on update_id stops reprocessing a redelivered update
+  // outright, regardless of what's causing the retry.
+  if (updateId != null) {
+    const { error: dedupError } = await admin.from("telegram_processed_updates").insert({ update_id: updateId });
+    // 23505 = unique_violation — already handled this exact update, skip
+    // silently instead of sending another reply for the same message. Any
+    // *other* error (e.g. the migration for this table not applied yet)
+    // fails open and processes normally — same principle as
+    // checkRateLimit(): a missing migration should never be the reason a
+    // legitimate message goes unanswered.
+    if (dedupError && dedupError.code === "23505") {
+      return NextResponse.json({ ok: true });
+    }
   }
 
   // Voice message: transcribe it, then treat the result exactly like a
@@ -178,8 +199,6 @@ export async function POST(req: Request) {
   if (typeof text !== "string" || !text.trim()) {
     return NextResponse.json({ ok: true });
   }
-
-  const admin = createAdminClient();
 
   if (text.startsWith("/start")) {
     const code = text.replace("/start", "").trim();
