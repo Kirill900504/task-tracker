@@ -1,6 +1,6 @@
 {
-  "name": "РОКАС",
-  "short_name": "РОКАС",
+  "name": "Планировщик задач",
+  "short_name": "Планировщик задач",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
