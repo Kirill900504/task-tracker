@@ -255,6 +255,95 @@
       });
   }
 
+  // ---------- Realtime: pick up changes made from another tab/device ----------
+  // Supabase pushes row changes over a websocket; we merge them into the
+  // same in-memory arrays + shadow snapshot that persistAll() diffs against,
+  // then re-render. Debounced so a burst of changes (e.g. a bulk edit
+  // elsewhere) doesn't thrash the DOM with one redraw per row.
+  function upsertById(list, item){
+    var idx = list.findIndex(function(x){ return x.id === item.id; });
+    if(idx === -1) list.push(item); else list[idx] = item;
+  }
+  function removeById(list, id){
+    var idx = list.findIndex(function(x){ return x.id === id; });
+    if(idx !== -1) list.splice(idx, 1);
+  }
+  function debounce(fn, ms){
+    var t = null;
+    return function(){ clearTimeout(t); t = setTimeout(fn, ms); };
+  }
+  var scheduleTasksRerender = debounce(function(){ render(); renderCalendar(); }, 150);
+  var scheduleMeetingsRerender = debounce(function(){ renderCalendar(); renderAllMeetings(); }, 150);
+  var scheduleIdeasRerender = debounce(function(){
+    // A full renderIdeas() replaces the DOM, which would blow away an
+    // in-progress inline edit — skip for now, the edit's own save/cancel
+    // handler calls renderIdeas() anyway and will pick up this data then.
+    if(document.querySelector(".idea-edit-input")) return;
+    renderIdeas();
+  }, 150);
+  var scheduleAssigneesRerender = debounce(function(){ refreshSelectsGlobal(); }, 150);
+
+  function setupRealtime(userId){
+    var filter = "user_id=eq." + userId;
+    db.channel("tracker-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: filter }, function(payload){
+        try{
+          if(payload.eventType === "DELETE"){
+            removeById(tasks, payload.old.id);
+            removeById(shadow.tasks, payload.old.id);
+          } else {
+            var t = taskFromRow(payload.new);
+            upsertById(tasks, t);
+            upsertById(shadow.tasks, t);
+          }
+          scheduleTasksRerender();
+        }catch(e){ console.error("Realtime tasks error:", e); }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "meetings", filter: filter }, function(payload){
+        try{
+          if(payload.eventType === "DELETE"){
+            removeById(meetings, payload.old.id);
+            removeById(shadow.meetings, payload.old.id);
+          } else {
+            var m = meetingFromRow(payload.new);
+            upsertById(meetings, m);
+            upsertById(shadow.meetings, m);
+          }
+          scheduleMeetingsRerender();
+        }catch(e){ console.error("Realtime meetings error:", e); }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "ideas", filter: filter }, function(payload){
+        try{
+          if(payload.eventType === "DELETE"){
+            removeById(ideas, payload.old.id);
+            removeById(shadow.ideas, payload.old.id);
+          } else {
+            var i = ideaFromRow(payload.new);
+            upsertById(ideas, i);
+            upsertById(shadow.ideas, i);
+          }
+          scheduleIdeasRerender();
+        }catch(e){ console.error("Realtime ideas error:", e); }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "assignees", filter: filter }, function(payload){
+        try{
+          if(payload.eventType === "DELETE"){
+            var name = payload.old.name;
+            var idx = assignees.indexOf(name);
+            if(idx !== -1) assignees.splice(idx, 1);
+            var sidx = shadow.assignees.indexOf(name);
+            if(sidx !== -1) shadow.assignees.splice(sidx, 1);
+          } else {
+            var newName = payload.new.name;
+            if(assignees.indexOf(newName) === -1) assignees.push(newName);
+            if(shadow.assignees.indexOf(newName) === -1) shadow.assignees.push(newName);
+          }
+          scheduleAssigneesRerender();
+        }catch(e){ console.error("Realtime assignees error:", e); }
+      })
+      .subscribe();
+  }
+
   // ---------- Helpers ----------
   function uid(){ return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
   function pad(n){ return n < 10 ? "0"+n : ""+n; }
@@ -695,8 +784,17 @@
       del.className = "idea-del"; del.textContent = "×"; del.title = "Удалить";
       del.addEventListener("click", function(e){
         e.stopPropagation();
+        // No confirm() dialog here on purpose — undo is faster for the
+        // common case, and this was previously one click with NO safety net
+        // at all, which is worse.
+        var removedAt = ideas.findIndex(function(i){ return i.id === idea.id; });
+        var removed = idea;
         ideas = ideas.filter(function(i){ return i.id !== idea.id; });
         persistAll(); renderIdeas();
+        showToast("Идея удалена", removed.text.slice(0, 60), function(){
+          ideas.splice(Math.min(removedAt, ideas.length), 0, removed);
+          persistAll(); renderIdeas();
+        });
       });
 
       actions.appendChild(flag);
@@ -793,6 +891,7 @@
           if(!meeting) return;
           var newTime = prompt("Время встречи «" + meeting.title + "» на " + fmtDate(ds) + ":", meeting.time || "10:00");
           if(newTime === null) return;
+          var prevDate = meeting.date, prevTime = meeting.time;
           meeting.date = ds;
           newTime = newTime.trim();
           if(newTime) meeting.time = newTime;
@@ -800,6 +899,10 @@
           renderCalendar();
           renderCalFilterNote();
           renderAllMeetings();
+          showToast("Встреча перенесена", meeting.title, function(){
+            meeting.date = prevDate; meeting.time = prevTime;
+            persistAll(); renderCalendar(); renderCalFilterNote(); renderAllMeetings();
+          });
         });
         grid.appendChild(cell);
       })(new Date(cellDate));
@@ -954,16 +1057,26 @@
         successBtn.className = "meeting-icon-btn success"; successBtn.textContent = "✅"; successBtn.title = "Успешно";
         successBtn.addEventListener("click", function(e){
           e.stopPropagation();
+          var prevStatus = m.status;
           m.status = "success";
           persistAll(); renderCalendar(); renderAllMeetings();
+          showToast("Встреча отмечена успешной", m.title, function(){
+            m.status = prevStatus;
+            persistAll(); renderCalendar(); renderAllMeetings();
+          });
         });
 
         var noResultBtn = document.createElement("button");
         noResultBtn.className = "meeting-icon-btn noresult"; noResultBtn.textContent = "🚫"; noResultBtn.title = "Без результата";
         noResultBtn.addEventListener("click", function(e){
           e.stopPropagation();
+          var prevStatus = m.status;
           m.status = "no_result";
           persistAll(); renderCalendar(); renderAllMeetings();
+          showToast("Встреча отмечена без результата", m.title, function(){
+            m.status = prevStatus;
+            persistAll(); renderCalendar(); renderAllMeetings();
+          });
         });
 
         var rescheduleQuickBtn = document.createElement("button");
@@ -976,7 +1089,8 @@
           newDate = newDate.trim();
           var newTime = prompt("Время встречи на " + fmtDate(newDate) + ":", m.time || "10:00");
           if(newTime === null) return;
-          performReschedule(m, newDate, newTime.trim(), m.result);
+          var undo = performReschedule(m, newDate, newTime.trim(), m.result);
+          showToast("Встреча перенесена", m.title, undo);
         });
 
         quickActions.appendChild(successBtn);
@@ -1124,6 +1238,7 @@
     if(!id) return;
     var m = meetings.find(function(x){ return x.id === id; });
     if(!m) return;
+    var prevStatus = m.status, prevResult = m.result, prevMovedToDate = m.movedToDate;
     m.status = status;
     m.result = document.getElementById("mResult").value.trim();
     if(status === "planned") m.movedToDate = "";
@@ -1131,6 +1246,10 @@
     closeMeetingModal();
     renderCalendar();
     renderAllMeetings();
+    showToast(status === "planned" ? "Встреча возвращена в план" : "Итог встречи сохранён", m.title, function(){
+      m.status = prevStatus; m.result = prevResult; m.movedToDate = prevMovedToDate;
+      persistAll(); renderCalendar(); renderAllMeetings();
+    });
   }
   document.getElementById("markSuccessBtn").addEventListener("click", function(){ setMeetingStatus("success"); });
   document.getElementById("markNoResultBtn").addEventListener("click", function(){ setMeetingStatus("no_result"); });
@@ -1139,7 +1258,9 @@
   // "Перенести следующий этап на дату" — создаёт новую встречу (тот же состав
   // и название) на выбранную дату, а текущую помечает как перенесённую.
   // Общая с иконкой "📅" на карточке встречи (renderAllMeetings) логика.
+  // Returns an undo function (used to back a showToast "Отменить" button).
   function performReschedule(m, newDate, newTime, resultNote){
+    var prevStatus = m.status, prevResult = m.result, prevMovedToDate = m.movedToDate;
     var followUp = {
       id: uid(),
       date: newDate,
@@ -1160,6 +1281,15 @@
     renderCalendar();
     renderCalFilterNote();
     renderAllMeetings();
+
+    return function undo(){
+      meetings = meetings.filter(function(x){ return x.id !== followUp.id; });
+      m.status = prevStatus; m.result = prevResult; m.movedToDate = prevMovedToDate;
+      persistAll();
+      renderCalendar();
+      renderCalFilterNote();
+      renderAllMeetings();
+    };
   }
 
   document.getElementById("rescheduleBtn").addEventListener("click", function(){
@@ -1171,8 +1301,9 @@
     if(!newDate){ alert("Укажите дату следующего этапа"); return; }
     var newTime = prompt("Время встречи на " + fmtDate(newDate) + ":", m.time || "10:00");
     if(newTime === null) return;
-    performReschedule(m, newDate, newTime.trim(), document.getElementById("mResult").value);
+    var undo = performReschedule(m, newDate, newTime.trim(), document.getElementById("mResult").value);
     closeMeetingModal();
+    showToast("Встреча перенесена", m.title, undo);
   });
 
   document.getElementById("meetingSaveBtn").addEventListener("click", function(){
@@ -1376,7 +1507,10 @@
 
   // ---------- Notifications ----------
   var toastStack = document.getElementById("toast-stack");
-  function showToast(title, body){
+  // undoFn, when passed, adds an "Отменить" button and shortens the
+  // auto-dismiss window (an undo offer that lingers 15s is more confusing
+  // than useful — the user has either already moved on or already decided).
+  function showToast(title, body, undoFn){
     var el = document.createElement("div");
     el.className = "toast";
     var closeBtn = document.createElement("span");
@@ -1385,9 +1519,18 @@
     el.appendChild(closeBtn);
     el.appendChild(b);
     el.appendChild(document.createTextNode(body));
+    if(undoFn){
+      var undoBtn = document.createElement("button");
+      undoBtn.className = "toast-undo"; undoBtn.textContent = "Отменить";
+      undoBtn.addEventListener("click", function(){
+        undoFn();
+        el.remove();
+      });
+      el.appendChild(undoBtn);
+    }
     closeBtn.addEventListener("click", function(){ el.remove(); });
     toastStack.appendChild(el);
-    setTimeout(function(){ if(el.parentNode) el.remove(); }, 15000);
+    setTimeout(function(){ if(el.parentNode) el.remove(); }, undoFn ? 6000 : 15000);
   }
 
   function browserNotify(title, body){
@@ -1576,6 +1719,7 @@
       window.location.href = "/login";
       return;
     }
+    var currentUserId = authRes.data.session.user.id;
 
     var signOutBtn = document.getElementById("signOutBtn");
     if(signOutBtn){
@@ -1657,6 +1801,7 @@
     setInterval(checkDueTasks, 60000);
     setInterval(checkMeetingReminders, 60000);
     checkSyncErrors();
+    setupRealtime(currentUserId);
   }
 
   // Surfaces sync failures that happened in a *previous* session (the toast

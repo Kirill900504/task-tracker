@@ -225,6 +225,11 @@
   }
   .toast b{display:block; margin-bottom:2px; font-size:12px; opacity:.75; font-family:var(--mono); text-transform:uppercase; letter-spacing:.04em;}
   .toast .close{float:right; cursor:pointer; opacity:.7; margin-left:8px;}
+  .toast-undo{
+    display:block; margin-top:8px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4);
+    color:#F3F8FA; border-radius:5px; padding:4px 10px; font-size:12px; cursor:pointer; font-family:var(--sans);
+  }
+  .toast-undo:hover{background:rgba(255,255,255,.25);}
   @keyframes slidein{from{transform:translateX(20px); opacity:0;} to{transform:translateX(0); opacity:1;}}
 
   .notif-banner{
