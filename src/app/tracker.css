@@ -388,3 +388,6 @@
   .reschedule-row button{flex:none;}
 
   .confirm-dt-question{font-size:13px; color:var(--ink); margin:0 0 14px;}
+  /* This dialog is short and never needs the top-aligned/scrollable
+     treatment the longer task/meeting forms use — center it properly. */
+  #confirmDateTimeOverlay{align-items:center;}
