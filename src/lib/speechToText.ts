@@ -1,5 +1,7 @@
-import { pipeline, env, type AutomaticSpeechRecognitionPipeline } from "@huggingface/transformers";
-import { OggOpusDecoder } from "ogg-opus-decoder";
+import { createRequire } from "node:module";
+// Type-only — erased at compile time, so this never triggers Node's
+// "node"-condition module resolution the way a value import would.
+import type { AutomaticSpeechRecognitionPipeline } from "@huggingface/transformers";
 
 // Free, self-hosted speech-to-text for Telegram voice messages — no paid
 // API, no external account. Runs entirely inside the Vercel function:
@@ -7,23 +9,44 @@ import { OggOpusDecoder } from "ogg-opus-decoder";
 // ffmpeg binary needed), resample to the 16kHz mono Whisper expects, then
 // transcribe with a small multilingual Whisper model via transformers.js.
 //
-// Forced onto the WASM ONNX backend (not the native onnxruntime-node
-// bindings) on purpose: this function runs in a fresh container on every
-// cold start, and a native binary that fails to load there would be a much
-// harder failure to diagnose than a slightly slower WASM run.
-if (env.backends.onnx.wasm) env.backends.onnx.wasm.numThreads = 1;
-// Vercel's writable scratch space — reused across warm invocations of the
-// same instance, so the ~40MB model only downloads once per container.
-env.cacheDir = "/tmp/whisper-cache";
+// @huggingface/transformers picks its entry point via package.json
+// "exports" based on which runtime condition Node reports — under Node.js
+// that's always its "node" build, which eagerly touches the native
+// onnxruntime-node bindings at module-load time regardless of which
+// `device` a pipeline() call later asks for. That native addon's shared
+// library failed to load in Vercel's serverless container in production
+// (confirmed via deploy logs: "libonnxruntime.so.1: cannot open shared
+// object file"), and a fresh container on every cold start makes that kind
+// of native-loader failure fundamentally harder to keep working than
+// avoiding it entirely. So: resolve the package normally (to find where
+// node_modules actually put it), then load its "web" build directly by
+// file path instead — that build only ever touches the pure-WASM
+// onnxruntime-web backend and never references onnxruntime-node at all.
+const require = createRequire(import.meta.url);
+
+type TransformersModule = typeof import("@huggingface/transformers");
+let transformersPromise: Promise<TransformersModule> | null = null;
+function loadTransformers(): Promise<TransformersModule> {
+  if (!transformersPromise) {
+    const nodeEntry = require.resolve("@huggingface/transformers");
+    const webEntry = nodeEntry.replace(/transformers\.node\.(mjs|cjs)$/, "transformers.web.js");
+    transformersPromise = import(webEntry) as Promise<TransformersModule>;
+  }
+  return transformersPromise;
+}
 
 const MODEL_ID = "Xenova/whisper-tiny"; // multilingual (incl. Russian), ~40MB — small enough for a cold serverless start
 let transcriberPromise: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
 
-function getTranscriber() {
+function getTranscriber(): Promise<AutomaticSpeechRecognitionPipeline> {
   if (!transcriberPromise) {
-    transcriberPromise = pipeline("automatic-speech-recognition", MODEL_ID, {
-      device: "wasm",
-    }) as Promise<AutomaticSpeechRecognitionPipeline>;
+    transcriberPromise = loadTransformers().then(({ pipeline, env }) => {
+      if (env.backends.onnx.wasm) env.backends.onnx.wasm.numThreads = 1;
+      // Vercel's writable scratch space — reused across warm invocations of
+      // the same container, so the ~40MB model only downloads once per cold start.
+      env.cacheDir = "/tmp/whisper-cache";
+      return pipeline("automatic-speech-recognition", MODEL_ID, { device: "wasm" });
+    });
   }
   return transcriberPromise;
 }
@@ -46,6 +69,7 @@ function resampleTo16k(input: Float32Array, inputRate: number): Float32Array {
 }
 
 export async function transcribeOggOpus(bytes: ArrayBuffer): Promise<string> {
+  const { OggOpusDecoder } = await import("ogg-opus-decoder");
   const decoder = new OggOpusDecoder();
   await decoder.ready;
   const { channelData, sampleRate } = await decoder.decode(new Uint8Array(bytes));

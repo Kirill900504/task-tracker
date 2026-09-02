@@ -5,7 +5,6 @@ import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
 import { handleManageItem, resolvePendingAction, type ManageAction, type ManageItemType, type PendingAction } from "@/lib/telegramManage";
-import { transcribeOggOpus } from "@/lib/speechToText";
 
 // Voice transcription (cold-start model download + WASM inference) can run
 // well past the default function timeout — Vercel's default is too short.
@@ -153,6 +152,13 @@ export async function POST(req: Request) {
   // typed message — same rate limit, same quick-add/query/manage pipeline.
   if (!text && voiceFileId) {
     try {
+      // Dynamic import on purpose — this pulls in transformers.js/ONNX,
+      // which must never be loaded for a plain text message. A previous
+      // version imported it statically at module scope and an unrelated
+      // native-binding load failure there 500'd the *entire* webhook,
+      // including plain task-creation texts (and Telegram retries a 500,
+      // which risked creating duplicate tasks from the retried message).
+      const { transcribeOggOpus } = await import("@/lib/speechToText");
       const bytes = await downloadTelegramFile(voiceFileId);
       const transcript = await transcribeOggOpus(bytes);
       if (!transcript) {
