@@ -12,6 +12,13 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Forgot-password (spec-audit recommendation #3): self-service recovery
+  // instead of the only path being "ask Кирилл to fix it by hand".
+  const [mode, setMode] = useState<"signin" | "forgot" | "sent">("signin");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -25,6 +32,74 @@ export default function LoginPage() {
     }
     router.push("/");
     router.refresh();
+  }
+
+  async function handleForgotSubmit(e: FormEvent) {
+    e.preventDefault();
+    setResetError("");
+    setResetLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setResetLoading(false);
+    if (error) {
+      setResetError("Не получилось отправить ссылку: " + error.message);
+      return;
+    }
+    setMode("sent");
+  }
+
+  if (mode === "forgot" || mode === "sent") {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div className="modal" style={{ maxWidth: 360, width: "100%" }}>
+          <h2>Восстановление пароля</h2>
+          {mode === "sent" ? (
+            <>
+              <p style={{ fontSize: 13, color: "var(--ink)", marginBottom: 16 }}>
+                Если <b>{resetEmail}</b> зарегистрирована в трекере — на неё отправлена ссылка для смены пароля. Проверьте почту (и папку «Спам»).
+              </p>
+              <div className="modal-actions">
+                <div className="left" />
+                <div className="left">
+                  <button type="button" className="btn btn-primary" onClick={() => setMode("signin")}>
+                    Назад ко входу
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <form onSubmit={handleForgotSubmit}>
+              <div className="field">
+                <label htmlFor="resetEmail">Почта</label>
+                <input
+                  id="resetEmail"
+                  type="email"
+                  autoComplete="email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  required
+                />
+              </div>
+              {resetError && <div style={{ color: "var(--high)", fontSize: 13, marginBottom: 12 }}>{resetError}</div>}
+              <div className="modal-actions">
+                <div className="left">
+                  <button type="button" className="btn" onClick={() => setMode("signin")}>
+                    Назад
+                  </button>
+                </div>
+                <div className="left">
+                  <button type="submit" className="btn btn-primary" disabled={resetLoading}>
+                    {resetLoading ? "Отправляю…" : "Отправить ссылку"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -94,6 +169,17 @@ export default function LoginPage() {
               {showPassword ? "🙈" : "👁"}
             </button>
           </div>
+          <button
+            type="button"
+            className="btn-ghost"
+            style={{ marginTop: 6, fontSize: 12, textDecoration: "underline", padding: 0 }}
+            onClick={() => {
+              setResetEmail(email);
+              setMode("forgot");
+            }}
+          >
+            Забыли пароль?
+          </button>
         </div>
 
         {error && (

@@ -28,6 +28,11 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isLoginPage = request.nextUrl.pathname.startsWith("/login");
+  // The password-recovery email link lands here with a code the client
+  // still needs to exchange for a session — middleware runs before that JS
+  // has a chance to, so it must not redirect this away first.
+  const isResetPasswordPage = request.nextUrl.pathname.startsWith("/reset-password");
+  if (isResetPasswordPage) return supabaseResponse;
   // Telegram and the external cron pinger call these with their own
   // secret-token checks, not a browser session — never gate them behind
   // the login redirect.
