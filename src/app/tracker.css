@@ -23,6 +23,10 @@
     --long-border:#3C5C46;
     --success:#3FA968;
     --assignee:#B9A0DE;
+    --section-work:#4FBDB0;
+    --section-work-bg:#1E3A37;
+    --section-personal:#D98BA0;
+    --section-personal-bg:#3A222B;
     --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
@@ -229,6 +233,8 @@
   .pill-date{color:var(--ink-soft); background:rgba(0,0,0,.18); border:1px solid var(--line);}
   .pill-date.overdue-text{color:#2A130D; font-weight:600; background:var(--high); border-color:var(--high);}
   .pill-date.due-today-text{color:#0B2833; font-weight:600; background:var(--today); border-color:var(--today);}
+  .pill-section{background:var(--section-work-bg); color:var(--section-work); font-weight:600;}
+  .pill-section-personal{background:var(--section-personal-bg); color:var(--section-personal);}
 
   .empty{color:var(--ink-soft); font-size:13px; padding:20px; text-align:center; border:1px dashed var(--line); border-radius:8px;}
 

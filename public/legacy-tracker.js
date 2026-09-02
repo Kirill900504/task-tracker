@@ -61,6 +61,7 @@
   var meetings = [];
   var ideas = [];
   var assignees = [];
+  var sections = [];
   var notified = load(LS_NOTIFIED, {});
 
   function sanitizeAssigneeList(list){
@@ -85,7 +86,7 @@
   // against the last-synced snapshot ("shadow") and pushes just the changed
   // rows to Supabase. Calls are chained on syncChain so they run in order.
   var db = null;
-  var shadow = { tasks: [], meetings: [], ideas: [], assignees: [] };
+  var shadow = { tasks: [], meetings: [], ideas: [], assignees: [], sections: [] };
   var syncChain = Promise.resolve();
 
   function taskToRow(t){
@@ -103,7 +104,8 @@
       recur_monthday: (t.recurMonthday !== "" && t.recurMonthday != null) ? Number(t.recurMonthday) : null,
       recur_year_day: (t.recurYearDay !== "" && t.recurYearDay != null) ? Number(t.recurYearDay) : null,
       recur_year_month: (t.recurYearMonth !== "" && t.recurYearMonth != null) ? Number(t.recurYearMonth) : null,
-      last_completed_on: t.lastCompletedOn || null
+      last_completed_on: t.lastCompletedOn || null,
+      section_id: t.sectionId || null
     };
   }
   function taskFromRow(r){
@@ -121,8 +123,16 @@
       recurMonthday: r.recur_monthday != null ? String(r.recur_monthday) : "",
       recurYearDay: r.recur_year_day != null ? String(r.recur_year_day) : "",
       recurYearMonth: r.recur_year_month != null ? String(r.recur_year_month) : "1",
-      lastCompletedOn: r.last_completed_on || ""
+      lastCompletedOn: r.last_completed_on || "",
+      sectionId: r.section_id || ""
     };
+  }
+
+  function sectionToRow(s){
+    return { id: s.id, name: s.name, kind: s.kind || "work", sort_order: s.sortOrder || 0 };
+  }
+  function sectionFromRow(r){
+    return { id: r.id, name: r.name, kind: r.kind || "work", sortOrder: r.sort_order || 0 };
   }
 
   function meetingToRow(m){
@@ -224,12 +234,15 @@
     var meetingsNow = meetings.slice();
     var ideasNow = ideas.slice();
     var assigneesNow = assignees.slice();
+    var sectionsNow = sections.slice();
 
     syncPendingCount++;
     setSyncStatus("Сохраняю…", false);
     var hadError = false;
 
     syncChain = syncChain
+      .then(function(){ return diffAndSync("sections", sectionsNow, shadow.sections, sectionToRow); })
+      .then(function(){ shadow.sections = sectionsNow; })
       .then(function(){ return diffAndSync("tasks", tasksNow, shadow.tasks, taskToRow); })
       .then(function(){ shadow.tasks = tasksNow; })
       .then(function(){ return diffAndSync("meetings", meetingsNow, shadow.meetings, meetingToRow); })
@@ -282,6 +295,7 @@
     renderIdeas();
   }, 150);
   var scheduleAssigneesRerender = debounce(function(){ refreshSelectsGlobal(); }, 150);
+  var scheduleSectionsRerender = debounce(function(){ refreshSelectsGlobal(); render(); }, 150);
 
   function setupRealtime(userId){
     var filter = "user_id=eq." + userId;
@@ -340,6 +354,19 @@
           }
           scheduleAssigneesRerender();
         }catch(e){ console.error("Realtime assignees error:", e); }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "sections", filter: filter }, function(payload){
+        try{
+          if(payload.eventType === "DELETE"){
+            removeById(sections, payload.old.id);
+            removeById(shadow.sections, payload.old.id);
+          } else {
+            var s = sectionFromRow(payload.new);
+            upsertById(sections, s);
+            upsertById(shadow.sections, s);
+          }
+          scheduleSectionsRerender();
+        }catch(e){ console.error("Realtime sections error:", e); }
       })
       .subscribe();
   }
@@ -471,10 +498,36 @@
     }
   }
 
+  function populateSectionSelect(sel, withAllOption, allLabel, withNoneOption){
+    var current = sel.value;
+    sel.innerHTML = "";
+    if(withAllOption){
+      var o = document.createElement("option");
+      o.value = "all"; o.textContent = allLabel;
+      sel.appendChild(o);
+    }
+    if(withNoneOption){
+      var n = document.createElement("option");
+      n.value = ""; n.textContent = "Без раздела";
+      sel.appendChild(n);
+    }
+    sections.slice().sort(function(a,b){ return (a.sortOrder||0) - (b.sortOrder||0); }).forEach(function(s){
+      var opt = document.createElement("option");
+      opt.value = s.id; opt.textContent = s.name;
+      sel.appendChild(opt);
+    });
+    var validValues = sections.map(function(s){ return s.id; });
+    if(withAllOption) validValues.push("all");
+    if(withNoneOption) validValues.push("");
+    if(validValues.indexOf(current) !== -1) sel.value = current;
+  }
+
   function refreshSelectsGlobal(){
     assignees = sanitizeAssigneeList(assignees);
     populateSelect(document.getElementById("filterAssignee"), assignees, true, "Все исполнители");
     populateSelect(document.getElementById("fAssignee"), assignees, false);
+    populateSectionSelect(document.getElementById("filterSection"), true, "Все разделы", false);
+    populateSectionSelect(document.getElementById("fSection"), false, "", true);
   }
 
   function priorityLabel(p){ return p === "high" ? "Высокий" : "Средний"; }
@@ -488,12 +541,19 @@
     return "";
   }
 
+  function sectionById(id){
+    if(!id) return null;
+    return sections.find(function(s){ return s.id === id; }) || null;
+  }
+
   function matchesFilters(t){
     var assignee = document.getElementById("filterAssignee").value;
     var priority = document.getElementById("filterPriority").value;
+    var section = document.getElementById("filterSection").value;
 
     if(assignee !== "all" && t.assignee !== assignee) return false;
     if(priority !== "all" && t.priority !== priority) return false;
+    if(section !== "all" && (t.sectionId || "") !== section) return false;
     if(calendarFilterDate){
       var d = new Date(calendarFilterDate + "T00:00:00");
       if(!isTaskDueOnDate(t, d)) return false;
@@ -535,6 +595,14 @@
 
     var meta = document.createElement("div");
     meta.className = "task-meta";
+
+    var section = sectionById(t.sectionId);
+    if(section){
+      var secPill = document.createElement("span");
+      secPill.className = "pill pill-section" + (section.kind === "personal" ? " pill-section-personal" : "");
+      secPill.textContent = section.name;
+      meta.appendChild(secPill);
+    }
 
     if(t.assignee){
       var asg = document.createElement("div");
@@ -1397,6 +1465,7 @@
     document.getElementById("fPriority").value = "med";
     document.getElementById("fTerm").value = "short";
     document.getElementById("fDeadline").value = "";
+    document.getElementById("fSection").value = "";
     document.getElementById("fRecur").value = "none";
     document.getElementById("fRecurMonthday").value = "";
     document.getElementById("fRecurYearDay").value = "";
@@ -1424,6 +1493,36 @@
       assignees = assignees.filter(function(a){ return a !== v; });
       persistAll();
       refreshSelectsGlobal();
+    }
+  });
+
+  document.getElementById("addSectionBtn").addEventListener("click", function(){
+    var name = prompt("Название нового раздела:");
+    if(!name) return;
+    name = name.trim();
+    if(!name) return;
+    var isPersonal = confirm("Это личный раздел (не рабочий)? ОК — личный, Отмена — рабочий.");
+    var section = { id: uid(), name: name, kind: isPersonal ? "personal" : "work", sortOrder: sections.length };
+    sections.push(section);
+    persistAll();
+    refreshSelectsGlobal();
+    document.getElementById("fSection").value = section.id;
+  });
+
+  document.getElementById("removeSectionBtn").addEventListener("click", function(){
+    var sel = document.getElementById("fSection");
+    var id = sel.value;
+    if(!id) return;
+    var section = sectionById(id);
+    if(!section) return;
+    if(confirm("Удалить раздел «" + section.name + "»? Задачи в нём останутся, но без раздела.")){
+      sections = sections.filter(function(s){ return s.id !== id; });
+      // Clear the reference locally too, so the UI updates immediately
+      // instead of waiting on a round trip through Realtime.
+      tasks.forEach(function(t){ if(t.sectionId === id) t.sectionId = ""; });
+      persistAll();
+      refreshSelectsGlobal();
+      render();
     }
   });
 
@@ -1473,6 +1572,7 @@
       document.getElementById("fTitle").value = t.title;
       document.getElementById("fDesc").value = t.desc || "";
       document.getElementById("fAssignee").value = t.assignee;
+      document.getElementById("fSection").value = t.sectionId || "";
       document.getElementById("fPriority").value = t.priority;
       document.getElementById("fTerm").value = t.term;
       document.getElementById("fDeadline").value = t.deadline || "";
@@ -1506,6 +1606,7 @@
       title: title,
       desc: document.getElementById("fDesc").value.trim(),
       assignee: document.getElementById("fAssignee").value,
+      sectionId: document.getElementById("fSection").value,
       priority: document.getElementById("fPriority").value,
       term: document.getElementById("fTerm").value,
       status: existing ? existing.status : "in_progress",
@@ -1538,7 +1639,7 @@
   });
 
   // ---------- Filters ----------
-  ["filterAssignee","filterPriority","showDoneCheckbox"].forEach(function(id){
+  ["filterAssignee","filterSection","filterPriority","showDoneCheckbox"].forEach(function(id){
     document.getElementById(id).addEventListener("input", render);
     document.getElementById(id).addEventListener("change", render);
   });
@@ -1798,7 +1899,8 @@
         db.from("tasks").select("*"),
         db.from("meetings").select("*"),
         db.from("ideas").select("*").order("created_at", { ascending: true }),
-        db.from("assignees").select("*").order("created_at", { ascending: true })
+        db.from("assignees").select("*").order("created_at", { ascending: true }),
+        db.from("sections").select("*").order("sort_order", { ascending: true })
       ]);
     }catch(e){
       showLoadError(e && e.message || String(e));
@@ -1815,10 +1917,11 @@
     meetings = results[1].data.map(meetingFromRow);
     ideas = results[2].data.map(ideaFromRow);
     assignees = sanitizeAssigneeList(results[3].data.map(function(r){ return r.name; }));
+    sections = results[4].data.map(sectionFromRow);
 
     // Baseline "already in the database" snapshot — taken before any of the
     // startup reconciliation below, so persistAll() only pushes what's new.
-    shadow = { tasks: tasks.slice(), meetings: meetings.slice(), ideas: ideas.slice(), assignees: assignees.slice() };
+    shadow = { tasks: tasks.slice(), meetings: meetings.slice(), ideas: ideas.slice(), assignees: assignees.slice(), sections: sections.slice() };
 
     if(assignees.length === 0){
       assignees = DEFAULT_ASSIGNEES.slice();

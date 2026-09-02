@@ -66,6 +66,7 @@ export const TRACKER_BODY_HTML = `
     <div class="toolbar">
       <button class="btn btn-primary" id="newTaskBtn">+ Новая задача</button>
       <div class="search-wrap" id="quickAddSlot"></div>
+      <select id="filterSection"><option value="all">Все разделы</option></select>
       <select id="filterAssignee"><option value="all">Все исполнители</option></select>
       <select id="filterPriority">
         <option value="all">Любой приоритет</option>
@@ -130,6 +131,15 @@ export const TRACKER_BODY_HTML = `
         <select id="fAssignee"></select>
         <button class="btn" id="addAssigneeBtn" type="button" title="Добавить исполнителя">+</button>
         <button class="btn btn-danger-ghost" id="removeAssigneeBtn" type="button" title="Удалить выбранного исполнителя">−</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Раздел</label>
+      <div class="select-with-add">
+        <select id="fSection"><option value="">Без раздела</option></select>
+        <button class="btn" id="addSectionBtn" type="button" title="Добавить раздел">+</button>
+        <button class="btn btn-danger-ghost" id="removeSectionBtn" type="button" title="Удалить выбранный раздел">−</button>
       </div>
     </div>
 
