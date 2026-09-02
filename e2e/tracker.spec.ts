@@ -62,3 +62,88 @@ test("full loop: login, task, meeting, idea, calendar, logout", async ({ page })
   await page.click("#signOutBtn");
   await expect(page).toHaveURL(/\/login/);
 });
+
+async function login(page: import("@playwright/test").Page) {
+  await page.goto("/login");
+  await page.fill("#email", email);
+  await page.fill("#password", password);
+  await page.click('button[type="submit"]');
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator("#newTaskBtn")).toBeVisible();
+  await page.check("#showDoneCheckbox");
+}
+
+// Two regression tests for "I closed things, signed out, signed back in, and
+// they were back". Two distinct, independent bugs turned out to cause
+// exactly that symptom:
+//
+// 1) softDeleteRow()/persistAll() fired their Supabase write independently
+//    of the sign-out button, so clicking "Выйти" right after an edit could
+//    navigate away — the browser aborts any still-in-flight request on
+//    unload — before the write ever reached the database. Fixed by making
+//    signOutBtn await the same syncChain persistAll()/softDeleteRow()/
+//    restoreRow() already queue onto.
+//
+// 2) Far more serious: shadow.tasks/meetings/ideas was snapshotted as
+//    `list.slice()` — a new ARRAY, but of the exact same object references
+//    still live in `tasks`/`meetings`/`ideas`. Most edits (the done
+//    checkbox, a meeting outcome button, the daily recurring-task reset)
+//    mutate that shared object in place (`t.status = "done"`), which
+//    silently mutates shadow's "last synced" copy too. The next
+//    persistAll() diffs the object against shadow and finds no
+//    difference — the edit is never sent to Supabase AT ALL, not even
+//    eventually, regardless of sign-out timing. Fixed via snapshotList(),
+//    which deep-clones each item when it enters shadow.
+//
+// Each test waits for its own setup write to fully settle (checked via
+// #syncStatus) before performing the actual edit — otherwise a slow first
+// write can still be in flight when the second action fires, which is a
+// separate, unrelated timing quirk in how fast two back-to-back creates
+// interact with the realtime echo, not the bug being tested here. Only the
+// edit-then-sign-out step is immediate, since that immediacy is the point.
+async function waitForSaved(page: import("@playwright/test").Page) {
+  await expect(page.locator("#syncStatus")).toHaveText("✓ Сохранено", { timeout: 10_000 });
+}
+
+test("completing a task survives an immediate sign-out", async ({ page }) => {
+  const title = `E2E race done ${Date.now()}`;
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await page.click("#saveTaskBtn");
+  await waitForSaved(page);
+
+  const taskCard = page.locator(".task", { hasText: title });
+  await expect(taskCard).toBeVisible();
+
+  // Mark done, then sign out immediately — no wait for that write to settle.
+  await taskCard.locator(".check").click();
+  await page.click("#signOutBtn");
+  await expect(page).toHaveURL(/\/login/);
+
+  await login(page);
+  await expect(page.locator(".task", { hasText: title })).toHaveClass(/done/);
+});
+
+test("deleting a task survives an immediate sign-out", async ({ page }) => {
+  const title = `E2E race deleted ${Date.now()}`;
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await page.click("#saveTaskBtn");
+  await waitForSaved(page);
+
+  await expect(page.locator(".task", { hasText: title })).toBeVisible();
+
+  // Open it, delete it, then sign out immediately.
+  page.once("dialog", (d) => d.accept());
+  await page.locator(".task", { hasText: title }).click();
+  await page.click("#deleteTaskBtn");
+  await page.click("#signOutBtn");
+  await expect(page).toHaveURL(/\/login/);
+
+  await login(page);
+  await expect(page.locator(".task", { hasText: title })).toHaveCount(0);
+});

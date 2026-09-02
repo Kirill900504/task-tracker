@@ -180,6 +180,23 @@
 
   function sameJson(a, b){ return JSON.stringify(a) === JSON.stringify(b); }
 
+  // Snapshots a list for `shadow` as independent copies of each item, not
+  // just a new array of the SAME object references. Root cause of a real
+  // "edits silently never reach the database" bug: most in-place edits
+  // (the done checkbox, a meeting outcome button, the daily recurring-task
+  // reset) do `t.status = "done"` on the exact object already sitting in
+  // both `tasks` and `shadow.tasks` — `tasks.slice()`/`tasksNow` only copies
+  // the ARRAY, so shadow held the same objects, not a frozen snapshot. That
+  // mutation was then visible through shadow's reference too, so the next
+  // persistAll() diffed a task against an "old" snapshot that had quietly
+  // already changed to match it — sameJson() said "no difference", no
+  // upsert was ever sent, and the edit was never persisted at all (not a
+  // timing race — permanently, silently dropped). Reloading later shows
+  // whatever was last actually written, i.e. the change looks "undone".
+  function snapshotList(list){
+    return list.map(function(x){ return JSON.parse(JSON.stringify(x)); });
+  }
+
   function diffAndSync(table, current, shadowList, toRow){
     var byIdCurrent = {}; current.forEach(function(x){ byIdCurrent[x.id] = x; });
     var byIdShadow = {}; shadowList.forEach(function(x){ byIdShadow[x.id] = x; });
@@ -249,13 +266,13 @@
 
     syncChain = syncChain
       .then(function(){ return diffAndSync("sections", sectionsNow, shadow.sections, sectionToRow); })
-      .then(function(){ shadow.sections = sectionsNow; })
+      .then(function(){ shadow.sections = snapshotList(sectionsNow); })
       .then(function(){ return diffAndSync("tasks", tasksNow, shadow.tasks, taskToRow); })
-      .then(function(){ shadow.tasks = tasksNow; })
+      .then(function(){ shadow.tasks = snapshotList(tasksNow); })
       .then(function(){ return diffAndSync("meetings", meetingsNow, shadow.meetings, meetingToRow); })
-      .then(function(){ shadow.meetings = meetingsNow; })
+      .then(function(){ shadow.meetings = snapshotList(meetingsNow); })
       .then(function(){ return diffAndSync("ideas", ideasNow, shadow.ideas, ideaToRow); })
-      .then(function(){ shadow.ideas = ideasNow; })
+      .then(function(){ shadow.ideas = snapshotList(ideasNow); })
       .then(function(){ return diffAndSyncAssignees(assigneesNow, shadow.assignees); })
       .then(function(){ shadow.assignees = assigneesNow; })
       .catch(function(err){
@@ -275,6 +292,20 @@
       });
   }
 
+  // Safety net for the general case the signOutBtn fix above doesn't cover —
+  // closing the tab, hitting browser-back, or reloading while a write from
+  // persistAll()/softDeleteRow()/restoreRow()/savePanelLayout() is still in
+  // flight. Can't await anything here (beforeunload can't block on a
+  // promise), but showing the browser's native "leave site?" prompt gives
+  // the user a chance to cancel and let the save finish instead of losing
+  // it silently.
+  window.addEventListener("beforeunload", function(e){
+    if(syncPendingCount > 0){
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+
   // Soft delete (spec-audit recommendation #4): marks the row instead of
   // physically removing it, so it stays recoverable indefinitely rather
   // than only within a 6-second undo-toast window. Deliberately bypasses
@@ -282,22 +313,53 @@
   // from the current array" as "hard delete", which is exactly what this
   // needs to NOT do. Callers remove the item from both the live array and
   // `shadow` themselves so it isn't re-synced as a delete afterward.
+  //
+  // Chained onto syncChain (same queue persistAll() uses) and counted via
+  // syncPendingCount instead of firing as an untracked, independent
+  // promise: previously this call was fire-and-forget, so clicking "Выйти"
+  // right after deleting/completing something could navigate away (killing
+  // the in-flight request — browsers abort pending fetches on unload)
+  // before it ever reached Supabase. Next login then loaded the old,
+  // never-deleted row back — the exact "closed items came back" bug.
+  // Routing every write through syncChain lets signOutBtn's handler (and
+  // beforeunload) wait for the same queue persistAll() already waits on.
   function softDeleteRow(table, id){
     if(!db) return;
-    db.from(table).update({ deleted_at: new Date().toISOString() }).eq("id", id).then(function(res){
+    syncPendingCount++;
+    setSyncStatus("Сохраняю…", false);
+    syncChain = syncChain.then(function(){
+      return db.from(table).update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    }).then(function(res){
       if(res.error){
         console.error("Soft delete error:", res.error);
         showToast("Не удалось удалить", res.error.message);
       }
+    }).catch(function(err){
+      console.error("Soft delete error:", err);
+      showToast("Не удалось удалить", (err && err.message) || String(err));
+    }).then(function(){
+      syncPendingCount = Math.max(0, syncPendingCount - 1);
+      setSyncStatus(syncPendingCount ? "Сохраняю…" : "✓ Сохранено", syncPendingCount === 0);
     });
   }
   // Explicit counterpart to softDeleteRow(), used only by "Отменить" undo
   // buttons. persistAll()'s upsert never touches deleted_at (see toRow()
   // comments above), so clearing it back to null has to be its own call.
+  // Same syncChain/syncPendingCount tracking as softDeleteRow(), and for
+  // the same reason.
   function restoreRow(table, id){
     if(!db) return;
-    db.from(table).update({ deleted_at: null }).eq("id", id).then(function(res){
+    syncPendingCount++;
+    setSyncStatus("Сохраняю…", false);
+    syncChain = syncChain.then(function(){
+      return db.from(table).update({ deleted_at: null }).eq("id", id);
+    }).then(function(res){
       if(res.error) console.error("Restore error:", res.error);
+    }).catch(function(err){
+      console.error("Restore error:", err);
+    }).then(function(){
+      syncPendingCount = Math.max(0, syncPendingCount - 1);
+      setSyncStatus(syncPendingCount ? "Сохраняю…" : "✓ Сохранено", syncPendingCount === 0);
     });
   }
 
@@ -344,7 +406,12 @@
           } else {
             var t = taskFromRow(payload.new);
             upsertById(tasks, t);
-            upsertById(shadow.tasks, t);
+            // A clone, not the same object `t` — see snapshotList()'s
+            // comment above persistAll(): sharing this reference with
+            // `tasks` would let a later in-place edit (the done checkbox
+            // etc.) silently "pre-sync" shadow through the shared object,
+            // so persistAll() would see no diff and never push the edit.
+            upsertById(shadow.tasks, JSON.parse(JSON.stringify(t)));
           }
           scheduleTasksRerender();
         }catch(e){ console.error("Realtime tasks error:", e); }
@@ -357,7 +424,7 @@
           } else {
             var m = meetingFromRow(payload.new);
             upsertById(meetings, m);
-            upsertById(shadow.meetings, m);
+            upsertById(shadow.meetings, JSON.parse(JSON.stringify(m)));
           }
           scheduleMeetingsRerender();
         }catch(e){ console.error("Realtime meetings error:", e); }
@@ -370,7 +437,7 @@
           } else {
             var i = ideaFromRow(payload.new);
             upsertById(ideas, i);
-            upsertById(shadow.ideas, i);
+            upsertById(shadow.ideas, JSON.parse(JSON.stringify(i)));
           }
           scheduleIdeasRerender();
         }catch(e){ console.error("Realtime ideas error:", e); }
@@ -734,8 +801,21 @@
     refreshResetLayoutBtn();
     updateLayoutColumns();
     if(!db) return;
-    db.from("user_prefs").upsert({ panel_layout: layout, updated_at: new Date().toISOString() })
-      .then(function(res){ if(res.error) console.error("Save layout error:", res.error); });
+    // Chained onto syncChain, same reasoning as softDeleteRow()/restoreRow()
+    // above — an untracked write here could just as easily be silently
+    // dropped by a sign-out that navigates away before it lands.
+    syncPendingCount++;
+    setSyncStatus("Сохраняю…", false);
+    syncChain = syncChain.then(function(){
+      return db.from("user_prefs").upsert({ panel_layout: layout, updated_at: new Date().toISOString() });
+    }).then(function(res){
+      if(res.error) console.error("Save layout error:", res.error);
+    }).catch(function(err){
+      console.error("Save layout error:", err);
+    }).then(function(){
+      syncPendingCount = Math.max(0, syncPendingCount - 1);
+      setSyncStatus(syncPendingCount ? "Сохраняю…" : "✓ Сохранено", syncPendingCount === 0);
+    });
   }
   resetLayoutBtn.addEventListener("click", function(){
     applyPanelLayout(DEFAULT_PANEL_LAYOUT);
@@ -2248,7 +2328,25 @@
     var signOutBtn = document.getElementById("signOutBtn");
     if(signOutBtn){
       signOutBtn.addEventListener("click", function(){
-        db.auth.signOut().then(function(){ window.location.href = "/login"; });
+        // Wait for every queued write (persistAll's diffAndSync, plus
+        // softDeleteRow/restoreRow/savePanelLayout, all chained onto the
+        // same syncChain) to actually reach Supabase before navigating.
+        // Navigating first was the root cause of "I deleted/completed
+        // things, signed out, signed back in, and they were back" — the
+        // browser aborts any still-in-flight request on page unload, so an
+        // action taken right before clicking "Выйти" could be discarded
+        // before it was ever saved.
+        signOutBtn.disabled = true;
+        setSyncStatus("Сохраняю перед выходом…", false);
+        Promise.resolve(syncChain).then(function(){
+          return db.auth.signOut();
+        }).then(function(){
+          window.location.href = "/login";
+        }).catch(function(err){
+          console.error("Sign out error:", err);
+          signOutBtn.disabled = false;
+          setSyncStatus("⚠ Не удалось сохранить перед выходом, попробуйте ещё раз", true);
+        });
       });
     }
 
@@ -2315,7 +2413,7 @@
 
     // Baseline "already in the database" snapshot — taken before any of the
     // startup reconciliation below, so persistAll() only pushes what's new.
-    shadow = { tasks: tasks.slice(), meetings: meetings.slice(), ideas: ideas.slice(), assignees: assignees.slice(), sections: sections.slice() };
+    shadow = { tasks: snapshotList(tasks), meetings: snapshotList(meetings), ideas: snapshotList(ideas), assignees: assignees.slice(), sections: snapshotList(sections) };
 
     if(assignees.length === 0){
       assignees = DEFAULT_ASSIGNEES.slice();
