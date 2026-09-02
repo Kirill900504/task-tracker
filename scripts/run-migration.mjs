@@ -13,7 +13,9 @@ if (!file) {
 }
 
 const sql = readFileSync(file, "utf8");
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+// Supabase's pooler requires SSL; without it, connection fails with a
+// misleading "password authentication failed" rather than an SSL error.
+const client = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
 await client.connect();
 try {
