@@ -79,9 +79,11 @@ export default function QuickAdd() {
 
   function handleResult(result: QuickAddResult, isClarifyFollowUp: boolean) {
     if (result.tool === "ask_clarifying_question") {
-      // Loop guard: if we already asked once and got the same question back
-      // (the model can degrade to echoing the input), stop asking.
-      if (isClarifyFollowUp && result.input.question.trim() === clarifyQuestion.trim()) {
+      // Loop guard: allow at most one clarifying round-trip. Comparing the
+      // question text was too narrow in practice (the model phrases repeat
+      // asks differently, so an exact match rarely fires) — cap by round
+      // instead, matching the same fix applied to the Telegram bot.
+      if (isClarifyFollowUp) {
         setStatus("error");
         setErrorMessage("Не смог разобрать фразу — попробуйте переформулировать");
         return;

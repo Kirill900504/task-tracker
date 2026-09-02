@@ -1,6 +1,6 @@
 {
-  "name": "РОКАС — Трекер задач",
-  "short_name": "Трекер РОКАС",
+  "name": "РОКАС",
+  "short_name": "РОКАС",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

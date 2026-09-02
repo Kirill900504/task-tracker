@@ -3,6 +3,10 @@ export const TRACKER_BODY_HTML = `
 <div id="toast-stack"></div>
 <div id="syncStatus"></div>
 <div class="people-tooltip" id="peopleTooltip"></div>
+<div class="date-popover" id="datePopover">
+  <button type="button" class="date-popover-btn" id="datePopoverTaskBtn">+ Задача</button>
+  <button type="button" class="date-popover-btn" id="datePopoverMeetingBtn">+ Встреча</button>
+</div>
 
 <header>
   <div class="header-row">
@@ -50,7 +54,10 @@ export const TRACKER_BODY_HTML = `
     <div class="panel" id="meetingsPanel">
       <div class="panel-head">
         <div class="panel-title">Встречи <span class="count" id="countMeetings">0</span></div>
-        <button class="btn btn-primary btn-small" id="addMeetingBtn">+</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <label class="check-wrap" style="font-size:11px;"><input type="checkbox" id="showResolvedMeetingsCheckbox"> Завершённые</label>
+          <button class="btn btn-primary btn-small" id="addMeetingBtn">+</button>
+        </div>
       </div>
       <div id="meetingsForDay"></div>
     </div>
@@ -94,7 +101,7 @@ export const TRACKER_BODY_HTML = `
   <div class="side side-ideas" id="ideasSide">
     <div class="panel" id="ideasPanel">
       <div class="panel-head">
-        <div class="panel-title">Идеи и мысли</div>
+        <div class="panel-title">Идеи и мысли <span class="count" id="countIdeas">0</span></div>
       </div>
       <div class="idea-add">
         <input type="text" id="ideaInput" placeholder="Мысль, идея… Enter — сохранить">

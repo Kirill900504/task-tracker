@@ -214,22 +214,26 @@ export async function POST(req: Request) {
   try {
     let { tool, input, droppedNames } = await parseQuickAdd(effectiveText, assignees);
 
-    // Loop guard: if we already asked a clarifying question last round and
-    // the model just asks the *same* thing again (observed in practice —
-    // it can degrade to literally echoing the user's own text back as the
-    // "question"), stop asking and fall back to the honest cant_help reply
-    // instead of asking forever.
+    // Loop guard: allow at most ONE clarifying round-trip. An exact-text
+    // comparison here previously let this slip through in production — the
+    // model phrased each follow-up slightly differently, so it never matched,
+    // and pending_context grew without bound across many replies (turning
+    // into an ever-larger, eventually corrupted blob that kept re-triggering
+    // the same stuck question). Capping by round instead of by text content
+    // closes that regardless of what the model says the second time.
     if (tool === "ask_clarifying_question" && hadPendingContext) {
-      const question = String(input.question || "").trim();
-      if (question === text.trim() || question === String(account.pending_context || "").trim()) {
-        tool = "cant_help";
-        input = {};
-        droppedNames = [];
-      }
+      tool = "cant_help";
+      input = {};
+      droppedNames = [];
     }
 
     if (tool === "ask_clarifying_question") {
-      await admin.from("telegram_accounts").update({ pending_context: effectiveText }).eq("telegram_chat_id", chatId);
+      // Defensive cap — this can only ever be the *first* round now, but
+      // truncate anyway so a single oversized message can't wedge the column.
+      await admin
+        .from("telegram_accounts")
+        .update({ pending_context: effectiveText.slice(0, 500) })
+        .eq("telegram_chat_id", chatId);
     }
     await replyForResult(chatId, admin, account.user_id, tool, input, droppedNames);
   } catch (e) {

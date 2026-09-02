@@ -16,6 +16,7 @@
     --today-bg:#1E3A45;
     --long-bg:#25392B;
     --long-border:#3C5C46;
+    --success:#3FA968;
     --assignee:#B9A0DE;
     --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -105,6 +106,7 @@
   .cal-day.selected{background:var(--accent); color:#F3F8FA;}
   .cal-dot{width:5px; height:5px; border-radius:50%; background:var(--med); display:inline-block; margin-top:3px;}
   .cal-dot.high{background:var(--high);}
+  .cal-day.drag-over{border-color:var(--today); background:var(--today-bg);}
   .cal-filter-note{display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--ink-soft); flex-wrap:wrap;}
 
   /* Ideas */
@@ -249,7 +251,7 @@
   .idea-item.important{border-color:var(--high); background:var(--high-bg);}
   .idea-item.done{opacity:.55;}
   .idea-item.done .idea-text{text-decoration:line-through;}
-  .idea-done-check{width:16px; height:16px; flex:none; margin-top:2px; cursor:pointer;}
+  .idea-check{margin-top:0;}
   .idea-item.important::after{
     content:""; position:absolute; top:-4px; right:-4px; width:9px; height:9px;
     border-radius:50%; background:var(--high); box-shadow:0 0 0 2px var(--paper);
@@ -304,6 +306,24 @@
   .people-tooltip .prow{padding:2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .meeting-del{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; flex:none;}
   .meeting-del:hover{color:var(--high);}
+  .meeting-quick-actions{display:flex; gap:1px; flex:none; align-items:center;}
+  .meeting-icon-btn{
+    background:none; border:none; cursor:pointer; font-size:13px; line-height:1;
+    padding:3px 4px; border-radius:4px; opacity:.55;
+  }
+  .meeting-icon-btn:hover{opacity:1; background:var(--paper);}
+
+  /* Popover: create a task/meeting on a clicked calendar date */
+  .date-popover{
+    display:none; flex-direction:column; position:fixed; z-index:300; gap:2px;
+    background:var(--paper); border:1px solid var(--line); border-radius:6px;
+    box-shadow:0 10px 28px rgba(0,0,0,.4); padding:6px; min-width:120px;
+  }
+  .date-popover-btn{
+    background:none; border:none; color:var(--ink); text-align:left; cursor:pointer;
+    font-family:var(--sans); font-size:13px; padding:6px 8px; border-radius:4px;
+  }
+  .date-popover-btn:hover{background:var(--paper-soft); color:var(--accent);}
   .participants-field{position:relative;}
   .participants-trigger{
     width:100%; text-align:left; padding:8px 10px; border:1px solid var(--line); border-radius:6px;
@@ -336,7 +356,8 @@
   .outcome-badge.success{color:var(--long-border); }
   .outcome-badge.no_result{color:var(--high);}
   .outcome-actions{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;}
-  .outcome-btn-success{color:var(--long-border); border-color:var(--long-border);}
+  .outcome-btn-success{background:var(--success); color:#0B2116; border-color:var(--success); font-weight:600;}
+  .outcome-btn-success:hover{opacity:.9;}
   .outcome-btn-noresult{color:var(--high); border-color:var(--high-bg);}
   .reschedule-row{display:flex; gap:8px; margin-top:10px;}
   .reschedule-row input{flex:1; padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink);}

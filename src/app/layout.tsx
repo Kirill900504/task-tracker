@@ -4,7 +4,7 @@ import "./tracker.css";
 import RegisterSW from "./registerSW";
 
 export const metadata: Metadata = {
-  title: "Трекер задач",
+  title: "Постановщик задач",
   description: "Личный таск-трекер",
   manifest: "/manifest.json",
   icons: {

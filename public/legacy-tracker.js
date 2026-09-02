@@ -265,6 +265,12 @@
     var p = iso.split("-");
     return p[2] + "." + p[1] + "." + p[0];
   }
+  // Adds n days to a YYYY-MM-DD string, built from local calendar fields
+  // (not UTC) so it doesn't drift near month/DST boundaries.
+  function addDaysIso(iso, n){
+    var p = iso.split("-").map(Number);
+    return dateStr(new Date(p[0], p[1]-1, p[2]+n));
+  }
   function weekdayName(n){
     return ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"][n];
   }
@@ -620,6 +626,7 @@
     wrap.innerHTML = "";
     var showDone = document.getElementById("showDoneCheckbox").checked;
     var visible = ideas.filter(function(i){ return showDone || !i.done; });
+    document.getElementById("countIdeas").textContent = visible.length;
     if(visible.length === 0){
       var e = document.createElement("div"); e.className = "empty";
       e.textContent = ideas.length === 0 ? "Пока пусто — запишите первую мысль" : "Нет активных мыслей";
@@ -633,13 +640,16 @@
       .forEach(function(idea){
       var row = document.createElement("div");
       row.className = "idea-item" + (idea.important ? " important" : "") + (idea.done ? " done" : "");
-      var check = document.createElement("input");
-      check.type = "checkbox"; check.className = "idea-done-check";
-      check.checked = !!idea.done;
+      // Custom check (matches the task-list checkbox styling) instead of a
+      // native <input type=checkbox>, whose default rendering looked
+      // inconsistent with the rest of the app.
+      var check = document.createElement("div");
+      check.className = "check idea-check" + (idea.done ? " checked" : "");
+      check.textContent = idea.done ? "✓" : "";
       check.title = idea.done ? "Вернуть в активные" : "Отметить завершённой";
-      check.addEventListener("click", function(e){ e.stopPropagation(); });
-      check.addEventListener("change", function(){
-        idea.done = check.checked;
+      check.addEventListener("click", function(e){
+        e.stopPropagation();
+        idea.done = !idea.done;
         persistAll(); renderIdeas();
       });
       var left = document.createElement("div");
@@ -766,10 +776,34 @@
           cell.appendChild(mdot);
         }
 
-        cell.addEventListener("click", function(){
-          calendarFilterDate = (calendarFilterDate === ds) ? null : ds;
+        cell.addEventListener("click", function(e){
+          e.stopPropagation();
+          openDatePopover(cell, ds);
+        });
+
+        // Drop target for dragging a meeting chip onto a new date.
+        cell.addEventListener("dragover", function(e){
+          e.preventDefault();
+          cell.classList.add("drag-over");
+        });
+        cell.addEventListener("dragleave", function(){
+          cell.classList.remove("drag-over");
+        });
+        cell.addEventListener("drop", function(e){
+          e.preventDefault();
+          cell.classList.remove("drag-over");
+          var id = e.dataTransfer.getData("text/plain");
+          if(!id) return;
+          var meeting = meetings.find(function(x){ return x.id === id; });
+          if(!meeting) return;
+          var newTime = prompt("Время встречи «" + meeting.title + "» на " + fmtDate(ds) + ":", meeting.time || "10:00");
+          if(newTime === null) return;
+          meeting.date = ds;
+          newTime = newTime.trim();
+          if(newTime) meeting.time = newTime;
+          persistAll();
           renderCalendar();
-          render();
+          renderCalFilterNote();
           renderAllMeetings();
         });
         grid.appendChild(cell);
@@ -812,18 +846,56 @@
     peopleTooltip.style.display = "none";
   }
 
+  // Клик по дате в календаре предлагает сразу завести задачу или встречу на
+  // эту дату, а не фильтрует список (так решили — быстрое создание нужнее).
+  var datePopover = document.getElementById("datePopover");
+  var datePopoverDate = null;
+  function openDatePopover(anchorEl, ds){
+    datePopoverDate = ds;
+    datePopover.style.display = "flex";
+    var rect = anchorEl.getBoundingClientRect();
+    var top = rect.bottom + 4;
+    var left = Math.max(8, Math.min(rect.left, window.innerWidth - datePopover.offsetWidth - 8));
+    if(top + datePopover.offsetHeight > window.innerHeight - 8){
+      top = rect.top - datePopover.offsetHeight - 4;
+    }
+    datePopover.style.top = top + "px";
+    datePopover.style.left = left + "px";
+  }
+  function closeDatePopover(){
+    datePopover.style.display = "none";
+    datePopoverDate = null;
+  }
+  document.addEventListener("click", function(e){
+    if(datePopover.style.display !== "none" && !datePopover.contains(e.target)) closeDatePopover();
+  });
+  document.getElementById("datePopoverTaskBtn").addEventListener("click", function(){
+    var ds = datePopoverDate;
+    closeDatePopover();
+    openModal(null, ds);
+  });
+  document.getElementById("datePopoverMeetingBtn").addEventListener("click", function(){
+    var ds = datePopoverDate;
+    closeDatePopover();
+    openMeetingModal(null, ds);
+  });
+
   function renderAllMeetings(){
     hidePeopleTooltip();
     var mwrap = document.getElementById("meetingsForDay");
-    var sorted = meetings.slice().sort(function(a,b){
-      var ak = (a.date||"") + " " + (a.time||"");
-      var bk = (b.date||"") + " " + (b.time||"");
-      return ak < bk ? -1 : (ak > bk ? 1 : 0);
-    });
+    var showResolved = document.getElementById("showResolvedMeetingsCheckbox").checked;
+    var sorted = meetings
+      .filter(function(m){ return showResolved || !m.status || m.status === "planned"; })
+      .sort(function(a,b){
+        var ak = (a.date||"") + " " + (a.time||"");
+        var bk = (b.date||"") + " " + (b.time||"");
+        return ak < bk ? -1 : (ak > bk ? 1 : 0);
+      });
     document.getElementById("countMeetings").textContent = sorted.length;
     mwrap.innerHTML = "";
     if(sorted.length === 0){
-      var e = document.createElement("div"); e.className = "empty"; e.textContent = "Встреч пока нет";
+      var e = document.createElement("div"); e.className = "empty";
+      e.textContent = meetings.length === 0 ? "Встреч пока нет" : "Нет запланированных встреч";
       mwrap.appendChild(e);
       return;
     }
@@ -832,6 +904,11 @@
       chip.className = "meeting-chip"
         + (m.date === calendarFilterDate ? " selected-day" : "")
         + (m.status && m.status !== "planned" ? " resolved" : "");
+      chip.draggable = true;
+      chip.addEventListener("dragstart", function(e){
+        e.dataTransfer.setData("text/plain", m.id);
+        e.dataTransfer.effectAllowed = "move";
+      });
       var left = document.createElement("div");
       left.style.display = "flex"; left.style.minWidth = "0"; left.style.flex = "1"; left.style.gap = "8px";
       var when = document.createElement("span"); when.className = "mwhen";
@@ -873,10 +950,52 @@
       chip.addEventListener("click", function(){ openMeetingModal(m); });
       chip.appendChild(left);
       if(cleanParticipants.length) chip.appendChild(people);
+
+      if(!m.status || m.status === "planned"){
+        var quickActions = document.createElement("div");
+        quickActions.className = "meeting-quick-actions";
+
+        var successBtn = document.createElement("button");
+        successBtn.className = "meeting-icon-btn success"; successBtn.textContent = "✅"; successBtn.title = "Успешно";
+        successBtn.addEventListener("click", function(e){
+          e.stopPropagation();
+          m.status = "success";
+          persistAll(); renderCalendar(); renderAllMeetings();
+        });
+
+        var noResultBtn = document.createElement("button");
+        noResultBtn.className = "meeting-icon-btn noresult"; noResultBtn.textContent = "🚫"; noResultBtn.title = "Без результата";
+        noResultBtn.addEventListener("click", function(e){
+          e.stopPropagation();
+          m.status = "no_result";
+          persistAll(); renderCalendar(); renderAllMeetings();
+        });
+
+        var rescheduleQuickBtn = document.createElement("button");
+        rescheduleQuickBtn.className = "meeting-icon-btn reschedule"; rescheduleQuickBtn.textContent = "📅"; rescheduleQuickBtn.title = "Перенести";
+        rescheduleQuickBtn.addEventListener("click", function(e){
+          e.stopPropagation();
+          var suggestedDate = addDaysIso(m.date, 1);
+          var newDate = prompt("Перенести встречу «" + m.title + "» на дату (ГГГГ-ММ-ДД):", suggestedDate);
+          if(!newDate) return;
+          newDate = newDate.trim();
+          var newTime = prompt("Время встречи на " + fmtDate(newDate) + ":", m.time || "10:00");
+          if(newTime === null) return;
+          performReschedule(m, newDate, newTime.trim(), m.result);
+        });
+
+        quickActions.appendChild(successBtn);
+        quickActions.appendChild(noResultBtn);
+        quickActions.appendChild(rescheduleQuickBtn);
+        chip.appendChild(quickActions);
+      }
+
       chip.appendChild(del);
       mwrap.appendChild(chip);
     });
   }
+
+  document.getElementById("showResolvedMeetingsCheckbox").addEventListener("change", renderAllMeetings);
 
   document.getElementById("calPrevBtn").addEventListener("click", function(){
     calViewDate.setMonth(calViewDate.getMonth() - 1);
@@ -972,7 +1091,9 @@
     if(m){
       outcomeField.style.display = "";
       document.getElementById("mResult").value = m.result || "";
-      document.getElementById("mRescheduleDate").value = "";
+      // Предлагаем конкретную дату — следующий день после встречи — вместо
+      // пустого поля, которое приходилось заполнять вручную.
+      document.getElementById("mRescheduleDate").value = addDaysIso(m.date, 1);
       if(m.status && m.status !== "planned"){
         badge.className = "outcome-badge show " + m.status;
         badge.textContent = outcomeLabel(m.status) + (m.movedToDate ? " · перенесено на " + fmtDate(m.movedToDate) : "");
@@ -1022,18 +1143,12 @@
 
   // "Перенести следующий этап на дату" — создаёт новую встречу (тот же состав
   // и название) на выбранную дату, а текущую помечает как перенесённую.
-  document.getElementById("rescheduleBtn").addEventListener("click", function(){
-    var id = document.getElementById("meetingId").value;
-    if(!id) return;
-    var m = meetings.find(function(x){ return x.id === id; });
-    if(!m) return;
-    var newDate = document.getElementById("mRescheduleDate").value;
-    if(!newDate){ alert("Укажите дату следующего этапа"); return; }
-
+  // Общая с иконкой "📅" на карточке встречи (renderAllMeetings) логика.
+  function performReschedule(m, newDate, newTime, resultNote){
     var followUp = {
       id: uid(),
       date: newDate,
-      time: m.time || "",
+      time: newTime || m.time || "",
       title: m.title,
       participants: m.participants.slice(),
       status: "planned",
@@ -1043,13 +1158,26 @@
     meetings.push(followUp);
 
     m.status = "no_result";
-    m.result = document.getElementById("mResult").value.trim() || "Перенесено на следующий этап";
+    m.result = (resultNote || "").trim() || "Перенесено на следующий этап";
     m.movedToDate = newDate;
 
     persistAll();
-    closeMeetingModal();
     renderCalendar();
+    renderCalFilterNote();
     renderAllMeetings();
+  }
+
+  document.getElementById("rescheduleBtn").addEventListener("click", function(){
+    var id = document.getElementById("meetingId").value;
+    if(!id) return;
+    var m = meetings.find(function(x){ return x.id === id; });
+    if(!m) return;
+    var newDate = document.getElementById("mRescheduleDate").value;
+    if(!newDate){ alert("Укажите дату следующего этапа"); return; }
+    var newTime = prompt("Время встречи на " + fmtDate(newDate) + ":", m.time || "10:00");
+    if(newTime === null) return;
+    performReschedule(m, newDate, newTime.trim(), document.getElementById("mResult").value);
+    closeMeetingModal();
   });
 
   document.getElementById("meetingSaveBtn").addEventListener("click", function(){
@@ -1161,7 +1289,7 @@
     render();
   });
 
-  function openModal(taskId){
+  function openModal(taskId, presetDeadline){
     refreshSelectsGlobal();
     if(taskId){
       var t = tasks.find(function(x){ return x.id === taskId; });
@@ -1192,6 +1320,7 @@
       document.getElementById("deleteTaskBtn").style.display = "inline-block";
     } else {
       resetForm();
+      if(presetDeadline) document.getElementById("fDeadline").value = presetDeadline;
     }
     overlay.classList.add("open");
   }
@@ -1409,6 +1538,12 @@
 
   // ---------- Hotkey: N — новая задача (по физической клавише, не зависит от раскладки) ----------
   document.addEventListener("keydown", function(e){
+    if(e.key === "Escape"){
+      if(overlay.classList.contains("open")) closeModal();
+      if(meetingOverlay.classList.contains("open")) closeMeetingModal();
+      if(datePopover.style.display !== "none") closeDatePopover();
+      return;
+    }
     if(e.code !== "KeyN") return;
     if(e.ctrlKey || e.metaKey || e.altKey) return;
     var tag = (document.activeElement && document.activeElement.tagName || "").toLowerCase();
