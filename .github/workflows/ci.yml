@@ -24,7 +24,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx tsc --noEmit
       - run: npx eslint src --max-warnings=0
       - run: npx vitest run
+      # `next build` runs its own TypeScript check internally — and it has
+      # to run before any standalone `tsc`, since it's also what generates
+      # the `.next/types` ambient types (e.g. LayoutProps) that layout.tsx
+      # depends on. A separate `tsc --noEmit` first (tried in run #1) fails
+      # for exactly that reason.
       - run: npm run build
