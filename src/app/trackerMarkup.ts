@@ -31,8 +31,6 @@ export const TRACKER_BODY_HTML = `
   </div>
 </header>
 
-<div id="quickAddSlot"></div>
-
 <div class="layout" id="layoutGrid">
 
   <!-- Left: calendar -->
@@ -70,7 +68,7 @@ export const TRACKER_BODY_HTML = `
 
     <div class="toolbar">
       <button class="btn btn-primary" id="newTaskBtn">+ Новая задача</button>
-      <div class="search-wrap"><input type="search" id="searchInput" placeholder="Поиск по задачам…"></div>
+      <div class="search-wrap" id="quickAddSlot"></div>
       <select id="filterAssignee"><option value="all">Все исполнители</option></select>
       <select id="filterPriority">
         <option value="all">Любой приоритет</option>

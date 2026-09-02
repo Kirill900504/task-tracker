@@ -402,14 +402,9 @@
   function matchesFilters(t){
     var assignee = document.getElementById("filterAssignee").value;
     var priority = document.getElementById("filterPriority").value;
-    var q = document.getElementById("searchInput").value.trim().toLowerCase();
 
     if(assignee !== "all" && t.assignee !== assignee) return false;
     if(priority !== "all" && t.priority !== priority) return false;
-    if(q){
-      var hay = (t.title + " " + (t.desc||"")).toLowerCase();
-      if(hay.indexOf(q) === -1) return false;
-    }
     if(calendarFilterDate){
       var d = new Date(calendarFilterDate + "T00:00:00");
       if(!isTaskDueOnDate(t, d)) return false;
@@ -1373,7 +1368,7 @@
   });
 
   // ---------- Filters ----------
-  ["filterAssignee","filterPriority","searchInput","showDoneCheckbox"].forEach(function(id){
+  ["filterAssignee","filterPriority","showDoneCheckbox"].forEach(function(id){
     document.getElementById(id).addEventListener("input", render);
     document.getElementById(id).addEventListener("change", render);
   });

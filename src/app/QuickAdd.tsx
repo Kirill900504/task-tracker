@@ -149,24 +149,18 @@ export default function QuickAdd() {
   if (!slot) return null;
 
   return createPortal(
-    <div
-      style={{
-        borderBottom: "1px solid var(--line)",
-        background: "var(--paper)",
-        padding: "10px 28px",
-      }}
-    >
+    <div style={{ width: "100%" }}>
       {status !== "clarify" && status !== "idea-preview" && (
         <form onSubmit={onSubmit} style={{ display: "flex", gap: 8 }}>
           <input
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Что нужно добавить? Например: завтра позвонить Сергею"
+            placeholder="Что добавить? Например: завтра позвонить Сергею"
             disabled={status === "loading"}
             style={{
               flex: 1,
-              padding: "8px 10px",
+              padding: "7px 9px",
               border: "1px solid var(--line)",
               borderRadius: 6,
               fontFamily: "var(--sans)",
