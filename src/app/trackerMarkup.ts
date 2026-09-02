@@ -16,11 +16,11 @@ export const TRACKER_BODY_HTML = `
     <div class="header-quote">
       <div class="hqline">Есть десятилетия, за которые ничего не случается, <b>и есть недели, за которые случаются десятилетия.</b></div>
     </div>
-    <div style="display:flex; gap:8px;">
+    <div class="header-btns" style="display:flex; gap:6px; flex-wrap:wrap;">
       <button class="btn active" id="ideasToggleBtn">💡 Идеи</button>
       <button class="btn active" id="calToggleBtn">📅 Календарь</button>
-      <button class="btn" id="notifPermBtn">🔔 Включить уведомления</button>
-      <button class="btn btn-primary" id="installAppBtn" style="display:none;">📥 Установить приложение</button>
+      <button class="btn" id="notifPermBtn">🔔 Уведомления</button>
+      <button class="btn btn-primary" id="installAppBtn" style="display:none;">📥 Установить</button>
       <button class="btn" id="telegramLinkBtn">🔗 Telegram</button>
       <button class="btn" id="signOutBtn">Выйти</button>
     </div>

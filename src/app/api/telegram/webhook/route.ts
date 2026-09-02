@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
 
 function uid(): string {
   return "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -14,7 +15,19 @@ function fmtDate(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
-async function replyForResult(chatId: number, admin: ReturnType<typeof createAdminClient>, userId: string, tool: string, input: Record<string, unknown>) {
+function droppedNote(dropped: string[]): string {
+  if (!dropped.length) return "";
+  return "\n⚠ Не нашёл в списке исполнителей, пропустил: " + dropped.join(", ");
+}
+
+async function replyForResult(
+  chatId: number,
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  tool: string,
+  input: Record<string, unknown>,
+  droppedNames: string[],
+) {
   if (tool === "create_task") {
     const row = {
       id: uid(),
@@ -37,7 +50,7 @@ async function replyForResult(chatId: number, admin: ReturnType<typeof createAdm
     if (row.deadline) lines.push("Срок: " + fmtDate(row.deadline as string));
     if (row.assignee) lines.push("Исполнитель: " + row.assignee);
     if (row.priority === "high") lines.push("Приоритет: высокий");
-    await sendTelegramMessage(chatId, lines.join("\n"));
+    await sendTelegramMessage(chatId, lines.join("\n") + droppedNote(droppedNames));
     return;
   }
 
@@ -63,7 +76,7 @@ async function replyForResult(chatId: number, admin: ReturnType<typeof createAdm
     }
     const lines = [`✓ Встреча: «${row.title}»`, `${fmtDate(row.date)}${row.time ? ", " + row.time : ""}`];
     if (row.participants.length) lines.push("Участники: " + row.participants.join(", "));
-    await sendTelegramMessage(chatId, lines.join("\n"));
+    await sendTelegramMessage(chatId, lines.join("\n") + droppedNote(droppedNames));
     return;
   }
 
@@ -88,6 +101,14 @@ async function replyForResult(chatId: number, admin: ReturnType<typeof createAdm
     await sendTelegramMessage(chatId, String(input.question || "Уточните, пожалуйста."));
     return;
   }
+
+  // cant_help, or anything unrecognized — an honest "I don't do that" beats
+  // silently failing or (the bug this replaced) echoing the user's message.
+  await sendTelegramMessage(
+    chatId,
+    "Пока умею только заводить задачи/встречи/идеи по фразе — на вопросы отвечать не умею. " +
+      "Хотите создать задачу или встречу — напишите её как поручение, например «завтра позвонить Сергею».",
+  );
 }
 
 export async function POST(req: Request) {
@@ -138,7 +159,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
     await admin.from("telegram_link_codes").delete().eq("code", code);
-    await sendTelegramMessage(chatId, "✓ Готово, аккаунт привязан. Теперь просто пишите сюда — например «завтра позвонить Сергею».");
+    await sendTelegramMessage(
+      chatId,
+      "✓ Готово, аккаунт привязан. Теперь просто пишите сюда — например «завтра позвонить Сергею».\n" +
+        "Также понимаю: «сегодня», «просрочено», «встречи», «помощь».",
+    );
     return NextResponse.json({ ok: true });
   }
 
@@ -163,8 +188,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const effectiveText = account.pending_context ? `${account.pending_context}. Уточнение: ${text.trim()}` : text.trim();
-  if (account.pending_context) {
+  // Read-only query commands ("сегодня", "просрочено", "встречи") are matched
+  // before quick-add — free, instant, and can't be misparsed by the LLM.
+  // They also break out of any pending clarify flow, since answering "сегодня"
+  // to a clarifying question isn't a real answer to it.
+  const queryKind = matchQueryCommand(text);
+  if (queryKind) {
+    if (account.pending_context) {
+      await admin.from("telegram_accounts").update({ pending_context: null }).eq("telegram_chat_id", chatId);
+    }
+    const reply = await replyForQuery(queryKind, account.user_id);
+    await sendTelegramMessage(chatId, reply);
+    return NextResponse.json({ ok: true });
+  }
+
+  const hadPendingContext = !!account.pending_context;
+  const effectiveText = hadPendingContext ? `${account.pending_context}. Уточнение: ${text.trim()}` : text.trim();
+  if (hadPendingContext) {
     await admin.from("telegram_accounts").update({ pending_context: null }).eq("telegram_chat_id", chatId);
   }
 
@@ -172,11 +212,26 @@ export async function POST(req: Request) {
   const assignees = (assigneeRows || []).map((r) => r.name as string);
 
   try {
-    const { tool, input } = await parseQuickAdd(effectiveText, assignees);
+    let { tool, input, droppedNames } = await parseQuickAdd(effectiveText, assignees);
+
+    // Loop guard: if we already asked a clarifying question last round and
+    // the model just asks the *same* thing again (observed in practice —
+    // it can degrade to literally echoing the user's own text back as the
+    // "question"), stop asking and fall back to the honest cant_help reply
+    // instead of asking forever.
+    if (tool === "ask_clarifying_question" && hadPendingContext) {
+      const question = String(input.question || "").trim();
+      if (question === text.trim() || question === String(account.pending_context || "").trim()) {
+        tool = "cant_help";
+        input = {};
+        droppedNames = [];
+      }
+    }
+
     if (tool === "ask_clarifying_question") {
       await admin.from("telegram_accounts").update({ pending_context: effectiveText }).eq("telegram_chat_id", chatId);
     }
-    await replyForResult(chatId, admin, account.user_id, tool, input);
+    await replyForResult(chatId, admin, account.user_id, tool, input, droppedNames);
   } catch (e) {
     await sendTelegramMessage(chatId, "Не получилось разобрать сообщение: " + (e instanceof Error ? e.message : String(e)));
   }

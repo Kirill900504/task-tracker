@@ -49,6 +49,7 @@
   .btn-ghost{border:none; background:none; color:var(--ink-soft); padding:4px 6px;}
   .btn-ghost:hover{color:var(--accent);}
   .btn-small{padding:5px 10px; font-size:12px;}
+  .header-btns .btn{padding:6px 10px; font-size:12px;}
   .btn.active{border-color:var(--accent); color:var(--accent);}
 
   .layout{

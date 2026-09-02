@@ -51,21 +51,24 @@ describe("nextWeekdayMap", () => {
 describe("sanitizeAgainstKnown", () => {
   const known = ["Кирилл (я)", "Юрий Черкашин"];
 
-  it("clears an assignee that isn't an exact match in the known list", () => {
+  it("clears an assignee that isn't an exact match, and reports it as dropped", () => {
     const input: Record<string, unknown> = { assignee: "Иван" };
-    sanitizeAgainstKnown(input, known);
+    const dropped = sanitizeAgainstKnown(input, known);
     expect(input.assignee).toBe("");
+    expect(dropped).toEqual(["Иван"]);
   });
 
-  it("keeps an assignee that exactly matches the known list", () => {
+  it("keeps an assignee that exactly matches the known list, reports nothing dropped", () => {
     const input: Record<string, unknown> = { assignee: "Юрий Черкашин" };
-    sanitizeAgainstKnown(input, known);
+    const dropped = sanitizeAgainstKnown(input, known);
     expect(input.assignee).toBe("Юрий Черкашин");
+    expect(dropped).toEqual([]);
   });
 
-  it("filters out participants not in the known list, keeps the rest", () => {
+  it("filters out participants not in the known list, keeps the rest, reports the dropped one", () => {
     const input: Record<string, unknown> = { participants: ["Кирилл (я)", "Придуманное Имя"] };
-    sanitizeAgainstKnown(input, known);
+    const dropped = sanitizeAgainstKnown(input, known);
     expect(input.participants).toEqual(["Кирилл (я)"]);
+    expect(dropped).toEqual(["Придуманное Имя"]);
   });
 });

@@ -15,10 +15,11 @@ type MeetingFields = { title: string; date: string; time: string; participants: 
 type IdeaFields = { text: string; important: boolean };
 
 type QuickAddResult =
-  | { tool: "create_task"; input: TaskFields }
-  | { tool: "create_meeting"; input: MeetingFields }
-  | { tool: "create_idea"; input: IdeaFields }
-  | { tool: "ask_clarifying_question"; input: { question: string } };
+  | { tool: "create_task"; input: TaskFields; droppedNames: string[] }
+  | { tool: "create_meeting"; input: MeetingFields; droppedNames: string[] }
+  | { tool: "create_idea"; input: IdeaFields; droppedNames: string[] }
+  | { tool: "ask_clarifying_question"; input: { question: string }; droppedNames: string[] }
+  | { tool: "cant_help"; input: Record<string, never>; droppedNames: string[] };
 
 declare global {
   interface Window {
@@ -47,7 +48,13 @@ export default function QuickAdd() {
   const [ideaPreview, setIdeaPreview] = useState<IdeaFields | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  async function send(fullText: string) {
+  function noteDropped(droppedNames: string[]) {
+    if (droppedNames.length) {
+      alert("Не нашёл в списке исполнителей, пропустил: " + droppedNames.join(", "));
+    }
+  }
+
+  async function send(fullText: string, isClarifyFollowUp: boolean) {
     setStatus("loading");
     setErrorMessage("");
     try {
@@ -63,26 +70,35 @@ export default function QuickAdd() {
         setErrorMessage(data.error || "Не удалось распознать");
         return;
       }
-      handleResult(data as QuickAddResult, fullText);
+      handleResult(data as QuickAddResult, isClarifyFollowUp);
     } catch {
       setStatus("error");
       setErrorMessage("Проблема с сетью");
     }
   }
 
-  function handleResult(result: QuickAddResult, fullText: string) {
+  function handleResult(result: QuickAddResult, isClarifyFollowUp: boolean) {
     if (result.tool === "ask_clarifying_question") {
+      // Loop guard: if we already asked once and got the same question back
+      // (the model can degrade to echoing the input), stop asking.
+      if (isClarifyFollowUp && result.input.question.trim() === clarifyQuestion.trim()) {
+        setStatus("error");
+        setErrorMessage("Не смог разобрать фразу — попробуйте переформулировать");
+        return;
+      }
       setClarifyQuestion(result.input.question);
       setStatus("clarify");
       return;
     }
     if (result.tool === "create_task") {
       window.trackerAPI?.prefillNewTask(result.input);
+      noteDropped(result.droppedNames);
       reset();
       return;
     }
     if (result.tool === "create_meeting") {
       window.trackerAPI?.prefillNewMeeting(result.input);
+      noteDropped(result.droppedNames);
       reset();
       return;
     }
@@ -91,9 +107,14 @@ export default function QuickAdd() {
       setStatus("idea-preview");
       return;
     }
-    // Should not happen — fall back to showing the raw text as an error.
+    if (result.tool === "cant_help") {
+      setStatus("error");
+      setErrorMessage("Это не похоже на задачу/встречу/идею — умею создавать только их");
+      return;
+    }
+    // Should not happen — fall back to a visible error rather than silence.
     setStatus("error");
-    setErrorMessage("Неожиданный ответ: " + fullText);
+    setErrorMessage("Неожиданный ответ сервера");
   }
 
   function reset() {
@@ -108,13 +129,13 @@ export default function QuickAdd() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
-    send(text.trim());
+    send(text.trim(), false);
   }
 
   function onClarifySubmit(e: FormEvent) {
     e.preventDefault();
     if (!clarifyAnswer.trim()) return;
-    send(text + ". Уточнение: " + clarifyAnswer.trim());
+    send(text + ". Уточнение: " + clarifyAnswer.trim(), true);
   }
 
   function confirmIdea() {

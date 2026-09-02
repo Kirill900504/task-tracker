@@ -50,6 +50,10 @@ function systemPrompt(now: Date, assignees: string[]) {
     "",
     '4) {"type":"clarify","question":string}',
     "   — фразу нельзя уверенно разобрать (например, не хватает ключевой детали) — короткий уточняющий вопрос вместо угадывания.",
+    "",
+    '5) {"type":"other"}',
+    "   — фраза НЕ является просьбой создать задачу/встречу/идею: вопрос про уже сделанное, комментарий, благодарность, что угодно вне этих трёх категорий.",
+    "   Используй именно этот тип, а не clarify, если пользователь не пытается ничего завести, а спрашивает или комментирует. Никогда не повторяй и не пересказывай его сообщение.",
   ].join("\n");
 }
 
@@ -66,20 +70,33 @@ export const TOOL_BY_TYPE: Record<string, string> = {
   meeting: "create_meeting",
   idea: "create_idea",
   clarify: "ask_clarifying_question",
+  other: "cant_help",
 };
 
 // Belt-and-suspenders: never trust the model to have actually honored the
 // "only names from the list" instruction — enforce it here regardless.
-export function sanitizeAgainstKnown(input: Record<string, unknown>, known: string[]) {
-  if (typeof input.assignee === "string" && !known.includes(input.assignee)) {
+// Returns the names that got dropped, so the caller can tell the user why
+// (dropping silently is what caused real confusion in practice — the user
+// had no way to know "Козлов" just wasn't in the assignee list).
+export function sanitizeAgainstKnown(input: Record<string, unknown>, known: string[]): string[] {
+  const dropped: string[] = [];
+  if (typeof input.assignee === "string" && input.assignee && !known.includes(input.assignee)) {
+    dropped.push(input.assignee);
     input.assignee = "";
   }
   if (Array.isArray(input.participants)) {
-    input.participants = input.participants.filter((n) => typeof n === "string" && known.includes(n));
+    const kept: string[] = [];
+    for (const n of input.participants) {
+      if (typeof n !== "string") continue;
+      if (known.includes(n)) kept.push(n);
+      else dropped.push(n);
+    }
+    input.participants = kept;
   }
+  return dropped;
 }
 
-export type QuickAddParsed = { tool: string; input: Record<string, unknown> };
+export type QuickAddParsed = { tool: string; input: Record<string, unknown>; droppedNames: string[] };
 
 export async function parseQuickAdd(text: string, assignees: string[]): Promise<QuickAddParsed> {
   const system = systemPrompt(new Date(), assignees);
@@ -111,7 +128,7 @@ export async function parseQuickAdd(text: string, assignees: string[]): Promise<
 
   const { type: _omit, ...input } = parsed;
   void _omit;
-  sanitizeAgainstKnown(input, assignees);
+  const droppedNames = sanitizeAgainstKnown(input, assignees);
 
-  return { tool, input };
+  return { tool, input, droppedNames };
 }
