@@ -77,6 +77,43 @@
   .side{position:sticky; top:84px; min-width:0; max-height:calc(100vh - 100px); overflow:auto;}
   .main-col{min-width:0;}
 
+  /* Mobile quick-add: a floating thumb-reachable button + bottom sheet
+     replaces the toolbar bar (which needs scrolling up to reach), so hide
+     the now-empty toolbar slot rather than leave a blank gap. */
+  @media (max-width:768px){
+    #quickAddSlot{display:none;}
+  }
+  .quick-add-fab{
+    position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom, 0px));
+    width:56px; height:56px; border-radius:50%; border:none;
+    background:var(--accent); color:#F3F8FA; font-size:28px; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 6px 18px rgba(0,0,0,.45); cursor:pointer; z-index:250;
+  }
+  .quick-add-fab:active{transform:scale(.94);}
+  .quick-add-sheet-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:260;
+    display:flex; align-items:flex-end;
+  }
+  .quick-add-sheet{
+    width:100%; background:var(--paper); border-radius:16px 16px 0 0;
+    padding:10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    box-shadow:0 -8px 24px rgba(0,0,0,.45);
+    animation:quick-add-sheet-up .18s ease-out;
+  }
+  @keyframes quick-add-sheet-up{ from{transform:translateY(100%);} to{transform:translateY(0);} }
+  .quick-add-sheet-handle{width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 12px;}
+  .quick-add-mic-btn{
+    flex:none; border:1px solid var(--line); background:var(--paper-soft); color:var(--ink);
+    border-radius:6px; width:38px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:16px; padding:0;
+  }
+  .quick-add-mic-btn.listening{background:var(--high); border-color:var(--high); animation:quick-add-mic-pulse 1s ease-in-out infinite;}
+  @keyframes quick-add-mic-pulse{ 0%,100%{opacity:1;} 50%{opacity:.55;} }
+  .quick-add-preview{display:flex; flex-direction:column; gap:8px; font-size:13px;}
+  .quick-add-preview .qap-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .quick-add-preview .qap-actions{display:flex; gap:8px; margin-top:2px;}
+
   select, input[type=text], input[type=date], input[type=search]{
     font-family:var(--sans); font-size:13px; padding:7px 9px;
     border:1px solid var(--line); border-radius:6px; background:var(--paper-soft); color:var(--ink);

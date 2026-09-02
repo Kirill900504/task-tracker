@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 type TaskFields = {
@@ -35,12 +35,39 @@ declare global {
   }
 }
 
-type Status = "idle" | "loading" | "clarify" | "idea-preview" | "error";
+// Web Speech API has no standard ambient type in TS's DOM lib yet, and is
+// only exposed under a vendor prefix in the browsers that support it at
+// all — typed loosely on purpose, this is a real browser-compat boundary,
+// not laziness.
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+};
+
+const MOBILE_QUERY = "(max-width: 768px)";
+const INPUT_STYLE = {
+  flex: 1,
+  padding: "7px 9px",
+  border: "1px solid var(--line)",
+  borderRadius: 6,
+  fontFamily: "var(--sans)",
+  fontSize: 13,
+  background: "var(--paper-soft)",
+  color: "var(--ink)",
+} as const;
+
+type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "error";
 
 export default function QuickAdd() {
-  // The portal target is normally already in the DOM by the time this
-  // mounts (it's part of the static markup rendered alongside it), so this
-  // usually resolves on the very first check. But it's been reported
+  // The desktop portal target is normally already in the DOM by the time
+  // this mounts (it's part of the static markup rendered alongside it), so
+  // this usually resolves on the very first check. But it's been reported
   // missing entirely in at least one mobile in-app browser — polling for a
   // short while instead of a single one-shot lookup means a late-arriving
   // element still gets picked up rather than leaving the bar silently gone
@@ -61,12 +88,66 @@ export default function QuickAdd() {
     }, 100);
     return () => clearInterval(interval);
   }, [slot]);
+
+  // Phones need a fundamentally different affordance than the desktop
+  // toolbar bar: a thumb-reachable floating button that opens a bottom
+  // sheet, rather than a bar the user has to scroll up to reach. Same form,
+  // same logic underneath — only where/how it's presented differs.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_QUERY);
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
   const [text, setText] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [clarifyQuestion, setClarifyQuestion] = useState("");
   const [clarifyAnswer, setClarifyAnswer] = useState("");
   const [ideaPreview, setIdeaPreview] = useState<IdeaFields | null>(null);
+  const [taskPreview, setTaskPreview] = useState<TaskFields | null>(null);
+  const [meetingPreview, setMeetingPreview] = useState<MeetingFields | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+
+  // Voice input (browser-native, free, no server round trip) — a mobile-
+  // first convenience: dictate instead of typing, review the transcript in
+  // the same text field, then submit through the exact same path as typed
+  // text. Feature-detected: Firefox and older browsers just don't get the
+  // mic button, no error shown.
+  const [voiceSupported] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const w = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
+    return !!(w.SpeechRecognition || w.webkitSpeechRecognition);
+  });
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  function toggleVoice() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const w = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
+    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!Ctor) return;
+    const recognition = new Ctor();
+    recognition.lang = "ru-RU";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = (e) => {
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+      setText(transcript);
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }
 
   function noteDropped(droppedNames: string[]) {
     if (droppedNames.length) {
@@ -155,15 +236,30 @@ export default function QuickAdd() {
 
   function handleSingleItem(item: QuickAddItem) {
     if (item.tool === "create_task") {
-      window.trackerAPI?.prefillNewTask(item.input);
-      noteDropped(item.droppedNames);
-      reset();
+      // Desktop reviews/edits in the real modal (mouse+keyboard, plenty of
+      // room). On a phone, reaching across that same multi-field form just
+      // to confirm one parsed task is the opposite of "fast" — a compact
+      // inline card with the essentials is enough, full editing is still a
+      // tap away afterward via the task itself.
+      if (isMobile) {
+        setTaskPreview(item.input);
+        setStatus("task-preview");
+      } else {
+        window.trackerAPI?.prefillNewTask(item.input);
+        noteDropped(item.droppedNames);
+        reset();
+      }
       return;
     }
     if (item.tool === "create_meeting") {
-      window.trackerAPI?.prefillNewMeeting(item.input);
-      noteDropped(item.droppedNames);
-      reset();
+      if (isMobile) {
+        setMeetingPreview(item.input);
+        setStatus("meeting-preview");
+      } else {
+        window.trackerAPI?.prefillNewMeeting(item.input);
+        noteDropped(item.droppedNames);
+        reset();
+      }
       return;
     }
     if (item.tool === "create_idea") {
@@ -192,8 +288,11 @@ export default function QuickAdd() {
     setClarifyQuestion("");
     setClarifyAnswer("");
     setIdeaPreview(null);
+    setTaskPreview(null);
+    setMeetingPreview(null);
     setErrorMessage("");
     setStatus("idle");
+    if (isMobile) setSheetOpen(false);
   }
 
   function onSubmit(e: FormEvent) {
@@ -213,85 +312,146 @@ export default function QuickAdd() {
     window.trackerAPI?.createIdea(ideaPreview);
     reset();
   }
+  function confirmTask() {
+    if (!taskPreview) return;
+    window.trackerAPI?.createTask(taskPreview);
+    reset();
+  }
+  function confirmMeeting() {
+    if (!meetingPreview) return;
+    window.trackerAPI?.createMeeting(meetingPreview);
+    reset();
+  }
+
+  function renderFormBody(): ReactNode {
+    return (
+      <>
+        {status !== "clarify" && status !== "idea-preview" && status !== "task-preview" && status !== "meeting-preview" && (
+          <form onSubmit={onSubmit} style={{ display: "flex", gap: 8 }}>
+            <input
+              type="text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Что добавить? Например: завтра позвонить Сергею"
+              disabled={status === "loading"}
+              style={INPUT_STYLE}
+            />
+            {voiceSupported && (
+              <button
+                type="button"
+                className={"quick-add-mic-btn" + (listening ? " listening" : "")}
+                onClick={toggleVoice}
+                title={listening ? "Остановить запись" : "Надиктовать"}
+                aria-label={listening ? "Остановить запись" : "Надиктовать"}
+              >
+                {listening ? "⏺" : "🎤"}
+              </button>
+            )}
+            <button className="btn btn-primary" type="submit" disabled={status === "loading" || !text.trim()}>
+              {status === "loading" ? "Думаю…" : "Добавить"}
+            </button>
+          </form>
+        )}
+
+        {status === "clarify" && (
+          <form onSubmit={onClarifySubmit} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, color: "var(--ink)" }}>{clarifyQuestion}</span>
+            <input type="text" autoFocus value={clarifyAnswer} onChange={(e) => setClarifyAnswer(e.target.value)} style={INPUT_STYLE} />
+            <button className="btn btn-primary" type="submit" disabled={!clarifyAnswer.trim()}>
+              Ответить
+            </button>
+            <button type="button" className="btn" onClick={reset}>
+              Отмена
+            </button>
+          </form>
+        )}
+
+        {status === "idea-preview" && ideaPreview && (
+          <div className="quick-add-preview">
+            <div className="qap-row">
+              <span style={{ color: "var(--ink-soft)" }}>Мысль{ideaPreview.important ? " (важно)" : ""}:</span>
+              <span style={{ color: "var(--ink)" }}>{ideaPreview.text}</span>
+            </div>
+            <div className="qap-actions">
+              <button className="btn btn-primary btn-small" onClick={confirmIdea}>Сохранить</button>
+              <button className="btn btn-small" onClick={reset}>Отмена</button>
+            </div>
+          </div>
+        )}
+
+        {status === "task-preview" && taskPreview && (
+          <div className="quick-add-preview">
+            <div className="qap-row">
+              <span style={{ color: "var(--ink-soft)" }}>Задача:</span>
+              <span style={{ color: "var(--ink)" }}>{taskPreview.title}</span>
+            </div>
+            <div className="qap-row">
+              {taskPreview.assignee && <span className="task-assignee">{taskPreview.assignee}</span>}
+              {taskPreview.deadline && <span className="pill pill-date">{taskPreview.deadline}</span>}
+              {taskPreview.priority === "high" && <span className="pill pill-high">Высокий</span>}
+            </div>
+            <div className="qap-actions">
+              <button className="btn btn-primary btn-small" onClick={confirmTask}>Сохранить</button>
+              <button className="btn btn-small" onClick={reset}>Отмена</button>
+            </div>
+          </div>
+        )}
+
+        {status === "meeting-preview" && meetingPreview && (
+          <div className="quick-add-preview">
+            <div className="qap-row">
+              <span style={{ color: "var(--ink-soft)" }}>Встреча:</span>
+              <span style={{ color: "var(--ink)" }}>{meetingPreview.title}</span>
+            </div>
+            <div className="qap-row">
+              {meetingPreview.date && <span className="pill pill-date">{meetingPreview.date}{meetingPreview.time ? ", " + meetingPreview.time : ""}</span>}
+              {meetingPreview.participants.length > 0 && <span style={{ color: "var(--ink-soft)" }}>{meetingPreview.participants.join(", ")}</span>}
+            </div>
+            <div className="qap-actions">
+              <button className="btn btn-primary btn-small" onClick={confirmMeeting}>Сохранить</button>
+              <button className="btn btn-small" onClick={reset}>Отмена</button>
+            </div>
+          </div>
+        )}
+
+        {status === "error" && (
+          <div style={{ marginTop: 6, fontSize: 12, color: "var(--high)" }}>
+            {errorMessage} — <button className="btn-ghost" style={{ textDecoration: "underline" }} onClick={reset}>ок</button>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (isMobile) {
+    // Floating, thumb-reachable capture button + bottom sheet — reachable
+    // from anywhere on the page without scrolling to the toolbar. Portals
+    // straight to <body> since it's position:fixed regardless of where in
+    // the DOM it lives.
+    if (typeof document === "undefined") return null;
+    return createPortal(
+      <>
+        <button
+          type="button"
+          className="quick-add-fab"
+          onClick={() => setSheetOpen(true)}
+          aria-label="Добавить задачу, встречу или мысль"
+        >
+          +
+        </button>
+        {sheetOpen && (
+          <div className="quick-add-sheet-backdrop" onClick={reset}>
+            <div className="quick-add-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="quick-add-sheet-handle" />
+              {renderFormBody()}
+            </div>
+          </div>
+        )}
+      </>,
+      document.body,
+    );
+  }
 
   if (!slot) return null;
-
-  return createPortal(
-    <div style={{ width: "100%" }}>
-      {status !== "clarify" && status !== "idea-preview" && (
-        <form onSubmit={onSubmit} style={{ display: "flex", gap: 8 }}>
-          <input
-            type="text"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Что добавить? Например: завтра позвонить Сергею"
-            disabled={status === "loading"}
-            style={{
-              flex: 1,
-              padding: "7px 9px",
-              border: "1px solid var(--line)",
-              borderRadius: 6,
-              fontFamily: "var(--sans)",
-              fontSize: 13,
-              background: "var(--paper-soft)",
-              color: "var(--ink)",
-            }}
-          />
-          <button className="btn btn-primary" type="submit" disabled={status === "loading" || !text.trim()}>
-            {status === "loading" ? "Думаю…" : "Добавить"}
-          </button>
-        </form>
-      )}
-
-      {status === "clarify" && (
-        <form onSubmit={onClarifySubmit} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ fontSize: 13, color: "var(--ink)" }}>{clarifyQuestion}</span>
-          <input
-            type="text"
-            autoFocus
-            value={clarifyAnswer}
-            onChange={(e) => setClarifyAnswer(e.target.value)}
-            style={{
-              flex: 1,
-              padding: "8px 10px",
-              border: "1px solid var(--accent)",
-              borderRadius: 6,
-              fontFamily: "var(--sans)",
-              fontSize: 13,
-              background: "var(--paper-soft)",
-              color: "var(--ink)",
-            }}
-          />
-          <button className="btn btn-primary" type="submit" disabled={!clarifyAnswer.trim()}>
-            Ответить
-          </button>
-          <button type="button" className="btn" onClick={reset}>
-            Отмена
-          </button>
-        </form>
-      )}
-
-      {status === "idea-preview" && ideaPreview && (
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <span style={{ fontSize: 13, color: "var(--ink-soft)" }}>
-            Мысль{ideaPreview.important ? " (важно)" : ""}:
-          </span>
-          <span style={{ fontSize: 13, color: "var(--ink)", flex: 1 }}>{ideaPreview.text}</span>
-          <button className="btn btn-primary btn-small" onClick={confirmIdea}>
-            Сохранить
-          </button>
-          <button className="btn btn-small" onClick={reset}>
-            Отмена
-          </button>
-        </div>
-      )}
-
-      {status === "error" && (
-        <div style={{ marginTop: 6, fontSize: 12, color: "var(--high)" }}>
-          {errorMessage} — <button className="btn-ghost" style={{ textDecoration: "underline" }} onClick={reset}>ок</button>
-        </div>
-      )}
-    </div>,
-    slot,
-  );
+  return createPortal(<div style={{ width: "100%" }}>{renderFormBody()}</div>, slot);
 }
