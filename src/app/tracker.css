@@ -1,4 +1,9 @@
   :root{
+    /* Tells the browser this page is deliberately dark-themed, so mobile
+       WebViews with a "force dark" feature (common on Android) don't try to
+       auto-invert/reprocess our own dark palette on top of it — a known
+       cause of text becoming unreadable on already-dark sites. */
+    color-scheme: dark;
     --bg:#232B2E;
     --paper:#2E383C;
     --paper-soft:#354147;
@@ -59,7 +64,12 @@
   }
   @media (max-width:1150px){
     .layout{grid-template-columns:1fr !important;}
-    .layout .side{position:static !important;}
+    /* In desktop's 3-column layout, .side is its own independently
+       scrolling sticky column (max-height + overflow:auto). Stacked into
+       one column on mobile, that turned into a second, nested scrollbar
+       inside the page's own — reset it here so the side panels just flow
+       with the page like everything else. */
+    .layout .side{position:static !important; max-height:none !important; overflow:visible !important;}
     .side-cal{order:2;}
     .main-col{order:1;}
     .side-ideas{order:3;}
@@ -121,6 +131,12 @@
   .idea-del{cursor:pointer; color:var(--ink-soft); background:none; border:none; font-size:15px; line-height:1; flex:none;}
   .idea-del:hover{color:var(--high);}
   #ideaList{max-height:60vh; overflow:auto;}
+  /* Thin, dark-theme-matched scrollbars instead of the browser's default
+     (often light/blocky, especially in mobile WebViews) chrome. */
+  #ideaList, #meetingsForDay{scrollbar-width:thin; scrollbar-color:var(--line) transparent;}
+  #ideaList::-webkit-scrollbar, #meetingsForDay::-webkit-scrollbar{width:6px;}
+  #ideaList::-webkit-scrollbar-track, #meetingsForDay::-webkit-scrollbar-track{background:transparent;}
+  #ideaList::-webkit-scrollbar-thumb, #meetingsForDay::-webkit-scrollbar-thumb{background:var(--line); border-radius:3px;}
 
   .section-title{
     font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft);
@@ -278,7 +294,7 @@
   .cal-filter-note{align-items:center;}
   #meetingsForDay{margin-top:2px; max-height:50vh; overflow:auto;}
   .meeting-chip{
-    display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
+    display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:6px 10px;
     background:var(--paper-soft); border:1px solid var(--line); border-radius:6px;
     padding:7px 9px; margin-top:6px; font-size:12px; cursor:pointer;
   }
@@ -292,7 +308,10 @@
   }
   .meeting-chip .mdate{color:var(--ink-soft); font-family:var(--mono); font-size:11px; white-space:nowrap;}
   .meeting-chip .mtime{color:var(--today); font-family:var(--mono); font-weight:700; white-space:nowrap;}
-  .meeting-chip .mtitle{flex:1; min-width:0; white-space:normal; word-break:break-word; line-height:1.4; padding-top:1px;}
+  .meeting-chip .mtitle{
+    flex:1; min-width:120px; white-space:normal; overflow-wrap:break-word; word-break:normal;
+    line-height:1.4; padding-top:1px;
+  }
   .meeting-chip .mpeople{
     color:var(--ink-soft); font-family:var(--mono); font-size:11px; white-space:nowrap;
     flex:none; cursor:default; padding:2px 3px; border-radius:4px;

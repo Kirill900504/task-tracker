@@ -52,10 +52,7 @@ export const TRACKER_BODY_HTML = `
     <div class="panel" id="meetingsPanel">
       <div class="panel-head">
         <div class="panel-title">Встречи <span class="count" id="countMeetings">0</span></div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <label class="check-wrap" style="font-size:11px;"><input type="checkbox" id="showResolvedMeetingsCheckbox"> Завершённые</label>
-          <button class="btn btn-primary btn-small" id="addMeetingBtn">+</button>
-        </div>
+        <button class="btn btn-primary btn-small" id="addMeetingBtn">+</button>
       </div>
       <div id="meetingsForDay"></div>
     </div>

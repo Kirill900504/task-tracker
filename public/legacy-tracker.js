@@ -981,7 +981,7 @@
   function renderAllMeetings(){
     hidePeopleTooltip();
     var mwrap = document.getElementById("meetingsForDay");
-    var showResolved = document.getElementById("showResolvedMeetingsCheckbox").checked;
+    var showResolved = document.getElementById("showDoneCheckbox").checked;
     var sorted = meetings
       .filter(function(m){ return showResolved || !m.status || m.status === "planned"; })
       .sort(function(a,b){
@@ -1008,7 +1008,11 @@
         e.dataTransfer.effectAllowed = "move";
       });
       var left = document.createElement("div");
-      left.style.display = "flex"; left.style.minWidth = "0"; left.style.flex = "1"; left.style.gap = "8px";
+      // flex-basis:100% forces date/title onto their own full-width row —
+      // otherwise, squeezed alongside the delete/quick-action buttons on a
+      // narrow screen, the title could be left so little room that
+      // word-break:break-word wraps it one character per line.
+      left.style.display = "flex"; left.style.minWidth = "0"; left.style.flex = "1 1 100%"; left.style.gap = "8px";
       var when = document.createElement("span"); when.className = "mwhen";
       var date = document.createElement("span"); date.className = "mdate"; date.textContent = fmtDate(m.date);
       var time = document.createElement("span"); time.className = "mtime"; time.textContent = m.time || "--:--";
@@ -1103,8 +1107,6 @@
       mwrap.appendChild(chip);
     });
   }
-
-  document.getElementById("showResolvedMeetingsCheckbox").addEventListener("change", renderAllMeetings);
 
   document.getElementById("calPrevBtn").addEventListener("click", function(){
     calViewDate.setMonth(calViewDate.getMonth() - 1);
@@ -1504,6 +1506,7 @@
     document.getElementById(id).addEventListener("change", render);
   });
   document.getElementById("showDoneCheckbox").addEventListener("change", renderIdeas);
+  document.getElementById("showDoneCheckbox").addEventListener("change", renderAllMeetings);
 
   // ---------- Notifications ----------
   var toastStack = document.getElementById("toast-stack");

@@ -272,7 +272,8 @@ export async function POST(req: Request) {
   const assignees = (assigneeRows || []).map((r) => r.name as string);
 
   try {
-    let { tool, input, droppedNames } = await parseQuickAdd(effectiveText, assignees);
+    const { items } = await parseQuickAdd(effectiveText, assignees);
+    let toProcess = items;
 
     // Loop guard: allow at most ONE clarifying round-trip. An exact-text
     // comparison here previously let this slip through in production — the
@@ -280,14 +281,16 @@ export async function POST(req: Request) {
     // and pending_context grew without bound across many replies (turning
     // into an ever-larger, eventually corrupted blob that kept re-triggering
     // the same stuck question). Capping by round instead of by text content
-    // closes that regardless of what the model says the second time.
-    if (tool === "ask_clarifying_question" && hadPendingContext) {
-      tool = "cant_help";
-      input = {};
-      droppedNames = [];
+    // closes that regardless of what the model says the second time. Only
+    // applies when the whole message is a single clarifying question — a
+    // multi-item batch that includes one alongside real items just drops it
+    // below instead.
+    if (toProcess.length === 1 && toProcess[0].tool === "ask_clarifying_question" && hadPendingContext) {
+      toProcess = [{ tool: "cant_help", input: {}, droppedNames: [] }];
     }
 
-    if (tool === "ask_clarifying_question") {
+    const isSingleClarify = toProcess.length === 1 && toProcess[0].tool === "ask_clarifying_question";
+    if (isSingleClarify) {
       // Defensive cap — this can only ever be the *first* round now, but
       // truncate anyway so a single oversized message can't wedge the column.
       await admin
@@ -295,7 +298,15 @@ export async function POST(req: Request) {
         .update({ pending_context: effectiveText.slice(0, 500) })
         .eq("telegram_chat_id", chatId);
     }
-    await replyForResult(chatId, admin, account.user_id, tool, input, droppedNames);
+
+    // A clarifying question can't be answered in a multi-item batch (there's
+    // nowhere to hold several pending questions at once) — process the
+    // actionable items and quietly drop that one rather than derail the
+    // whole message over an unclear fragment.
+    const finalItems = isSingleClarify ? toProcess : toProcess.filter((it) => it.tool !== "ask_clarifying_question");
+    for (const it of finalItems) {
+      await replyForResult(chatId, admin, account.user_id, it.tool, it.input, it.droppedNames);
+    }
   } catch (e) {
     await sendTelegramMessage(chatId, "Не получилось разобрать сообщение: " + (e instanceof Error ? e.message : String(e)));
   }

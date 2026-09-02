@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 type TaskFields = {
@@ -14,7 +14,7 @@ type TaskFields = {
 type MeetingFields = { title: string; date: string; time: string; participants: string[] };
 type IdeaFields = { text: string; important: boolean };
 
-type QuickAddResult =
+type QuickAddItem =
   | { tool: "create_task"; input: TaskFields; droppedNames: string[] }
   | { tool: "create_meeting"; input: MeetingFields; droppedNames: string[] }
   | { tool: "create_idea"; input: IdeaFields; droppedNames: string[] }
@@ -28,6 +28,8 @@ declare global {
       getAssignees: () => string[];
       prefillNewTask: (f: TaskFields) => void;
       prefillNewMeeting: (f: MeetingFields) => void;
+      createTask: (f: TaskFields) => void;
+      createMeeting: (f: MeetingFields) => void;
       createIdea: (f: IdeaFields) => void;
     };
   }
@@ -36,12 +38,29 @@ declare global {
 type Status = "idle" | "loading" | "clarify" | "idea-preview" | "error";
 
 export default function QuickAdd() {
-  // The portal target is part of the static markup rendered alongside this
-  // component, so it already exists in the DOM by the time this runs on the
-  // client — a lazy initializer avoids an extra effect + render pass.
-  const [slot] = useState<HTMLElement | null>(() =>
+  // The portal target is normally already in the DOM by the time this
+  // mounts (it's part of the static markup rendered alongside it), so this
+  // usually resolves on the very first check. But it's been reported
+  // missing entirely in at least one mobile in-app browser — polling for a
+  // short while instead of a single one-shot lookup means a late-arriving
+  // element still gets picked up rather than leaving the bar silently gone
+  // for the rest of the session.
+  const [slot, setSlot] = useState<HTMLElement | null>(() =>
     typeof document !== "undefined" ? document.getElementById("quickAddSlot") : null,
   );
+  useEffect(() => {
+    if (slot) return;
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      const el = document.getElementById("quickAddSlot");
+      if (el || attempts > 50) {
+        setSlot(el);
+        clearInterval(interval);
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [slot]);
   const [text, setText] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [clarifyQuestion, setClarifyQuestion] = useState("");
@@ -71,56 +90,99 @@ export default function QuickAdd() {
         setErrorMessage(data.error || "Не удалось распознать");
         return;
       }
-      handleResult(data as QuickAddResult, isClarifyFollowUp);
+      handleItems((data.items as QuickAddItem[]) || [], isClarifyFollowUp);
     } catch {
       setStatus("error");
       setErrorMessage("Проблема с сетью");
     }
   }
 
-  function handleResult(result: QuickAddResult, isClarifyFollowUp: boolean) {
-    if (result.tool === "ask_clarifying_question") {
-      // Loop guard: allow at most one clarifying round-trip. Comparing the
-      // question text was too narrow in practice (the model phrases repeat
-      // asks differently, so an exact match rarely fires) — cap by round
-      // instead, matching the same fix applied to the Telegram bot.
+  function handleItems(items: QuickAddItem[], isClarifyFollowUp: boolean) {
+    // Whole message is a single unclear question — ask once, same loop
+    // guard as the Telegram bot (comparing question text was too narrow in
+    // practice; cap by round instead).
+    if (items.length === 1 && items[0].tool === "ask_clarifying_question") {
       if (isClarifyFollowUp) {
         setStatus("error");
         setErrorMessage("Не смог разобрать фразу — попробуйте переформулировать");
         return;
       }
-      setClarifyQuestion(result.input.question);
+      setClarifyQuestion(items[0].input.question);
       setStatus("clarify");
       return;
     }
-    if (result.tool === "create_task") {
-      window.trackerAPI?.prefillNewTask(result.input);
-      noteDropped(result.droppedNames);
+
+    // A clarifying question mixed into a multi-item batch can't be answered
+    // (nowhere to hold several pending questions at once) — drop it and
+    // handle the actionable items instead of derailing the whole message.
+    const actionable = items.filter((it) => it.tool !== "ask_clarifying_question");
+    if (!actionable.length) {
+      setStatus("error");
+      setErrorMessage("Не удалось разобрать фразу");
+      return;
+    }
+
+    if (actionable.length === 1) {
+      handleSingleItem(actionable[0]);
+      return;
+    }
+
+    // Multiple items in one phrase ("заведи задачу X, две мысли Y и Z, и
+    // встречу с Ивановым завтра в 15") — create everything directly instead
+    // of opening a modal per item, same as the Telegram bot does.
+    const created: string[] = [];
+    const dropped: string[] = [];
+    for (const it of actionable) {
+      if (it.tool === "create_task") {
+        window.trackerAPI?.createTask(it.input);
+        created.push("Задача: " + it.input.title);
+      } else if (it.tool === "create_meeting") {
+        window.trackerAPI?.createMeeting(it.input);
+        created.push("Встреча: " + it.input.title);
+      } else if (it.tool === "create_idea") {
+        window.trackerAPI?.createIdea(it.input);
+        created.push("Идея: " + it.input.text);
+      } else if (it.tool === "manage_item") {
+        created.push("(изменение существующего — сделайте кнопками в списке)");
+      }
+      dropped.push(...it.droppedNames);
+    }
+    let msg = "Создано:\n" + created.join("\n");
+    if (dropped.length) msg += "\n\n⚠ Не нашёл в списке исполнителей: " + dropped.join(", ");
+    alert(msg);
+    reset();
+  }
+
+  function handleSingleItem(item: QuickAddItem) {
+    if (item.tool === "create_task") {
+      window.trackerAPI?.prefillNewTask(item.input);
+      noteDropped(item.droppedNames);
       reset();
       return;
     }
-    if (result.tool === "create_meeting") {
-      window.trackerAPI?.prefillNewMeeting(result.input);
-      noteDropped(result.droppedNames);
+    if (item.tool === "create_meeting") {
+      window.trackerAPI?.prefillNewMeeting(item.input);
+      noteDropped(item.droppedNames);
       reset();
       return;
     }
-    if (result.tool === "create_idea") {
-      setIdeaPreview(result.input);
+    if (item.tool === "create_idea") {
+      setIdeaPreview(item.input);
       setStatus("idea-preview");
       return;
     }
-    if (result.tool === "cant_help") {
+    if (item.tool === "cant_help") {
       setStatus("error");
       setErrorMessage("Это не похоже на задачу/встречу/идею — умею создавать только их");
       return;
     }
-    if (result.tool === "manage_item") {
+    if (item.tool === "manage_item") {
       setStatus("error");
       setErrorMessage("Изменить или удалить существующую задачу/встречу можно кнопками в списке — так надёжнее, чем текстом");
       return;
     }
-    // Should not happen — fall back to a visible error rather than silence.
+    // Should not happen (ask_clarifying_question is filtered out before
+    // reaching here) — fall back to a visible error rather than silence.
     setStatus("error");
     setErrorMessage("Неожиданный ответ сервера");
   }

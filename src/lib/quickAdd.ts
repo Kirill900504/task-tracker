@@ -33,9 +33,10 @@ function systemPrompt(now: Date, assignees: string[]) {
     "Если в фразе назван день недели («в пятницу», «во вторник» и т.п.) — БЕРИ ГОТОВУЮ ДАТУ ИЗ ЭТОЙ ТАБЛИЦЫ, ни в коем случае не вычисляй сам:",
     nextWeekdayMap(now),
     `Список исполнителей, которых знает система: ${assignees.length ? assignees.join(", ") : "(пусто)"}.`,
-    "Ты помогаешь быстро завести запись в личном таск-трекере по одной фразе на русском языке.",
-    "Разбери фразу и ответь РОВНО ОДНИМ JSON-объектом, без markdown-разметки, без пояснений до или после — только сам JSON, начиная с символа {.",
-    "Поле type определяет структуру остальных полей — используй ровно одну из шести:",
+    "Ты помогаешь быстро завести записи в личном таск-трекере по одной фразе на русском языке.",
+    "Ответь РОВНО ОДНИМ JSON-МАССИВОМ объектов, без markdown-разметки, без пояснений до или после — только сам JSON, начиная с символа [.",
+    "В одной фразе может быть НЕСКОЛЬКО разных поручений сразу (например: задача + две мысли + встреча одним сообщением) — тогда верни несколько элементов массива, по одному на каждое отдельное поручение. Если поручение одно — в массиве всё равно один элемент.",
+    "Каждый элемент массива — отдельный JSON-объект, поле type определяет его структуру — используй ровно одну из шести:",
     "",
     '1) {"type":"task","title":string,"description":string,"assignee":string,"priority":"high"|"med","term":"short"|"long","deadline":string}',
     "   — что-то, что нужно сделать. assignee: СКОПИРУЙ имя буква-в-букву из списка исполнителей выше. Если точного совпадения нет — пустая строка. Категорически запрещено писать любое имя, которого нет в списке дословно.",
@@ -49,7 +50,7 @@ function systemPrompt(now: Date, assignees: string[]) {
     "   — просто мысль/наблюдение без срока и исполнителя. important: true только если пользователь явно подчеркнул важность.",
     "",
     '4) {"type":"clarify","question":string}',
-    "   — фразу нельзя уверенно разобрать (например, не хватает ключевой детали) — короткий уточняющий вопрос вместо угадывания.",
+    "   — фразу целиком нельзя уверенно разобрать (например, не хватает ключевой детали) — короткий уточняющий вопрос вместо угадывания. Используй, только если ВСЯ фраза непонятна; если непонятна лишь часть многосоставной фразы — обработай понятные поручения, а неясную часть пропусти.",
     "",
     '5) {"type":"manage_item","action":"complete"|"success"|"no_result"|"reopen"|"delete","itemType":"task"|"meeting","query":string}',
     "   — просьба изменить УЖЕ СУЩЕСТВУЮЩУЮ задачу или встречу (не создать новую): отметить выполненной, отметить итог встречи, вернуть в работу/план или удалить.",
@@ -60,17 +61,37 @@ function systemPrompt(now: Date, assignees: string[]) {
     "   query: короткий фрагмент названия дословно, как назвал пользователь — НЕ придумывай и не дополняй его.",
     "",
     '6) {"type":"other"}',
-    "   — фраза НЕ является просьбой создать/изменить задачу, встречу или идею: вопрос про уже сделанное, комментарий, благодарность, что угодно вне этих категорий.",
+    "   — фраза (или её часть, если поручений несколько) НЕ является просьбой создать/изменить задачу, встречу или идею: вопрос про уже сделанное, комментарий, благодарность, что угодно вне этих категорий.",
     "   Используй именно этот тип, а не clarify, если пользователь не пытается ничего завести или изменить, а спрашивает или комментирует. Никогда не повторяй и не пересказывай его сообщение.",
+    "",
+    "Примеры формы ответа:",
+    'Одно поручение → [{"type":"task","title":"...","description":"","assignee":"","priority":"med","term":"short","deadline":""}]',
+    'Несколько поручений одной фразой → [{"type":"task",...}, {"type":"idea",...}, {"type":"idea",...}, {"type":"meeting",...}]',
   ].join("\n");
 }
 
-function extractJson(raw: string): unknown {
+// Extracts a JSON array from the model's raw text response. Tolerates a
+// bare object too (wraps it in a single-element array) — smaller/free-tier
+// models don't always follow the "always an array" instruction exactly.
+function extractJsonArray(raw: string): unknown[] {
   const trimmed = raw.trim();
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start === -1 || end === -1 || end < start) throw new Error("В ответе нет JSON");
-  return JSON.parse(trimmed.slice(start, end + 1));
+  const arrStart = trimmed.indexOf("[");
+  const objStart = trimmed.indexOf("{");
+  const useArray = arrStart !== -1 && (objStart === -1 || arrStart < objStart);
+
+  if (useArray) {
+    const end = trimmed.lastIndexOf("]");
+    if (end === -1 || end < arrStart) throw new Error("В ответе нет JSON-массива");
+    const parsed = JSON.parse(trimmed.slice(arrStart, end + 1));
+    if (!Array.isArray(parsed)) throw new Error("Ожидался массив");
+    return parsed;
+  }
+  if (objStart !== -1) {
+    const end = trimmed.lastIndexOf("}");
+    if (end === -1 || end < objStart) throw new Error("В ответе нет JSON");
+    return [JSON.parse(trimmed.slice(objStart, end + 1))];
+  }
+  throw new Error("В ответе нет JSON");
 }
 
 export const TOOL_BY_TYPE: Record<string, string> = {
@@ -105,25 +126,25 @@ export function sanitizeAgainstKnown(input: Record<string, unknown>, known: stri
   return dropped;
 }
 
-export type QuickAddParsed = { tool: string; input: Record<string, unknown>; droppedNames: string[] };
+export type QuickAddItem = { tool: string; input: Record<string, unknown>; droppedNames: string[] };
+export type QuickAddParsed = { items: QuickAddItem[] };
 
 export async function parseQuickAdd(text: string, assignees: string[]): Promise<QuickAddParsed> {
   const system = systemPrompt(new Date(), assignees);
 
-  let parsed: Record<string, unknown> | null = null;
+  let parsed: unknown[] | null = null;
   let lastError = "";
   for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
     try {
       const raw = await gigaChatComplete({
-        system: attempt === 0 ? system : system + "\n\nВАЖНО: ответь ТОЛЬКО валидным JSON, без единого лишнего символа.",
+        system: attempt === 0 ? system : system + "\n\nВАЖНО: ответь ТОЛЬКО валидным JSON-массивом, без единого лишнего символа.",
         user: text,
       });
-      const candidate = extractJson(raw);
-      if (candidate && typeof candidate === "object" && "type" in candidate) {
-        parsed = candidate as Record<string, unknown>;
-      } else {
-        lastError = "Ответ без поля type";
-      }
+      const candidates = extractJsonArray(raw).filter(
+        (c): c is Record<string, unknown> => !!c && typeof c === "object" && "type" in c,
+      );
+      if (candidates.length) parsed = candidates;
+      else lastError = "Ответ без элементов с полем type";
     } catch (e) {
       lastError = e instanceof Error ? e.message : String(e);
     }
@@ -131,13 +152,17 @@ export async function parseQuickAdd(text: string, assignees: string[]): Promise<
 
   if (!parsed) throw new Error("GigaChat: " + lastError);
 
-  const type = String(parsed.type);
-  const tool = TOOL_BY_TYPE[type];
-  if (!tool) throw new Error("Неизвестный тип: " + type);
+  const items: QuickAddItem[] = [];
+  for (const p of parsed) {
+    const type = String((p as Record<string, unknown>).type);
+    const tool = TOOL_BY_TYPE[type];
+    if (!tool) continue; // an unknown type from one element shouldn't sink the whole batch
+    const { type: _omit, ...input } = p as Record<string, unknown>;
+    void _omit;
+    const droppedNames = sanitizeAgainstKnown(input, assignees);
+    items.push({ tool, input, droppedNames });
+  }
+  if (!items.length) throw new Error("Не удалось разобрать ни одного элемента");
 
-  const { type: _omit, ...input } = parsed;
-  void _omit;
-  const droppedNames = sanitizeAgainstKnown(input, assignees);
-
-  return { tool, input, droppedNames };
+  return { items };
 }
