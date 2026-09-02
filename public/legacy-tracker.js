@@ -106,6 +106,7 @@
       recur_year_month: (t.recurYearMonth !== "" && t.recurYearMonth != null) ? Number(t.recurYearMonth) : null,
       last_completed_on: t.lastCompletedOn || null,
       section_id: t.sectionId || null,
+      manual_order: (t.manualOrder != null && t.manualOrder !== "") ? Number(t.manualOrder) : null,
       // Any task held in-memory is by definition not deleted — a soft
       // delete removes it from this array immediately (see deleteTaskBtn),
       // so a live task upserting deleted_at:null is always correct, and is
@@ -130,7 +131,8 @@
       recurYearDay: r.recur_year_day != null ? String(r.recur_year_day) : "",
       recurYearMonth: r.recur_year_month != null ? String(r.recur_year_month) : "1",
       lastCompletedOn: r.last_completed_on || "",
-      sectionId: r.section_id || ""
+      sectionId: r.section_id || "",
+      manualOrder: r.manual_order != null ? r.manual_order : null
     };
   }
 
@@ -505,6 +507,144 @@
   var elListShort = document.getElementById("listShort");
   var elListLong = document.getElementById("listLong");
   var elListDone = document.getElementById("listDone");
+
+  // ---------- Task drag-and-drop: move between short/long, freely reorder ----------
+  function getDragAfterElement(container, y){
+    var els = Array.prototype.slice.call(container.querySelectorAll(".task:not(.dragging)"));
+    var closest = { offset: -Infinity, element: null };
+    els.forEach(function(child){
+      var box = child.getBoundingClientRect();
+      var offset = y - box.top - box.height / 2;
+      if(offset < 0 && offset > closest.offset) closest = { offset: offset, element: child };
+    });
+    return closest.element;
+  }
+  // Assigns sequential manual_order values matching the given visual
+  // order — once any task in a column has been dragged, sortFn() (below)
+  // makes that column's order fully explicit instead of automatic.
+  function reorderColumn(orderedIds){
+    orderedIds.forEach(function(id, i){
+      var t = tasks.find(function(x){ return x.id === id; });
+      if(t) t.manualOrder = i;
+    });
+  }
+  function setupTaskDragDrop(container, term){
+    container.addEventListener("dragover", function(e){
+      if(!e.dataTransfer.types.includes("application/x-task-id")) return;
+      e.preventDefault();
+      container.classList.add("drag-over");
+    });
+    container.addEventListener("dragleave", function(e){
+      if(e.target === container) container.classList.remove("drag-over");
+    });
+    container.addEventListener("drop", function(e){
+      var id = e.dataTransfer.getData("application/x-task-id");
+      if(!id) return;
+      e.preventDefault();
+      container.classList.remove("drag-over");
+      var dragged = tasks.find(function(x){ return x.id === id; });
+      if(!dragged) return;
+
+      var after = getDragAfterElement(container, e.clientY);
+      var siblingIds = Array.prototype.slice.call(container.children)
+        .filter(function(el){ return el.classList.contains("task") && el.dataset.id !== id; })
+        .map(function(el){ return el.dataset.id; });
+      var insertAt = after ? siblingIds.indexOf(after.dataset.id) : -1;
+      if(insertAt === -1) insertAt = siblingIds.length;
+      siblingIds.splice(insertAt, 0, id);
+
+      dragged.term = term;
+      reorderColumn(siblingIds);
+      persistAll();
+      render();
+    });
+  }
+  setupTaskDragDrop(elListShort, "short");
+  setupTaskDragDrop(elListLong, "long");
+
+  // ---------- Idea -> task/meeting: drag an idea card onto a column or the
+  // meetings panel to convert it, instead of retyping it there by hand.
+  function convertIdeaToTask(ideaId, term){
+    var idx = ideas.findIndex(function(i){ return i.id === ideaId; });
+    if(idx === -1) return;
+    var idea = ideas[idx];
+    ideas = ideas.filter(function(i){ return i.id !== ideaId; });
+    shadow.ideas = shadow.ideas.filter(function(i){ return i.id !== ideaId; });
+    softDeleteRow("ideas", ideaId);
+
+    var task = {
+      id: uid(), title: idea.text, desc: "", assignee: "", sectionId: "",
+      priority: idea.important ? "high" : "med", term: term, status: "in_progress",
+      deadline: "", recur: "none", recurWeekday: "1", recurMonthday: "",
+      recurYearDay: "", recurYearMonth: "1", lastCompletedOn: "", manualOrder: null
+    };
+    tasks.push(task);
+    persistAll();
+    renderIdeas();
+    render();
+
+    showToast("Идея превращена в задачу", task.title, function(){
+      tasks = tasks.filter(function(x){ return x.id !== task.id; });
+      shadow.tasks = shadow.tasks.filter(function(x){ return x.id !== task.id; });
+      softDeleteRow("tasks", task.id);
+      ideas.splice(Math.min(idx, ideas.length), 0, idea);
+      persistAll();
+      renderIdeas(); render();
+    });
+  }
+
+  function convertIdeaToMeeting(ideaId){
+    var idx = ideas.findIndex(function(i){ return i.id === ideaId; });
+    if(idx === -1) return;
+    var idea = ideas[idx];
+    promptDateTime("Встреча «" + idea.text + "» на:", todayStr(), "10:00").then(function(result){
+      if(!result) return;
+      ideas = ideas.filter(function(i){ return i.id !== ideaId; });
+      shadow.ideas = shadow.ideas.filter(function(i){ return i.id !== ideaId; });
+      softDeleteRow("ideas", ideaId);
+
+      var meeting = {
+        id: uid(), date: result.date, time: result.time || "", title: idea.text,
+        participants: [], status: "planned", result: "", movedToDate: ""
+      };
+      meetings.push(meeting);
+      persistAll();
+      renderIdeas();
+      renderCalendar();
+      renderAllMeetings();
+
+      showToast("Идея превращена во встречу", meeting.title, function(){
+        meetings = meetings.filter(function(x){ return x.id !== meeting.id; });
+        shadow.meetings = shadow.meetings.filter(function(x){ return x.id !== meeting.id; });
+        softDeleteRow("meetings", meeting.id);
+        ideas.splice(Math.min(idx, ideas.length), 0, idea);
+        persistAll();
+        renderIdeas(); renderCalendar(); renderAllMeetings();
+      });
+    });
+  }
+
+  function setupIdeaDrop(container, onDrop){
+    container.addEventListener("dragover", function(e){
+      if(!e.dataTransfer.types.includes("application/x-idea-id")) return;
+      e.preventDefault();
+      container.classList.add("drag-over");
+    });
+    container.addEventListener("dragleave", function(e){
+      if(e.target === container) container.classList.remove("drag-over");
+    });
+    container.addEventListener("drop", function(e){
+      var ideaId = e.dataTransfer.getData("application/x-idea-id");
+      if(!ideaId) return;
+      e.preventDefault();
+      container.classList.remove("drag-over");
+      onDrop(ideaId);
+    });
+  }
+  setupIdeaDrop(elListShort, function(ideaId){ convertIdeaToTask(ideaId, "short"); });
+  setupIdeaDrop(elListLong, function(ideaId){ convertIdeaToTask(ideaId, "long"); });
+  setupIdeaDrop(document.getElementById("meetingsForDay"), convertIdeaToMeeting);
+
   var calendarFilterDate = null;
 
   function populateSelect(sel, items, withAllOption, allLabel){
@@ -596,6 +736,13 @@
       + (isOverdue(t) ? " overdue" : "")
       + (!isOverdue(t) && isDueTodayHighlight(t) ? " due-today" : "");
     div.dataset.id = t.id;
+    div.draggable = true;
+    div.addEventListener("dragstart", function(e){
+      e.dataTransfer.setData("application/x-task-id", t.id);
+      e.dataTransfer.effectAllowed = "move";
+      setTimeout(function(){ div.classList.add("dragging"); }, 0);
+    });
+    div.addEventListener("dragend", function(){ div.classList.remove("dragging"); });
 
     var check = document.createElement("div");
     check.className = "check" + (t.status === "done" ? " checked" : "");
@@ -697,6 +844,13 @@
       return 3;
     }
     function sortFn(a,b){
+      // Manual drag order (if the user has ever dragged anything in this
+      // column) always wins over the automatic urgency sort below — tasks
+      // never manually placed sort after all the ones that have been.
+      var am = a.manualOrder != null, bm = b.manualOrder != null;
+      if(am && bm) return a.manualOrder - b.manualOrder;
+      if(am !== bm) return am ? -1 : 1;
+
       var ao = rankOf(a), bo = rankOf(b);
       if(ao !== bo) return ao - bo;
 
@@ -819,6 +973,13 @@
       .forEach(function(idea){
       var row = document.createElement("div");
       row.className = "idea-item" + (idea.important ? " important" : "") + (idea.done ? " done" : "");
+      row.draggable = true;
+      row.addEventListener("dragstart", function(e){
+        e.dataTransfer.setData("application/x-idea-id", idea.id);
+        e.dataTransfer.effectAllowed = "move";
+        setTimeout(function(){ row.classList.add("dragging"); }, 0);
+      });
+      row.addEventListener("dragend", function(){ row.classList.remove("dragging"); });
       // Custom check (matches the task-list checkbox styling) instead of a
       // native <input type=checkbox>, whose default rendering looked
       // inconsistent with the rest of the app.

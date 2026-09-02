@@ -205,6 +205,11 @@
     cursor:pointer; min-width:0;
   }
   .task:hover{border-color:var(--accent);}
+  .task{cursor:grab;}
+  .task.dragging{opacity:.4;}
+  #listShort.drag-over, #listLong.drag-over{
+    outline:2px dashed var(--accent); outline-offset:4px; border-radius:8px;
+  }
   .task.done{opacity:.5;}
   .task.high{background:var(--accent-soft); border-color:var(--accent);}
   .task.overdue{border-left:4px solid var(--high); background:var(--overdue-bg);}
@@ -311,7 +316,9 @@
   }
 
   /* Ideas: flag + inline edit */
-  .idea-item{position:relative;}
+  .idea-item{position:relative; cursor:grab;}
+  .idea-item.dragging{opacity:.4;}
+  #ideaList.drag-over{outline:2px dashed var(--accent); outline-offset:4px; border-radius:8px;}
   .idea-item.important{border-color:var(--high); background:var(--high-bg);}
   .idea-item.done{opacity:.55;}
   .idea-item.done .idea-text{text-decoration:line-through;}
@@ -336,6 +343,7 @@
   .cal-dot.meeting{background:var(--today);}
   .cal-filter-note{align-items:center;}
   #meetingsForDay{margin-top:2px; max-height:50vh; overflow:auto;}
+  #meetingsForDay.drag-over{outline:2px dashed var(--accent); outline-offset:-2px; border-radius:8px;}
   .meeting-chip{
     display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:6px 10px;
     background:var(--paper-soft); border:1px solid var(--line); border-radius:6px;
