@@ -106,13 +106,12 @@
       recur_year_month: (t.recurYearMonth !== "" && t.recurYearMonth != null) ? Number(t.recurYearMonth) : null,
       last_completed_on: t.lastCompletedOn || null,
       section_id: t.sectionId || null,
-      manual_order: (t.manualOrder != null && t.manualOrder !== "") ? Number(t.manualOrder) : null,
-      // Any task held in-memory is by definition not deleted — a soft
-      // delete removes it from this array immediately (see deleteTaskBtn),
-      // so a live task upserting deleted_at:null is always correct, and is
-      // also what makes an undo (re-inserting the item, then persistAll())
-      // actually un-delete it server-side.
-      deleted_at: null
+      manual_order: (t.manualOrder != null && t.manualOrder !== "") ? Number(t.manualOrder) : null
+      // deleted_at is deliberately NOT part of this row — an ordinary
+      // upsert (edit, drag reorder, a stale tab resyncing) must never touch
+      // it, or it would silently resurrect a row someone else deleted in
+      // the meantime. Delete/undo go through softDeleteRow()/restoreRow()
+      // instead, which touch only that one column.
     };
   }
   function taskFromRow(r){
@@ -152,8 +151,7 @@
       participants: sanitizeAssigneeList(m.participants),
       status: m.status || "planned",
       result: m.result || "",
-      moved_to_date: m.movedToDate || null,
-      deleted_at: null
+      moved_to_date: m.movedToDate || null
     };
   }
   function meetingFromRow(r){
@@ -170,7 +168,7 @@
   }
 
   function ideaToRow(i){
-    return { id: i.id, text: i.text, important: !!i.important, done: !!i.done, deleted_at: null };
+    return { id: i.id, text: i.text, important: !!i.important, done: !!i.done };
   }
   function formatIdeaCreatedAt(iso){
     var d = new Date(iso);
@@ -291,6 +289,15 @@
         console.error("Soft delete error:", res.error);
         showToast("Не удалось удалить", res.error.message);
       }
+    });
+  }
+  // Explicit counterpart to softDeleteRow(), used only by "Отменить" undo
+  // buttons. persistAll()'s upsert never touches deleted_at (see toRow()
+  // comments above), so clearing it back to null has to be its own call.
+  function restoreRow(table, id){
+    if(!db) return;
+    db.from(table).update({ deleted_at: null }).eq("id", id).then(function(res){
+      if(res.error) console.error("Restore error:", res.error);
     });
   }
 
@@ -509,6 +516,14 @@
   var elListDone = document.getElementById("listDone");
 
   // ---------- Task drag-and-drop: move between short/long, freely reorder ----------
+  // A brief highlight on a just-created/just-converted card so the result of
+  // a drag is obvious, not just a silent DOM update.
+  function flashNewItem(id){
+    var el = document.querySelector('[data-id="' + id + '"]');
+    if(!el) return;
+    el.classList.add("just-created");
+    setTimeout(function(){ el.classList.remove("just-created"); }, 1200);
+  }
   function getDragAfterElement(container, y){
     var els = Array.prototype.slice.call(container.querySelectorAll(".task:not(.dragging)"));
     var closest = { offset: -Infinity, element: null };
@@ -528,20 +543,46 @@
       if(t) t.manualOrder = i;
     });
   }
+  // Draws a thin insertion line showing exactly where the card will land —
+  // recomputed on every dragover, not just shown as a generic "you're over
+  // the column" outline.
+  function updateDropIndicator(container, after){
+    Array.prototype.slice.call(container.querySelectorAll(".drag-indicator")).forEach(function(el){
+      el.classList.remove("drag-indicator");
+    });
+    container.classList.remove("drag-indicator-end");
+    if(after) after.classList.add("drag-indicator");
+    else container.classList.add("drag-indicator-end");
+  }
+  function clearDropIndicator(container){
+    Array.prototype.slice.call(container.querySelectorAll(".drag-indicator")).forEach(function(el){
+      el.classList.remove("drag-indicator");
+    });
+    container.classList.remove("drag-indicator-end");
+  }
   function setupTaskDragDrop(container, term){
     container.addEventListener("dragover", function(e){
       if(!e.dataTransfer.types.includes("application/x-task-id")) return;
       e.preventDefault();
       container.classList.add("drag-over");
+      updateDropIndicator(container, getDragAfterElement(container, e.clientY));
     });
+    // e.target is whatever element the pointer is over, which is usually a
+    // child card, not the container itself — checking relatedTarget (where
+    // the pointer is headed) instead of target is what makes this fire only
+    // when the drag genuinely leaves the container, not on every child edge.
     container.addEventListener("dragleave", function(e){
-      if(e.target === container) container.classList.remove("drag-over");
+      if(!container.contains(e.relatedTarget)){
+        container.classList.remove("drag-over");
+        clearDropIndicator(container);
+      }
     });
     container.addEventListener("drop", function(e){
       var id = e.dataTransfer.getData("application/x-task-id");
       if(!id) return;
       e.preventDefault();
       container.classList.remove("drag-over");
+      clearDropIndicator(container);
       var dragged = tasks.find(function(x){ return x.id === id; });
       if(!dragged) return;
 
@@ -582,12 +623,14 @@
     persistAll();
     renderIdeas();
     render();
+    flashNewItem(task.id);
 
     showToast("Идея превращена в задачу", task.title, function(){
       tasks = tasks.filter(function(x){ return x.id !== task.id; });
       shadow.tasks = shadow.tasks.filter(function(x){ return x.id !== task.id; });
       softDeleteRow("tasks", task.id);
       ideas.splice(Math.min(idx, ideas.length), 0, idea);
+      restoreRow("ideas", idea.id);
       persistAll();
       renderIdeas(); render();
     });
@@ -612,12 +655,14 @@
       renderIdeas();
       renderCalendar();
       renderAllMeetings();
+      flashNewItem(meeting.id);
 
       showToast("Идея превращена во встречу", meeting.title, function(){
         meetings = meetings.filter(function(x){ return x.id !== meeting.id; });
         shadow.meetings = shadow.meetings.filter(function(x){ return x.id !== meeting.id; });
         softDeleteRow("meetings", meeting.id);
         ideas.splice(Math.min(idx, ideas.length), 0, idea);
+        restoreRow("ideas", idea.id);
         persistAll();
         renderIdeas(); renderCalendar(); renderAllMeetings();
       });
@@ -631,7 +676,7 @@
       container.classList.add("drag-over");
     });
     container.addEventListener("dragleave", function(e){
-      if(e.target === container) container.classList.remove("drag-over");
+      if(!container.contains(e.relatedTarget)) container.classList.remove("drag-over");
     });
     container.addEventListener("drop", function(e){
       var ideaId = e.dataTransfer.getData("application/x-idea-id");
@@ -1051,6 +1096,7 @@
         renderIdeas();
         showToast("Идея удалена", removed.text.slice(0, 60), function(){
           ideas.splice(Math.min(removedAt, ideas.length), 0, removed);
+          restoreRow("ideas", removed.id);
           persistAll(); renderIdeas();
         });
       });
@@ -1137,8 +1183,8 @@
           e.preventDefault();
           cell.classList.add("drag-over");
         });
-        cell.addEventListener("dragleave", function(){
-          cell.classList.remove("drag-over");
+        cell.addEventListener("dragleave", function(e){
+          if(!cell.contains(e.relatedTarget)) cell.classList.remove("drag-over");
         });
         cell.addEventListener("drop", function(e){
           e.preventDefault();
@@ -1310,6 +1356,7 @@
           renderCalendar(); renderAllMeetings();
           showToast("Встреча удалена", m.title, function(){
             meetings.splice(Math.min(idx, meetings.length), 0, m);
+            restoreRow("meetings", m.id);
             persistAll(); renderCalendar(); renderAllMeetings();
           });
         }
@@ -1654,6 +1701,7 @@
       renderAllMeetings();
       showToast("Встреча удалена", removed.title, function(){
         meetings.splice(Math.min(idx, meetings.length), 0, removed);
+        restoreRow("meetings", removed.id);
         persistAll(); renderCalendar(); renderCalFilterNote(); renderAllMeetings();
       });
     }
@@ -1845,6 +1893,7 @@
       renderCalendar();
       showToast("Задача удалена", removed.title, function(){
         tasks.splice(Math.min(idx, tasks.length), 0, removed);
+        restoreRow("tasks", removed.id);
         persistAll(); render(); renderCalendar();
       });
     }
