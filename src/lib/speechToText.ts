@@ -81,7 +81,14 @@ function getTranscriber(): Promise<AutomaticSpeechRecognitionPipeline> {
       // Vercel's writable scratch space — reused across warm invocations of
       // the same container, so the ~40MB model only downloads once per cold start.
       env.cacheDir = "/tmp/whisper-cache";
-      return pipeline("automatic-speech-recognition", MODEL_ID, { device: "wasm" });
+      // "wasm" isn't a recognized device name in this version of the
+      // library (confirmed in production: "Unsupported device: 'wasm'.
+      // Should be one of: cuda, webgpu, cpu.") — "cpu" is what actually
+      // routes through the WASM backend in a non-GPU environment like this
+      // one; the *build* we load (transformers.web.js, see loadTransformers
+      // above) is what keeps it off the native onnxruntime-node bindings,
+      // regardless of this device name.
+      return pipeline("automatic-speech-recognition", MODEL_ID, { device: "cpu" });
     });
   }
   return transcriberPromise;
