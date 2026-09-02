@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendTelegramMessage } from "@/lib/telegram";
+import { sendTelegramMessage, downloadTelegramFile } from "@/lib/telegram";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
 import { handleManageItem, resolvePendingAction, type ManageAction, type ManageItemType, type PendingAction } from "@/lib/telegramManage";
+import { transcribeOggOpus } from "@/lib/speechToText";
+
+// Voice transcription (cold-start model download + WASM inference) can run
+// well past the default function timeout — Vercel's default is too short.
+export const maxDuration = 60;
 
 function uid(): string {
   return "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -137,11 +142,34 @@ export async function POST(req: Request) {
   const update = await req.json().catch(() => null);
   const message = update?.message;
   const chatId: number | undefined = message?.chat?.id;
-  const text: string | undefined = message?.text;
+  const voiceFileId: string | undefined = message?.voice?.file_id;
+  let text: string | undefined = message?.text;
+
+  if (!chatId) {
+    return NextResponse.json({ ok: true });
+  }
+
+  // Voice message: transcribe it, then treat the result exactly like a
+  // typed message — same rate limit, same quick-add/query/manage pipeline.
+  if (!text && voiceFileId) {
+    try {
+      const bytes = await downloadTelegramFile(voiceFileId);
+      const transcript = await transcribeOggOpus(bytes);
+      if (!transcript) {
+        await sendTelegramMessage(chatId, "Не расслышал — попробуйте ещё раз или напишите текстом.");
+        return NextResponse.json({ ok: true });
+      }
+      await sendTelegramMessage(chatId, "🎙 Распознал: «" + transcript + "»");
+      text = transcript;
+    } catch (e) {
+      await sendTelegramMessage(chatId, "Не получилось распознать голос: " + (e instanceof Error ? e.message : String(e)));
+      return NextResponse.json({ ok: true });
+    }
+  }
 
   // Always 200 — Telegram retries aggressively on non-2xx, and there's
   // nothing useful to retry here (bad/irrelevant updates, missing text).
-  if (!chatId || typeof text !== "string" || !text.trim()) {
+  if (typeof text !== "string" || !text.trim()) {
     return NextResponse.json({ ok: true });
   }
 

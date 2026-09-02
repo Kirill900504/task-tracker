@@ -11,9 +11,11 @@
     "test:rls": "node --env-file=.env.local scripts/test-rls.mjs"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
     "next": "16.3.4",
+    "ogg-opus-decoder": "^1.7.5",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
