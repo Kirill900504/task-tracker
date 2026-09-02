@@ -105,7 +105,13 @@
       recur_year_day: (t.recurYearDay !== "" && t.recurYearDay != null) ? Number(t.recurYearDay) : null,
       recur_year_month: (t.recurYearMonth !== "" && t.recurYearMonth != null) ? Number(t.recurYearMonth) : null,
       last_completed_on: t.lastCompletedOn || null,
-      section_id: t.sectionId || null
+      section_id: t.sectionId || null,
+      // Any task held in-memory is by definition not deleted — a soft
+      // delete removes it from this array immediately (see deleteTaskBtn),
+      // so a live task upserting deleted_at:null is always correct, and is
+      // also what makes an undo (re-inserting the item, then persistAll())
+      // actually un-delete it server-side.
+      deleted_at: null
     };
   }
   function taskFromRow(r){
@@ -144,7 +150,8 @@
       participants: sanitizeAssigneeList(m.participants),
       status: m.status || "planned",
       result: m.result || "",
-      moved_to_date: m.movedToDate || null
+      moved_to_date: m.movedToDate || null,
+      deleted_at: null
     };
   }
   function meetingFromRow(r){
@@ -161,7 +168,7 @@
   }
 
   function ideaToRow(i){
-    return { id: i.id, text: i.text, important: !!i.important, done: !!i.done };
+    return { id: i.id, text: i.text, important: !!i.important, done: !!i.done, deleted_at: null };
   }
   function formatIdeaCreatedAt(iso){
     var d = new Date(iso);
@@ -268,6 +275,23 @@
       });
   }
 
+  // Soft delete (spec-audit recommendation #4): marks the row instead of
+  // physically removing it, so it stays recoverable indefinitely rather
+  // than only within a 6-second undo-toast window. Deliberately bypasses
+  // the diffAndSync()/shadow mechanism above — that path treats "missing
+  // from the current array" as "hard delete", which is exactly what this
+  // needs to NOT do. Callers remove the item from both the live array and
+  // `shadow` themselves so it isn't re-synced as a delete afterward.
+  function softDeleteRow(table, id){
+    if(!db) return;
+    db.from(table).update({ deleted_at: new Date().toISOString() }).eq("id", id).then(function(res){
+      if(res.error){
+        console.error("Soft delete error:", res.error);
+        showToast("Не удалось удалить", res.error.message);
+      }
+    });
+  }
+
   // ---------- Realtime: pick up changes made from another tab/device ----------
   // Supabase pushes row changes over a websocket; we merge them into the
   // same in-memory arrays + shadow snapshot that persistAll() diffs against,
@@ -302,9 +326,12 @@
     db.channel("tracker-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: filter }, function(payload){
         try{
-          if(payload.eventType === "DELETE"){
-            removeById(tasks, payload.old.id);
-            removeById(shadow.tasks, payload.old.id);
+          // A soft delete arrives here as an UPDATE (deleted_at now set),
+          // not a DELETE — treat it the same as one, or it would silently
+          // resurrect on every other open tab/device.
+          if(payload.eventType === "DELETE" || payload.new.deleted_at){
+            removeById(tasks, payload.old ? payload.old.id : payload.new.id);
+            removeById(shadow.tasks, payload.old ? payload.old.id : payload.new.id);
           } else {
             var t = taskFromRow(payload.new);
             upsertById(tasks, t);
@@ -315,9 +342,9 @@
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "meetings", filter: filter }, function(payload){
         try{
-          if(payload.eventType === "DELETE"){
-            removeById(meetings, payload.old.id);
-            removeById(shadow.meetings, payload.old.id);
+          if(payload.eventType === "DELETE" || payload.new.deleted_at){
+            removeById(meetings, payload.old ? payload.old.id : payload.new.id);
+            removeById(shadow.meetings, payload.old ? payload.old.id : payload.new.id);
           } else {
             var m = meetingFromRow(payload.new);
             upsertById(meetings, m);
@@ -328,9 +355,9 @@
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "ideas", filter: filter }, function(payload){
         try{
-          if(payload.eventType === "DELETE"){
-            removeById(ideas, payload.old.id);
-            removeById(shadow.ideas, payload.old.id);
+          if(payload.eventType === "DELETE" || payload.new.deleted_at){
+            removeById(ideas, payload.old ? payload.old.id : payload.new.id);
+            removeById(shadow.ideas, payload.old ? payload.old.id : payload.new.id);
           } else {
             var i = ideaFromRow(payload.new);
             upsertById(ideas, i);
@@ -858,7 +885,9 @@
         var removedAt = ideas.findIndex(function(i){ return i.id === idea.id; });
         var removed = idea;
         ideas = ideas.filter(function(i){ return i.id !== idea.id; });
-        persistAll(); renderIdeas();
+        shadow.ideas = shadow.ideas.filter(function(i){ return i.id !== idea.id; });
+        softDeleteRow("ideas", idea.id);
+        renderIdeas();
         showToast("Идея удалена", removed.text.slice(0, 60), function(){
           ideas.splice(Math.min(removedAt, ideas.length), 0, removed);
           persistAll(); renderIdeas();
@@ -1113,8 +1142,15 @@
       del.addEventListener("click", function(e){
         e.stopPropagation();
         if(confirm("Удалить встречу «" + m.title + "»?")){
+          var idx = meetings.findIndex(function(x){ return x.id === m.id; });
           meetings = meetings.filter(function(x){ return x.id !== m.id; });
-          persistAll(); renderCalendar(); renderAllMeetings();
+          shadow.meetings = shadow.meetings.filter(function(x){ return x.id !== m.id; });
+          softDeleteRow("meetings", m.id);
+          renderCalendar(); renderAllMeetings();
+          showToast("Встреча удалена", m.title, function(){
+            meetings.splice(Math.min(idx, meetings.length), 0, m);
+            persistAll(); renderCalendar(); renderAllMeetings();
+          });
         }
       });
       chip.addEventListener("click", function(){ openMeetingModal(m); });
@@ -1446,12 +1482,19 @@
     var id = document.getElementById("meetingId").value;
     if(!id) return;
     if(confirm("Удалить эту встречу?")){
+      var idx = meetings.findIndex(function(x){ return x.id === id; });
+      var removed = meetings[idx];
       meetings = meetings.filter(function(x){ return x.id !== id; });
-      persistAll();
+      shadow.meetings = shadow.meetings.filter(function(x){ return x.id !== id; });
+      softDeleteRow("meetings", id);
       closeMeetingModal();
       renderCalendar();
       renderCalFilterNote();
       renderAllMeetings();
+      showToast("Встреча удалена", removed.title, function(){
+        meetings.splice(Math.min(idx, meetings.length), 0, removed);
+        persistAll(); renderCalendar(); renderCalFilterNote(); renderAllMeetings();
+      });
     }
   });
 
@@ -1631,10 +1674,18 @@
     var id = document.getElementById("taskId").value;
     if(!id) return;
     if(confirm("Удалить эту задачу?")){
+      var idx = tasks.findIndex(function(x){ return x.id === id; });
+      var removed = tasks[idx];
       tasks = tasks.filter(function(x){ return x.id !== id; });
-      persistAll();
+      shadow.tasks = shadow.tasks.filter(function(x){ return x.id !== id; });
+      softDeleteRow("tasks", id);
       closeModal();
       render();
+      renderCalendar();
+      showToast("Задача удалена", removed.title, function(){
+        tasks.splice(Math.min(idx, tasks.length), 0, removed);
+        persistAll(); render(); renderCalendar();
+      });
     }
   });
 
@@ -1896,9 +1947,9 @@
     var results;
     try{
       results = await Promise.all([
-        db.from("tasks").select("*"),
-        db.from("meetings").select("*"),
-        db.from("ideas").select("*").order("created_at", { ascending: true }),
+        db.from("tasks").select("*").is("deleted_at", null),
+        db.from("meetings").select("*").is("deleted_at", null),
+        db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }),
         db.from("assignees").select("*").order("created_at", { ascending: true }),
         db.from("sections").select("*").order("sort_order", { ascending: true })
       ]);

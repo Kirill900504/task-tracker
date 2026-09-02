@@ -39,7 +39,8 @@ export async function GET(req: Request) {
     const { data: tasks } = await admin
       .from("tasks")
       .select("id,title,assignee,status,deadline,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month")
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .is("deleted_at", null);
 
     const dueLines: string[] = [];
     for (const t of (tasks || []) as TaskRow[]) {
@@ -64,7 +65,8 @@ export async function GET(req: Request) {
       .from("meetings")
       .select("id,title,date,time,participants,status")
       .eq("user_id", userId)
-      .eq("date", today);
+      .eq("date", today)
+      .is("deleted_at", null);
 
     for (const m of (meetings || []) as MeetingRow[]) {
       if (m.status !== "planned" || !m.time) continue;

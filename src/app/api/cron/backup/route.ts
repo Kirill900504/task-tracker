@@ -53,6 +53,17 @@ export async function GET(req: Request) {
       `📦 Еженедельная резервная копия (${today})`,
     );
     sent++;
+
+    // Soft-deleted (spec-audit #4) rows older than 30 days are purged for
+    // real — but only *after* this week's backup above, which still
+    // includes them, so nothing is ever truly gone without a last copy
+    // existing somewhere.
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    await Promise.all([
+      admin.from("tasks").delete().eq("user_id", userId).lt("deleted_at", cutoff),
+      admin.from("meetings").delete().eq("user_id", userId).lt("deleted_at", cutoff),
+      admin.from("ideas").delete().eq("user_id", userId).lt("deleted_at", cutoff),
+    ]);
   }
 
   return NextResponse.json({ ok: true, sent });

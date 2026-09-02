@@ -35,7 +35,7 @@ async function findCandidates(
   query: string,
 ): Promise<Candidate[]> {
   if (itemType === "task") {
-    let q = admin.from("tasks").select("id, title, status").eq("user_id", userId);
+    let q = admin.from("tasks").select("id, title, status").eq("user_id", userId).is("deleted_at", null);
     if (action === "complete") q = q.eq("status", "in_progress");
     if (action === "reopen") q = q.eq("status", "done");
     const { data } = await q;
@@ -44,7 +44,7 @@ async function findCandidates(
       .map((t) => ({ id: t.id as string, title: t.title as string }));
   }
 
-  let q = admin.from("meetings").select("id, title, date, status").eq("user_id", userId);
+  let q = admin.from("meetings").select("id, title, date, status").eq("user_id", userId).is("deleted_at", null);
   if (action === "success" || action === "no_result") q = q.eq("status", "planned");
   if (action === "reopen") q = q.in("status", ["success", "no_result"]);
   const { data } = await q;
@@ -69,7 +69,10 @@ async function applyAction(
 ): Promise<{ error: string | null }> {
   if (itemType === "task") {
     if (action === "delete") {
-      const { error } = await admin.from("tasks").delete().eq("id", id);
+      // Soft delete (spec-audit recommendation #4) — marks the row instead
+      // of physically removing it, recoverable indefinitely rather than
+      // gone the instant "да" is confirmed.
+      const { error } = await admin.from("tasks").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       return { error: error?.message || null };
     }
     const status = action === "complete" ? "done" : action === "reopen" ? "in_progress" : null;
@@ -81,7 +84,7 @@ async function applyAction(
   }
 
   if (action === "delete") {
-    const { error } = await admin.from("meetings").delete().eq("id", id);
+    const { error } = await admin.from("meetings").update({ deleted_at: new Date().toISOString() }).eq("id", id);
     return { error: error?.message || null };
   }
   const status = action === "success" ? "success" : action === "no_result" ? "no_result" : action === "reopen" ? "planned" : null;

@@ -38,7 +38,8 @@ async function replyToday(admin: ReturnType<typeof createAdminClient>, userId: s
     .from("tasks")
     .select("id, title, assignee, status, deadline, recur, recur_weekday, recur_monthday, recur_year_day, recur_year_month")
     .eq("user_id", userId)
-    .eq("status", "in_progress");
+    .eq("status", "in_progress")
+    .is("deleted_at", null);
   const tasks = ((taskRows || []) as TaskRow[]).filter((t) => isDueToday(t, now, today));
 
   const { data: meetingRows } = await admin
@@ -47,6 +48,7 @@ async function replyToday(admin: ReturnType<typeof createAdminClient>, userId: s
     .eq("user_id", userId)
     .eq("date", today)
     .eq("status", "planned")
+    .is("deleted_at", null)
     .order("time");
 
   if (!tasks.length && !(meetingRows || []).length) {
@@ -78,7 +80,8 @@ async function replyOverdue(admin: ReturnType<typeof createAdminClient>, userId:
     .eq("user_id", userId)
     .eq("status", "in_progress")
     .eq("recur", "none")
-    .not("deadline", "is", null);
+    .not("deadline", "is", null)
+    .is("deleted_at", null);
   const overdue = ((taskRows || []) as TaskRow[])
     .filter((t) => isOverdue(t, today))
     .sort((a, b) => (a.deadline || "").localeCompare(b.deadline || ""));
@@ -100,6 +103,7 @@ async function replyMeetings(admin: ReturnType<typeof createAdminClient>, userId
     .eq("user_id", userId)
     .eq("status", "planned")
     .gte("date", today)
+    .is("deleted_at", null)
     .order("date")
     .order("time")
     .limit(10);
