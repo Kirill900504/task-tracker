@@ -1,4 +1,5 @@
-import { createRequire } from "node:module";
+import path from "node:path";
+import fs from "node:fs";
 // Type-only — erased at compile time, so this never triggers Node's
 // "node"-condition module resolution the way a value import would.
 import type { AutomaticSpeechRecognitionPipeline } from "@huggingface/transformers";
@@ -18,19 +19,54 @@ import type { AutomaticSpeechRecognitionPipeline } from "@huggingface/transforme
 // (confirmed via deploy logs: "libonnxruntime.so.1: cannot open shared
 // object file"), and a fresh container on every cold start makes that kind
 // of native-loader failure fundamentally harder to keep working than
-// avoiding it entirely. So: resolve the package normally (to find where
-// node_modules actually put it), then load its "web" build directly by
-// file path instead — that build only ever touches the pure-WASM
-// onnxruntime-web backend and never references onnxruntime-node at all.
-const require = createRequire(import.meta.url);
+// avoiding it entirely. So: load its "web" build directly by file path
+// instead — that build only ever touches the pure-WASM onnxruntime-web
+// backend and never references onnxruntime-node at all.
+//
+// Getting that path is trickier than it should be: an earlier version used
+// require.resolve("@huggingface/transformers") to find where node_modules
+// actually put it. That broke in production with "16637.replace is not a
+// function" — Turbopack statically analyzes require()/require.resolve()
+// call sites with a literal package-name argument and rewrites them to
+// reference its OWN internal module registry (a numeric id), even for a
+// package marked serverExternalPackages — so the "path" it handed back
+// was never a real path at all. Building the path from process.cwd() at
+// runtime instead is invisible to that static analysis (no literal
+// require()-style call for the bundler to find), so it can only ever
+// resolve for real, the way plain Node would.
+function findWebEntryPath(): string {
+  const segments = ["node_modules", "@huggingface", "transformers", "dist", "transformers.web.js"];
+  // turbopackIgnore: this path reaches into node_modules, so without the
+  // hint Turbopack's tracer defensively assumes it might need *any* file in
+  // the project and bundles everything (including /public) into the
+  // function — the actual package is already guaranteed to ship in full via
+  // serverExternalPackages in next.config.ts, so there's nothing here for
+  // the tracer to usefully discover anyway.
+  const candidates = [
+    path.join(/* turbopackIgnore: true */ process.cwd(), ...segments),
+    path.join(/* turbopackIgnore: true */ process.cwd(), "..", ...segments),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error("Could not locate @huggingface/transformers web build (looked in: " + candidates.join(", ") + ")");
+}
+
+// Even wrapped in a function call, Turbopack still tried to statically
+// resolve this import() at *build* time and failed the whole build outright
+// ("Module not found") rather than deferring to runtime — a stricter
+// failure mode than webpack's usual "critical dependency" warning.
+// Constructing the import through `new Function` hides it from every
+// bundler's static analysis entirely: the `import()` call only exists
+// inside a string compiled by the JS engine at runtime, never as a real
+// AST node any build tool parses.
+const dynamicImport = new Function("specifier", "return import(specifier);") as (specifier: string) => Promise<unknown>;
 
 type TransformersModule = typeof import("@huggingface/transformers");
 let transformersPromise: Promise<TransformersModule> | null = null;
 function loadTransformers(): Promise<TransformersModule> {
   if (!transformersPromise) {
-    const nodeEntry = require.resolve("@huggingface/transformers");
-    const webEntry = nodeEntry.replace(/transformers\.node\.(mjs|cjs)$/, "transformers.web.js");
-    transformersPromise = import(webEntry) as Promise<TransformersModule>;
+    transformersPromise = dynamicImport(findWebEntryPath()) as Promise<TransformersModule>;
   }
   return transformersPromise;
 }
