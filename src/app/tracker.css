@@ -68,18 +68,48 @@
   }
   @media (max-width:1150px){
     .layout{grid-template-columns:1fr !important;}
-    /* In desktop's 3-column layout, .side is its own independently
+    /* In desktop's 3-column layout, a side zone is its own independently
        scrolling sticky column (max-height + overflow:auto). Stacked into
        one column on mobile, that turned into a second, nested scrollbar
-       inside the page's own — reset it here so the side panels just flow
-       with the page like everything else. */
-    .layout .side{position:static !important; max-height:none !important; overflow:visible !important;}
-    .side-cal{order:2;}
-    .main-col{order:1;}
-    .side-ideas{order:3;}
+       inside the page's own — reset it here so panels just flow with the
+       page like everything else. Zone order is fixed on mobile (tasks
+       first) regardless of how panels were rearranged on desktop — a
+       narrow screen has no "left/right" for that arrangement to mean
+       anything, so it falls back to the one order that always makes sense. */
+    .layout [data-zone]{position:static !important; max-height:none !important; overflow:visible !important;}
+    [data-zone="left"]{order:2;}
+    [data-zone="center"]{order:1;}
+    [data-zone="right"]{order:3;}
   }
-  .side{position:sticky; top:84px; min-width:0; max-height:calc(100vh - 100px); overflow:auto;}
-  .main-col{min-width:0;}
+  .dash-zone{min-width:0; border-radius:10px; transition:background .15s ease, box-shadow .15s ease;}
+  [data-zone="left"], [data-zone="right"]{position:sticky; top:84px; max-height:calc(100vh - 100px); overflow:auto;}
+  .dash-zone.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
+
+  /* ---------- Panel constructor: drag panels between/within zones ---------- */
+  .dash-panel{
+    position:relative; min-width:0; container-type:inline-size;
+    transition:box-shadow .15s ease, transform .15s ease, opacity .15s ease;
+  }
+  .dash-panel.dragging{
+    opacity:.5; transform:scale(1.01) rotate(-.4deg);
+    box-shadow:0 14px 32px rgba(0,0,0,.4); border-color:var(--accent);
+  }
+  .dash-panel.drag-indicator::before{
+    content:""; position:absolute; left:0; right:0; top:-11px; height:3px;
+    background:var(--accent); border-radius:2px;
+  }
+  .dash-zone.drag-indicator-end{box-shadow:inset 0 0 0 1px var(--accent), inset 0 -3px 0 0 var(--accent);}
+  .dash-panel-head{
+    display:flex; align-items:center; gap:8px; margin-bottom:10px;
+  }
+  .dash-panel-head .panel-title{margin:0; flex:1;}
+  .dash-drag-handle{
+    cursor:grab; color:var(--ink-soft); font-size:13px; letter-spacing:-2px;
+    line-height:1; padding:2px 2px 2px 0; flex:none; user-select:none;
+  }
+  .dash-drag-handle:hover{color:var(--accent);}
+  .dash-panel.dragging .dash-drag-handle{cursor:grabbing;}
+  @media (prefers-reduced-motion: reduce){ .dash-panel.dragging{transform:none;} }
 
   /* Mobile quick-add: a floating thumb-reachable button + bottom sheet
      replaces the toolbar bar (which needs scrolling up to reach), so hide
@@ -195,6 +225,11 @@
 
   .columns{display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start;}
   @media (max-width:640px){ .columns{grid-template-columns:1fr;} }
+  /* Safety net for the panel constructor: if the Tasks panel is dragged
+     into a narrow zone, fall back to one column based on the PANEL's own
+     width rather than the viewport's — a container query, not a media
+     query, is what makes that distinction possible. */
+  @container (max-width:480px){ .columns{grid-template-columns:1fr;} }
   .column{min-width:0;}
 
   .done-wrap{margin-top:26px;}

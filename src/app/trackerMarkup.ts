@@ -24,6 +24,7 @@ export const TRACKER_BODY_HTML = `
       <button class="btn active" id="ideasToggleBtn">💡 Идеи</button>
       <button class="btn active" id="calToggleBtn">📅 Календарь</button>
       <button class="btn" id="notifPermBtn">🔔 Уведомления</button>
+      <button class="btn" id="resetLayoutBtn" style="display:none;" title="Панели вернутся на исходные места">↺ Сбросить расположение</button>
       <button class="btn btn-primary" id="installAppBtn" style="display:none;">📥 Установить</button>
       <button class="btn" id="telegramLinkBtn">🔗 Telegram</button>
       <button class="btn" id="signOutBtn">Выйти</button>
@@ -33,9 +34,13 @@ export const TRACKER_BODY_HTML = `
 
 <div class="layout" id="layoutGrid">
 
-  <!-- Left: calendar -->
-  <div class="side side-cal" id="calSide">
-    <div class="panel" id="calPanel">
+  <!-- Left zone -->
+  <div class="dash-zone" id="zoneLeft" data-zone="left">
+    <div class="panel dash-panel" id="calPanel" data-panel-id="calPanel">
+      <div class="dash-panel-head">
+        <span class="dash-drag-handle" draggable="true" title="Перетащить панель">⠿⠿</span>
+        <div class="panel-title">Календарь</div>
+      </div>
       <div class="cal-nav">
         <button class="btn btn-small" id="calPrevBtn">←</button>
         <div class="cal-month" id="calMonthLabel"></div>
@@ -49,8 +54,9 @@ export const TRACKER_BODY_HTML = `
       </div>
     </div>
 
-    <div class="panel" id="meetingsPanel">
-      <div class="panel-head">
+    <div class="panel dash-panel" id="meetingsPanel" data-panel-id="meetingsPanel">
+      <div class="dash-panel-head">
+        <span class="dash-drag-handle" draggable="true" title="Перетащить панель">⠿⠿</span>
         <div class="panel-title">Встречи <span class="count" id="countMeetings">0</span></div>
         <button class="btn btn-primary btn-small" id="addMeetingBtn">+</button>
       </div>
@@ -58,45 +64,52 @@ export const TRACKER_BODY_HTML = `
     </div>
   </div>
 
-  <!-- Center: tasks -->
-  <div class="main-col" id="mainCol">
-    <div class="notif-banner" id="notifBanner"></div>
-    <div class="notif-banner" id="syncErrorBanner" style="display:none;"></div>
-
-    <div class="toolbar">
-      <button class="btn btn-primary" id="newTaskBtn">+ Новая задача</button>
-      <div class="search-wrap" id="quickAddSlot"></div>
-      <select id="filterSection"><option value="all">Все разделы</option></select>
-      <select id="filterAssignee"><option value="all">Все исполнители</option></select>
-      <select id="filterPriority">
-        <option value="all">Любой приоритет</option>
-        <option value="high">Высокий</option>
-        <option value="med">Средний</option>
-      </select>
-      <label class="check-wrap"><input type="checkbox" id="showDoneCheckbox"> Показывать завершённые</label>
-    </div>
-
-    <div class="columns">
-      <div class="column" id="colShort">
-        <div class="section-title" id="titleShort">Краткосрочные <span class="count" id="countShort">0</span><span class="collapse-arrow">▾</span></div>
-        <div id="listShort"></div>
+  <!-- Center zone -->
+  <div class="dash-zone" id="zoneCenter" data-zone="center">
+    <div class="main-col dash-panel" id="mainCol" data-panel-id="mainCol">
+      <div class="dash-panel-head">
+        <span class="dash-drag-handle" draggable="true" title="Перетащить панель">⠿⠿</span>
+        <div class="panel-title">Задачи</div>
       </div>
-      <div class="column" id="colLong">
-        <div class="section-title" id="titleLong">Долгосрочные <span class="count" id="countLong">0</span><span class="collapse-arrow">▾</span></div>
-        <div id="listLong"></div>
-      </div>
-    </div>
+      <div class="notif-banner" id="notifBanner"></div>
+      <div class="notif-banner" id="syncErrorBanner" style="display:none;"></div>
 
-    <div class="done-wrap" id="doneWrap" style="display:none;">
-      <div class="section-title">Завершённые <span class="count" id="countDone">0</span></div>
-      <div id="listDone"></div>
+      <div class="toolbar">
+        <button class="btn btn-primary" id="newTaskBtn">+ Новая задача</button>
+        <div class="search-wrap" id="quickAddSlot"></div>
+        <select id="filterSection"><option value="all">Все разделы</option></select>
+        <select id="filterAssignee"><option value="all">Все исполнители</option></select>
+        <select id="filterPriority">
+          <option value="all">Любой приоритет</option>
+          <option value="high">Высокий</option>
+          <option value="med">Средний</option>
+        </select>
+        <label class="check-wrap"><input type="checkbox" id="showDoneCheckbox"> Показывать завершённые</label>
+      </div>
+
+      <div class="columns">
+        <div class="column" id="colShort">
+          <div class="section-title" id="titleShort">Краткосрочные <span class="count" id="countShort">0</span><span class="collapse-arrow">▾</span></div>
+          <div id="listShort"></div>
+        </div>
+        <div class="column" id="colLong">
+          <div class="section-title" id="titleLong">Долгосрочные <span class="count" id="countLong">0</span><span class="collapse-arrow">▾</span></div>
+          <div id="listLong"></div>
+        </div>
+      </div>
+
+      <div class="done-wrap" id="doneWrap" style="display:none;">
+        <div class="section-title">Завершённые <span class="count" id="countDone">0</span></div>
+        <div id="listDone"></div>
+      </div>
     </div>
   </div>
 
-  <!-- Right: ideas -->
-  <div class="side side-ideas" id="ideasSide">
-    <div class="panel" id="ideasPanel">
-      <div class="panel-head">
+  <!-- Right zone -->
+  <div class="dash-zone" id="zoneRight" data-zone="right">
+    <div class="panel dash-panel" id="ideasPanel" data-panel-id="ideasPanel">
+      <div class="dash-panel-head">
+        <span class="dash-drag-handle" draggable="true" title="Перетащить панель">⠿⠿</span>
         <div class="panel-title">Идеи и мысли <span class="count" id="countIdeas">0</span></div>
       </div>
       <div class="idea-add">

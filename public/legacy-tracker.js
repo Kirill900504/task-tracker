@@ -690,6 +690,116 @@
   setupIdeaDrop(elListLong, function(ideaId){ convertIdeaToTask(ideaId, "long"); });
   setupIdeaDrop(document.getElementById("meetingsForDay"), convertIdeaToMeeting);
 
+  // ---------- Panel constructor: drag whole panels (Календарь, Встречи,
+  // Задачи, Идеи) between and within the three layout zones. Persisted to
+  // Supabase (one row per user) so a custom arrangement survives reloads
+  // and follows the account across devices, same as everything else here.
+  var zoneLeft = document.getElementById("zoneLeft");
+  var zoneCenter = document.getElementById("zoneCenter");
+  var zoneRight = document.getElementById("zoneRight");
+  var allZones = [zoneLeft, zoneCenter, zoneRight];
+  var resetLayoutBtn = document.getElementById("resetLayoutBtn");
+  var DEFAULT_PANEL_LAYOUT = {
+    left: ["calPanel", "meetingsPanel"],
+    center: ["mainCol"],
+    right: ["ideasPanel"]
+  };
+
+  function currentPanelLayout(){
+    var layout = {};
+    allZones.forEach(function(zone){
+      layout[zone.dataset.zone] = Array.prototype.slice.call(zone.children)
+        .filter(function(el){ return el.classList.contains("dash-panel"); })
+        .map(function(el){ return el.dataset.panelId; });
+    });
+    return layout;
+  }
+  function sameLayout(a, b){ return JSON.stringify(a) === JSON.stringify(b); }
+  function refreshResetLayoutBtn(){
+    resetLayoutBtn.style.display = sameLayout(currentPanelLayout(), DEFAULT_PANEL_LAYOUT) ? "none" : "";
+  }
+  function applyPanelLayout(layout){
+    var zonesByName = { left: zoneLeft, center: zoneCenter, right: zoneRight };
+    ["left", "center", "right"].forEach(function(zoneName){
+      var zone = zonesByName[zoneName];
+      (layout[zoneName] || []).forEach(function(panelId){
+        var el = document.getElementById(panelId);
+        if(el) zone.appendChild(el);
+      });
+    });
+    refreshResetLayoutBtn();
+  }
+  function savePanelLayout(){
+    var layout = currentPanelLayout();
+    refreshResetLayoutBtn();
+    updateLayoutColumns();
+    if(!db) return;
+    db.from("user_prefs").upsert({ panel_layout: layout, updated_at: new Date().toISOString() })
+      .then(function(res){ if(res.error) console.error("Save layout error:", res.error); });
+  }
+  resetLayoutBtn.addEventListener("click", function(){
+    applyPanelLayout(DEFAULT_PANEL_LAYOUT);
+    savePanelLayout();
+  });
+
+  function getPanelAfterElement(zone, y){
+    var els = Array.prototype.slice.call(zone.querySelectorAll(".dash-panel:not(.dragging)"));
+    var closest = { offset: -Infinity, element: null };
+    els.forEach(function(child){
+      var box = child.getBoundingClientRect();
+      var offset = y - box.top - box.height / 2;
+      if(offset < 0 && offset > closest.offset) closest = { offset: offset, element: child };
+    });
+    return closest.element;
+  }
+  function updatePanelDropIndicator(zone, after){
+    document.querySelectorAll(".dash-panel.drag-indicator").forEach(function(el){ el.classList.remove("drag-indicator"); });
+    allZones.forEach(function(z){ z.classList.remove("drag-indicator-end"); });
+    if(after) after.classList.add("drag-indicator");
+    else zone.classList.add("drag-indicator-end");
+  }
+  function clearPanelDropIndicator(){
+    document.querySelectorAll(".dash-panel.drag-indicator").forEach(function(el){ el.classList.remove("drag-indicator"); });
+    allZones.forEach(function(z){ z.classList.remove("drag-indicator-end", "drag-over"); });
+  }
+  function setupPanelZoneDrop(zone){
+    zone.addEventListener("dragover", function(e){
+      if(!e.dataTransfer.types.includes("application/x-panel-id")) return;
+      e.preventDefault();
+      zone.classList.add("drag-over");
+      updatePanelDropIndicator(zone, getPanelAfterElement(zone, e.clientY));
+    });
+    zone.addEventListener("dragleave", function(e){
+      if(!zone.contains(e.relatedTarget)) zone.classList.remove("drag-over");
+    });
+    zone.addEventListener("drop", function(e){
+      var id = e.dataTransfer.getData("application/x-panel-id");
+      if(!id) return;
+      e.preventDefault();
+      clearPanelDropIndicator();
+      var panel = document.getElementById(id);
+      if(!panel) return;
+      var after = getPanelAfterElement(zone, e.clientY);
+      if(after) zone.insertBefore(panel, after); else zone.appendChild(panel);
+      savePanelLayout();
+    });
+  }
+  allZones.forEach(setupPanelZoneDrop);
+
+  Array.prototype.slice.call(document.querySelectorAll(".dash-drag-handle")).forEach(function(handle){
+    var panel = handle.closest(".dash-panel");
+    if(!panel) return;
+    handle.addEventListener("dragstart", function(e){
+      e.dataTransfer.setData("application/x-panel-id", panel.id);
+      e.dataTransfer.effectAllowed = "move";
+      setTimeout(function(){ panel.classList.add("dragging"); }, 0);
+    });
+    handle.addEventListener("dragend", function(){
+      panel.classList.remove("dragging");
+      clearPanelDropIndicator();
+    });
+  });
+
   var calendarFilterDate = null;
 
   function populateSelect(sel, items, withAllOption, allLabel){
@@ -959,20 +1069,31 @@
   // вокруг неё оставался — получалась "пустая полоса" и сломанная раскладка.
   // Теперь при скрытии колонка убирается из grid-template-columns целиком,
   // а не просто схлопывается до 0.
-  var calSide = document.getElementById("calSide");
   var calPanel = document.getElementById("calPanel");
-  var ideasSide = document.getElementById("ideasSide");
+  var ideasPanel = document.getElementById("ideasPanel");
   var layoutGrid = document.getElementById("layoutGrid");
   var calOpen = true, ideasOpen = true;
 
+  // A zone's column only needs to reserve width while it actually has a
+  // visible panel in it — which panel(s) that is can change now that
+  // panels can be dragged between zones, so this is computed from the
+  // DOM each time rather than assumed fixed (previously the left zone's
+  // 300px was hardcoded as "always reserved" because Встречи always lived
+  // there; that stopped being guaranteed once panels became rearrangeable).
+  function zoneHasVisiblePanel(zone){
+    return Array.prototype.some.call(zone.children, function(el){
+      return el.classList && el.classList.contains("dash-panel") && el.style.display !== "none";
+    });
+  }
   function updateLayoutColumns(){
-    // Левая колонка (300px) всегда зарезервирована — в ней всегда виден блок
-    // "Встречи", даже если сам календарь скрыт кнопкой.
-    var cols = ["300px", "1fr"];
-    if(ideasOpen) cols.push("320px");
-    layoutGrid.style.gridTemplateColumns = cols.join(" ");
     calPanel.style.display = calOpen ? "" : "none";
-    ideasSide.style.display = ideasOpen ? "" : "none";
+    ideasPanel.style.display = ideasOpen ? "" : "none";
+    var cols = [
+      zoneHasVisiblePanel(zoneLeft) ? "300px" : "0px",
+      "1fr",
+      zoneHasVisiblePanel(zoneRight) ? "320px" : "0px"
+    ];
+    layoutGrid.style.gridTemplateColumns = cols.join(" ");
     document.getElementById("calToggleBtn").classList.toggle("active", calOpen);
     document.getElementById("ideasToggleBtn").classList.toggle("active", ideasOpen);
   }
@@ -2179,6 +2300,18 @@
     ideas = results[2].data.map(ideaFromRow);
     assignees = sanitizeAssigneeList(results[3].data.map(function(r){ return r.name; }));
     sections = results[4].data.map(sectionFromRow);
+
+    // Best-effort, not part of the critical Promise.all above — a missing
+    // migration or a hiccup loading saved panel positions shouldn't block
+    // the rest of the app from booting, it should just fall back to the
+    // default layout.
+    try{
+      var prefsRes = await db.from("user_prefs").select("panel_layout").maybeSingle();
+      applyPanelLayout((prefsRes.data && prefsRes.data.panel_layout) || DEFAULT_PANEL_LAYOUT);
+    }catch(e){
+      console.error("Load panel layout error:", e);
+      applyPanelLayout(DEFAULT_PANEL_LAYOUT);
+    }
 
     // Baseline "already in the database" snapshot — taken before any of the
     // startup reconciliation below, so persistAll() only pushes what's new.
