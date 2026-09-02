@@ -254,7 +254,8 @@ export const TRACKER_BODY_HTML = `
       </div>
       <div class="reschedule-row">
         <input type="date" id="mRescheduleDate">
-        <button type="button" class="btn btn-small" id="rescheduleBtn">📅 Перенести следующий этап на эту дату</button>
+        <input type="time" id="mRescheduleTime" value="10:00">
+        <button type="button" class="btn btn-small" id="rescheduleBtn">📅 Перенести следующий этап</button>
       </div>
     </div>
 
@@ -265,6 +266,32 @@ export const TRACKER_BODY_HTML = `
       <div class="left">
         <button class="btn" id="meetingCancelBtn">Отмена</button>
         <button class="btn btn-primary" id="meetingSaveBtn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Generic date+time confirmation, used instead of the browser's native
+     prompt() for drag-to-reschedule and the quick "📅" icon on meeting chips. -->
+<div class="overlay" id="confirmDateTimeOverlay">
+  <div class="modal" style="max-width:360px;">
+    <h2>Подтвердите действие</h2>
+    <p class="confirm-dt-question" id="confirmDateTimeQuestion"></p>
+    <div class="row2">
+      <div class="field">
+        <label>Дата</label>
+        <input type="date" id="confirmDateTimeDate">
+      </div>
+      <div class="field">
+        <label>Время</label>
+        <input type="time" id="confirmDateTimeTime">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <div class="left"></div>
+      <div class="left">
+        <button class="btn" id="confirmDateTimeCancelBtn">Отмена</button>
+        <button class="btn btn-primary" id="confirmDateTimeOkBtn">ОК</button>
       </div>
     </div>
   </div>

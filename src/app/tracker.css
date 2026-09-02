@@ -383,5 +383,8 @@
   .outcome-btn-success{background:var(--success); color:#0B2116; border-color:var(--success); font-weight:600;}
   .outcome-btn-success:hover{opacity:.9;}
   .outcome-btn-noresult{color:var(--high); border-color:var(--high-bg);}
-  .reschedule-row{display:flex; gap:8px; margin-top:10px;}
-  .reschedule-row input{flex:1; padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink);}
+  .reschedule-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .reschedule-row input{flex:1; min-width:110px; padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink);}
+  .reschedule-row button{flex:none;}
+
+  .confirm-dt-question{font-size:13px; color:var(--ink); margin:0 0 14px;}

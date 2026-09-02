@@ -889,19 +889,19 @@
           if(!id) return;
           var meeting = meetings.find(function(x){ return x.id === id; });
           if(!meeting) return;
-          var newTime = prompt("Время встречи «" + meeting.title + "» на " + fmtDate(ds) + ":", meeting.time || "10:00");
-          if(newTime === null) return;
-          var prevDate = meeting.date, prevTime = meeting.time;
-          meeting.date = ds;
-          newTime = newTime.trim();
-          if(newTime) meeting.time = newTime;
-          persistAll();
-          renderCalendar();
-          renderCalFilterNote();
-          renderAllMeetings();
-          showToast("Встреча перенесена", meeting.title, function(){
-            meeting.date = prevDate; meeting.time = prevTime;
-            persistAll(); renderCalendar(); renderCalFilterNote(); renderAllMeetings();
+          promptDateTime("Перенести встречу «" + meeting.title + "» на:", ds, meeting.time || "10:00").then(function(result){
+            if(!result) return;
+            var prevDate = meeting.date, prevTime = meeting.time;
+            meeting.date = result.date;
+            if(result.time) meeting.time = result.time;
+            persistAll();
+            renderCalendar();
+            renderCalFilterNote();
+            renderAllMeetings();
+            showToast("Встреча перенесена", meeting.title, function(){
+              meeting.date = prevDate; meeting.time = prevTime;
+              persistAll(); renderCalendar(); renderCalFilterNote(); renderAllMeetings();
+            });
           });
         });
         grid.appendChild(cell);
@@ -1088,13 +1088,11 @@
         rescheduleQuickBtn.addEventListener("click", function(e){
           e.stopPropagation();
           var suggestedDate = addDaysIso(m.date, 1);
-          var newDate = prompt("Перенести встречу «" + m.title + "» на дату (ГГГГ-ММ-ДД):", suggestedDate);
-          if(!newDate) return;
-          newDate = newDate.trim();
-          var newTime = prompt("Время встречи на " + fmtDate(newDate) + ":", m.time || "10:00");
-          if(newTime === null) return;
-          var undo = performReschedule(m, newDate, newTime.trim(), m.result);
-          showToast("Встреча перенесена", m.title, undo);
+          promptDateTime("Перенести встречу «" + m.title + "» на:", suggestedDate, m.time || "10:00").then(function(result){
+            if(!result) return;
+            var undo = performReschedule(m, result.date, result.time, m.result);
+            showToast("Встреча перенесена", m.title, undo);
+          });
         });
 
         quickActions.appendChild(successBtn);
@@ -1130,6 +1128,45 @@
   });
 
   // ---------- Meeting modal ----------
+  // Styled date+time confirmation, matching the rest of the UI, instead of
+  // the browser's native prompt() (which the calendar drag-to-reschedule
+  // and the meeting chip's quick "📅" icon used to rely on).
+  var confirmDateTimeOverlay = document.getElementById("confirmDateTimeOverlay");
+  var activeDateTimeCancel = null; // lets the Escape handler below close this too
+  function promptDateTime(question, defaultDate, defaultTime){
+    return new Promise(function(resolve){
+      document.getElementById("confirmDateTimeQuestion").textContent = question;
+      var dateInput = document.getElementById("confirmDateTimeDate");
+      var timeInput = document.getElementById("confirmDateTimeTime");
+      dateInput.value = defaultDate || "";
+      timeInput.value = defaultTime || "";
+      confirmDateTimeOverlay.classList.add("open");
+
+      var okBtn = document.getElementById("confirmDateTimeOkBtn");
+      var cancelBtn = document.getElementById("confirmDateTimeCancelBtn");
+      function cleanup(){
+        confirmDateTimeOverlay.classList.remove("open");
+        okBtn.removeEventListener("click", onOk);
+        cancelBtn.removeEventListener("click", onCancel);
+        confirmDateTimeOverlay.removeEventListener("click", onOverlayClick);
+        activeDateTimeCancel = null;
+      }
+      function onOk(){
+        var date = dateInput.value;
+        var time = timeInput.value;
+        cleanup();
+        if(!date){ resolve(null); return; }
+        resolve({ date: date, time: time });
+      }
+      function onCancel(){ cleanup(); resolve(null); }
+      function onOverlayClick(e){ if(e.target === confirmDateTimeOverlay) onCancel(); }
+      okBtn.addEventListener("click", onOk);
+      cancelBtn.addEventListener("click", onCancel);
+      confirmDateTimeOverlay.addEventListener("click", onOverlayClick);
+      activeDateTimeCancel = onCancel;
+    });
+  }
+
   var meetingOverlay = document.getElementById("meetingOverlay");
   var participantsField = document.getElementById("participantsField");
   var participantsTrigger = document.getElementById("participantsTrigger");
@@ -1205,6 +1242,7 @@
       // Предлагаем конкретную дату — следующий день после встречи — вместо
       // пустого поля, которое приходилось заполнять вручную.
       document.getElementById("mRescheduleDate").value = addDaysIso(m.date, 1);
+      document.getElementById("mRescheduleTime").value = m.time || "10:00";
       if(m.status && m.status !== "planned"){
         badge.className = "outcome-badge show " + m.status;
         badge.textContent = outcomeLabel(m.status) + (m.movedToDate ? " · перенесено на " + fmtDate(m.movedToDate) : "");
@@ -1301,9 +1339,8 @@
     if(!m) return;
     var newDate = document.getElementById("mRescheduleDate").value;
     if(!newDate){ alert("Укажите дату следующего этапа"); return; }
-    var newTime = prompt("Время встречи на " + fmtDate(newDate) + ":", m.time || "10:00");
-    if(newTime === null) return;
-    var undo = performReschedule(m, newDate, newTime.trim(), document.getElementById("mResult").value);
+    var newTime = document.getElementById("mRescheduleTime").value || m.time || "10:00";
+    var undo = performReschedule(m, newDate, newTime, document.getElementById("mResult").value);
     closeMeetingModal();
     showToast("Встреча перенесена", m.title, undo);
   });
@@ -1683,6 +1720,7 @@
       if(overlay.classList.contains("open")) closeModal();
       if(meetingOverlay.classList.contains("open")) closeMeetingModal();
       if(datePopover.style.display !== "none") closeDatePopover();
+      if(activeDateTimeCancel) activeDateTimeCancel();
       return;
     }
     if(e.code !== "KeyN") return;
