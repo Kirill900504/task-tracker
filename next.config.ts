@@ -15,6 +15,22 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     "**": ["**/onnxruntime-node/bin/napi-v6/darwin/**", "**/onnxruntime-node/bin/napi-v6/win32/**"],
   },
+  // speechToText.ts deliberately loads @huggingface/transformers' "web"
+  // build through a `new Function`-constructed import (see the comment
+  // there for why) so no bundler's static analysis can see or rewrite that
+  // call. The unavoidable cost: the same invisibility that protects it from
+  // being rewritten also means Next's file tracer never finds a reference
+  // to it, so it doesn't get copied into the deployed function either
+  // ("Could not locate ... web build", confirmed in production). Forcing
+  // it in here, scoped to only the one route that needs it.
+  outputFileTracingIncludes: {
+    "/api/telegram/webhook": [
+      "./node_modules/@huggingface/transformers/**",
+      "./node_modules/@huggingface/jinja/**",
+      "./node_modules/@huggingface/tokenizers/**",
+      "./node_modules/onnxruntime-web/**",
+    ],
+  },
 };
 
 export default nextConfig;
