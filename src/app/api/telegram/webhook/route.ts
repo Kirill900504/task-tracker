@@ -5,6 +5,7 @@ import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
 import { handleManageItem, resolvePendingAction, type ManageAction, type ManageItemType, type PendingAction } from "@/lib/telegramManage";
+import { logAiAction } from "@/lib/aiActionLog";
 
 // Voice transcription (cold-start model download + WASM inference) can run
 // well past the default function timeout — Vercel's default is too short.
@@ -326,8 +327,17 @@ export async function POST(req: Request) {
     for (const it of finalItems) {
       await replyForResult(chatId, admin, account.user_id, it.tool, it.input, it.droppedNames);
     }
+    await logAiAction(admin, {
+      userId: account.user_id,
+      source: "telegram",
+      inputText: effectiveText,
+      success: true,
+      resultSummary: finalItems.map((it) => it.tool).join(", "),
+    });
   } catch (e) {
-    await sendTelegramMessage(chatId, "Не получилось разобрать сообщение: " + (e instanceof Error ? e.message : String(e)));
+    const message = e instanceof Error ? e.message : String(e);
+    await sendTelegramMessage(chatId, "Не получилось разобрать сообщение: " + message);
+    await logAiAction(admin, { userId: account.user_id, source: "telegram", inputText: effectiveText, success: false, errorMessage: message });
   }
 
   return NextResponse.json({ ok: true });

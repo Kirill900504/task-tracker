@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { logAiAction } from "@/lib/aiActionLog";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -26,8 +27,17 @@ export async function POST(req: Request) {
 
   try {
     const result = await parseQuickAdd(text, assignees);
+    await logAiAction(supabase, {
+      userId: user.id,
+      source: "web",
+      inputText: text,
+      success: true,
+      resultSummary: result.items.map((it) => it.tool).join(", "),
+    });
     return NextResponse.json(result);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 502 });
+    const message = e instanceof Error ? e.message : String(e);
+    await logAiAction(supabase, { userId: user.id, source: "web", inputText: text, success: false, errorMessage: message });
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }
