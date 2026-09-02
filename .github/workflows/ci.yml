@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # These two are NEXT_PUBLIC_* values — already shipped in the deployed
+    # site's browser bundle (the anon key is meant to be public; real access
+    # control is Supabase RLS), so there's nothing gained by hiding them
+    # behind GitHub Secrets. Only needed here so `next build` has something
+    # to inline; they're not used to reach any real backend during CI.
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://mglynwkucpcbkdeuymoa.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1nbHlud2t1Y3BjYmtkZXV5bW9hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyODc0ODEsImV4cCI6MjEwMzg2MzQ4MX0.KxRDP5VAVeZWZRjaVKPIo5gdFQ8ppjOvaBDJOAaDMMQ
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx eslint src --max-warnings=0
+      - run: npx vitest run
+      - run: npm run build
