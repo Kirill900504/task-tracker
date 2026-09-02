@@ -4,6 +4,7 @@ import { sendTelegramMessage } from "@/lib/telegram";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
+import { handleManageItem, resolvePendingAction, type ManageAction, type ManageItemType, type PendingAction } from "@/lib/telegramManage";
 
 function uid(): string {
   return "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -102,6 +103,22 @@ async function replyForResult(
     return;
   }
 
+  if (tool === "manage_item") {
+    const action = input.action as ManageAction;
+    const itemType = input.itemType as ManageItemType;
+    const query = String(input.query || "").trim();
+    if (!query) {
+      await sendTelegramMessage(chatId, "Не понял, какую задачу или встречу вы имеете в виду — уточните название.");
+      return;
+    }
+    const { reply, pendingAction } = await handleManageItem(userId, action, itemType, query);
+    if (pendingAction) {
+      await admin.from("telegram_accounts").update({ pending_action: pendingAction }).eq("telegram_chat_id", chatId);
+    }
+    await sendTelegramMessage(chatId, reply);
+    return;
+  }
+
   // cant_help, or anything unrecognized — an honest "I don't do that" beats
   // silently failing or (the bug this replaced) echoing the user's message.
   await sendTelegramMessage(
@@ -169,7 +186,7 @@ export async function POST(req: Request) {
 
   const { data: account, error: accountError } = await admin
     .from("telegram_accounts")
-    .select("user_id, pending_context")
+    .select("user_id, pending_context, pending_action")
     .eq("telegram_chat_id", chatId)
     .maybeSingle();
 
@@ -185,6 +202,15 @@ export async function POST(req: Request) {
   const { allowed } = await checkRateLimit(admin, account.user_id, "telegram", 20, 60);
   if (!allowed) {
     await sendTelegramMessage(chatId, "Слишком много сообщений подряд, подождите минуту.");
+    return NextResponse.json({ ok: true });
+  }
+
+  // A pending delete confirmation always wins over everything else — the
+  // next message is either "да" or a cancel, never a new request.
+  if (account.pending_action) {
+    await admin.from("telegram_accounts").update({ pending_action: null }).eq("telegram_chat_id", chatId);
+    const reply = await resolvePendingAction(account.pending_action as PendingAction, text);
+    await sendTelegramMessage(chatId, reply);
     return NextResponse.json({ ok: true });
   }
 

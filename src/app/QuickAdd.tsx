@@ -19,6 +19,7 @@ type QuickAddResult =
   | { tool: "create_meeting"; input: MeetingFields; droppedNames: string[] }
   | { tool: "create_idea"; input: IdeaFields; droppedNames: string[] }
   | { tool: "ask_clarifying_question"; input: { question: string }; droppedNames: string[] }
+  | { tool: "manage_item"; input: { action: string; itemType: string; query: string }; droppedNames: string[] }
   | { tool: "cant_help"; input: Record<string, never>; droppedNames: string[] };
 
 declare global {
@@ -112,6 +113,11 @@ export default function QuickAdd() {
     if (result.tool === "cant_help") {
       setStatus("error");
       setErrorMessage("Это не похоже на задачу/встречу/идею — умею создавать только их");
+      return;
+    }
+    if (result.tool === "manage_item") {
+      setStatus("error");
+      setErrorMessage("Изменить или удалить существующую задачу/встречу можно кнопками в списке — так надёжнее, чем текстом");
       return;
     }
     // Should not happen — fall back to a visible error rather than silence.
