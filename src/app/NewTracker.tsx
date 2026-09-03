@@ -5,25 +5,40 @@
 // conversion, and (still to come in this same pass) meeting→calendar and
 // dashboard panel rearrange.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTrackerData } from "@/hooks/useTrackerData";
 import { useToasts } from "@/hooks/useToasts";
 import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
+import { useNotifications } from "@/hooks/useNotifications";
+import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 import TasksPanel from "@/components/tracker/TasksPanel";
 import MeetingsPanel from "@/components/tracker/MeetingsPanel";
 import CalendarPanel from "@/components/tracker/CalendarPanel";
 import IdeasPanel from "@/components/tracker/IdeasPanel";
 import ToastStack from "@/components/tracker/ToastStack";
 import DashboardLayout from "@/components/tracker/DashboardLayout";
-import { todayStr } from "@/lib/taskDisplay";
+import { pad, todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import { DEFAULT_PANEL_LAYOUT } from "@/lib/trackerRows";
 import type { Meeting, Task } from "@/types/tracker";
+
+const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+function formatClock(d: Date): string {
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}, ${WEEKDAY_NAMES_FULL[d.getDay()]} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function NewTracker() {
   const { loading, loadError, tasks, meetings, ideas, sections, assignees, panelLayout, syncStatus, actions } = useTrackerData();
   const toasts = useToasts();
   const dateTimeConfirm = useDateTimeConfirm();
+  const notifications = useNotifications({ tasks, meetings, saveTask: actions.saveTask, showToast: toasts.showToast, ready: !loading });
+  const installPrompt = useInstallPrompt();
+
+  const [clockText, setClockText] = useState(() => formatClock(new Date()));
+  useEffect(() => {
+    const timer = setInterval(() => setClockText(formatClock(new Date())), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // "Показывать завершённые" is one shared toggle for done tasks AND
   // resolved meetings — see TasksPanel's prop comment.
@@ -119,9 +134,22 @@ export default function NewTracker() {
           <div className="brand">
             <div>
               <h1>Планировщик задач</h1>
+              <div className="subtitle" id="dateNow">
+                {clockText}
+              </div>
             </div>
           </div>
           <div className="header-btns">
+            {notifications.permission !== "unsupported" && (
+              <button className="btn" id="notifPermBtn" onClick={notifications.requestPermission}>
+                {notifications.permission === "granted" ? "🔔 Уведомления включены" : "🔔 Включить уведомления"}
+              </button>
+            )}
+            {installPrompt.visible && (
+              <button className="btn btn-primary" id="installAppBtn" onClick={installPrompt.promptInstall}>
+                📥 Установить
+              </button>
+            )}
             {JSON.stringify(panelLayout) !== JSON.stringify(DEFAULT_PANEL_LAYOUT) && (
               <button
                 className="btn"
@@ -186,6 +214,7 @@ export default function NewTracker() {
               onOpenTaskHandled={() => setOpenTaskRequest(null)}
               onIdeaDropped={convertIdeaToTask}
               justCreatedId={justCreatedTaskId}
+              notifBanner={notifications.bannerText}
             />
           ),
           ideasPanel: <IdeasPanel ideas={ideas} showDone={showDone} actions={actions} toasts={toasts} />,

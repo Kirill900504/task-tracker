@@ -29,6 +29,7 @@ export default function TasksPanel({
   onOpenTaskHandled,
   onIdeaDropped,
   justCreatedId,
+  notifBanner,
   dragHandleProps,
   isDragging,
   dropIndicatorBefore,
@@ -60,6 +61,7 @@ export default function TasksPanel({
   // owns both tasks and ideas state.
   onIdeaDropped: (ideaId: string, term: Term) => void;
   justCreatedId?: string | null;
+  notifBanner?: string | null;
 } & PanelDragProps) {
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
@@ -226,6 +228,7 @@ export default function TasksPanel({
         <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
         <div className="panel-title">Задачи</div>
       </div>
+      {notifBanner && <div className="notif-banner show">{notifBanner}</div>}
       <div className="toolbar">
         <button className="btn btn-primary" id="newTaskBtn" onClick={() => setModalState({ open: true, task: null })}>
           + Новая задача
