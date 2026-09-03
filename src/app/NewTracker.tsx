@@ -1,19 +1,30 @@
 "use client";
 
 // New UI, built up phase by phase per the approved migration plan.
-// Phase 3: task columns, card, modal (incl. recurrence), done/undo — the
-// first real slice of the rewrite. Meetings/calendar/ideas/drag-and-drop/
-// notifications/panel layout still come from later phases and aren't
-// rendered here yet.
+// Phase 4 adds meetings + calendar alongside Phase 3's tasks. Ideas,
+// drag-and-drop, notifications, and panel-layout persistence still come
+// from later phases.
 
+import { useState } from "react";
 import { useTrackerData } from "@/hooks/useTrackerData";
 import { useToasts } from "@/hooks/useToasts";
+import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import TasksPanel from "@/components/tracker/TasksPanel";
+import MeetingsPanel from "@/components/tracker/MeetingsPanel";
+import CalendarPanel from "@/components/tracker/CalendarPanel";
 import ToastStack from "@/components/tracker/ToastStack";
 
 export default function NewTracker() {
-  const { loading, loadError, tasks, sections, assignees, syncStatus, actions } = useTrackerData();
+  const { loading, loadError, tasks, meetings, sections, assignees, syncStatus, actions } = useTrackerData();
   const toasts = useToasts();
+  const dateTimeConfirm = useDateTimeConfirm();
+
+  // "Показывать завершённые" is one shared toggle for done tasks AND
+  // resolved meetings — see TasksPanel's prop comment.
+  const [showDone, setShowDone] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [openTaskRequest, setOpenTaskRequest] = useState<string | null>(null);
+  const [openMeetingRequest, setOpenMeetingRequest] = useState<string | null>(null);
 
   if (loadError) {
     return <div style={{ padding: 24 }}>Не удалось загрузить данные из облака: {loadError}</div>;
@@ -25,6 +36,7 @@ export default function NewTracker() {
   return (
     <>
       <ToastStack toasts={toasts.toasts} onUndo={toasts.undo} onDismiss={toasts.dismiss} />
+      {dateTimeConfirm.dialog}
       <div id="syncStatus" className="show">
         {syncStatus.pending ? "Сохраняю…" : syncStatus.lastError ? `⚠ ${syncStatus.lastError}` : "✓ Сохранено"}
       </div>
@@ -44,7 +56,39 @@ export default function NewTracker() {
       </header>
       <div className="layout">
         <div className="dash-zone">
-          <TasksPanel tasks={tasks} sections={sections} assignees={assignees} actions={actions} toasts={toasts} />
+          <CalendarPanel
+            tasks={tasks}
+            meetings={meetings}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            onRequestNewTask={(date) => setOpenTaskRequest(date)}
+            onRequestNewMeeting={(date) => setOpenMeetingRequest(date)}
+          />
+          <MeetingsPanel
+            meetings={meetings}
+            assignees={assignees}
+            showResolved={showDone}
+            selectedDay={selectedDate}
+            actions={actions}
+            toasts={toasts}
+            dateTimeConfirm={dateTimeConfirm}
+            openMeetingRequest={openMeetingRequest}
+            onOpenMeetingHandled={() => setOpenMeetingRequest(null)}
+          />
+        </div>
+        <div className="dash-zone">
+          <TasksPanel
+            tasks={tasks}
+            sections={sections}
+            assignees={assignees}
+            actions={actions}
+            toasts={toasts}
+            showDone={showDone}
+            onShowDoneChange={setShowDone}
+            calendarFilterDate={selectedDate}
+            openTaskRequest={openTaskRequest}
+            onOpenTaskHandled={() => setOpenTaskRequest(null)}
+          />
         </div>
       </div>
     </>

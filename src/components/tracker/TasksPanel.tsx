@@ -8,7 +8,7 @@
 // undo) is a faithful behavioral port.
 import { useMemo, useState } from "react";
 import type { Section, Task } from "@/types/tracker";
-import { taskSortFn } from "@/lib/taskDisplay";
+import { isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
 import TaskCard from "./TaskCard";
 import TaskModal from "./TaskModal";
 import type { useToasts } from "@/hooks/useToasts";
@@ -19,6 +19,11 @@ export default function TasksPanel({
   assignees,
   actions,
   toasts,
+  showDone,
+  onShowDoneChange,
+  calendarFilterDate,
+  openTaskRequest,
+  onOpenTaskHandled,
 }: {
   tasks: Task[];
   sections: Section[];
@@ -33,12 +38,32 @@ export default function TasksPanel({
     removeAssignee: (name: string) => void;
   };
   toasts: ReturnType<typeof useToasts>;
+  // "Показывать завершённые" is one shared toggle for both done tasks and
+  // resolved meetings in the legacy UI (a single checkbox, read by both
+  // render() and renderAllMeetings()) — owned by the parent so it can be
+  // passed to MeetingsPanel too.
+  showDone: boolean;
+  onShowDoneChange: (v: boolean) => void;
+  calendarFilterDate: string | null;
+  openTaskRequest: string | null;
+  onOpenTaskHandled: () => void;
 }) {
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterSection, setFilterSection] = useState("all");
-  const [showDone, setShowDone] = useState(false);
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; presetDeadline?: string }>({ open: false, task: null });
+
+  // A sibling (the calendar's date popover) can also request opening the
+  // "new task" modal for a specific date — treated as an alternate open
+  // source alongside the internal button-click state, rather than synced
+  // into it via an effect (which would cause an extra render pass).
+  const modalOpen = modalState.open || openTaskRequest !== null;
+  const modalTask = modalState.open ? modalState.task : null;
+  const modalPresetDeadline = modalState.open ? modalState.presetDeadline : (openTaskRequest ?? undefined);
+  function closeModal() {
+    setModalState({ open: false, task: null });
+    if (openTaskRequest !== null) onOpenTaskHandled();
+  }
 
   const sectionById = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections]);
 
@@ -46,6 +71,7 @@ export default function TasksPanel({
     if (filterAssignee !== "all" && t.assignee !== filterAssignee) return false;
     if (filterPriority !== "all" && t.priority !== filterPriority) return false;
     if (filterSection !== "all" && (t.sectionId || "") !== filterSection) return false;
+    if (calendarFilterDate && !isTaskDueOnDate(t, new Date(calendarFilterDate + "T00:00:00"))) return false;
     return true;
   });
   const shortOpen = filtered.filter((t) => t.term === "short" && t.status !== "done").sort(taskSortFn);
@@ -135,7 +161,7 @@ export default function TasksPanel({
           <option value="med">Средний</option>
         </select>
         <label className="check-wrap">
-          <input type="checkbox" id="showDoneCheckbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Показывать завершённые
+          <input type="checkbox" id="showDoneCheckbox" checked={showDone} onChange={(e) => onShowDoneChange(e.target.checked)} /> Показывать завершённые
         </label>
       </div>
 
@@ -167,16 +193,16 @@ export default function TasksPanel({
         </div>
       )}
 
-      {modalState.open && (
+      {modalOpen && (
         <TaskModal
-          key={modalState.task?.id ?? "new"}
-          task={modalState.task}
-          presetDeadline={modalState.presetDeadline}
+          key={modalTask?.id ?? "new"}
+          task={modalTask}
+          presetDeadline={modalPresetDeadline}
           sections={sections}
           assignees={assignees}
           onSave={actions.saveTask}
-          onDelete={() => modalState.task && deleteTask(modalState.task)}
-          onClose={() => setModalState({ open: false, task: null })}
+          onDelete={() => modalTask && deleteTask(modalTask)}
+          onClose={closeModal}
           onAddAssignee={actions.addAssignee}
           onRemoveAssignee={actions.removeAssignee}
           onAddSection={actions.saveSection}
