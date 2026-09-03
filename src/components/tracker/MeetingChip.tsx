@@ -12,6 +12,7 @@ export default function MeetingChip({
   onDelete,
   onQuickStatus,
   onQuickReschedule,
+  justCreated,
 }: {
   meeting: Meeting;
   selectedDay: string | null;
@@ -19,6 +20,7 @@ export default function MeetingChip({
   onDelete: () => void;
   onQuickStatus: (status: "success" | "no_result") => void;
   onQuickReschedule: () => void;
+  justCreated?: boolean;
 }) {
   const [showPeople, setShowPeople] = useState(false);
   const participants = sanitizeAssigneeList(meeting.participants);
@@ -26,7 +28,17 @@ export default function MeetingChip({
 
   return (
     <div
-      className={"meeting-chip" + (meeting.date === selectedDay ? " selected-day" : "") + (meeting.status && meeting.status !== "planned" ? " resolved" : "")}
+      className={
+        "meeting-chip" +
+        (meeting.date === selectedDay ? " selected-day" : "") +
+        (meeting.status && meeting.status !== "planned" ? " resolved" : "") +
+        (justCreated ? " just-created" : "")
+      }
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", meeting.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
       onClick={onOpen}
     >
       <div style={{ display: "flex", minWidth: 0, flex: "1 1 100%", gap: 8 }}>

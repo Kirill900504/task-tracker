@@ -1,9 +1,9 @@
 "use client";
 
 // New UI, built up phase by phase per the approved migration plan.
-// Phase 4 adds meetings + calendar alongside Phase 3's tasks. Ideas,
-// drag-and-drop, notifications, and panel-layout persistence still come
-// from later phases.
+// Phase 6 adds drag-and-drop: task reorder/column-move, idea→task/meeting
+// conversion, and (still to come in this same pass) meeting→calendar and
+// dashboard panel rearrange.
 
 import { useState } from "react";
 import { useTrackerData } from "@/hooks/useTrackerData";
@@ -12,10 +12,16 @@ import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import TasksPanel from "@/components/tracker/TasksPanel";
 import MeetingsPanel from "@/components/tracker/MeetingsPanel";
 import CalendarPanel from "@/components/tracker/CalendarPanel";
+import IdeasPanel from "@/components/tracker/IdeasPanel";
 import ToastStack from "@/components/tracker/ToastStack";
+import DashboardLayout from "@/components/tracker/DashboardLayout";
+import { todayStr } from "@/lib/taskDisplay";
+import { uid } from "@/lib/uid";
+import { DEFAULT_PANEL_LAYOUT } from "@/lib/trackerRows";
+import type { Meeting, Task } from "@/types/tracker";
 
 export default function NewTracker() {
-  const { loading, loadError, tasks, meetings, sections, assignees, syncStatus, actions } = useTrackerData();
+  const { loading, loadError, tasks, meetings, ideas, sections, assignees, panelLayout, syncStatus, actions } = useTrackerData();
   const toasts = useToasts();
   const dateTimeConfirm = useDateTimeConfirm();
 
@@ -25,6 +31,74 @@ export default function NewTracker() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [openTaskRequest, setOpenTaskRequest] = useState<string | null>(null);
   const [openMeetingRequest, setOpenMeetingRequest] = useState<string | null>(null);
+  const [justCreatedTaskId, setJustCreatedTaskId] = useState<string | null>(null);
+  const [justCreatedMeetingId, setJustCreatedMeetingId] = useState<string | null>(null);
+
+  function flashTask(id: string) {
+    setJustCreatedTaskId(id);
+    setTimeout(() => setJustCreatedTaskId((cur) => (cur === id ? null : cur)), 1200);
+  }
+  function flashMeeting(id: string) {
+    setJustCreatedMeetingId(id);
+    setTimeout(() => setJustCreatedMeetingId((cur) => (cur === id ? null : cur)), 1200);
+  }
+
+  // Port of convertIdeaToTask()/convertIdeaToMeeting() — the idea's removal
+  // and the new item's creation share ONE undo toast, matching legacy
+  // exactly (undoing puts the idea back and removes the created item).
+  function convertIdeaToTask(ideaId: string, term: "short" | "long") {
+    const idea = ideas.find((i) => i.id === ideaId);
+    if (!idea) return;
+    actions.deleteIdea(idea.id);
+    const task: Task = {
+      id: uid(),
+      title: idea.text,
+      desc: "",
+      assignee: "",
+      sectionId: "",
+      priority: idea.important ? "high" : "med",
+      term,
+      status: "in_progress",
+      deadline: "",
+      recur: "none",
+      recurWeekday: "1",
+      recurMonthday: "",
+      recurYearDay: "",
+      recurYearMonth: "1",
+      lastCompletedOn: "",
+      manualOrder: null,
+    };
+    actions.saveTask(task);
+    flashTask(task.id);
+    toasts.showToast("Идея превращена в задачу", task.title, () => {
+      actions.deleteTask(task.id);
+      actions.restoreIdea(idea);
+    });
+  }
+
+  async function convertIdeaToMeeting(ideaId: string) {
+    const idea = ideas.find((i) => i.id === ideaId);
+    if (!idea) return;
+    const result = await dateTimeConfirm.ask(`Встреча «${idea.text}» на:`, todayStr(), "10:00");
+    if (!result) return;
+    actions.deleteIdea(idea.id);
+    const meeting: Meeting = {
+      id: uid(),
+      date: result.date,
+      time: result.time || "",
+      title: idea.text,
+      participants: [],
+      status: "planned",
+      result: "",
+      movedToDate: "",
+    };
+    actions.saveMeeting(meeting);
+    flashMeeting(meeting.id);
+    toasts.showToast("Идея превращена во встречу", meeting.title, () => {
+      actions.deleteMeeting(meeting.id);
+      actions.restoreIdea(idea);
+    });
+  }
 
   if (loadError) {
     return <div style={{ padding: 24 }}>Не удалось загрузить данные из облака: {loadError}</div>;
@@ -48,49 +122,75 @@ export default function NewTracker() {
             </div>
           </div>
           <div className="header-btns">
+            {JSON.stringify(panelLayout) !== JSON.stringify(DEFAULT_PANEL_LAYOUT) && (
+              <button
+                className="btn"
+                id="resetLayoutBtn"
+                title="Панели вернутся на исходные места"
+                onClick={() => actions.savePanelLayout(DEFAULT_PANEL_LAYOUT)}
+              >
+                ↺ Сбросить расположение
+              </button>
+            )}
             <button className="btn" id="signOutBtn" onClick={() => actions.signOut()}>
               Выйти
             </button>
           </div>
         </div>
       </header>
-      <div className="layout">
-        <div className="dash-zone">
-          <CalendarPanel
-            tasks={tasks}
-            meetings={meetings}
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            onRequestNewTask={(date) => setOpenTaskRequest(date)}
-            onRequestNewMeeting={(date) => setOpenMeetingRequest(date)}
-          />
-          <MeetingsPanel
-            meetings={meetings}
-            assignees={assignees}
-            showResolved={showDone}
-            selectedDay={selectedDate}
-            actions={actions}
-            toasts={toasts}
-            dateTimeConfirm={dateTimeConfirm}
-            openMeetingRequest={openMeetingRequest}
-            onOpenMeetingHandled={() => setOpenMeetingRequest(null)}
-          />
-        </div>
-        <div className="dash-zone">
-          <TasksPanel
-            tasks={tasks}
-            sections={sections}
-            assignees={assignees}
-            actions={actions}
-            toasts={toasts}
-            showDone={showDone}
-            onShowDoneChange={setShowDone}
-            calendarFilterDate={selectedDate}
-            openTaskRequest={openTaskRequest}
-            onOpenTaskHandled={() => setOpenTaskRequest(null)}
-          />
-        </div>
-      </div>
+      <DashboardLayout
+        layout={panelLayout}
+        onLayoutChange={actions.savePanelLayout}
+        panels={{
+          calPanel: (
+            <CalendarPanel
+              tasks={tasks}
+              meetings={meetings}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              onRequestNewTask={(date) => setOpenTaskRequest(date)}
+              onRequestNewMeeting={(date) => setOpenMeetingRequest(date)}
+              dateTimeConfirm={dateTimeConfirm}
+              onRescheduleMeeting={(meeting, date, time) => {
+                actions.saveMeeting({ ...meeting, date, time: time || meeting.time });
+                toasts.showToast("Встреча перенесена", meeting.title, () => actions.saveMeeting(meeting));
+              }}
+            />
+          ),
+          meetingsPanel: (
+            <MeetingsPanel
+              meetings={meetings}
+              assignees={assignees}
+              showResolved={showDone}
+              selectedDay={selectedDate}
+              actions={actions}
+              toasts={toasts}
+              dateTimeConfirm={dateTimeConfirm}
+              openMeetingRequest={openMeetingRequest}
+              onOpenMeetingHandled={() => setOpenMeetingRequest(null)}
+              onIdeaDropped={convertIdeaToMeeting}
+              justCreatedId={justCreatedMeetingId}
+            />
+          ),
+          mainCol: (
+            <TasksPanel
+              tasks={tasks}
+              sections={sections}
+              assignees={assignees}
+              actions={actions}
+              toasts={toasts}
+              showDone={showDone}
+              onShowDoneChange={setShowDone}
+              calendarFilterDate={selectedDate}
+              openTaskRequest={openTaskRequest}
+              onOpenTaskHandled={() => setOpenTaskRequest(null)}
+              onIdeaDropped={convertIdeaToTask}
+              justCreatedId={justCreatedTaskId}
+            />
+          ),
+          ideasPanel: <IdeasPanel ideas={ideas} showDone={showDone} actions={actions} toasts={toasts} />,
+        }}
+      />
     </>
   );
 }

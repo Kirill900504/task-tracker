@@ -1,5 +1,6 @@
 "use client";
 
+import type { DragEvent } from "react";
 import type { Section, Task } from "@/types/tracker";
 import { fmtDate, isDueTodayHighlight, isOverdue, priorityClass, priorityLabel, recurLabel } from "@/lib/taskDisplay";
 
@@ -8,19 +9,41 @@ export default function TaskCard({
   section,
   onToggleDone,
   onOpen,
+  isDragging,
+  onDragStart,
+  onDragEnd,
+  justCreated,
+  dropIndicatorBefore,
 }: {
   task: Task;
   section: Section | null;
   onToggleDone: () => void;
   onOpen: () => void;
+  isDragging?: boolean;
+  onDragStart?: (e: DragEvent) => void;
+  onDragEnd?: () => void;
+  justCreated?: boolean;
+  dropIndicatorBefore?: boolean;
 }) {
   const overdue = isOverdue(task);
   const dueToday = !overdue && isDueTodayHighlight(task);
 
   return (
     <div
-      className={"task" + (task.status === "done" ? " done" : "") + (task.priority === "high" ? " high" : "") + (overdue ? " overdue" : "") + (dueToday ? " due-today" : "")}
+      className={
+        "task" +
+        (task.status === "done" ? " done" : "") +
+        (task.priority === "high" ? " high" : "") +
+        (overdue ? " overdue" : "") +
+        (dueToday ? " due-today" : "") +
+        (isDragging ? " dragging" : "") +
+        (justCreated ? " just-created" : "") +
+        (dropIndicatorBefore ? " drag-indicator" : "")
+      }
       data-id={task.id}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onClick={onOpen}
     >
       <div

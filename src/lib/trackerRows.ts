@@ -150,7 +150,11 @@ function pad(n: number): string {
   return n < 10 ? "0" + n : "" + n;
 }
 
-function formatIdeaCreatedAt(iso: string | undefined): string {
+// Exported so client-side idea creation (a brand-new idea, not yet
+// round-tripped through the database) can stamp the same "dd.mm.yyyy hh:mm"
+// display string using the local Date it was created with, matching what
+// ideaFromRow() would produce once the created_at column comes back.
+export function formatIdeaCreatedAt(iso: string | Date | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;

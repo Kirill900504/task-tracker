@@ -9,6 +9,7 @@ import MeetingChip from "./MeetingChip";
 import MeetingModal from "./MeetingModal";
 import type { useToasts } from "@/hooks/useToasts";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
+import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 
 export default function MeetingsPanel({
   meetings,
@@ -20,6 +21,11 @@ export default function MeetingsPanel({
   dateTimeConfirm,
   openMeetingRequest,
   onOpenMeetingHandled,
+  onIdeaDropped,
+  justCreatedId,
+  dragHandleProps,
+  isDragging,
+  dropIndicatorBefore,
 }: {
   meetings: Meeting[];
   assignees: string[];
@@ -36,7 +42,10 @@ export default function MeetingsPanel({
   // for a specific date, e.g. from the date popover's "+ Встреча" button.
   openMeetingRequest: string | null;
   onOpenMeetingHandled: () => void;
-}) {
+  onIdeaDropped: (ideaId: string) => void;
+  justCreatedId?: string | null;
+} & PanelDragProps) {
+  const [ideaDragOver, setIdeaDragOver] = useState(false);
   const [modalState, setModalState] = useState<{ open: boolean; meeting: Meeting | null; presetDate?: string }>({ open: false, meeting: null });
 
   // See TasksPanel's identical pattern: an external open request from a
@@ -93,8 +102,9 @@ export default function MeetingsPanel({
   }
 
   return (
-    <div className="panel" id="meetingsPanel">
+    <div className={"panel dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")} id="meetingsPanel" data-panel-id="meetingsPanel">
       <div className="dash-panel-head">
+        <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
         <div className="panel-title">
           Встречи <span className="count">{sorted.length}</span>
         </div>
@@ -102,7 +112,25 @@ export default function MeetingsPanel({
           +
         </button>
       </div>
-      <div id="meetingsForDay">
+      <div
+        id="meetingsForDay"
+        className={ideaDragOver ? "drag-over" : ""}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes("application/x-idea-id")) return;
+          e.preventDefault();
+          setIdeaDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setIdeaDragOver(false);
+        }}
+        onDrop={(e) => {
+          const ideaId = e.dataTransfer.getData("application/x-idea-id");
+          setIdeaDragOver(false);
+          if (!ideaId) return;
+          e.preventDefault();
+          onIdeaDropped(ideaId);
+        }}
+      >
         {sorted.length === 0 ? (
           <div className="empty">{meetings.length === 0 ? "Встреч пока нет" : "Нет запланированных встреч"}</div>
         ) : (
@@ -115,6 +143,7 @@ export default function MeetingsPanel({
               onDelete={() => deleteMeeting(m)}
               onQuickStatus={(status) => setStatus(m, status, m.result)}
               onQuickReschedule={() => quickReschedule(m)}
+              justCreated={justCreatedId === m.id}
             />
           ))
         )}

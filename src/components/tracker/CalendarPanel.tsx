@@ -8,6 +8,8 @@ import { useState } from "react";
 import type { Meeting, Task } from "@/types/tracker";
 import { dateStr, fmtDate, isTaskDueOnDate, todayStr } from "@/lib/taskDisplay";
 import { getMonthGridDates } from "@/lib/calendarLogic";
+import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
+import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 
 const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -19,6 +21,11 @@ export default function CalendarPanel({
   onSelectDate,
   onRequestNewTask,
   onRequestNewMeeting,
+  onRescheduleMeeting,
+  dateTimeConfirm,
+  dragHandleProps,
+  isDragging,
+  dropIndicatorBefore,
 }: {
   tasks: Task[];
   meetings: Meeting[];
@@ -26,16 +33,24 @@ export default function CalendarPanel({
   onSelectDate: (date: string | null) => void;
   onRequestNewTask: (date: string) => void;
   onRequestNewMeeting: (date: string) => void;
-}) {
+  // Dropping a meeting chip on a day just moves it (date/time only, after
+  // confirming via the shared styled date/time dialog) — a lighter
+  // operation than the "reschedule" quick-action icon, which instead
+  // creates a follow-up meeting and resolves the original one.
+  onRescheduleMeeting: (meeting: Meeting, newDate: string, newTime: string) => void;
+  dateTimeConfirm: ReturnType<typeof useDateTimeConfirm>;
+} & PanelDragProps) {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [popoverDate, setPopoverDate] = useState<string | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
 
   const today = todayStr();
   const gridDates = getMonthGridDates(viewDate);
 
   return (
-    <div className="panel" id="calPanel">
+    <div className={"panel dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")} id="calPanel" data-panel-id="calPanel">
       <div className="dash-panel-head">
+        <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
         <div className="panel-title">Календарь</div>
       </div>
       <div className="cal-nav">
@@ -63,10 +78,35 @@ export default function CalendarPanel({
           return (
             <div
               key={ds}
-              className={"cal-day" + (cd.getMonth() !== viewDate.getMonth() ? " other-month" : "") + (ds === today ? " today" : "") + (ds === selectedDate ? " selected" : "")}
+              className={
+                "cal-day" +
+                (cd.getMonth() !== viewDate.getMonth() ? " other-month" : "") +
+                (ds === today ? " today" : "") +
+                (ds === selectedDate ? " selected" : "") +
+                (dragOverDate === ds ? " drag-over" : "")
+              }
               onClick={(e) => {
                 e.stopPropagation();
                 setPopoverDate(ds);
+              }}
+              onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes("text/plain")) return;
+                e.preventDefault();
+                setDragOverDate(ds);
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverDate((cur) => (cur === ds ? null : cur));
+              }}
+              onDrop={async (e) => {
+                setDragOverDate(null);
+                const meetingId = e.dataTransfer.getData("text/plain");
+                if (!meetingId) return;
+                e.preventDefault();
+                const meeting = meetings.find((m) => m.id === meetingId);
+                if (!meeting) return;
+                const result = await dateTimeConfirm.ask(`Перенести встречу «${meeting.title}» на:`, ds, meeting.time || "10:00");
+                if (!result) return;
+                onRescheduleMeeting(meeting, result.date, result.time);
               }}
               style={{ position: "relative" }}
             >

@@ -2,16 +2,19 @@
 
 // Port of the task columns + toolbar from public/legacy-tracker.js
 // (render(), matchesFilters(), sortFn/rankOf, the modal open/save/delete
-// flow). Drag-and-drop reordering is deliberately not included yet — that's
-// a later phase (see the approved migration plan) — so cards aren't
-// draggable here, everything else (filters, sort groups, recurrence, done/
-// undo) is a faithful behavioral port.
-import { useMemo, useState } from "react";
+// flow, setupTaskDragDrop()/reorderColumn(), and the idea-drop handlers
+// for elListShort/elListLong).
+import { useMemo, useRef, useState } from "react";
+import type { DragEvent, RefObject } from "react";
 import type { Section, Task } from "@/types/tracker";
 import { isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
+import { getDragAfterElement } from "@/lib/dndDom";
 import TaskCard from "./TaskCard";
 import TaskModal from "./TaskModal";
 import type { useToasts } from "@/hooks/useToasts";
+import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
+
+type Term = "short" | "long";
 
 export default function TasksPanel({
   tasks,
@@ -24,6 +27,11 @@ export default function TasksPanel({
   calendarFilterDate,
   openTaskRequest,
   onOpenTaskHandled,
+  onIdeaDropped,
+  justCreatedId,
+  dragHandleProps,
+  isDragging,
+  dropIndicatorBefore,
 }: {
   tasks: Task[];
   sections: Section[];
@@ -47,11 +55,22 @@ export default function TasksPanel({
   calendarFilterDate: string | null;
   openTaskRequest: string | null;
   onOpenTaskHandled: () => void;
-}) {
+  // A dropped idea becomes a task in whichever column it landed on — the
+  // idea's own removal/undo is handled by the parent (NewTracker), which
+  // owns both tasks and ideas state.
+  onIdeaDropped: (ideaId: string, term: Term) => void;
+  justCreatedId?: string | null;
+} & PanelDragProps) {
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterSection, setFilterSection] = useState("all");
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; presetDeadline?: string }>({ open: false, task: null });
+
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{ term: Term; beforeId: string | null } | null>(null);
+  const [ideaDragOverTerm, setIdeaDragOverTerm] = useState<Term | null>(null);
+  const shortColRef = useRef<HTMLDivElement | null>(null);
+  const longColRef = useRef<HTMLDivElement | null>(null);
 
   // A sibling (the calendar's date popover) can also request opening the
   // "new task" modal for a specific date — treated as an alternate open
@@ -108,13 +127,69 @@ export default function TasksPanel({
     });
   }
 
-  function renderColumn(list: Task[], emptyText: string, countLabel: string) {
+  function handleDragOver(e: DragEvent<HTMLDivElement>, term: Term) {
+    if (e.dataTransfer.types.includes("application/x-task-id")) {
+      e.preventDefault();
+      const container = term === "short" ? shortColRef.current : longColRef.current;
+      const after = container ? getDragAfterElement(container, e.clientY, ".task:not(.dragging)") : null;
+      setDropIndicator({ term, beforeId: after?.dataset.id ?? null });
+    } else if (e.dataTransfer.types.includes("application/x-idea-id")) {
+      e.preventDefault();
+      setIdeaDragOverTerm(term);
+    }
+  }
+
+  function handleDragLeave(e: DragEvent<HTMLDivElement>, term: Term) {
+    const container = term === "short" ? shortColRef.current : longColRef.current;
+    if (container && !container.contains(e.relatedTarget as Node)) {
+      setDropIndicator((cur) => (cur?.term === term ? null : cur));
+      setIdeaDragOverTerm((cur) => (cur === term ? null : cur));
+    }
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>, term: Term) {
+    e.preventDefault();
+    const ideaId = e.dataTransfer.getData("application/x-idea-id");
+    if (ideaId) {
+      setIdeaDragOverTerm(null);
+      onIdeaDropped(ideaId, term);
+      return;
+    }
+    const taskId = e.dataTransfer.getData("application/x-task-id");
+    setDropIndicator(null);
+    if (!taskId) return;
+    const dragged = tasks.find((t) => t.id === taskId);
+    if (!dragged) return;
+
+    const container = term === "short" ? shortColRef.current : longColRef.current;
+    const after = container ? getDragAfterElement(container, e.clientY, ".task:not(.dragging)") : null;
+    const columnList = term === "short" ? shortOpen : longOpen;
+    const siblingIds = columnList.filter((t) => t.id !== taskId).map((t) => t.id);
+    const insertAt = after ? siblingIds.indexOf(after.dataset.id as string) : -1;
+    siblingIds.splice(insertAt === -1 ? siblingIds.length : insertAt, 0, taskId);
+
+    siblingIds.forEach((id, i) => {
+      const t = tasks.find((x) => x.id === id);
+      if (!t) return;
+      const changedTerm = id === taskId && t.term !== term;
+      if (t.manualOrder === i && !changedTerm) return;
+      actions.saveTask({ ...t, manualOrder: i, ...(changedTerm ? { term } : {}) });
+    });
+  }
+
+  function renderColumn(list: Task[], emptyText: string, countLabel: string, term: Term, ref: RefObject<HTMLDivElement | null>) {
     return (
       <div className="column">
         <div className="section-title">
           {countLabel} <span className="count">{list.length}</span>
         </div>
-        <div>
+        <div
+          ref={ref}
+          className={ideaDragOverTerm === term ? "drag-over" : dropIndicator?.term === term && dropIndicator.beforeId === null ? "drag-indicator-end" : ""}
+          onDragOver={(e) => handleDragOver(e, term)}
+          onDragLeave={(e) => handleDragLeave(e, term)}
+          onDrop={(e) => handleDrop(e, term)}
+        >
           {list.length === 0 ? (
             <div className="empty">{emptyText}</div>
           ) : (
@@ -125,6 +200,18 @@ export default function TasksPanel({
                 section={sectionById.get(t.sectionId) ?? null}
                 onToggleDone={() => toggleDone(t)}
                 onOpen={() => setModalState({ open: true, task: t })}
+                isDragging={draggingTaskId === t.id}
+                justCreated={justCreatedId === t.id}
+                dropIndicatorBefore={dropIndicator?.term === term && dropIndicator.beforeId === t.id}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("application/x-task-id", t.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  setDraggingTaskId(t.id);
+                }}
+                onDragEnd={() => {
+                  setDraggingTaskId(null);
+                  setDropIndicator(null);
+                }}
               />
             ))
           )}
@@ -134,7 +221,11 @@ export default function TasksPanel({
   }
 
   return (
-    <div className="main-col" id="mainCol">
+    <div className={"main-col dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")} id="mainCol" data-panel-id="mainCol">
+      <div className="dash-panel-head">
+        <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
+        <div className="panel-title">Задачи</div>
+      </div>
       <div className="toolbar">
         <button className="btn btn-primary" id="newTaskBtn" onClick={() => setModalState({ open: true, task: null })}>
           + Новая задача
@@ -166,8 +257,8 @@ export default function TasksPanel({
       </div>
 
       <div className="columns">
-        {renderColumn(shortOpen, "Нет краткосрочных задач по текущим фильтрам", "Краткосрочные")}
-        {renderColumn(longOpen, "Нет долгосрочных задач по текущим фильтрам", "Долгосрочные")}
+        {renderColumn(shortOpen, "Нет краткосрочных задач по текущим фильтрам", "Краткосрочные", "short", shortColRef)}
+        {renderColumn(longOpen, "Нет долгосрочных задач по текущим фильтрам", "Долгосрочные", "long", longColRef)}
       </div>
 
       {showDone && (
