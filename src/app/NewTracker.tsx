@@ -1,15 +1,19 @@
 "use client";
 
-// Phase 1 scaffold for the React rewrite (see the approved migration plan).
-// Deliberately minimal — just proves useTrackerData() loads real data and
-// the sync/retry/sign-out machinery works end-to-end. The actual task/
-// meeting/idea/calendar UI comes in later phases; this is not meant to be
-// used day-to-day yet.
+// New UI, built up phase by phase per the approved migration plan.
+// Phase 3: task columns, card, modal (incl. recurrence), done/undo — the
+// first real slice of the rewrite. Meetings/calendar/ideas/drag-and-drop/
+// notifications/panel layout still come from later phases and aren't
+// rendered here yet.
 
 import { useTrackerData } from "@/hooks/useTrackerData";
+import { useToasts } from "@/hooks/useToasts";
+import TasksPanel from "@/components/tracker/TasksPanel";
+import ToastStack from "@/components/tracker/ToastStack";
 
 export default function NewTracker() {
-  const { loading, loadError, tasks, meetings, ideas, assignees, sections, syncStatus, actions } = useTrackerData();
+  const { loading, loadError, tasks, sections, assignees, syncStatus, actions } = useTrackerData();
+  const toasts = useToasts();
 
   if (loadError) {
     return <div style={{ padding: 24 }}>Не удалось загрузить данные из облака: {loadError}</div>;
@@ -19,26 +23,30 @@ export default function NewTracker() {
   }
 
   return (
-    <div style={{ padding: 24, fontFamily: "sans-serif", color: "#eee", background: "#232B2E", minHeight: "100vh" }}>
-      <h1>Новый интерфейс — Фаза 1 (черновик данных)</h1>
-      <p>
-        Статус синхронизации:{" "}
+    <>
+      <ToastStack toasts={toasts.toasts} onUndo={toasts.undo} onDismiss={toasts.dismiss} />
+      <div id="syncStatus" className="show">
         {syncStatus.pending ? "Сохраняю…" : syncStatus.lastError ? `⚠ ${syncStatus.lastError}` : "✓ Сохранено"}
-      </p>
-      <ul>
-        <li>Задачи: {tasks.length}</li>
-        <li>Встречи: {meetings.length}</li>
-        <li>Идеи: {ideas.length}</li>
-        <li>Исполнители: {assignees.length}</li>
-        <li>Разделы: {sections.length}</li>
-      </ul>
-      <button
-        onClick={() => {
-          actions.signOut();
-        }}
-      >
-        Выйти
-      </button>
-    </div>
+      </div>
+      <header>
+        <div className="header-row">
+          <div className="brand">
+            <div>
+              <h1>Планировщик задач</h1>
+            </div>
+          </div>
+          <div className="header-btns">
+            <button className="btn" id="signOutBtn" onClick={() => actions.signOut()}>
+              Выйти
+            </button>
+          </div>
+        </div>
+      </header>
+      <div className="layout">
+        <div className="dash-zone">
+          <TasksPanel tasks={tasks} sections={sections} assignees={assignees} actions={actions} toasts={toasts} />
+        </div>
+      </div>
+    </>
   );
 }

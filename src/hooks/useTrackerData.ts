@@ -23,6 +23,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { diffAssignees, diffRows, removeById, snapshotList, upsertById } from "@/lib/trackerSync";
+import { refreshRecurringStatuses } from "@/lib/taskDisplay";
 import {
   DEFAULT_ASSIGNEES,
   DEFAULT_PANEL_LAYOUT,
@@ -422,14 +423,20 @@ export function useTrackerData() {
         if (t.assignee && !loadedAssignees.includes(t.assignee)) loadedAssignees.push(t.assignee);
       });
 
+      // A recurring task completed in a past period shows as open again
+      // (see src/lib/taskDisplay.ts's refreshRecurringStatuses) — done
+      // *after* the shadow baseline above, exactly like legacy-tracker.js's
+      // boot(), so the reset itself is treated as a real change to sync.
+      const { tasks: recurRefreshedTasks } = refreshRecurringStatuses(loadedTasks);
+
       liveRef.current = {
-        tasks: loadedTasks,
+        tasks: recurRefreshedTasks,
         meetings: loadedMeetings,
         ideas: loadedIdeas,
         assignees: loadedAssignees,
         sections: loadedSections,
       };
-      setTasks(loadedTasks);
+      setTasks(recurRefreshedTasks);
       setMeetings(loadedMeetings);
       setIdeas(loadedIdeas);
       setAssignees(loadedAssignees);
