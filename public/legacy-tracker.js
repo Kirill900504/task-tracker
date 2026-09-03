@@ -250,6 +250,26 @@
     }
   }
 
+  // Automatic retry for a genuinely failed save (network hiccup, Supabase
+  // hiccup — as opposed to the shared-reference bug above, which silently
+  // sent nothing at all rather than erroring). Previously a failed
+  // persistAll() just showed a toast that disappeared in 2s and otherwise
+  // did nothing — the edit would only ever get another chance if the user
+  // happened to make some OTHER edit later (shadow wasn't advanced, so
+  // that unrelated persistAll() would sync it as a side effect, but if the
+  // user never touched anything else, or was signing out, it was gone for
+  // good). This retries the same still-unsynced change on a timer until it
+  // actually lands, and keeps the error visible instead of auto-hiding it.
+  var syncHasPendingFailure = false;
+  var syncRetryTimer = null;
+  function scheduleSyncRetry(){
+    if(syncRetryTimer) return;
+    syncRetryTimer = setTimeout(function(){
+      syncRetryTimer = null;
+      if(syncHasPendingFailure) persistAll();
+    }, 15000);
+  }
+
   function persistAll(){
     save(LS_NOTIFIED, notified);
     if(!db) return;
@@ -278,7 +298,7 @@
       .catch(function(err){
         hadError = true;
         console.error("Supabase sync error:", err);
-        showToast("Не сохранилось в облако", (err && err.message) || "Проверьте интернет-соединение");
+        showToast("Не сохранилось в облако", (err && err.message) || "Повторю через 15 секунд");
         // Best-effort durable record — a toast disappears with the tab, this
         // survives so a later session can surface "you had a sync failure".
         try{
@@ -288,7 +308,15 @@
       .then(function(){
         syncPendingCount--;
         if(syncPendingCount <= 0) syncPendingCount = 0;
-        setSyncStatus(hadError ? "⚠ Ошибка сохранения" : "✓ Сохранено", true);
+        syncHasPendingFailure = hadError;
+        if(hadError){
+          // Stays on screen (autoHide:false) instead of vanishing in 2s —
+          // an error nobody saw is as good as no error handling at all.
+          setSyncStatus("⚠ Не сохранилось, повторю через 15с", false);
+          scheduleSyncRetry();
+        } else {
+          setSyncStatus("✓ Сохранено", true);
+        }
       });
   }
 
@@ -300,7 +328,7 @@
   // the user a chance to cancel and let the save finish instead of losing
   // it silently.
   window.addEventListener("beforeunload", function(e){
-    if(syncPendingCount > 0){
+    if(syncPendingCount > 0 || syncHasPendingFailure){
       e.preventDefault();
       e.returnValue = "";
     }
@@ -466,7 +494,7 @@
           } else {
             var s = sectionFromRow(payload.new);
             upsertById(sections, s);
-            upsertById(shadow.sections, s);
+            upsertById(shadow.sections, JSON.parse(JSON.stringify(s)));
           }
           scheduleSectionsRerender();
         }catch(e){ console.error("Realtime sections error:", e); }
@@ -2339,10 +2367,27 @@
         signOutBtn.disabled = true;
         setSyncStatus("Сохраняю перед выходом…", false);
         Promise.resolve(syncChain).then(function(){
+          // syncChain resolves even after a failed save — persistAll()'s own
+          // .catch() swallows the network/Supabase error so the QUEUE keeps
+          // moving, it doesn't mean the save actually succeeded. Check the
+          // flag it sets, not just "did waiting finish".
+          if(syncHasPendingFailure){
+            signOutBtn.disabled = false;
+            var proceed = confirm(
+              "Не удалось сохранить последние изменения (нет связи с облаком). " +
+              "Выйти всё равно? Несохранённое может потеряться."
+            );
+            if(!proceed){
+              setSyncStatus("⚠ Не сохранилось, повторю через 15с", false);
+              return Promise.reject(new Error("cancelled"));
+            }
+            signOutBtn.disabled = true;
+          }
           return db.auth.signOut();
         }).then(function(){
           window.location.href = "/login";
         }).catch(function(err){
+          if(err && err.message === "cancelled") return;
           console.error("Sign out error:", err);
           signOutBtn.disabled = false;
           setSyncStatus("⚠ Не удалось сохранить перед выходом, попробуйте ещё раз", true);
