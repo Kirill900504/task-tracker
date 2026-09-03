@@ -6,7 +6,7 @@
 // for elListShort/elListLong).
 import { useMemo, useRef, useState } from "react";
 import type { DragEvent, RefObject } from "react";
-import type { Section, Task } from "@/types/tracker";
+import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
 import { getDragAfterElement } from "@/lib/dndDom";
 import TaskCard from "./TaskCard";
@@ -54,7 +54,7 @@ export default function TasksPanel({
   showDone: boolean;
   onShowDoneChange: (v: boolean) => void;
   calendarFilterDate: string | null;
-  openTaskRequest: string | null;
+  openTaskRequest: TaskPrefill | null;
   onOpenTaskHandled: () => void;
   // A dropped idea becomes a task in whichever column it landed on — the
   // idea's own removal/undo is handled by the parent (NewTracker), which
@@ -66,7 +66,7 @@ export default function TasksPanel({
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterSection, setFilterSection] = useState("all");
-  const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; presetDeadline?: string }>({ open: false, task: null });
+  const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
 
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ term: Term; beforeId: string | null } | null>(null);
@@ -80,7 +80,7 @@ export default function TasksPanel({
   // into it via an effect (which would cause an extra render pass).
   const modalOpen = modalState.open || openTaskRequest !== null;
   const modalTask = modalState.open ? modalState.task : null;
-  const modalPresetDeadline = modalState.open ? modalState.presetDeadline : (openTaskRequest ?? undefined);
+  const modalPrefill = modalState.open ? modalState.prefill : (openTaskRequest ?? undefined);
   function closeModal() {
     setModalState({ open: false, task: null });
     if (openTaskRequest !== null) onOpenTaskHandled();
@@ -233,6 +233,7 @@ export default function TasksPanel({
         <button className="btn btn-primary" id="newTaskBtn" onClick={() => setModalState({ open: true, task: null })}>
           + Новая задача
         </button>
+        <div className="search-wrap" id="quickAddSlot" />
         <select id="filterSection" value={filterSection} onChange={(e) => setFilterSection(e.target.value)}>
           <option value="all">Все разделы</option>
           {sections.map((s) => (
@@ -291,7 +292,7 @@ export default function TasksPanel({
         <TaskModal
           key={modalTask?.id ?? "new"}
           task={modalTask}
-          presetDeadline={modalPresetDeadline}
+          prefill={modalPrefill}
           sections={sections}
           assignees={assignees}
           onSave={actions.saveTask}

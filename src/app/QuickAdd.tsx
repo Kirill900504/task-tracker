@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-type TaskFields = {
+export type TaskFields = {
   title: string;
   description: string;
   assignee: string;
@@ -11,8 +11,8 @@ type TaskFields = {
   term: "short" | "long";
   deadline: string;
 };
-type MeetingFields = { title: string; date: string; time: string; participants: string[] };
-type IdeaFields = { text: string; important: boolean };
+export type MeetingFields = { title: string; date: string; time: string; participants: string[] };
+export type IdeaFields = { text: string; important: boolean };
 
 type QuickAddItem =
   | { tool: "create_task"; input: TaskFields; droppedNames: string[] }
@@ -22,16 +22,18 @@ type QuickAddItem =
   | { tool: "manage_item"; input: { action: string; itemType: string; query: string }; droppedNames: string[] }
   | { tool: "cant_help"; input: Record<string, never>; droppedNames: string[] };
 
+export interface QuickAddProvider {
+  getAssignees: () => string[];
+  prefillNewTask: (f: TaskFields) => void;
+  prefillNewMeeting: (f: MeetingFields) => void;
+  createTask: (f: TaskFields) => void;
+  createMeeting: (f: MeetingFields) => void;
+  createIdea: (f: IdeaFields) => void;
+}
+
 declare global {
   interface Window {
-    trackerAPI?: {
-      getAssignees: () => string[];
-      prefillNewTask: (f: TaskFields) => void;
-      prefillNewMeeting: (f: MeetingFields) => void;
-      createTask: (f: TaskFields) => void;
-      createMeeting: (f: MeetingFields) => void;
-      createIdea: (f: IdeaFields) => void;
-    };
+    trackerAPI?: QuickAddProvider;
   }
 }
 
@@ -64,7 +66,16 @@ const INPUT_STYLE = {
 
 type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "error";
 
-export default function QuickAdd() {
+export default function QuickAdd({ provider }: { provider?: QuickAddProvider } = {}) {
+  // The legacy UI has no React-owned state to hand this component, so it
+  // reaches the vanilla-JS side through window.trackerAPI (see
+  // legacy-tracker.js's assignment at the very bottom of that file). The
+  // new UI passes a real provider backed by useTrackerData's actions
+  // instead — same shape, no global needed. Every call site below reads
+  // through `api`, never `window.trackerAPI` directly, so this component
+  // works unmodified under either UI.
+  const api = provider ?? (typeof window !== "undefined" ? window.trackerAPI : undefined);
+
   // The desktop portal target is normally already in the DOM by the time
   // this mounts (it's part of the static markup rendered alongside it), so
   // this usually resolves on the very first check. But it's been reported
@@ -159,7 +170,7 @@ export default function QuickAdd() {
     setStatus("loading");
     setErrorMessage("");
     try {
-      const assignees = window.trackerAPI?.getAssignees() || [];
+      const assignees = api?.getAssignees() || [];
       const res = await fetch("/api/quick-add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -215,13 +226,13 @@ export default function QuickAdd() {
     const dropped: string[] = [];
     for (const it of actionable) {
       if (it.tool === "create_task") {
-        window.trackerAPI?.createTask(it.input);
+        api?.createTask(it.input);
         created.push("Задача: " + it.input.title);
       } else if (it.tool === "create_meeting") {
-        window.trackerAPI?.createMeeting(it.input);
+        api?.createMeeting(it.input);
         created.push("Встреча: " + it.input.title);
       } else if (it.tool === "create_idea") {
-        window.trackerAPI?.createIdea(it.input);
+        api?.createIdea(it.input);
         created.push("Идея: " + it.input.text);
       } else if (it.tool === "manage_item") {
         created.push("(изменение существующего — сделайте кнопками в списке)");
@@ -245,7 +256,7 @@ export default function QuickAdd() {
         setTaskPreview(item.input);
         setStatus("task-preview");
       } else {
-        window.trackerAPI?.prefillNewTask(item.input);
+        api?.prefillNewTask(item.input);
         noteDropped(item.droppedNames);
         reset();
       }
@@ -256,7 +267,7 @@ export default function QuickAdd() {
         setMeetingPreview(item.input);
         setStatus("meeting-preview");
       } else {
-        window.trackerAPI?.prefillNewMeeting(item.input);
+        api?.prefillNewMeeting(item.input);
         noteDropped(item.droppedNames);
         reset();
       }
@@ -309,17 +320,17 @@ export default function QuickAdd() {
 
   function confirmIdea() {
     if (!ideaPreview) return;
-    window.trackerAPI?.createIdea(ideaPreview);
+    api?.createIdea(ideaPreview);
     reset();
   }
   function confirmTask() {
     if (!taskPreview) return;
-    window.trackerAPI?.createTask(taskPreview);
+    api?.createTask(taskPreview);
     reset();
   }
   function confirmMeeting() {
     if (!meetingPreview) return;
-    window.trackerAPI?.createMeeting(meetingPreview);
+    api?.createMeeting(meetingPreview);
     reset();
   }
 

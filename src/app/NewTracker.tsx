@@ -19,8 +19,9 @@ import ToastStack from "@/components/tracker/ToastStack";
 import DashboardLayout from "@/components/tracker/DashboardLayout";
 import { pad, todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
-import { DEFAULT_PANEL_LAYOUT } from "@/lib/trackerRows";
-import type { Meeting, Task } from "@/types/tracker";
+import { DEFAULT_PANEL_LAYOUT, formatIdeaCreatedAt } from "@/lib/trackerRows";
+import type { Meeting, MeetingPrefill, Task, TaskPrefill } from "@/types/tracker";
+import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 function formatClock(d: Date): string {
@@ -44,8 +45,8 @@ export default function NewTracker() {
   // resolved meetings — see TasksPanel's prop comment.
   const [showDone, setShowDone] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [openTaskRequest, setOpenTaskRequest] = useState<string | null>(null);
-  const [openMeetingRequest, setOpenMeetingRequest] = useState<string | null>(null);
+  const [openTaskRequest, setOpenTaskRequest] = useState<TaskPrefill | null>(null);
+  const [openMeetingRequest, setOpenMeetingRequest] = useState<MeetingPrefill | null>(null);
   const [justCreatedTaskId, setJustCreatedTaskId] = useState<string | null>(null);
   const [justCreatedMeetingId, setJustCreatedMeetingId] = useState<string | null>(null);
 
@@ -115,6 +116,53 @@ export default function NewTracker() {
     });
   }
 
+  const quickAddProvider: QuickAddProvider = {
+    getAssignees: () => assignees,
+    prefillNewTask: (f) => setOpenTaskRequest({ title: f.title, desc: f.description, assignee: f.assignee, priority: f.priority, term: f.term, deadline: f.deadline }),
+    prefillNewMeeting: (f) => setOpenMeetingRequest({ title: f.title, date: f.date, time: f.time, participants: f.participants }),
+    createTask: (f) => {
+      actions.saveTask({
+        id: uid(),
+        title: f.title,
+        desc: f.description,
+        assignee: f.assignee,
+        sectionId: "",
+        priority: f.priority,
+        term: f.term,
+        status: "in_progress",
+        deadline: f.deadline,
+        recur: "none",
+        recurWeekday: "1",
+        recurMonthday: "",
+        recurYearDay: "",
+        recurYearMonth: "1",
+        lastCompletedOn: "",
+        manualOrder: null,
+      });
+    },
+    createMeeting: (f) => {
+      actions.saveMeeting({
+        id: uid(),
+        date: f.date,
+        time: f.time || "",
+        title: f.title,
+        participants: f.participants,
+        status: "planned",
+        result: "",
+        movedToDate: "",
+      });
+    },
+    createIdea: (f) => {
+      actions.saveIdea({
+        id: uid(),
+        text: f.text,
+        important: f.important,
+        done: false,
+        createdAt: formatIdeaCreatedAt(new Date()),
+      });
+    },
+  };
+
   if (loadError) {
     return <div style={{ padding: 24 }}>Не удалось загрузить данные из облака: {loadError}</div>;
   }
@@ -126,6 +174,7 @@ export default function NewTracker() {
     <>
       <ToastStack toasts={toasts.toasts} onUndo={toasts.undo} onDismiss={toasts.dismiss} />
       {dateTimeConfirm.dialog}
+      <QuickAdd provider={quickAddProvider} />
       <div id="syncStatus" className="show">
         {syncStatus.pending ? "Сохраняю…" : syncStatus.lastError ? `⚠ ${syncStatus.lastError}` : "✓ Сохранено"}
       </div>
@@ -176,8 +225,8 @@ export default function NewTracker() {
               meetings={meetings}
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
-              onRequestNewTask={(date) => setOpenTaskRequest(date)}
-              onRequestNewMeeting={(date) => setOpenMeetingRequest(date)}
+              onRequestNewTask={(date) => setOpenTaskRequest({ deadline: date })}
+              onRequestNewMeeting={(date) => setOpenMeetingRequest({ date })}
               dateTimeConfirm={dateTimeConfirm}
               onRescheduleMeeting={(meeting, date, time) => {
                 actions.saveMeeting({ ...meeting, date, time: time || meeting.time });

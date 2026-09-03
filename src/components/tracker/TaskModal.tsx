@@ -6,7 +6,7 @@
 // #fTitle, #saveTaskBtn, etc.) so the existing e2e patterns keep working
 // against the new UI with minimal changes.
 import { useState } from "react";
-import type { RecurKind, Section, Task } from "@/types/tracker";
+import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
 
 const WEEKDAY_OPTIONS = [
@@ -23,15 +23,15 @@ const MONTH_OPTIONS = [
   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
 ].map((label, i) => ({ value: String(i + 1), label }));
 
-function emptyForm(task: Task | null, presetDeadline?: string) {
+function emptyForm(task: Task | null, prefill?: TaskPrefill) {
   return {
-    title: task?.title ?? "",
-    desc: task?.desc ?? "",
-    assignee: task?.assignee ?? "",
+    title: task?.title ?? prefill?.title ?? "",
+    desc: task?.desc ?? prefill?.desc ?? "",
+    assignee: task?.assignee ?? prefill?.assignee ?? "",
     sectionId: task?.sectionId ?? "",
-    priority: task?.priority ?? "med",
-    term: task?.term ?? "short",
-    deadline: task?.deadline ?? presetDeadline ?? "",
+    priority: task?.priority ?? prefill?.priority ?? "med",
+    term: task?.term ?? prefill?.term ?? "short",
+    deadline: task?.deadline ?? prefill?.deadline ?? "",
     recur: task?.recur ?? "none",
     recurWeekday: task?.recurWeekday || "1",
     recurMonthday: task?.recurMonthday ?? "",
@@ -42,7 +42,7 @@ function emptyForm(task: Task | null, presetDeadline?: string) {
 
 export default function TaskModal({
   task,
-  presetDeadline,
+  prefill,
   sections,
   assignees,
   onSave,
@@ -54,7 +54,7 @@ export default function TaskModal({
   onRemoveSection,
 }: {
   task: Task | null;
-  presetDeadline?: string;
+  prefill?: TaskPrefill;
   sections: Section[];
   assignees: string[];
   onSave: (task: Task) => void;
@@ -65,7 +65,7 @@ export default function TaskModal({
   onAddSection: (section: Section) => void;
   onRemoveSection: (id: string) => void;
 }) {
-  const [form, setForm] = useState(() => emptyForm(task, presetDeadline));
+  const [form, setForm] = useState(() => emptyForm(task, prefill));
 
   const isEditing = !!task;
   const assigneeOptions = form.assignee && !assignees.includes(form.assignee) ? [...assignees, form.assignee] : assignees;

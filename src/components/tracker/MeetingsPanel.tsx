@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Meeting, MeetingStatus } from "@/types/tracker";
+import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso, sortMeetingsForList } from "@/lib/calendarLogic";
 import { todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
@@ -40,20 +40,20 @@ export default function MeetingsPanel({
   dateTimeConfirm: ReturnType<typeof useDateTimeConfirm>;
   // Lets a sibling (the calendar) request opening the "new meeting" modal
   // for a specific date, e.g. from the date popover's "+ Встреча" button.
-  openMeetingRequest: string | null;
+  openMeetingRequest: MeetingPrefill | null;
   onOpenMeetingHandled: () => void;
   onIdeaDropped: (ideaId: string) => void;
   justCreatedId?: string | null;
 } & PanelDragProps) {
   const [ideaDragOver, setIdeaDragOver] = useState(false);
-  const [modalState, setModalState] = useState<{ open: boolean; meeting: Meeting | null; presetDate?: string }>({ open: false, meeting: null });
+  const [modalState, setModalState] = useState<{ open: boolean; meeting: Meeting | null; prefill?: MeetingPrefill }>({ open: false, meeting: null });
 
   // See TasksPanel's identical pattern: an external open request from a
   // sibling (the calendar's date popover) is treated as an alternate open
   // source rather than synced into local state via an effect.
   const modalOpen = modalState.open || openMeetingRequest !== null;
   const modalMeeting = modalState.open ? modalState.meeting : null;
-  const modalPresetDate = modalState.open ? modalState.presetDate : (openMeetingRequest ?? undefined);
+  const modalPrefill = modalState.open ? modalState.prefill : (openMeetingRequest ?? undefined);
   function closeModal() {
     setModalState({ open: false, meeting: null });
     if (openMeetingRequest !== null) onOpenMeetingHandled();
@@ -108,7 +108,7 @@ export default function MeetingsPanel({
         <div className="panel-title">
           Встречи <span className="count">{sorted.length}</span>
         </div>
-        <button className="btn btn-primary btn-small" id="addMeetingBtn" onClick={() => setModalState({ open: true, meeting: null, presetDate: selectedDay ?? todayStr() })}>
+        <button className="btn btn-primary btn-small" id="addMeetingBtn" onClick={() => setModalState({ open: true, meeting: null, prefill: { date: selectedDay ?? todayStr() } })}>
           +
         </button>
       </div>
@@ -153,7 +153,7 @@ export default function MeetingsPanel({
         <MeetingModal
           key={modalMeeting?.id ?? "new"}
           meeting={modalMeeting}
-          presetDate={modalPresetDate}
+          prefill={modalPrefill}
           assignees={assignees}
           onSave={actions.saveMeeting}
           onDelete={() => modalMeeting && deleteMeeting(modalMeeting)}

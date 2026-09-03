@@ -4,7 +4,7 @@
 // meetingSaveBtn/deleteMeetingBtn/setMeetingStatus/performReschedule in
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
 import { useState } from "react";
-import type { Meeting, MeetingStatus } from "@/types/tracker";
+import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso } from "@/lib/calendarLogic";
 import { fmtDate } from "@/lib/taskDisplay";
 import { sanitizeAssigneeList } from "@/lib/trackerRows";
@@ -18,7 +18,7 @@ function outcomeLabel(status: MeetingStatus): string {
 
 export default function MeetingModal({
   meeting,
-  presetDate,
+  prefill,
   assignees,
   onSave,
   onDelete,
@@ -27,7 +27,7 @@ export default function MeetingModal({
   onReschedule,
 }: {
   meeting: Meeting | null;
-  presetDate?: string;
+  prefill?: MeetingPrefill;
   assignees: string[];
   onSave: (m: Meeting) => void;
   onDelete: () => void;
@@ -36,10 +36,10 @@ export default function MeetingModal({
   onReschedule: (meeting: Meeting, newDate: string, newTime: string, resultNote: string) => void;
 }) {
   const isEditing = !!meeting;
-  const [date, setDate] = useState(meeting?.date ?? presetDate ?? "");
-  const [title, setTitle] = useState(meeting?.title ?? "");
-  const [time, setTime] = useState(meeting?.time || "10:00");
-  const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? []));
+  const [date, setDate] = useState(meeting?.date ?? prefill?.date ?? "");
+  const [title, setTitle] = useState(meeting?.title ?? prefill?.title ?? "");
+  const [time, setTime] = useState(meeting?.time || prefill?.time || "10:00");
+  const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? prefill?.participants ?? []));
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [result, setResult] = useState(meeting?.result ?? "");
   const [rescheduleDate, setRescheduleDate] = useState(meeting ? addDaysIso(meeting.date, 1) : "");

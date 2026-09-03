@@ -58,6 +58,25 @@ export interface Section {
 
 export type Assignee = string;
 
+// Partial pre-fill for opening a "new task"/"new meeting" modal already
+// populated — used by both the calendar's date-popover (deadline/date only)
+// and QuickAdd's desktop flow (full parsed fields) under the new UI.
+export interface TaskPrefill {
+  title?: string;
+  desc?: string;
+  assignee?: string;
+  priority?: Priority;
+  term?: Term;
+  deadline?: string;
+}
+
+export interface MeetingPrefill {
+  title?: string;
+  date?: string;
+  time?: string;
+  participants?: string[];
+}
+
 export interface PanelLayout {
   left: string[];
   center: string[];
