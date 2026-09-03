@@ -6,6 +6,7 @@
 // #fTitle, #saveTaskBtn, etc.) so the existing e2e patterns keep working
 // against the new UI with minimal changes.
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
 
@@ -142,7 +143,7 @@ export default function TaskModal({
 
   const showStopRecur = isEditing && form.recur !== "none";
 
-  return (
+  return createPortal(
     <div className="overlay open" id="overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <h2 id="modalTitle">{isEditing ? "Редактировать задачу" : "Новая задача"}</h2>
@@ -310,6 +311,7 @@ export default function TaskModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -4,6 +4,7 @@
 // meetingSaveBtn/deleteMeetingBtn/setMeetingStatus/performReschedule in
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso } from "@/lib/calendarLogic";
 import { fmtDate } from "@/lib/taskDisplay";
@@ -96,7 +97,7 @@ export default function MeetingModal({
 
   const resolved = isEditing && meeting.status && meeting.status !== "planned";
 
-  return (
+  return createPortal(
     <div className="overlay open" id="meetingOverlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <h2 id="meetingModalTitle">{isEditing ? "Редактировать встречу" : "Новая встреча"}</h2>
@@ -201,6 +202,7 @@ export default function MeetingModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
