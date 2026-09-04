@@ -5,7 +5,7 @@
 // public/legacy-tracker.js. Kept on the same element ids (#overlay,
 // #fTitle, #saveTaskBtn, etc.) so the existing e2e patterns keep working
 // against the new UI with minimal changes.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
@@ -67,6 +67,15 @@ export default function TaskModal({
   onRemoveSection: (id: string) => void;
 }) {
   const [form, setForm] = useState(() => emptyForm(task, prefill));
+
+  // Esc closes the modal, same as legacy's global keydown handler.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   const isEditing = !!task;
   const assigneeOptions = form.assignee && !assignees.includes(form.assignee) ? [...assignees, form.assignee] : assignees;

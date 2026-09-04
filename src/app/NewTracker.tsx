@@ -11,6 +11,9 @@ import { useToasts } from "@/hooks/useToasts";
 import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
+import { useTelegramLink } from "@/hooks/useTelegramLink";
+import SyncErrorBanner from "@/components/tracker/SyncErrorBanner";
+import SyncStatusPill from "@/components/tracker/SyncStatusPill";
 import TasksPanel from "@/components/tracker/TasksPanel";
 import MeetingsPanel from "@/components/tracker/MeetingsPanel";
 import CalendarPanel from "@/components/tracker/CalendarPanel";
@@ -34,12 +37,20 @@ export default function NewTracker() {
   const dateTimeConfirm = useDateTimeConfirm();
   const notifications = useNotifications({ tasks, meetings, saveTask: actions.saveTask, showToast: toasts.showToast, ready: !loading });
   const installPrompt = useInstallPrompt();
+  const telegram = useTelegramLink();
 
   const [clockText, setClockText] = useState(() => formatClock(new Date()));
   useEffect(() => {
     const timer = setInterval(() => setClockText(formatClock(new Date())), 30000);
     return () => clearInterval(timer);
   }, []);
+
+  // Header toggles for the calendar/ideas panels — same as legacy's
+  // calOpen/ideasOpen: hiding a panel also collapses the layout column it
+  // was sitting in (see DashboardLayout's hiddenPanels prop).
+  const [calOpen, setCalOpen] = useState(true);
+  const [ideasOpen, setIdeasOpen] = useState(true);
+
 
   // "Показывать завершённые" is one shared toggle for done tasks AND
   // resolved meetings — see TasksPanel's prop comment.
@@ -49,6 +60,24 @@ export default function NewTracker() {
   const [openMeetingRequest, setOpenMeetingRequest] = useState<MeetingPrefill | null>(null);
   const [justCreatedTaskId, setJustCreatedTaskId] = useState<string | null>(null);
   const [justCreatedMeetingId, setJustCreatedMeetingId] = useState<string | null>(null);
+
+  // Hotkey N — new task. Keyed off the physical key (e.code) so it works on a
+  // Russian layout too, and ignored while typing or with a modal already up.
+  // The open-modal check reads the DOM rather than lifting every panel's modal
+  // state up here: each modal renders `.overlay.open`, same as legacy did.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.code !== "KeyN" || e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      const tag = (el?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || el?.isContentEditable) return;
+      if (document.querySelector(".overlay.open")) return;
+      e.preventDefault();
+      setOpenTaskRequest({});
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   function flashTask(id: string) {
     setJustCreatedTaskId(id);
@@ -175,20 +204,37 @@ export default function NewTracker() {
       <ToastStack toasts={toasts.toasts} onUndo={toasts.undo} onDismiss={toasts.dismiss} />
       {dateTimeConfirm.dialog}
       <QuickAdd provider={quickAddProvider} />
-      <div id="syncStatus" className="show">
-        {syncStatus.pending ? "Сохраняю…" : syncStatus.lastError ? `⚠ ${syncStatus.lastError}` : "✓ Сохранено"}
-      </div>
+      {syncStatus.everSaved && (
+        <SyncStatusPill
+          key={syncStatus.pending ? "pending" : syncStatus.lastError ? "error:" + syncStatus.lastError : "saved"}
+          text={syncStatus.pending ? "Сохраняю…" : syncStatus.lastError ? `⚠ ${syncStatus.lastError}` : "✓ Сохранено"}
+          autoHide={!syncStatus.pending && !syncStatus.lastError}
+        />
+      )}
       <header>
         <div className="header-row">
           <div className="brand">
+            {/* eslint-disable-next-line @next/next/no-img-element -- same plain <img> the legacy markup used; next/image adds nothing for a fixed-size local logo */}
+            <img className="brand-logo" src="/favicon.png" alt="РОКАС" />
             <div>
-              <h1>Планировщик задач</h1>
+              <h1>РОКАС</h1>
               <div className="subtitle" id="dateNow">
                 {clockText}
               </div>
             </div>
           </div>
+          <div className="header-quote">
+            <div className="hqline">
+              Есть десятилетия, за которые ничего не случается, <b>и есть недели, за которые случаются десятилетия.</b>
+            </div>
+          </div>
           <div className="header-btns">
+            <button className={"btn" + (ideasOpen ? " active" : "")} id="ideasToggleBtn" onClick={() => setIdeasOpen((v) => !v)}>
+              💡 Идеи
+            </button>
+            <button className={"btn" + (calOpen ? " active" : "")} id="calToggleBtn" onClick={() => setCalOpen((v) => !v)}>
+              📅 Календарь
+            </button>
             {notifications.permission !== "unsupported" && (
               <button className="btn" id="notifPermBtn" onClick={notifications.requestPermission}>
                 {notifications.permission === "granted" ? "🔔 Уведомления включены" : "🔔 Включить уведомления"}
@@ -209,6 +255,11 @@ export default function NewTracker() {
                 ↺ Сбросить расположение
               </button>
             )}
+            {telegram.visible && (
+              <button className="btn" id="telegramLinkBtn" onClick={telegram.link}>
+                🔗 Telegram
+              </button>
+            )}
             <button className="btn" id="signOutBtn" onClick={() => actions.signOut()}>
               Выйти
             </button>
@@ -218,6 +269,7 @@ export default function NewTracker() {
       <DashboardLayout
         layout={panelLayout}
         onLayoutChange={actions.savePanelLayout}
+        hiddenPanels={[...(calOpen ? [] : ["calPanel"]), ...(ideasOpen ? [] : ["ideasPanel"])]}
         panels={{
           calPanel: (
             <CalendarPanel
@@ -264,6 +316,7 @@ export default function NewTracker() {
               onIdeaDropped={convertIdeaToTask}
               justCreatedId={justCreatedTaskId}
               notifBanner={notifications.bannerText}
+              extraBanner={<SyncErrorBanner />}
             />
           ),
           ideasPanel: <IdeasPanel ideas={ideas} showDone={showDone} actions={actions} toasts={toasts} />,

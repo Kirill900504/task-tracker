@@ -5,7 +5,7 @@
 // flow, setupTaskDragDrop()/reorderColumn(), and the idea-drop handlers
 // for elListShort/elListLong).
 import { useMemo, useRef, useState } from "react";
-import type { DragEvent, RefObject } from "react";
+import type { DragEvent, ReactNode, RefObject } from "react";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
 import { getDragAfterElement } from "@/lib/dndDom";
@@ -30,6 +30,7 @@ export default function TasksPanel({
   onIdeaDropped,
   justCreatedId,
   notifBanner,
+  extraBanner,
   dragHandleProps,
   isDragging,
   dropIndicatorBefore,
@@ -62,11 +63,37 @@ export default function TasksPanel({
   onIdeaDropped: (ideaId: string, term: Term) => void;
   justCreatedId?: string | null;
   notifBanner?: string | null;
+  // Rendered under the notification banner, in the same slot legacy's
+  // #syncErrorBanner occupied (see SyncErrorBanner).
+  extraBanner?: ReactNode;
 } & PanelDragProps) {
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterSection, setFilterSection] = useState("all");
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
+
+  // Collapsible columns, persisted per column exactly like legacy did
+  // (localStorage key kkt_collapsed_<colId>) so the choice survives reloads.
+  const [collapsedCols, setCollapsedCols] = useState<Record<string, boolean>>(() => {
+    const empty: Record<string, boolean> = {};
+    if (typeof localStorage === "undefined") return empty;
+    try {
+      return { colShort: localStorage.getItem("kkt_collapsed_colShort") === "1", colLong: localStorage.getItem("kkt_collapsed_colLong") === "1" };
+    } catch {
+      return empty;
+    }
+  });
+  function toggleCollapsed(colId: string) {
+    setCollapsedCols((cur) => {
+      const next = { ...cur, [colId]: !cur[colId] };
+      try {
+        localStorage.setItem("kkt_collapsed_" + colId, next[colId] ? "1" : "0");
+      } catch {
+        /* private mode / storage disabled — the toggle still works for this session */
+      }
+      return next;
+    });
+  }
 
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ term: Term; beforeId: string | null } | null>(null);
@@ -180,10 +207,13 @@ export default function TasksPanel({
   }
 
   function renderColumn(list: Task[], emptyText: string, countLabel: string, term: Term, ref: RefObject<HTMLDivElement | null>) {
+    const colId = term === "short" ? "colShort" : "colLong";
+    const collapsed = collapsedCols[colId];
     return (
-      <div className="column">
-        <div className="section-title">
+      <div className={"column" + (collapsed ? " collapsed" : "")} id={colId}>
+        <div className="section-title" onClick={() => toggleCollapsed(colId)}>
           {countLabel} <span className="count">{list.length}</span>
+          <span className="collapse-arrow">▾</span>
         </div>
         <div
           ref={ref}
@@ -228,7 +258,12 @@ export default function TasksPanel({
         <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
         <div className="panel-title">Задачи</div>
       </div>
-      {notifBanner && <div className="notif-banner show">{notifBanner}</div>}
+      {notifBanner && (
+        <div className="notif-banner show" id="notifBanner">
+          {notifBanner}
+        </div>
+      )}
+      {extraBanner}
       <div className="toolbar">
         <button className="btn btn-primary" id="newTaskBtn" onClick={() => setModalState({ open: true, task: null })}>
           + Новая задача

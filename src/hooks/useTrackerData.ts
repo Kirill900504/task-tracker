@@ -55,6 +55,9 @@ export interface SyncStatus {
   // Non-null while a save has failed and is waiting to retry — the UI
   // should keep this visible (not auto-hide it) until it clears.
   lastError: string | null;
+  // False until the first write of the session, so a freshly loaded page
+  // doesn't show a "✓ Сохранено" pill for something that never happened.
+  everSaved: boolean;
 }
 
 function emptyShadow(): Shadow {
@@ -74,7 +77,7 @@ export function useTrackerData() {
   const [assignees, setAssignees] = useState<string[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [panelLayout, setPanelLayoutState] = useState<PanelLayout>(DEFAULT_PANEL_LAYOUT);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ pending: false, lastError: null });
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ pending: false, lastError: null, everSaved: false });
 
   const dbRef = useRef<SupabaseClient | null>(null);
   // Mirrors of the state above, read synchronously by persistAll()/
@@ -102,7 +105,7 @@ export function useTrackerData() {
     const sectionsNow = liveRef.current.sections;
 
     pendingCountRef.current++;
-    setSyncStatus({ pending: true, lastError: null });
+    setSyncStatus({ pending: true, lastError: null, everSaved: true });
     let hadError = false;
 
     syncChainRef.current = syncChainRef.current
@@ -185,6 +188,7 @@ export function useTrackerData() {
         setSyncStatus({
           pending: pendingCountRef.current > 0,
           lastError: hadError ? "Не сохранилось, повторю через 15с" : null,
+          everSaved: true,
         });
         if (hadError) scheduleRetry();
       });
@@ -214,7 +218,7 @@ export function useTrackerData() {
     const db = dbRef.current;
     if (!db) return;
     pendingCountRef.current++;
-    setSyncStatus({ pending: true, lastError: null });
+    setSyncStatus({ pending: true, lastError: null, everSaved: true });
     syncChainRef.current = syncChainRef.current
       .then(async () => {
         const { error } = await db.from(table).update({ deleted_at: new Date().toISOString() }).eq("id", id);
@@ -225,7 +229,7 @@ export function useTrackerData() {
       })
       .then(() => {
         pendingCountRef.current = Math.max(0, pendingCountRef.current - 1);
-        setSyncStatus({ pending: pendingCountRef.current > 0, lastError: null });
+        setSyncStatus({ pending: pendingCountRef.current > 0, lastError: null, everSaved: true });
       });
   }, []);
 
@@ -233,7 +237,7 @@ export function useTrackerData() {
     const db = dbRef.current;
     if (!db) return;
     pendingCountRef.current++;
-    setSyncStatus({ pending: true, lastError: null });
+    setSyncStatus({ pending: true, lastError: null, everSaved: true });
     syncChainRef.current = syncChainRef.current
       .then(async () => {
         const { error } = await db.from(table).update({ deleted_at: null }).eq("id", id);
@@ -244,7 +248,7 @@ export function useTrackerData() {
       })
       .then(() => {
         pendingCountRef.current = Math.max(0, pendingCountRef.current - 1);
-        setSyncStatus({ pending: pendingCountRef.current > 0, lastError: null });
+        setSyncStatus({ pending: pendingCountRef.current > 0, lastError: null, everSaved: true });
       });
   }, []);
 
@@ -253,7 +257,7 @@ export function useTrackerData() {
     const db = dbRef.current;
     if (!db) return;
     pendingCountRef.current++;
-    setSyncStatus({ pending: true, lastError: null });
+    setSyncStatus({ pending: true, lastError: null, everSaved: true });
     syncChainRef.current = syncChainRef.current
       .then(async () => {
         const { error } = await db.from("user_prefs").upsert({ panel_layout: layout, updated_at: new Date().toISOString() });
@@ -264,7 +268,7 @@ export function useTrackerData() {
       })
       .then(() => {
         pendingCountRef.current = Math.max(0, pendingCountRef.current - 1);
-        setSyncStatus({ pending: pendingCountRef.current > 0, lastError: null });
+        setSyncStatus({ pending: pendingCountRef.current > 0, lastError: null, everSaved: true });
       });
   }, []);
 

@@ -4,7 +4,8 @@
 // openDatePopover()/renderCalFilterNote() in legacy-tracker.js. Drag-to-
 // reschedule (dropping a meeting chip on a day) is a later phase — clicking
 // a day still opens the "+ Задача / + Встреча" popover as before.
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Meeting, Task } from "@/types/tracker";
 import { dateStr, fmtDate, isTaskDueOnDate, todayStr } from "@/lib/taskDisplay";
 import { getMonthGridDates } from "@/lib/calendarLogic";
@@ -41,8 +42,37 @@ export default function CalendarPanel({
   dateTimeConfirm: ReturnType<typeof useDateTimeConfirm>;
 } & PanelDragProps) {
   const [viewDate, setViewDate] = useState(() => new Date());
-  const [popoverDate, setPopoverDate] = useState<string | null>(null);
+  // The popover is portalled to <body> and positioned from the clicked cell's
+  // rect — a direct port of legacy's openDatePopover(). Rendering it inside the
+  // cell instead would trap it: .dash-panel sets container-type, which makes it
+  // the containing block for position:fixed children, and the panel's own
+  // scroll would clip it near the bottom of the list.
+  const [popover, setPopover] = useState<{ date: string; anchor: DOMRect } | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+
+  // Placed by writing to the DOM once measured (its own size decides whether
+  // it fits below the cell), then flipped above / pulled inside the viewport
+  // edges — the same math legacy's openDatePopover() used.
+  useLayoutEffect(() => {
+    const el = popoverRef.current;
+    if (!popover || !el) return;
+    const r = popover.anchor;
+    let top = r.bottom + 4;
+    if (top + el.offsetHeight > window.innerHeight - 8) top = r.top - el.offsetHeight - 4;
+    el.style.top = top + "px";
+    el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - el.offsetWidth - 8)) + "px";
+  }, [popover]);
+
+  // Esc closes it, same as legacy's global keydown handler.
+  useEffect(() => {
+    if (!popover) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setPopover(null);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [popover]);
 
   const today = todayStr();
   const gridDates = getMonthGridDates(viewDate);
@@ -87,7 +117,7 @@ export default function CalendarPanel({
               }
               onClick={(e) => {
                 e.stopPropagation();
-                setPopoverDate(ds);
+                setPopover({ date: ds, anchor: e.currentTarget.getBoundingClientRect() });
               }}
               onDragOver={(e) => {
                 if (!e.dataTransfer.types.includes("text/plain")) return;
@@ -113,37 +143,49 @@ export default function CalendarPanel({
               {cd.getDate()}
               {dueTasks.length > 0 && <div className={"cal-dot" + (hasHigh ? " high" : "")} />}
               {dayMeetings.length > 0 && <div className="cal-dot meeting" style={{ marginTop: dueTasks.length ? 2 : 3 }} />}
-              {popoverDate === ds && (
-                <div className="date-popover" style={{ display: "flex" }} id="datePopover" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    className="date-popover-btn"
-                    id="datePopoverTaskBtn"
-                    onClick={() => {
-                      setPopoverDate(null);
-                      onRequestNewTask(ds);
-                    }}
-                  >
-                    + Задача
-                  </button>
-                  <button
-                    type="button"
-                    className="date-popover-btn"
-                    id="datePopoverMeetingBtn"
-                    onClick={() => {
-                      setPopoverDate(null);
-                      onRequestNewMeeting(ds);
-                    }}
-                  >
-                    + Встреча
-                  </button>
-                </div>
-              )}
             </div>
           );
         })}
       </div>
-      {popoverDate && <div style={{ position: "fixed", inset: 0, zIndex: 1 }} onClick={() => setPopoverDate(null)} />}
+      {popover &&
+        createPortal(
+          <>
+            <div style={{ position: "fixed", inset: 0, zIndex: 299 }} onClick={() => setPopover(null)} />
+            <div
+              ref={popoverRef}
+              className="date-popover"
+              style={{ display: "flex", top: -9999, left: -9999 }}
+              id="datePopover"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="date-popover-btn"
+                id="datePopoverTaskBtn"
+                onClick={() => {
+                  const d = popover.date;
+                  setPopover(null);
+                  onRequestNewTask(d);
+                }}
+              >
+                + Задача
+              </button>
+              <button
+                type="button"
+                className="date-popover-btn"
+                id="datePopoverMeetingBtn"
+                onClick={() => {
+                  const d = popover.date;
+                  setPopover(null);
+                  onRequestNewMeeting(d);
+                }}
+              >
+                + Встреча
+              </button>
+            </div>
+          </>,
+          document.body,
+        )}
       {selectedDate && (
         <div className="cal-filter-note" id="calFilterNote" style={{ display: "flex" }}>
           <span id="calFilterText">Показаны задачи на {fmtDate(selectedDate)}</span>

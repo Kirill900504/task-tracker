@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Meeting } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
 import { sanitizeAssigneeList } from "@/lib/trackerRows";
@@ -22,9 +23,26 @@ export default function MeetingChip({
   onQuickReschedule: () => void;
   justCreated?: boolean;
 }) {
-  const [showPeople, setShowPeople] = useState(false);
+  // The participants tooltip lives in <body> and is positioned from the
+  // anchor's rect, exactly as legacy's showPeopleTooltip() did: the meetings
+  // list scrolls (#meetingsForDay{overflow:auto}), so a tooltip nested inside
+  // a chip gets clipped for meetings near the bottom of the list.
+  const [peopleAnchor, setPeopleAnchor] = useState<DOMRect | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
   const participants = sanitizeAssigneeList(meeting.participants);
   const showQuickActions = !meeting.status || meeting.status === "planned";
+
+  // Placed by writing to the DOM once it has been measured (its own size
+  // decides whether it fits below the anchor), before paint — the same
+  // getBoundingClientRect math legacy's showPeopleTooltip() used.
+  useLayoutEffect(() => {
+    const el = tooltipRef.current;
+    if (!peopleAnchor || !el) return;
+    let top = peopleAnchor.bottom + 4;
+    if (top + el.offsetHeight > window.innerHeight - 8) top = peopleAnchor.top - el.offsetHeight - 4;
+    el.style.top = top + "px";
+    el.style.left = Math.max(8, peopleAnchor.right - el.offsetWidth) + "px";
+  }, [peopleAnchor]);
 
   return (
     <div
@@ -60,19 +78,25 @@ export default function MeetingChip({
       </div>
 
       {participants.length > 0 && (
-        <span className="mpeople" onMouseEnter={() => setShowPeople(true)} onMouseLeave={() => setShowPeople(false)} style={{ position: "relative" }}>
+        <span
+          className="mpeople"
+          onMouseEnter={(e) => setPeopleAnchor(e.currentTarget.getBoundingClientRect())}
+          onMouseLeave={() => setPeopleAnchor(null)}
+        >
           👥 {participants.length}
-          {showPeople && (
-            <div className="people-tooltip" style={{ display: "block", position: "absolute", top: "100%", right: 0 }}>
-              {participants.map((p) => (
-                <div className="prow" key={p}>
-                  {p}
-                </div>
-              ))}
-            </div>
-          )}
         </span>
       )}
+      {peopleAnchor &&
+        createPortal(
+          <div ref={tooltipRef} id="peopleTooltip" className="people-tooltip" style={{ display: "block", top: -9999, left: -9999 }}>
+            {participants.map((p) => (
+              <div className="prow" key={p}>
+                {p}
+              </div>
+            ))}
+          </div>,
+          document.body,
+        )}
 
       {showQuickActions && (
         <div className="meeting-quick-actions">

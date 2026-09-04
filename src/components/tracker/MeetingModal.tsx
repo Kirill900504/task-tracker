@@ -3,7 +3,7 @@
 // Port of the meeting modal from trackerMarkup.ts + openMeetingModal()/
 // meetingSaveBtn/deleteMeetingBtn/setMeetingStatus/performReschedule in
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso } from "@/lib/calendarLogic";
@@ -45,6 +45,15 @@ export default function MeetingModal({
   const [result, setResult] = useState(meeting?.result ?? "");
   const [rescheduleDate, setRescheduleDate] = useState(meeting ? addDaysIso(meeting.date, 1) : "");
   const [rescheduleTime, setRescheduleTime] = useState(meeting?.time || "10:00");
+
+  // Esc closes the modal, same as legacy's global keydown handler.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   function toggleParticipant(name: string) {
     setParticipants((prev) => (prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name]));

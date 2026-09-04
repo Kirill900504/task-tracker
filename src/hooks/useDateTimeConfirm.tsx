@@ -4,7 +4,7 @@
 // confirmation dialog used instead of the browser's native prompt() for
 // meeting reschedule flows. Same Promise-based call shape: ask() resolves
 // to {date, time} on OK, or null on cancel/closing without a date.
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface PendingAsk {
   question: string;
@@ -30,6 +30,21 @@ export function useDateTimeConfirm() {
     pendingRef.current = null;
     setPending(null);
   }
+
+  // Esc cancels, same as legacy's global keydown handler (which kept an
+  // activeDateTimeCancel reference specifically so this dialog answered to it).
+  const open = pending !== null;
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      pendingRef.current?.resolve(null);
+      pendingRef.current = null;
+      setPending(null);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   const dialog = pending ? (
     <div
