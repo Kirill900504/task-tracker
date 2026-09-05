@@ -224,7 +224,12 @@
   .idea-meta{font-size:11px; color:var(--ink-soft); font-family:var(--mono); margin-top:3px;}
   .idea-del{cursor:pointer; color:var(--ink-soft); background:none; border:none; font-size:15px; line-height:1; flex:none;}
   .idea-del:hover{color:var(--high);}
-  #ideaList{max-height:60vh; overflow:auto;}
+  /* The "important" marker is a dot hung 4px outside the card's top-right
+     corner (.idea-item.important::after). Inside a scroll container that
+     overflow counts, so the list drew a horizontal scrollbar even with two
+     ideas in it — the padding gives the dot room to sit inside the scrollable
+     area, and the negative margins keep the cards aligned as before. */
+  #ideaList{max-height:60vh; overflow:auto; padding:5px 5px 0; margin:-5px -5px 0;}
   /* Thin, dark-theme-matched scrollbars instead of the browser's default
      (often light/blocky, especially in mobile WebViews) chrome. */
   #ideaList, #meetingsForDay{scrollbar-width:thin; scrollbar-color:var(--line) transparent;}

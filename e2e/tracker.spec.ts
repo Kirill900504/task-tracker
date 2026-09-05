@@ -126,6 +126,64 @@ test("completing a task survives an immediate sign-out", async ({ page }) => {
   await expect(page.locator(".task", { hasText: title })).toHaveClass(/done/);
 });
 
+// Covers the whole drag-an-idea-onto-a-date flow end to end: the meeting
+// modal opens pre-filled, the idea survives until the meeting is actually
+// saved, and "Отменить" puts it back — which also means the delete has to
+// have been soft, since restoring only flips deleted_at on a row that is
+// still there. (It does NOT reproduce the stale-snapshot race in persistAll
+// that this flow originally exposed — that one needed timing this test does
+// not reliably hit; it was verified by hand instead.)
+test("dragging an idea onto a calendar day converts it into a meeting", async ({ page }) => {
+  const ideaText = `E2E идея-встреча ${Date.now()}`;
+
+  await login(page);
+  await page.fill("#ideaInput", ideaText);
+  await page.click("#ideaAddBtn");
+  await expect(page.locator(".idea-item", { hasText: ideaText })).toBeVisible();
+  await waitForSaved(page);
+
+  // Reload first, so the idea being dragged is one loaded from the database
+  // rather than one this session just created — the everyday case.
+  await page.reload();
+  await expect(page.locator(".idea-item", { hasText: ideaText })).toBeVisible();
+
+  // HTML5 drag-and-drop isn't driven reliably by real mouse events in
+  // headless Chromium, so the drag is dispatched directly — the handlers
+  // under test are the same ones a real drag reaches.
+  await page.evaluate((text) => {
+    const idea = [...document.querySelectorAll(".idea-item")].find((el) => el.textContent?.includes(text));
+    const cell = [...document.querySelectorAll(".cal-day:not(.other-month)")].find(
+      (el) => el.firstChild?.textContent?.trim() === "15",
+    );
+    if (!idea || !cell) throw new Error("idea or calendar cell not found");
+    const dt = new DataTransfer();
+    idea.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: dt }));
+    cell.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+    cell.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, ideaText);
+
+  // The meeting modal opens pre-filled — the idea is still there until saved.
+  await expect(page.locator("#meetingOverlay")).toBeVisible();
+  await expect(page.locator("#mTitle")).toHaveValue(ideaText);
+  await expect(page.locator(".idea-item", { hasText: ideaText })).toBeVisible();
+
+  await page.click("#meetingSaveBtn");
+  await expect(page.locator(".meeting-chip", { hasText: ideaText })).toBeVisible();
+  await expect(page.locator(".idea-item", { hasText: ideaText })).toHaveCount(0);
+  await waitForSaved(page);
+
+  // "Отменить" is what proves the delete was soft: restoring flips
+  // deleted_at back, which only works if the row is still there.
+  await page.click(".toast-undo");
+  await expect(page.locator(".idea-item", { hasText: ideaText })).toBeVisible();
+  await expect(page.locator(".meeting-chip", { hasText: ideaText })).toHaveCount(0);
+  await waitForSaved(page);
+
+  await page.reload();
+  await expect(page.locator(".idea-item", { hasText: ideaText })).toBeVisible();
+  await expect(page.locator(".meeting-chip", { hasText: ideaText })).toHaveCount(0);
+});
+
 test("deleting a task survives an immediate sign-out", async ({ page }) => {
   const title = `E2E race deleted ${Date.now()}`;
 

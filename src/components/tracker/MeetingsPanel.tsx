@@ -21,6 +21,7 @@ export default function MeetingsPanel({
   dateTimeConfirm,
   openMeetingRequest,
   onOpenMeetingHandled,
+  onRequestedMeetingSaved,
   onIdeaDropped,
   justCreatedId,
   dragHandleProps,
@@ -42,6 +43,10 @@ export default function MeetingsPanel({
   // for a specific date, e.g. from the date popover's "+ Встреча" button.
   openMeetingRequest: MeetingPrefill | null;
   onOpenMeetingHandled: () => void;
+  // Fires only for a meeting saved from such a request, so the parent can
+  // finish whatever started it — e.g. an idea dragged onto a calendar day
+  // is only consumed once its meeting actually exists.
+  onRequestedMeetingSaved?: (meeting: Meeting) => void;
   onIdeaDropped: (ideaId: string) => void;
   justCreatedId?: string | null;
 } & PanelDragProps) {
@@ -57,6 +62,12 @@ export default function MeetingsPanel({
   function closeModal() {
     setModalState({ open: false, meeting: null });
     if (openMeetingRequest !== null) onOpenMeetingHandled();
+  }
+  function handleModalSave(m: Meeting) {
+    actions.saveMeeting(m);
+    // Runs before closeModal() (the modal saves, then closes), so the
+    // request is still open here and this only fires for requested opens.
+    if (!modalState.open && openMeetingRequest !== null) onRequestedMeetingSaved?.(m);
   }
 
   const sorted = sortMeetingsForList(meetings, showResolved);
@@ -155,7 +166,7 @@ export default function MeetingsPanel({
           meeting={modalMeeting}
           prefill={modalPrefill}
           assignees={assignees}
-          onSave={actions.saveMeeting}
+          onSave={handleModalSave}
           onDelete={() => modalMeeting && deleteMeeting(modalMeeting)}
           onClose={closeModal}
           onSetStatus={setStatus}

@@ -98,18 +98,23 @@ export function useTrackerData() {
     const db = dbRef.current;
     if (!db) return;
 
-    const tasksNow = liveRef.current.tasks;
-    const meetingsNow = liveRef.current.meetings;
-    const ideasNow = liveRef.current.ideas;
-    const assigneesNow = liveRef.current.assignees;
-    const sectionsNow = liveRef.current.sections;
-
+    // Every step below reads liveRef at the moment it *runs*, never a
+    // snapshot taken here at call time. legacy-tracker.js read its live
+    // arrays the same way, and the difference matters: two actions in one
+    // tick (saving a meeting and consuming the idea it came from, say)
+    // queue two persistAll runs, and a stale snapshot would both re-upsert
+    // rows the second action had already removed and then overwrite shadow
+    // with that stale list — after which the next diff reads as "this row
+    // was deleted" and issues a hard DELETE for a row that should only ever
+    // be soft-deleted. Same family as the shared-shadow bug in the header
+    // comment: shadow must always describe what was actually just synced.
     pendingCountRef.current++;
     setSyncStatus({ pending: true, lastError: null, everSaved: true });
     let hadError = false;
 
     syncChainRef.current = syncChainRef.current
       .then(async () => {
+        const sectionsNow = liveRef.current.sections;
         const { upserts, deleteIds } = diffRows(sectionsNow, shadowRef.current.sections, sectionToRow);
         if (upserts.length) {
           const { error } = await db.from("sections").upsert(upserts as SectionRow[]);
@@ -122,6 +127,7 @@ export function useTrackerData() {
         shadowRef.current.sections = snapshotList(sectionsNow);
       })
       .then(async () => {
+        const tasksNow = liveRef.current.tasks;
         const { upserts, deleteIds } = diffRows(tasksNow, shadowRef.current.tasks, taskToRow);
         if (upserts.length) {
           const { error } = await db.from("tasks").upsert(upserts as TaskRow[]);
@@ -134,6 +140,7 @@ export function useTrackerData() {
         shadowRef.current.tasks = snapshotList(tasksNow);
       })
       .then(async () => {
+        const meetingsNow = liveRef.current.meetings;
         const { upserts, deleteIds } = diffRows(meetingsNow, shadowRef.current.meetings, meetingToRow);
         if (upserts.length) {
           const { error } = await db.from("meetings").upsert(upserts as MeetingRow[]);
@@ -146,6 +153,7 @@ export function useTrackerData() {
         shadowRef.current.meetings = snapshotList(meetingsNow);
       })
       .then(async () => {
+        const ideasNow = liveRef.current.ideas;
         const { upserts, deleteIds } = diffRows(ideasNow, shadowRef.current.ideas, ideaToRow);
         if (upserts.length) {
           const { error } = await db.from("ideas").upsert(upserts as IdeaRow[]);
@@ -158,6 +166,7 @@ export function useTrackerData() {
         shadowRef.current.ideas = snapshotList(ideasNow);
       })
       .then(async () => {
+        const assigneesNow = liveRef.current.assignees;
         const { added, removed } = diffAssignees(assigneesNow, shadowRef.current.assignees);
         if (added.length) {
           const { error } = await db.from("assignees").upsert(

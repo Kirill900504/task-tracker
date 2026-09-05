@@ -121,6 +121,41 @@ export default function NewTracker() {
     });
   }
 
+  // Dragging an idea or a task onto a calendar day opens the meeting modal
+  // pre-filled with its title and that date — participants and time are then
+  // picked in the normal form. The source idea is only consumed once the
+  // meeting is actually saved (cancelling the modal leaves it untouched); a
+  // dragged task stays where it is, since a meeting about a task doesn't
+  // replace the task itself.
+  const [pendingIdeaConversion, setPendingIdeaConversion] = useState<string | null>(null);
+
+  function ideaDroppedOnDate(ideaId: string, date: string) {
+    const idea = ideas.find((i) => i.id === ideaId);
+    if (!idea) return;
+    setPendingIdeaConversion(idea.id);
+    setOpenMeetingRequest({ title: idea.text, date, time: "10:00" });
+  }
+
+  function taskDroppedOnDate(taskId: string, date: string) {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    setPendingIdeaConversion(null);
+    setOpenMeetingRequest({ title: task.title, date, time: "10:00", participants: task.assignee ? [task.assignee] : [] });
+  }
+
+  function requestedMeetingSaved(meeting: Meeting) {
+    flashMeeting(meeting.id);
+    if (!pendingIdeaConversion) return;
+    const idea = ideas.find((i) => i.id === pendingIdeaConversion);
+    setPendingIdeaConversion(null);
+    if (!idea) return;
+    actions.deleteIdea(idea.id);
+    toasts.showToast("Идея превращена во встречу", meeting.title, () => {
+      actions.deleteMeeting(meeting.id);
+      actions.restoreIdea(idea);
+    });
+  }
+
   async function convertIdeaToMeeting(ideaId: string) {
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
@@ -280,6 +315,8 @@ export default function NewTracker() {
               onRequestNewTask={(date) => setOpenTaskRequest({ deadline: date })}
               onRequestNewMeeting={(date) => setOpenMeetingRequest({ date })}
               dateTimeConfirm={dateTimeConfirm}
+              onIdeaDroppedOnDate={ideaDroppedOnDate}
+              onTaskDroppedOnDate={taskDroppedOnDate}
               onRescheduleMeeting={(meeting, date, time) => {
                 actions.saveMeeting({ ...meeting, date, time: time || meeting.time });
                 toasts.showToast("Встреча перенесена", meeting.title, () => actions.saveMeeting(meeting));
@@ -296,7 +333,11 @@ export default function NewTracker() {
               toasts={toasts}
               dateTimeConfirm={dateTimeConfirm}
               openMeetingRequest={openMeetingRequest}
-              onOpenMeetingHandled={() => setOpenMeetingRequest(null)}
+              onOpenMeetingHandled={() => {
+                setOpenMeetingRequest(null);
+                setPendingIdeaConversion(null);
+              }}
+              onRequestedMeetingSaved={requestedMeetingSaved}
               onIdeaDropped={convertIdeaToMeeting}
               justCreatedId={justCreatedMeetingId}
             />

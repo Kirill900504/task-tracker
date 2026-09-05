@@ -23,6 +23,8 @@ export default function CalendarPanel({
   onRequestNewTask,
   onRequestNewMeeting,
   onRescheduleMeeting,
+  onIdeaDroppedOnDate,
+  onTaskDroppedOnDate,
   dateTimeConfirm,
   dragHandleProps,
   isDragging,
@@ -39,6 +41,11 @@ export default function CalendarPanel({
   // operation than the "reschedule" quick-action icon, which instead
   // creates a follow-up meeting and resolves the original one.
   onRescheduleMeeting: (meeting: Meeting, newDate: string, newTime: string) => void;
+  // Dropping an idea or a task on a day turns it into a meeting on that date:
+  // the parent opens the meeting modal pre-filled with the title and date, so
+  // participants and time are chosen in the normal form before saving.
+  onIdeaDroppedOnDate: (ideaId: string, date: string) => void;
+  onTaskDroppedOnDate: (taskId: string, date: string) => void;
   dateTimeConfirm: ReturnType<typeof useDateTimeConfirm>;
 } & PanelDragProps) {
   const [viewDate, setViewDate] = useState(() => new Date());
@@ -120,7 +127,8 @@ export default function CalendarPanel({
                 setPopover({ date: ds, anchor: e.currentTarget.getBoundingClientRect() });
               }}
               onDragOver={(e) => {
-                if (!e.dataTransfer.types.includes("text/plain")) return;
+                const t = e.dataTransfer.types;
+                if (!t.includes("text/plain") && !t.includes("application/x-idea-id") && !t.includes("application/x-task-id")) return;
                 e.preventDefault();
                 setDragOverDate(ds);
               }}
@@ -129,6 +137,18 @@ export default function CalendarPanel({
               }}
               onDrop={async (e) => {
                 setDragOverDate(null);
+                const ideaId = e.dataTransfer.getData("application/x-idea-id");
+                if (ideaId) {
+                  e.preventDefault();
+                  onIdeaDroppedOnDate(ideaId, ds);
+                  return;
+                }
+                const taskId = e.dataTransfer.getData("application/x-task-id");
+                if (taskId) {
+                  e.preventDefault();
+                  onTaskDroppedOnDate(taskId, ds);
+                  return;
+                }
                 const meetingId = e.dataTransfer.getData("text/plain");
                 if (!meetingId) return;
                 e.preventDefault();
