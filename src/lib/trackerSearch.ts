@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { gigaChatComplete } from "@/lib/gigachat/client";
+import { stem } from "@/lib/stem";
 
 // "Найди всё про Севастополь" — across tasks, meetings, ideas, and the parts
 // the assistant's normal snapshot deliberately leaves out: task descriptions
@@ -15,15 +16,6 @@ import { gigaChatComplete } from "@/lib/gigachat/client";
 const MAX_HITS_PER_KIND = 15;
 
 export type SearchHit = { kind: "task" | "meeting" | "idea"; line: string };
-
-// Strips the common Russian endings so a query matches its own inflections.
-// Crude on purpose — a stem that is slightly too short only widens the net,
-// and the results are shown to a human either way.
-function stem(word: string): string {
-  const w = word.toLowerCase();
-  if (w.length <= 4) return w;
-  return w.replace(/(ами|ями|ого|ему|ому|ыми|ими|ая|ое|ые|ий|ый|ой|ем|ом|ах|ях|ов|ев|ей|ю|я|ы|и|а|е|у|о)$/u, "");
-}
 
 function queryStems(query: string): string[] {
   return query

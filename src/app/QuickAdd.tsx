@@ -16,6 +16,9 @@ export type MeetingFields = { title: string; date: string; time: string; partici
 export type IdeaFields = { text: string; important: boolean };
 // One action item pulled out of dictated meeting notes, awaiting confirmation.
 export type ExtractedTask = { title: string; assignee: string; deadline: string; priority: "high" | "med" };
+// The still-open meeting a dictated recap turned out to be about, when the
+// server matched one — offered for closing along with the action items.
+export type MatchedMeeting = { id: string; title: string; date: string; result: string };
 
 type QuickAddItem =
   | { tool: "create_task"; input: TaskFields; droppedNames: string[] }
@@ -24,7 +27,7 @@ type QuickAddItem =
   | { tool: "ask_clarifying_question"; input: { question: string }; droppedNames: string[] }
   | { tool: "manage_item"; input: { action: string; itemType: string; query: string }; droppedNames: string[] }
   | { tool: "answer_question"; input: { answer?: string; query?: string }; droppedNames: string[] }
-  | { tool: "meeting_notes"; input: { summary?: string; tasks?: ExtractedTask[] }; droppedNames: string[] }
+  | { tool: "meeting_notes"; input: { summary?: string; tasks?: ExtractedTask[]; meeting?: MatchedMeeting | null }; droppedNames: string[] }
   | { tool: "cant_help"; input: Record<string, never>; droppedNames: string[] };
 
 export interface QuickAddProvider {
@@ -34,6 +37,7 @@ export interface QuickAddProvider {
   createTask: (f: TaskFields) => void;
   createMeeting: (f: MeetingFields) => void;
   createIdea: (f: IdeaFields) => void;
+  closeMeetingWithResult: (m: { id: string; summary: string }) => void;
 }
 
 const MOBILE_QUERY = "(max-width: 768px)";
@@ -108,7 +112,7 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
   const [answer, setAnswer] = useState("");
   // Action items extracted from dictated meeting notes — shown for review,
   // created only when the user confirms.
-  const [notes, setNotes] = useState<{ summary: string; tasks: ExtractedTask[] } | null>(null);
+  const [notes, setNotes] = useState<{ summary: string; tasks: ExtractedTask[]; meeting: MatchedMeeting | null } | null>(null);
 
   // Voice input (browser-native, free, no server round trip). Dictation is
   // the whole interaction here: when you stop talking, the phrase goes
@@ -239,12 +243,15 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
     }
     if (item.tool === "meeting_notes") {
       const tasks = item.input.tasks || [];
-      if (!tasks.length) {
+      const matched = item.input.meeting || null;
+      // Nothing left to confirm only when there are neither action items
+      // nor a meeting to close — otherwise the preview is still useful.
+      if (!tasks.length && !matched) {
         setStatus("answer");
         setAnswer([item.input.summary || "", "Поручений в этом рассказе не нашёл."].filter(Boolean).join("\n\n"));
         return;
       }
-      setNotes({ summary: item.input.summary || "", tasks });
+      setNotes({ summary: item.input.summary || "", tasks, meeting: matched });
       setStatus("notes-preview");
       return;
     }
@@ -309,6 +316,9 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
     if (!notes) return;
     for (const t of notes.tasks) {
       api?.createTask({ title: t.title, description: "", assignee: t.assignee, priority: t.priority, term: "short", deadline: t.deadline });
+    }
+    if (notes.meeting && notes.summary) {
+      api?.closeMeetingWithResult({ id: notes.meeting.id, summary: notes.summary });
     }
     reset();
   }
@@ -419,6 +429,11 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
             <div className="qap-row" style={{ display: "block" }}>
               Поручений: {notes.tasks.length}
             </div>
+            {notes.meeting && (
+              <div className="qap-row" style={{ display: "block", color: "var(--ink-soft)" }}>
+                🗓 Встреча «{notes.meeting.title}» будет закрыта, итог запишу в её карточку
+              </div>
+            )}
             {notes.tasks.map((t, i) => (
               <div className="qap-row" key={i}>
                 <span style={{ color: "var(--ink)" }}>{t.title}</span>
@@ -429,7 +444,7 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
             ))}
             <div className="qap-actions">
               <button className="btn btn-primary btn-small" onClick={confirmNotes}>
-                Создать все
+                {notes.tasks.length ? "Создать все" : "Закрыть встречу"}
               </button>
               <button className="btn btn-small" onClick={reset}>
                 Отмена

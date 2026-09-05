@@ -9,6 +9,7 @@ import { logAiAction } from "@/lib/aiActionLog";
 import { buildTrackerContext } from "@/lib/trackerContext";
 import { answerTrackerQuestion } from "@/lib/telegramAssistant";
 import { extractMeetingNotes } from "@/lib/meetingNotes";
+import { findMeetingForNotes } from "@/lib/meetingLink";
 import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 
@@ -138,8 +139,26 @@ async function replyForResult(
     const { data: assigneeRows } = await admin.from("assignees").select("name").eq("user_id", userId);
     const known = (assigneeRows || []).map((r) => r.name as string);
     const { summary, tasks } = await extractMeetingNotes(notes, known);
+    // Which meeting this recap is about, if any still stands open — matched
+    // in code, see meetingLink. When it matches, the same confirmation also
+    // closes that meeting and writes the recap into its card, so a dictated
+    // outcome doesn't leave the meeting hanging as "запланирована".
+    const meeting = await findMeetingForNotes(admin, userId, notes);
+    const meetingLine = meeting ? `🗓 Встречу «${meeting.title}» от ${fmtDate(meeting.date)} закрою и запишу в неё этот итог.` : "";
+    const pendingMeeting = meeting && summary ? { id: meeting.id, title: meeting.title, result: meeting.result, summary } : undefined;
 
     if (!tasks.length) {
+      if (pendingMeeting) {
+        await admin
+          .from("telegram_accounts")
+          .update({ pending_action: { kind: "create_tasks", userId, tasks: [], meeting: pendingMeeting } })
+          .eq("telegram_chat_id", chatId);
+        await sendTelegramMessage(
+          chatId,
+          "📝 " + summary + "\n\nПоручений в рассказе не нашёл.\n" + meetingLine + "\n\nЗакрываю? Ответьте «да» — любой другой ответ отменит.",
+        );
+        return;
+      }
       await sendTelegramMessage(
         chatId,
         (summary ? "📝 " + summary + "\n\n" : "") + "Поручений в этом рассказе не нашёл. Если что-то нужно завести — скажите отдельной фразой.",
@@ -158,13 +177,14 @@ async function replyForResult(
     });
     await admin
       .from("telegram_accounts")
-      .update({ pending_action: { kind: "create_tasks", userId, tasks } })
+      .update({ pending_action: { kind: "create_tasks", userId, tasks, meeting: pendingMeeting } })
       .eq("telegram_chat_id", chatId);
     await sendTelegramMessage(
       chatId,
       (summary ? "📝 " + summary + "\n\n" : "") +
-        `Нашёл поручений: ${tasks.length}\n${lines.join("\n")}\n\n` +
-        "Создать их? Ответьте «да» — любой другой ответ отменит.\n" +
+        `Нашёл поручений: ${tasks.length}\n${lines.join("\n")}\n` +
+        (pendingMeeting ? meetingLine + "\n" : "") +
+        "\nСоздать их? Ответьте «да» — любой другой ответ отменит.\n" +
         "Проверьте список: если что-то пропущено, допишите отдельным сообщением.",
     );
     return;

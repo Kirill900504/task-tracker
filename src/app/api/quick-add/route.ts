@@ -6,6 +6,7 @@ import { logAiAction } from "@/lib/aiActionLog";
 import { buildTrackerContext } from "@/lib/trackerContext";
 import { answerTrackerQuestion } from "@/lib/telegramAssistant";
 import { extractMeetingNotes } from "@/lib/meetingNotes";
+import { findMeetingForNotes } from "@/lib/meetingLink";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -43,8 +44,12 @@ export async function POST(req: Request) {
     if (notesItem) {
       const notes = String(notesItem.input.text || text);
       const extracted = await extractMeetingNotes(notes, assignees);
+      // Same as the bot: if the recap belongs to a meeting still standing
+      // open, offer to close it with this outcome in the same confirmation.
+      const matched = extracted.summary ? await findMeetingForNotes(supabase, user.id, notes) : null;
+      const meeting = matched ? { id: matched.id, title: matched.title, date: matched.date, result: matched.result } : null;
       await logAiAction(supabase, { userId: user.id, source: "web", inputText: text, success: true, resultSummary: "meeting_notes" });
-      return NextResponse.json({ items: [{ tool: "meeting_notes", input: extracted, droppedNames: [] }] });
+      return NextResponse.json({ items: [{ tool: "meeting_notes", input: { ...extracted, meeting }, droppedNames: [] }] });
     }
 
     const questionItem = result.items.find((it) => it.tool === "answer_question");

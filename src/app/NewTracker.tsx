@@ -25,6 +25,7 @@ import { uid } from "@/lib/uid";
 import { DEFAULT_PANEL_LAYOUT, formatIdeaCreatedAt, sameLayout } from "@/lib/trackerRows";
 import type { Meeting, MeetingPrefill, Task, TaskPrefill } from "@/types/tracker";
 import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
+import { mergeResult } from "@/lib/meetingLink";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 function formatClock(d: Date): string {
@@ -218,6 +219,19 @@ export default function NewTracker() {
         result: "",
         movedToDate: "",
         resolvedAt: "",
+      });
+    },
+    // Dictated meeting notes matched an open meeting: write the recap into
+    // its card and mark it held, the same state the panel's own «Успешно»
+    // button produces, so the meeting stops sitting there as planned.
+    closeMeetingWithResult: ({ id, summary }) => {
+      const meeting = meetings.find((m) => m.id === id);
+      if (!meeting) return;
+      actions.saveMeeting({
+        ...meeting,
+        status: "success",
+        result: mergeResult(meeting.result, summary),
+        resolvedAt: new Date().toISOString(),
       });
     },
     createIdea: (f) => {

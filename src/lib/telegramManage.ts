@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { applyBulkMove, type BulkMovePlan } from "@/lib/bulkActions";
+import { closeMeetingWithResult } from "@/lib/meetingLink";
 
 // Editing/completing/deleting existing tasks and meetings from Telegram.
 // The model only ever supplies an action + a title fragment ("query") — it
@@ -20,6 +21,11 @@ export type PendingCreateTasks = {
   kind: "create_tasks";
   userId: string;
   tasks: { title: string; assignee: string; deadline: string; priority: "high" | "med" }[];
+  // Set when the dictated recap was matched to a meeting still marked
+  // "planned": the same "да" that creates the tasks also closes that meeting
+  // and writes the recap into its card. Optional, so pending rows written
+  // before this existed still resolve.
+  meeting?: { id: string; title: string; result: string; summary: string };
 };
 export type PendingBulkMove = { kind: "bulk_move"; plan: BulkMovePlan };
 export type PendingAction = PendingDelete | PendingCreateTasks | PendingBulkMove;
@@ -163,7 +169,19 @@ export async function resolvePendingAction(
   }
 
   if (isCreateTasks(pending)) {
-    if (!confirmed) return "Отменено — ни одной задачи не создал.";
+    if (!confirmed) return "Отменено — ничего не записал.";
+
+    // The recap closes its meeting first: if the task insert then fails, the
+    // outcome is still saved where it belongs and the failure is reported.
+    const lines: string[] = [];
+    if (pending.meeting) {
+      const failed = await closeMeetingWithResult(admin, pending.meeting.id, pending.meeting.result, pending.meeting.summary);
+      lines.push(failed ? "Встречу закрыть не получилось: " + failed : "✓ Встреча «" + pending.meeting.title + "» закрыта, итог записан в карточку.");
+    }
+    if (!pending.tasks.length) {
+      return lines.length ? lines.join("\n") : "Нечего записывать.";
+    }
+
     const rows = pending.tasks.map((t) => ({
       id: "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
       user_id: pending.userId,
@@ -177,8 +195,9 @@ export async function resolvePendingAction(
       recur: "none",
     }));
     const { error } = await admin.from("tasks").insert(rows);
-    if (error) return "Не получилось создать задачи: " + error.message;
-    return `✓ Создано задач: ${rows.length}\n` + rows.map((r) => `• ${r.title}${r.assignee ? " — " + r.assignee : ""}`).join("\n");
+    if (error) return [...lines, "Не получилось создать задачи: " + error.message].join("\n");
+    lines.push(`✓ Создано задач: ${rows.length}`);
+    return [...lines, ...rows.map((r) => `• ${r.title}${r.assignee ? " — " + r.assignee : ""}`)].join("\n");
   }
 
   if (!confirmed) {
