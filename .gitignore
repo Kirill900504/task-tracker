@@ -52,3 +52,7 @@ next-env.d.ts
 /test-results
 /playwright-report
 /e2e/.e2e-user.json
+
+# Throwaway helper scripts used while testing (disposable Supabase accounts,
+# fixtures) — never part of the app.
+scripts/_*
