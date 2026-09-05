@@ -10,6 +10,8 @@ import { addDaysIso } from "@/lib/calendarLogic";
 import { fmtDate } from "@/lib/taskDisplay";
 import { sanitizeAssigneeList } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
+import { openPickerOnClick } from "@/lib/pickerInput";
+import MicButton from "./MicButton";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS: string[] = (() => {
@@ -133,20 +135,16 @@ export default function MeetingModal({
             className="date-input"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            onClick={(e) => {
-              const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
-              try {
-                el.showPicker?.();
-              } catch {
-                /* not allowed in this context — the native glyph still works */
-              }
-            }}
+            onClick={openPickerOnClick}
           />
         </div>
 
         <div className="field">
           <label>Название встречи</label>
-          <input type="text" id="mTitle" placeholder="Например: Совещание по опту" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <div className="input-with-mic">
+            <input type="text" id="mTitle" placeholder="Например: Совещание по опту" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <MicButton value={title} onChange={setTitle} title="Надиктовать название" />
+          </div>
         </div>
 
         <div className="field">
@@ -174,7 +172,7 @@ export default function MeetingModal({
           </div>
           <div className="time-other">
             <span>другое время</span>
-            <input type="time" id="mTime" className="time-input" value={time} onChange={(e) => setTime(e.target.value)} />
+            <input type="time" id="mTime" className="time-input" value={time} onChange={(e) => setTime(e.target.value)} onClick={openPickerOnClick} />
           </div>
         </div>
 
@@ -205,7 +203,10 @@ export default function MeetingModal({
             <div className={"outcome-badge" + (resolved ? ` show ${meeting.status}` : "")} id="outcomeBadge">
               {resolved ? outcomeLabel(meeting.status) + (meeting.movedToDate ? " · перенесено на " + fmtDate(meeting.movedToDate) : "") : ""}
             </div>
-            <textarea id="mResult" rows={2} placeholder="Кратко: что решили, что дальше…" value={result} onChange={(e) => setResult(e.target.value)} />
+            <div className="input-with-mic">
+              <textarea id="mResult" rows={2} placeholder="Кратко: что решили, что дальше…" value={result} onChange={(e) => setResult(e.target.value)} />
+              <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
+            </div>
             <div className="outcome-actions">
               <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" onClick={() => setStatus("success")}>
                 ✅ Успешно
@@ -220,8 +221,8 @@ export default function MeetingModal({
               )}
             </div>
             <div className="reschedule-row">
-              <input type="date" id="mRescheduleDate" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} />
-              <input type="time" id="mRescheduleTime" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} />
+              <input type="date" id="mRescheduleDate" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} onClick={openPickerOnClick} />
+              <input type="time" id="mRescheduleTime" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} onClick={openPickerOnClick} />
               <button type="button" className="btn btn-small" id="rescheduleBtn" onClick={reschedule}>
                 📅 Перенести следующий этап
               </button>

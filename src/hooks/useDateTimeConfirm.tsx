@@ -5,6 +5,7 @@
 // meeting reschedule flows. Same Promise-based call shape: ask() resolves
 // to {date, time} on OK, or null on cancel/closing without a date.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { openPickerOnClick } from "@/lib/pickerInput";
 
 interface PendingAsk {
   question: string;
@@ -65,6 +66,7 @@ export function useDateTimeConfirm() {
               id="confirmDateTimeDate"
               value={pending.date}
               onChange={(e) => setPending((p) => (p ? { ...p, date: e.target.value } : p))}
+              onClick={openPickerOnClick}
             />
           </div>
           <div className="field">
@@ -74,6 +76,7 @@ export function useDateTimeConfirm() {
               id="confirmDateTimeTime"
               value={pending.time}
               onChange={(e) => setPending((p) => (p ? { ...p, time: e.target.value } : p))}
+              onClick={openPickerOnClick}
             />
           </div>
         </div>

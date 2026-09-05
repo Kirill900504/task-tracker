@@ -362,6 +362,17 @@
     background:var(--paper-soft); color:var(--ink);
   }
   .field textarea{min-height:56px; resize:vertical;}
+  /* A field you can dictate into: the mic sits beside the input, aligned to
+     its top so it stays put next to a textarea that has been dragged taller. */
+  .input-with-mic{display:flex; gap:6px; align-items:flex-start;}
+  .input-with-mic > input, .input-with-mic > textarea{flex:1; min-width:0;}
+  .field-mic-btn{
+    flex:none; border:1px solid var(--line); background:var(--paper-soft); color:var(--ink);
+    border-radius:6px; width:36px; height:34px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:15px; padding:0;
+  }
+  .field-mic-btn:hover{border-color:var(--accent);}
+  .field-mic-btn.listening{background:var(--high); border-color:var(--high); animation:quick-add-mic-pulse 1s ease-in-out infinite;}
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
   .select-with-add{display:flex; gap:6px;}
   .select-with-add select{flex:1;}

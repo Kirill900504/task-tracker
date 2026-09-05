@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, type FormEvent, type ReactNode } from "react";
+import { useState, useEffect, type FormEvent, type ReactNode } from "react";
+import { useSpeechInput } from "@/hooks/useSpeechInput";
 import { createPortal } from "react-dom";
 
 export type TaskFields = {
@@ -36,21 +37,6 @@ declare global {
     trackerAPI?: QuickAddProvider;
   }
 }
-
-// Web Speech API has no standard ambient type in TS's DOM lib yet, and is
-// only exposed under a vendor prefix in the browsers that support it at
-// all — typed loosely on purpose, this is a real browser-compat boundary,
-// not laziness.
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  start: () => void;
-  stop: () => void;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-};
 
 const MOBILE_QUERY = "(max-width: 768px)";
 const INPUT_STYLE = {
@@ -123,42 +109,14 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
   const [meetingPreview, setMeetingPreview] = useState<MeetingFields | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Voice input (browser-native, free, no server round trip) — a mobile-
-  // first convenience: dictate instead of typing, review the transcript in
-  // the same text field, then submit through the exact same path as typed
-  // text. Feature-detected: Firefox and older browsers just don't get the
-  // mic button, no error shown.
-  const [voiceSupported] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const w = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
-    return !!(w.SpeechRecognition || w.webkitSpeechRecognition);
+  // Voice input (browser-native, free, no server round trip). Dictation is
+  // the whole interaction here: when you stop talking, the phrase goes
+  // straight off to be parsed — no "Добавить" button to reach for
+  // afterwards. Typed text still submits with Enter.
+  const speech = useSpeechInput({
+    onTranscript: setText,
+    onDone: (finalText) => send(finalText, false),
   });
-  const [listening, setListening] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-
-  function toggleVoice() {
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-    const w = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
-    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!Ctor) return;
-    const recognition = new Ctor();
-    recognition.lang = "ru-RU";
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.onresult = (e) => {
-      let transcript = "";
-      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
-      setText(transcript);
-    };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-    setListening(true);
-  }
 
   function noteDropped(droppedNames: string[]) {
     if (droppedNames.length) {
@@ -343,24 +301,24 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
               type="text"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Что добавить? Например: завтра позвонить Сергею"
+              placeholder={
+                status === "loading" ? "Думаю…" : speech.listening ? "Говорите…" : "Что добавить? Enter — добавить, 🎤 — надиктовать"
+              }
               disabled={status === "loading"}
               style={INPUT_STYLE}
             />
-            {voiceSupported && (
+            {speech.supported && (
               <button
                 type="button"
-                className={"quick-add-mic-btn" + (listening ? " listening" : "")}
-                onClick={toggleVoice}
-                title={listening ? "Остановить запись" : "Надиктовать"}
-                aria-label={listening ? "Остановить запись" : "Надиктовать"}
+                className={"quick-add-mic-btn" + (speech.listening ? " listening" : "")}
+                onClick={speech.toggle}
+                disabled={status === "loading"}
+                title={speech.listening ? "Остановить запись" : "Надиктовать"}
+                aria-label={speech.listening ? "Остановить запись" : "Надиктовать"}
               >
-                {listening ? "⏺" : "🎤"}
+                {speech.listening ? "⏺" : "🎤"}
               </button>
             )}
-            <button className="btn btn-primary" type="submit" disabled={status === "loading" || !text.trim()}>
-              {status === "loading" ? "Думаю…" : "Добавить"}
-            </button>
           </form>
         )}
 
