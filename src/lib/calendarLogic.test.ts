@@ -37,6 +37,7 @@ function baseMeeting(overrides: Partial<Meeting>): Meeting {
     status: "planned",
     result: "",
     movedToDate: "",
+    resolvedAt: "",
     ...overrides,
   };
 }
@@ -54,6 +55,21 @@ describe("sortMeetingsForList", () => {
     const b = baseMeeting({ id: "b", date: "2026-09-01", time: "09:00" });
     const c = baseMeeting({ id: "c", date: "2026-09-02", time: "09:00" });
     expect(sortMeetingsForList([a, b, c], false).map((m) => m.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("keeps every still-planned meeting above the resolved ones", () => {
+    // The planned one is dated later than both resolved ones — it still has
+    // to happen, so it belongs at the top regardless of date order.
+    const planned = baseMeeting({ id: "planned", date: "2026-12-01", status: "planned" });
+    const resolvedEarly = baseMeeting({ id: "early", date: "2026-09-01", status: "success", resolvedAt: "2026-09-01T12:00:00.000Z" });
+    const resolvedLate = baseMeeting({ id: "late", date: "2026-09-02", status: "no_result", resolvedAt: "2026-09-05T12:00:00.000Z" });
+    expect(sortMeetingsForList([resolvedEarly, planned, resolvedLate], true).map((m) => m.id)).toEqual(["planned", "late", "early"]);
+  });
+
+  it("sorts resolved meetings with no resolvedAt after those that have one", () => {
+    const legacy = baseMeeting({ id: "legacy", status: "success", resolvedAt: "" });
+    const stamped = baseMeeting({ id: "stamped", status: "success", resolvedAt: "2026-09-01T12:00:00.000Z" });
+    expect(sortMeetingsForList([legacy, stamped], true).map((m) => m.id)).toEqual(["stamped", "legacy"]);
   });
 
   it("does not mutate the input array", () => {

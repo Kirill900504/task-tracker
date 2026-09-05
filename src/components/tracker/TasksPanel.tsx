@@ -124,9 +124,16 @@ export default function TasksPanel({
   });
   const shortOpen = filtered.filter((t) => t.term === "short" && t.status !== "done").sort(taskSortFn);
   const longOpen = filtered.filter((t) => t.term === "long" && t.status !== "done").sort(taskSortFn);
+  // Most recently completed first — this list exists to reopen what was just
+  // closed, so closing order beats deadline order. Tasks closed before
+  // completedAt existed have no timestamp; they fall back to deadline and
+  // sort below everything that does have one.
   const doneList = filtered
     .filter((t) => t.status === "done")
     .sort((a, b) => {
+      const ac = a.completedAt || "";
+      const bc = b.completedAt || "";
+      if (ac !== bc) return ac > bc ? -1 : 1;
       const ad = a.deadline || "";
       const bd = b.deadline || "";
       return ad < bd ? 1 : ad > bd ? -1 : 0;
@@ -134,9 +141,11 @@ export default function TasksPanel({
 
   function toggleDone(t: Task) {
     if (t.status === "done") {
-      actions.saveTask({ ...t, status: "in_progress", lastCompletedOn: "" });
+      actions.saveTask({ ...t, status: "in_progress", lastCompletedOn: "", completedAt: "" });
     } else {
-      actions.saveTask({ ...t, status: "done", lastCompletedOn: new Date().toISOString().slice(0, 10) });
+      // completedAt is what orders the "завершённые" list newest-first, so
+      // the task just closed is the one at the top, ready to be reopened.
+      actions.saveTask({ ...t, status: "done", lastCompletedOn: new Date().toISOString().slice(0, 10), completedAt: new Date().toISOString() });
     }
   }
 

@@ -103,6 +103,11 @@ async function login(page: import("@playwright/test").Page) {
 // edit-then-sign-out step is immediate, since that immediacy is the point.
 async function waitForSaved(page: import("@playwright/test").Page) {
   await expect(page.locator("#syncStatus")).toHaveText("✓ Сохранено", { timeout: 10_000 });
+  // The text alone can still be left over from an earlier save while the one
+  // just triggered is only about to start. The `show` class is dropped 2s
+  // after a save actually finishes (SyncStatusPill), so waiting for it to go
+  // away means nothing is in flight any more.
+  await expect(page.locator("#syncStatus")).not.toHaveClass(/show/, { timeout: 15_000 });
 }
 
 test("completing a task survives an immediate sign-out", async ({ page }) => {

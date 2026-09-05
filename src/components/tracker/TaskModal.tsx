@@ -103,6 +103,7 @@ export default function TaskModal({
       recurYearMonth: form.recurYearMonth,
       lastCompletedOn: task?.lastCompletedOn ?? "",
       manualOrder: task?.manualOrder ?? null,
+      completedAt: task?.completedAt ?? "",
     };
     onSave(next);
     onClose();

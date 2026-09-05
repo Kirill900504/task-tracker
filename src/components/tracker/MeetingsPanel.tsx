@@ -78,15 +78,23 @@ export default function MeetingsPanel({
   }
 
   function setStatus(m: Meeting, status: MeetingStatus, resultText: string) {
-    const prev = { status: m.status, result: m.result, movedToDate: m.movedToDate };
-    actions.saveMeeting({ ...m, status, result: resultText.trim(), movedToDate: status === "planned" ? "" : m.movedToDate });
+    const prev = { status: m.status, result: m.result, movedToDate: m.movedToDate, resolvedAt: m.resolvedAt };
+    actions.saveMeeting({
+      ...m,
+      status,
+      result: resultText.trim(),
+      movedToDate: status === "planned" ? "" : m.movedToDate,
+      // Orders the resolved half of the list newest-first; cleared when the
+      // meeting goes back into the plan.
+      resolvedAt: status === "planned" ? "" : new Date().toISOString(),
+    });
     toasts.showToast(status === "planned" ? "Встреча возвращена в план" : "Итог встречи сохранён", m.title, () =>
       actions.saveMeeting({ ...m, ...prev }),
     );
   }
 
   function reschedule(m: Meeting, newDate: string, newTime: string, resultNote: string) {
-    const prev = { status: m.status, result: m.result, movedToDate: m.movedToDate };
+    const prev = { status: m.status, result: m.result, movedToDate: m.movedToDate, resolvedAt: m.resolvedAt };
     const followUp: Meeting = {
       id: uid(),
       date: newDate,
@@ -96,9 +104,16 @@ export default function MeetingsPanel({
       status: "planned",
       result: "",
       movedToDate: "",
+      resolvedAt: "",
     };
     actions.saveMeeting(followUp);
-    actions.saveMeeting({ ...m, status: "no_result", result: (resultNote || "").trim() || "Перенесено на следующий этап", movedToDate: newDate });
+    actions.saveMeeting({
+      ...m,
+      status: "no_result",
+      result: (resultNote || "").trim() || "Перенесено на следующий этап",
+      movedToDate: newDate,
+      resolvedAt: new Date().toISOString(),
+    });
     toasts.showToast("Встреча перенесена", m.title, () => {
       actions.deleteMeeting(followUp.id);
       actions.saveMeeting({ ...m, ...prev });

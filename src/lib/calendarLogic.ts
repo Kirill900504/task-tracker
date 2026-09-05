@@ -26,13 +26,31 @@ export function getMonthGridDates(viewDate: Date): Date[] {
 
 // Only meetings still "planned" show by default; showResolved reveals
 // success/no_result ones too. Sorted by date then time, both ascending.
+// Still-planned meetings come first, in chronological order — those are the
+// ones that still have to happen, so they stay at the top of the panel. The
+// resolved ones follow, most recently closed first (resolvedAt), so the
+// meeting just marked ✅/🚫 sits right under the live list and can be put
+// back into the plan without hunting for it.
 export function sortMeetingsForList(meetings: Meeting[], showResolved: boolean): Meeting[] {
+  const isPlanned = (m: Meeting) => !m.status || m.status === "planned";
   return meetings
-    .filter((m) => showResolved || !m.status || m.status === "planned")
+    .filter((m) => showResolved || isPlanned(m))
     .slice()
     .sort((a, b) => {
+      if (isPlanned(a) !== isPlanned(b)) return isPlanned(a) ? -1 : 1;
+      if (isPlanned(a)) {
+        const ak = `${a.date || ""} ${a.time || ""}`;
+        const bk = `${b.date || ""} ${b.time || ""}`;
+        return ak < bk ? -1 : ak > bk ? 1 : 0;
+      }
+      // Resolved: newest first. Anything without a resolvedAt (closed before
+      // that column existed, or by an older client) sorts last rather than
+      // jumping to the top.
+      const ar = a.resolvedAt || "";
+      const br = b.resolvedAt || "";
+      if (ar !== br) return ar > br ? -1 : 1;
       const ak = `${a.date || ""} ${a.time || ""}`;
       const bk = `${b.date || ""} ${b.time || ""}`;
-      return ak < bk ? -1 : ak > bk ? 1 : 0;
+      return ak > bk ? -1 : ak < bk ? 1 : 0;
     });
 }

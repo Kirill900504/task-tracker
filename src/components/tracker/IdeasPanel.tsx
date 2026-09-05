@@ -33,7 +33,7 @@ export default function IdeasPanel({
   function add() {
     const v = text.trim();
     if (!v) return;
-    actions.saveIdea({ id: uid(), text: v, important: false, done: false, createdAt: formatIdeaCreatedAt(new Date()) });
+    actions.saveIdea({ id: uid(), text: v, important: false, done: false, createdAt: formatIdeaCreatedAt(new Date()), doneAt: "" });
     setText("");
   }
 
@@ -76,7 +76,7 @@ export default function IdeasPanel({
             <IdeaItem
               key={idea.id}
               idea={idea}
-              onToggleDone={() => actions.saveIdea({ ...idea, done: !idea.done })}
+              onToggleDone={() => actions.saveIdea({ ...idea, done: !idea.done, doneAt: idea.done ? "" : new Date().toISOString() })}
               onToggleImportant={() => actions.saveIdea({ ...idea, important: !idea.important })}
               onEditText={(newText) => actions.saveIdea({ ...idea, text: newText })}
               onDelete={() => deleteIdea(idea)}

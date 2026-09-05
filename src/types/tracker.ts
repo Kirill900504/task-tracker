@@ -28,6 +28,9 @@ export interface Task {
   recurYearMonth: string; // "1"-"12"
   lastCompletedOn: string; // YYYY-MM-DD or ""
   manualOrder: number | null;
+  // ISO timestamp of when the task was last marked done ("" while open).
+  // Drives the "most recently closed first" order of the завершённые list.
+  completedAt: string;
 }
 
 export interface Meeting {
@@ -39,6 +42,9 @@ export interface Meeting {
   status: MeetingStatus;
   result: string;
   movedToDate: string;
+  // ISO timestamp of when the meeting was closed (success/no_result), ""
+  // while it is still planned.
+  resolvedAt: string;
 }
 
 export interface Idea {
@@ -47,6 +53,8 @@ export interface Idea {
   important: boolean;
   done: boolean;
   createdAt: string; // formatted "dd.mm.yyyy hh:mm", display-only
+  // ISO timestamp of when the idea was ticked off ("" while active).
+  doneAt: string;
 }
 
 export interface Section {

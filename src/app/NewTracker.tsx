@@ -112,6 +112,7 @@ export default function NewTracker() {
       recurYearMonth: "1",
       lastCompletedOn: "",
       manualOrder: null,
+      completedAt: "",
     };
     actions.saveTask(task);
     flashTask(task.id);
@@ -171,6 +172,7 @@ export default function NewTracker() {
       status: "planned",
       result: "",
       movedToDate: "",
+      resolvedAt: "",
     };
     actions.saveMeeting(meeting);
     flashMeeting(meeting.id);
@@ -202,6 +204,7 @@ export default function NewTracker() {
         recurYearMonth: "1",
         lastCompletedOn: "",
         manualOrder: null,
+        completedAt: "",
       });
     },
     createMeeting: (f) => {
@@ -214,6 +217,7 @@ export default function NewTracker() {
         status: "planned",
         result: "",
         movedToDate: "",
+        resolvedAt: "",
       });
     },
     createIdea: (f) => {
@@ -223,6 +227,7 @@ export default function NewTracker() {
         important: f.important,
         done: false,
         createdAt: formatIdeaCreatedAt(new Date()),
+        doneAt: "",
       });
     },
   };

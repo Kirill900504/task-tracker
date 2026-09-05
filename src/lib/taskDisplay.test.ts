@@ -28,6 +28,7 @@ function baseTask(overrides: Partial<Task>): Task {
     recurYearMonth: "1",
     lastCompletedOn: "",
     manualOrder: null,
+    completedAt: "",
     ...overrides,
   };
 }

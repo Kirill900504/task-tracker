@@ -23,6 +23,7 @@ export type TaskRow = {
   last_completed_on: string | null;
   section_id: string | null;
   manual_order: number | null;
+  completed_at: string | null;
 };
 
 export type MeetingRow = {
@@ -34,6 +35,7 @@ export type MeetingRow = {
   status: string;
   result: string;
   moved_to_date: string | null;
+  resolved_at: string | null;
 };
 
 export type IdeaRow = {
@@ -42,6 +44,7 @@ export type IdeaRow = {
   important: boolean;
   done: boolean;
   created_at?: string;
+  done_at: string | null;
 };
 
 export type SectionRow = {
@@ -89,6 +92,7 @@ export function taskToRow(t: Task): TaskRow {
     last_completed_on: t.lastCompletedOn || null,
     section_id: t.sectionId || null,
     manual_order: t.manualOrder != null && (t.manualOrder as unknown as string) !== "" ? Number(t.manualOrder) : null,
+    completed_at: t.completedAt || null,
     // deleted_at is deliberately NOT part of this row — see softDeleteRow()/
     // restoreRow() in useTrackerData.ts for why an ordinary upsert must
     // never touch it.
@@ -113,6 +117,7 @@ export function taskFromRow(r: TaskRow): Task {
     lastCompletedOn: r.last_completed_on || "",
     sectionId: r.section_id || "",
     manualOrder: r.manual_order != null ? r.manual_order : null,
+    completedAt: r.completed_at || "",
   };
 }
 
@@ -126,6 +131,7 @@ export function meetingToRow(m: Meeting): MeetingRow {
     status: m.status || "planned",
     result: m.result || "",
     moved_to_date: m.movedToDate || null,
+    resolved_at: m.resolvedAt || null,
   };
 }
 
@@ -139,11 +145,12 @@ export function meetingFromRow(r: MeetingRow): Meeting {
     status: (r.status as Meeting["status"]) || "planned",
     result: r.result || "",
     movedToDate: r.moved_to_date || "",
+    resolvedAt: r.resolved_at || "",
   };
 }
 
 export function ideaToRow(i: Idea): IdeaRow {
-  return { id: i.id, text: i.text, important: !!i.important, done: !!i.done };
+  return { id: i.id, text: i.text, important: !!i.important, done: !!i.done, done_at: i.doneAt || null };
 }
 
 function pad(n: number): string {
@@ -161,7 +168,7 @@ export function formatIdeaCreatedAt(iso: string | Date | undefined): string {
 }
 
 export function ideaFromRow(r: IdeaRow): Idea {
-  return { id: r.id, text: r.text, important: !!r.important, done: !!r.done, createdAt: formatIdeaCreatedAt(r.created_at) };
+  return { id: r.id, text: r.text, important: !!r.important, done: !!r.done, createdAt: formatIdeaCreatedAt(r.created_at), doneAt: r.done_at || "" };
 }
 
 export function sectionToRow(s: Section): SectionRow {

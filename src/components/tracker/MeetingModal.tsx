@@ -11,6 +11,19 @@ import { fmtDate } from "@/lib/taskDisplay";
 import { sanitizeAssigneeList } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
 
+// 09:00–18:00 in half-hour steps: the working day, one tap per slot.
+const TIME_SLOTS: string[] = (() => {
+  const out: string[] = [];
+  for (let m = 9 * 60; m <= 18 * 60; m += 30) {
+    out.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+  }
+  return out;
+})();
+
+// The account owner is the one scheduling, so he is not offered as someone
+// to add — see the participant grid.
+const SELF_ASSIGNEE = "Кирилл (я)";
+
 function outcomeLabel(status: MeetingStatus): string {
   if (status === "success") return "✅ Успешно завершена";
   if (status === "no_result") return "🚫 Без результата";
@@ -41,7 +54,6 @@ export default function MeetingModal({
   const [title, setTitle] = useState(meeting?.title ?? prefill?.title ?? "");
   const [time, setTime] = useState(meeting?.time || prefill?.time || "10:00");
   const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? prefill?.participants ?? []));
-  const [participantsOpen, setParticipantsOpen] = useState(false);
   const [result, setResult] = useState(meeting?.result ?? "");
   const [rescheduleDate, setRescheduleDate] = useState(meeting ? addDaysIso(meeting.date, 1) : "");
   const [rescheduleTime, setRescheduleTime] = useState(meeting?.time || "10:00");
@@ -55,14 +67,10 @@ export default function MeetingModal({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
+  const selectableAssignees = assignees.filter((a) => a !== SELF_ASSIGNEE);
+
   function toggleParticipant(name: string) {
     setParticipants((prev) => (prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name]));
-  }
-
-  function participantsLabel() {
-    if (participants.length === 0) return "Выберите участников";
-    if (participants.length <= 2) return participants.join(", ");
-    return `${participants.length} участников: ${participants.slice(0, 2).join(", ")}…`;
   }
 
   function save() {
@@ -84,6 +92,7 @@ export default function MeetingModal({
       status: meeting?.status ?? "planned",
       result: meeting ? result.trim() : "",
       movedToDate: meeting?.movedToDate ?? "",
+      resolvedAt: meeting?.resolvedAt ?? "",
     });
     onClose();
   }
@@ -114,7 +123,25 @@ export default function MeetingModal({
 
         <div className="field">
           <label>Дата</label>
-          <input type="date" id="mDate" value={date} onChange={(e) => setDate(e.target.value)} />
+          {/* Sized to the date itself rather than stretched across the modal,
+              and clicking anywhere in the field opens the picker — not just
+              the little calendar glyph. showPicker() is Chromium/Safari; on
+              browsers without it the field still works as a normal input. */}
+          <input
+            type="date"
+            id="mDate"
+            className="date-input"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            onClick={(e) => {
+              const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
+              try {
+                el.showPicker?.();
+              } catch {
+                /* not allowed in this context — the native glyph still works */
+              }
+            }}
+          />
         </div>
 
         <div className="field">
@@ -124,33 +151,51 @@ export default function MeetingModal({
 
         <div className="field">
           <label>Время</label>
-          <input type="time" id="mTime" value={time} onChange={(e) => setTime(e.target.value)} />
+          {/* One tap on the usual working-hours slots (09:00–18:00, every 30
+              minutes). Anything outside that range is still reachable through
+              the small input underneath, and shows up as its own selected
+              chip so an existing 20:15 meeting isn't silently rewritten. */}
+          <div className="time-grid" id="mTimeGrid">
+            {TIME_SLOTS.map((slot) => (
+              <button
+                key={slot}
+                type="button"
+                className={"time-slot" + (time === slot ? " selected" : "")}
+                onClick={() => setTime(slot)}
+              >
+                {slot}
+              </button>
+            ))}
+            {time && !TIME_SLOTS.includes(time) && (
+              <button type="button" className="time-slot selected" onClick={() => setTime(time)}>
+                {time}
+              </button>
+            )}
+          </div>
+          <div className="time-other">
+            <span>другое время</span>
+            <input type="time" id="mTime" className="time-input" value={time} onChange={(e) => setTime(e.target.value)} />
+          </div>
         </div>
 
         <div className="field participants-field" id="participantsField">
           <label>Состав участников</label>
-          <button
-            type="button"
-            className={"participants-trigger" + (participantsOpen ? " open" : "")}
-            id="participantsTrigger"
-            onClick={() => setParticipantsOpen((v) => !v)}
-          >
-            {participantsLabel()}
-          </button>
-          <div className={"participants-dropdown" + (participantsOpen ? " open" : "")} id="participantsDropdown">
-            <div className="participants-list" id="mParticipants">
-              {assignees.map((name) => (
-                <label className="participant-row" key={name}>
-                  <input type="checkbox" value={name} checked={participants.includes(name)} onChange={() => toggleParticipant(name)} />
-                  <span>{name}</span>
-                </label>
-              ))}
-            </div>
-            <div className="participants-dropdown-footer">
-              <button type="button" className="btn btn-small btn-primary" id="participantsDoneBtn" onClick={() => setParticipantsOpen(false)}>
-                Готово
+          {/* Тap-to-toggle chips instead of a dropdown of checkboxes — the
+              whole team fits in a few rows. Кирилл himself is left out on
+              purpose (he runs the meetings, so he is never the one being
+              picked); if he is already listed on an existing meeting that
+              stays untouched — see save(). */}
+          <div className="participant-grid" id="mParticipants">
+            {selectableAssignees.map((name) => (
+              <button
+                key={name}
+                type="button"
+                className={"participant-chip" + (participants.includes(name) ? " selected" : "")}
+                onClick={() => toggleParticipant(name)}
+              >
+                {name}
               </button>
-            </div>
+            ))}
           </div>
         </div>
 
