@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveWhen } from "./meetingNotes";
+import { resolveWhen, mergeMissedTasks, MAX_EXTRA_TASKS, type ExtractedTask } from "./meetingNotes";
 
 // The model returns a label ("friday"), never a date — turning that into a
 // real date is this function's job, precisely because the model got the
@@ -43,5 +43,42 @@ describe("resolveWhen", () => {
 
   it("is case-insensitive and tolerates padding", () => {
     expect(resolveWhen("  Friday ", SATURDAY)).toBe("2026-09-11");
+  });
+});
+
+describe("mergeMissedTasks", () => {
+  const t = (title: string): ExtractedTask => ({ title, assignee: "", deadline: "", priority: "med" });
+  const story =
+    "Игорь готовит смету по складу. Наталья свяжется с перевозчиком. " +
+    "Юра посмотрит договор аренды, сроки не горят.";
+
+  it("adds a task the first pass missed", () => {
+    const merged = mergeMissedTasks([t("Подготовить смету по складу")], [t("Посмотреть договор аренды")], story);
+    expect(merged.map((x) => x.title)).toEqual(["Подготовить смету по складу", "Посмотреть договор аренды"]);
+  });
+
+  it("does not add the same task worded differently", () => {
+    const merged = mergeMissedTasks([t("Подготовить смету по складу")], [t("Смета по складу подготовить")], story);
+    expect(merged).toHaveLength(1);
+  });
+
+  it("drops an invented task whose words are not in the story", () => {
+    const merged = mergeMissedTasks([t("Подготовить смету")], [t("Заказать новые визитки дизайнеру")], story);
+    expect(merged).toHaveLength(1);
+  });
+
+  it("keeps a reworded task that still comes from the story", () => {
+    const merged = mergeMissedTasks([t("Подготовить смету")], [t("Связаться с перевозчиком")], story);
+    expect(merged).toHaveLength(2);
+  });
+
+  it("never lets the second pass more than triple-add", () => {
+    const extra = [t("Связаться с перевозчиком"), t("Посмотреть договор аренды"), t("Смета по складу"), t("Аренда склада сроки")];
+    const merged = mergeMissedTasks([t("Первое поручение")], extra, story);
+    expect(merged.length).toBeLessThanOrEqual(1 + MAX_EXTRA_TASKS);
+  });
+
+  it("ignores an empty title", () => {
+    expect(mergeMissedTasks([t("Смета")], [t("   ")], story)).toHaveLength(1);
   });
 });

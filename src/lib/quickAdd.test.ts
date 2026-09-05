@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isoDate, addDays, nextWeekdayMap, sanitizeAgainstKnown } from "./quickAdd";
+import { isoDate, addDays, nextWeekdayMap, sanitizeAgainstKnown, resolveKnownName } from "./quickAdd";
 
 describe("isoDate / addDays", () => {
   it("formats using local calendar fields (not UTC)", () => {
@@ -70,5 +70,59 @@ describe("sanitizeAgainstKnown", () => {
     const dropped = sanitizeAgainstKnown(input, known);
     expect(input.participants).toEqual(["Кирилл (я)"]);
     expect(dropped).toEqual(["Придуманное Имя"]);
+  });
+});
+
+describe("resolveKnownName", () => {
+  const KNOWN = ["Кирилл (я)", "Игорь Витковский", "Наталья Мамакова", "Никита Козлов", "Юра Нодберг"];
+
+  it("keeps a name that is already exactly right", () => {
+    expect(resolveKnownName("Никита Козлов", KNOWN)).toBe("Никита Козлов");
+  });
+
+  it("resolves a first name on its own", () => {
+    expect(resolveKnownName("Игорь", KNOWN)).toBe("Игорь Витковский");
+  });
+
+  it("resolves a surname on its own", () => {
+    expect(resolveKnownName("Мамакова", KNOWN)).toBe("Наталья Мамакова");
+  });
+
+  it("resolves an inflected name", () => {
+    expect(resolveKnownName("Никите Козлову", KNOWN)).toBe("Никита Козлов");
+  });
+
+  it("resolves «Кирилл» to the entry with the parenthetical", () => {
+    expect(resolveKnownName("Кирилл", KNOWN)).toBe("Кирилл (я)");
+  });
+
+  it("refuses to guess when a fragment fits two people", () => {
+    expect(resolveKnownName("Игорь", [...KNOWN, "Игорь Петров"])).toBeNull();
+  });
+
+  it("returns null for someone not on the list at all", () => {
+    expect(resolveKnownName("Сергей Иванов", KNOWN)).toBeNull();
+  });
+});
+
+describe("sanitizeAgainstKnown with partial names", () => {
+  const KNOWN = ["Игорь Витковский", "Наталья Мамакова"];
+
+  it("fills in the full name of an assignee given by first name", () => {
+    const input: Record<string, unknown> = { assignee: "Игорь" };
+    expect(sanitizeAgainstKnown(input, KNOWN)).toEqual([]);
+    expect(input.assignee).toBe("Игорь Витковский");
+  });
+
+  it("expands participants and reports only the genuinely unknown ones", () => {
+    const input: Record<string, unknown> = { participants: ["Наталья", "Пётр Сидоров"] };
+    expect(sanitizeAgainstKnown(input, KNOWN)).toEqual(["Пётр Сидоров"]);
+    expect(input.participants).toEqual(["Наталья Мамакова"]);
+  });
+
+  it("does not list the same person twice", () => {
+    const input: Record<string, unknown> = { participants: ["Игорь", "Витковский"] };
+    sanitizeAgainstKnown(input, KNOWN);
+    expect(input.participants).toEqual(["Игорь Витковский"]);
   });
 });

@@ -1,4 +1,5 @@
 import { gigaChatComplete } from "@/lib/gigachat/client";
+import { sharesPrefix } from "@/lib/stem";
 
 // Shared natural-language parsing used by both the web quick-add bar
 // (/api/quick-add) and the Telegram bot (/api/telegram/webhook) — one
@@ -142,18 +143,49 @@ export const TOOL_BY_TYPE: Record<string, string> = {
 // Returns the names that got dropped, so the caller can tell the user why
 // (dropping silently is what caused real confusion in practice — the user
 // had no way to know "Козлов" just wasn't in the assignee list).
+// You say «Игорь готовит смету», the list says «Игорь Витковский» — and
+// the name used to be dropped for not matching letter for letter, leaving
+// the task with no executor. Nobody dictates full names, so a fragment is
+// resolved to the known assignee it can only mean: tokens are matched by
+// their opening letters (so «Никите Козлову» finds «Никита Козлов»), and
+// if a fragment fits two people it is still dropped rather than guessed.
+function nameTokens(name: string): string[] {
+  return name
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length >= 3);
+}
+
+export function resolveKnownName(candidate: string, known: string[]): string | null {
+  const raw = candidate.trim();
+  if (!raw) return null;
+  if (known.includes(raw)) return raw;
+
+  const wanted = nameTokens(raw);
+  if (!wanted.length) return null;
+
+  const matches = known.filter((k) => {
+    const tokens = nameTokens(k);
+    return wanted.some((w) => tokens.some((t) => sharesPrefix(w, t, 4)));
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
 export function sanitizeAgainstKnown(input: Record<string, unknown>, known: string[]): string[] {
   const dropped: string[] = [];
-  if (typeof input.assignee === "string" && input.assignee && !known.includes(input.assignee)) {
-    dropped.push(input.assignee);
-    input.assignee = "";
+  if (typeof input.assignee === "string" && input.assignee) {
+    const resolved = resolveKnownName(input.assignee, known);
+    if (!resolved) dropped.push(input.assignee);
+    input.assignee = resolved || "";
   }
   if (Array.isArray(input.participants)) {
     const kept: string[] = [];
     for (const n of input.participants) {
       if (typeof n !== "string") continue;
-      if (known.includes(n)) kept.push(n);
-      else dropped.push(n);
+      const resolved = resolveKnownName(n, known);
+      if (resolved && !kept.includes(resolved)) kept.push(resolved);
+      else if (!resolved) dropped.push(n);
     }
     input.participants = kept;
   }

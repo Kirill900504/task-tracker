@@ -1,5 +1,6 @@
 import { gigaChatComplete } from "@/lib/gigachat/client";
 import { isoDate, addDays, nextWeekdayMap, sanitizeAgainstKnown } from "@/lib/quickAdd";
+import { stem, sharesPrefix } from "@/lib/stem";
 
 // "Разбор итогов встречи": you come out of a meeting, dictate what was
 // agreed in one go, and the bot pulls the action items out of it — who has
@@ -100,6 +101,80 @@ function extractJsonObject(raw: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+// The one failure that survived every prompt fix: about one run in three
+// quietly drops a task — most often one said without a deadline. A missed
+// task is invisible (you cannot review a list for what is not on it),
+// while an extra one is right there to be spotted, so the trade is worth
+// making: a second pass is asked what the first one left out.
+//
+// Its output is not trusted on its own. Merging happens here: anything
+// already in the list is dropped, and a supposedly missed task whose own
+// words do not appear in what was actually said is dropped too — that is
+// the shape an invented task takes.
+function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length >= 4)
+    .map(stem)
+    // Sorted, so the same instruction phrased in another order — «смета
+    // по складу» vs «по складу смета» — collapses to the same key.
+    .sort()
+    .join(" ");
+}
+
+function words(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length >= 4);
+}
+
+
+function isGrounded(title: string, source: string): boolean {
+  const hay = words(source);
+  const titleWords = words(title);
+  if (!titleWords.length) return false;
+  // A shared five-letter opening counts as the same word: verb forms are
+  // what the stemmer cannot line up («посмотрит» vs «посмотреть»), and the
+  // point here is only to tell a rewording of what was said from a new
+  // subject nobody mentioned.
+  const hits = titleWords.filter((w) => hay.some((h) => sharesPrefix(w, h, 5))).length;
+  // Half the meaningful words of the task have to come from the story
+  // itself — a rewording of something said passes, a new subject does not.
+  return hits * 2 >= titleWords.length;
+}
+
+export const MAX_EXTRA_TASKS = 3;
+
+export function mergeMissedTasks(found: ExtractedTask[], extra: ExtractedTask[], source: string): ExtractedTask[] {
+  const seen = new Set(found.map((t) => normalizeTitle(t.title)));
+  const merged = [...found];
+  for (const t of extra) {
+    if (merged.length >= found.length + MAX_EXTRA_TASKS) break;
+    const key = normalizeTitle(t.title);
+    if (!key || seen.has(key)) continue;
+    if (!isGrounded(t.title, source)) continue;
+    seen.add(key);
+    merged.push(t);
+  }
+  return merged;
+}
+
+function secondPassPrompt(now: Date, assignees: string[], found: ExtractedTask[]): string {
+  return [
+    systemPrompt(now, assignees),
+    "",
+    "=== УЖЕ ВЫПИСАНО ===",
+    found.map((t, i) => `${i + 1}) ${t.title}`).join("\n") || "(пусто)",
+    "=== КОНЕЦ ===",
+    "",
+    "Сейчас твоя задача другая: найди поручения, которых в этом списке НЕТ.",
+    "Верни тем же форматом ТОЛЬКО пропущенные поручения. Если ничего не пропущено — верни пустой массив tasks.",
+    "Не повторяй уже выписанное другими словами. Не добавляй ничего, чего не было в рассказе.",
+  ].join("\n");
+}
+
 export async function extractMeetingNotes(text: string, assignees: string[]): Promise<MeetingNotesResult> {
   const now = new Date();
   const system = systemPrompt(now, assignees);
@@ -119,6 +194,21 @@ export async function extractMeetingNotes(text: string, assignees: string[]): Pr
   }
   if (!parsed) throw new Error("GigaChat: " + lastError);
 
+  const summary = String(parsed.summary || "").trim();
+  const tasks = parseTasks(parsed, assignees, now);
+
+  // Second pass: what did the first one miss? Best-effort — if it fails or
+  // returns nothing usable, the first pass's list stands unchanged.
+  try {
+    const raw = await gigaChatComplete({ system: secondPassPrompt(now, assignees, tasks), user: text });
+    const extra = parseTasks(extractJsonObject(raw), assignees, now);
+    return { summary, tasks: mergeMissedTasks(tasks, extra, text) };
+  } catch {
+    return { summary, tasks };
+  }
+}
+
+function parseTasks(parsed: Record<string, unknown>, assignees: string[], now: Date): ExtractedTask[] {
   const rawTasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
   const tasks: ExtractedTask[] = [];
   for (const rt of rawTasks) {
@@ -142,5 +232,5 @@ export async function extractMeetingNotes(text: string, assignees: string[]): Pr
     });
   }
 
-  return { summary: String(parsed.summary || "").trim(), tasks };
+  return tasks;
 }
