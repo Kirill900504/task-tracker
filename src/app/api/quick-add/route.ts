@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { logAiAction } from "@/lib/aiActionLog";
+import { buildTrackerContext } from "@/lib/trackerContext";
+import { answerTrackerQuestion } from "@/lib/telegramAssistant";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -27,6 +29,20 @@ export async function POST(req: Request) {
 
   try {
     const result = await parseQuickAdd(text, assignees);
+
+    // A question ("что горит?") needs a second step the parse can't do on
+    // its own: it only classified the message. Answer it here, against a
+    // read-only snapshot of this user's data, and hand the finished text
+    // back so the bar can just show it. Same behaviour as the Telegram bot.
+    const questionItem = result.items.find((it) => it.tool === "answer_question");
+    if (questionItem) {
+      const question = String(questionItem.input.query || text);
+      const context = await buildTrackerContext(supabase, user.id);
+      const answer = await answerTrackerQuestion(question, context);
+      await logAiAction(supabase, { userId: user.id, source: "web", inputText: text, success: true, resultSummary: "answer_question" });
+      return NextResponse.json({ items: [{ tool: "answer_question", input: { answer }, droppedNames: [] }] });
+    }
+
     await logAiAction(supabase, {
       userId: user.id,
       source: "web",

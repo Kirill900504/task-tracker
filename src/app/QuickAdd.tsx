@@ -21,6 +21,7 @@ type QuickAddItem =
   | { tool: "create_idea"; input: IdeaFields; droppedNames: string[] }
   | { tool: "ask_clarifying_question"; input: { question: string }; droppedNames: string[] }
   | { tool: "manage_item"; input: { action: string; itemType: string; query: string }; droppedNames: string[] }
+  | { tool: "answer_question"; input: { answer?: string; query?: string }; droppedNames: string[] }
   | { tool: "cant_help"; input: Record<string, never>; droppedNames: string[] };
 
 export interface QuickAddProvider {
@@ -50,7 +51,7 @@ const INPUT_STYLE = {
   color: "var(--ink)",
 } as const;
 
-type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "error";
+type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "answer" | "error";
 
 export default function QuickAdd({ provider }: { provider?: QuickAddProvider } = {}) {
   // The legacy UI has no React-owned state to hand this component, so it
@@ -108,6 +109,10 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
   const [taskPreview, setTaskPreview] = useState<TaskFields | null>(null);
   const [meetingPreview, setMeetingPreview] = useState<MeetingFields | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  // A question about the tracker gets answered by the server (see
+  // /api/quick-add) — shown right here rather than sending the user to the
+  // Telegram bot for it.
+  const [answer, setAnswer] = useState("");
 
   // Voice input (browser-native, free, no server round trip). Dictation is
   // the whole interaction here: when you stop talking, the phrase goes
@@ -236,9 +241,14 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
       setStatus("idea-preview");
       return;
     }
+    if (item.tool === "answer_question") {
+      setAnswer(item.input.answer || "");
+      setStatus("answer");
+      return;
+    }
     if (item.tool === "cant_help") {
       setStatus("error");
-      setErrorMessage("Это не похоже на задачу/встречу/идею — умею создавать только их");
+      setErrorMessage("Это не похоже ни на задачу/встречу/мысль, ни на вопрос о делах");
       return;
     }
     if (item.tool === "manage_item") {
@@ -256,6 +266,7 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
     setText("");
     setClarifyQuestion("");
     setClarifyAnswer("");
+    setAnswer("");
     setIdeaPreview(null);
     setTaskPreview(null);
     setMeetingPreview(null);
@@ -295,7 +306,7 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
   function renderFormBody(): ReactNode {
     return (
       <>
-        {status !== "clarify" && status !== "idea-preview" && status !== "task-preview" && status !== "meeting-preview" && (
+        {status !== "clarify" && status !== "idea-preview" && status !== "task-preview" && status !== "meeting-preview" && status !== "answer" && (
           <form onSubmit={onSubmit} style={{ display: "flex", gap: 8 }}>
             <input
               type="text"
@@ -379,6 +390,19 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
             <div className="qap-actions">
               <button className="btn btn-primary btn-small" onClick={confirmMeeting}>Сохранить</button>
               <button className="btn btn-small" onClick={reset}>Отмена</button>
+            </div>
+          </div>
+        )}
+
+        {status === "answer" && (
+          <div className="quick-add-preview">
+            <div className="qap-row" style={{ whiteSpace: "pre-wrap", display: "block" }}>
+              {answer}
+            </div>
+            <div className="qap-actions">
+              <button className="btn btn-small" onClick={reset}>
+                Закрыть
+              </button>
             </div>
           </div>
         )}

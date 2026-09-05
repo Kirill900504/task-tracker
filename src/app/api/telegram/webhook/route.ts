@@ -6,6 +6,8 @@ import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
 import { handleManageItem, resolvePendingAction, type ManageAction, type ManageItemType, type PendingAction } from "@/lib/telegramManage";
 import { logAiAction } from "@/lib/aiActionLog";
+import { buildTrackerContext } from "@/lib/trackerContext";
+import { answerTrackerQuestion } from "@/lib/telegramAssistant";
 
 // Voice transcription (cold-start model download + WASM inference) can run
 // well past the default function timeout — Vercel's default is too short.
@@ -124,12 +126,27 @@ async function replyForResult(
     return;
   }
 
+  if (tool === "answer_question") {
+    const question = String(input.query || "").trim();
+    if (!question) {
+      await sendTelegramMessage(chatId, "Не понял вопрос — переспросите, пожалуйста.");
+      return;
+    }
+    // Two-step on purpose: the parse above only decided "this is a question".
+    // The answer needs the user's actual data, which is fetched here and
+    // handed to the model as a read-only snapshot (see trackerContext).
+    const context = await buildTrackerContext(admin, userId);
+    const answer = await answerTrackerQuestion(question, context);
+    await sendTelegramMessage(chatId, answer);
+    return;
+  }
+
   // cant_help, or anything unrecognized — an honest "I don't do that" beats
   // silently failing or (the bug this replaced) echoing the user's message.
   await sendTelegramMessage(
     chatId,
-    "Пока умею только заводить задачи/встречи/идеи по фразе — на вопросы отвечать не умею. " +
-      "Хотите создать задачу или встречу — напишите её как поручение, например «завтра позвонить Сергею».",
+    "Это не похоже ни на поручение, ни на вопрос о делах. " +
+      "Напишите поручение («завтра позвонить Сергею») или спросите про свои задачи («что горит на этой неделе»).",
   );
 }
 
