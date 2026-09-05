@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { applyBulkMove, type BulkMovePlan } from "@/lib/bulkActions";
 
 // Editing/completing/deleting existing tasks and meetings from Telegram.
 // The model only ever supplies an action + a title fragment ("query") — it
@@ -20,10 +21,15 @@ export type PendingCreateTasks = {
   userId: string;
   tasks: { title: string; assignee: string; deadline: string; priority: "high" | "med" }[];
 };
-export type PendingAction = PendingDelete | PendingCreateTasks;
+export type PendingBulkMove = { kind: "bulk_move"; plan: BulkMovePlan };
+export type PendingAction = PendingDelete | PendingCreateTasks | PendingBulkMove;
 
 function isCreateTasks(p: PendingAction): p is PendingCreateTasks {
   return (p as PendingCreateTasks).kind === "create_tasks";
+}
+
+function isBulkMove(p: PendingAction): p is PendingBulkMove {
+  return (p as PendingBulkMove).kind === "bulk_move";
 }
 
 function fmtDate(iso: string): string {
@@ -150,6 +156,11 @@ export async function resolvePendingAction(
   const admin = createAdminClient();
   const normalized = replyText.trim().toLowerCase();
   const confirmed = AFFIRMATIVE.includes(normalized);
+
+  if (isBulkMove(pending)) {
+    if (!confirmed) return "Отменено — ничего не переносил.";
+    return await applyBulkMove(pending.plan);
+  }
 
   if (isCreateTasks(pending)) {
     if (!confirmed) return "Отменено — ни одной задачи не создал.";

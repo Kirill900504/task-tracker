@@ -9,6 +9,8 @@ import { logAiAction } from "@/lib/aiActionLog";
 import { buildTrackerContext } from "@/lib/trackerContext";
 import { answerTrackerQuestion } from "@/lib/telegramAssistant";
 import { extractMeetingNotes } from "@/lib/meetingNotes";
+import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
+import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 
 // Voice transcription (cold-start model download + WASM inference) can run
 // well past the default function timeout — Vercel's default is too short.
@@ -165,6 +167,34 @@ async function replyForResult(
         "Создать их? Ответьте «да» — любой другой ответ отменит.\n" +
         "Проверьте список: если что-то пропущено, допишите отдельным сообщением.",
     );
+    return;
+  }
+
+  if (tool === "bulk_move") {
+    const scope = (["tasks", "meetings", "both"] as const).includes(input.scope as BulkScope) ? (input.scope as BulkScope) : "both";
+    const { plan, error } = await planBulkMove(userId, { scope, from: String(input.from || ""), to: String(input.to || "") });
+    if (error || !plan) {
+      await sendTelegramMessage(chatId, error || "Не понял, что переносить.");
+      return;
+    }
+    // Shown and confirmed before anything moves — a bulk edit is the one
+    // place a misunderstanding is expensive to undo.
+    await admin
+      .from("telegram_accounts")
+      .update({ pending_action: { kind: "bulk_move", plan } })
+      .eq("telegram_chat_id", chatId);
+    await sendTelegramMessage(chatId, describePlan(plan) + "\n\nПереношу? Ответьте «да» — любой другой ответ отменит.");
+    return;
+  }
+
+  if (tool === "search_tracker") {
+    const query = String(input.query || "").trim();
+    if (!query) {
+      await sendTelegramMessage(chatId, "Что искать? Назовите тему или человека.");
+      return;
+    }
+    const hits = await searchTracker(admin, userId, query);
+    await sendTelegramMessage(chatId, await summariseSearch(query, hits));
     return;
   }
 
@@ -399,8 +429,19 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await sendTelegramMessage(chatId, "Не получилось разобрать сообщение: " + message);
-    await logAiAction(admin, { userId: account.user_id, source: "telegram", inputText: effectiveText, success: false, errorMessage: message });
+    // Classification failed — most often because the message was a question
+    // and the model answered it in prose instead of returning JSON. Rather
+    // than show "В ответе нет JSON", treat it as a question: that path only
+    // reads data, so the worst case is an unhelpful answer, never a wrong
+    // edit. A real failure there falls through to the error message.
+    try {
+      const context = await buildTrackerContext(admin, account.user_id);
+      await sendTelegramMessage(chatId, await answerTrackerQuestion(effectiveText, context));
+      await logAiAction(admin, { userId: account.user_id, source: "telegram", inputText: effectiveText, success: true, resultSummary: "answer_question (fallback)" });
+    } catch {
+      await sendTelegramMessage(chatId, "Не получилось разобрать сообщение: " + message);
+      await logAiAction(admin, { userId: account.user_id, source: "telegram", inputText: effectiveText, success: false, errorMessage: message });
+    }
   }
 
   return NextResponse.json({ ok: true });
