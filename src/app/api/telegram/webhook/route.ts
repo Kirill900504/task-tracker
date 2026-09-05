@@ -8,6 +8,7 @@ import { handleManageItem, resolvePendingAction, type ManageAction, type ManageI
 import { logAiAction } from "@/lib/aiActionLog";
 import { buildTrackerContext } from "@/lib/trackerContext";
 import { answerTrackerQuestion } from "@/lib/telegramAssistant";
+import { extractMeetingNotes } from "@/lib/meetingNotes";
 
 // Voice transcription (cold-start model download + WASM inference) can run
 // well past the default function timeout — Vercel's default is too short.
@@ -123,6 +124,47 @@ async function replyForResult(
       await admin.from("telegram_accounts").update({ pending_action: pendingAction }).eq("telegram_chat_id", chatId);
     }
     await sendTelegramMessage(chatId, reply);
+    return;
+  }
+
+  if (tool === "meeting_notes") {
+    const notes = String(input.text || "").trim();
+    if (!notes) {
+      await sendTelegramMessage(chatId, "Не расслышал итоги встречи — перескажите ещё раз.");
+      return;
+    }
+    const { data: assigneeRows } = await admin.from("assignees").select("name").eq("user_id", userId);
+    const known = (assigneeRows || []).map((r) => r.name as string);
+    const { summary, tasks } = await extractMeetingNotes(notes, known);
+
+    if (!tasks.length) {
+      await sendTelegramMessage(
+        chatId,
+        (summary ? "📝 " + summary + "\n\n" : "") + "Поручений в этом рассказе не нашёл. Если что-то нужно завести — скажите отдельной фразой.",
+      );
+      return;
+    }
+
+    // Never created straight away: a monologue is exactly the input where a
+    // model can turn a passing remark into a task, so the list is shown and
+    // waits for an explicit "да" (handled by resolvePendingAction).
+    const lines = tasks.map((t, i) => {
+      const bits = [t.assignee || "без исполнителя"];
+      if (t.deadline) bits.push("до " + fmtDate(t.deadline));
+      if (t.priority === "high") bits.push("важно");
+      return `${i + 1}) ${t.title} — ${bits.join(", ")}`;
+    });
+    await admin
+      .from("telegram_accounts")
+      .update({ pending_action: { kind: "create_tasks", userId, tasks } })
+      .eq("telegram_chat_id", chatId);
+    await sendTelegramMessage(
+      chatId,
+      (summary ? "📝 " + summary + "\n\n" : "") +
+        `Нашёл поручений: ${tasks.length}\n${lines.join("\n")}\n\n` +
+        "Создать их? Ответьте «да» — любой другой ответ отменит.\n" +
+        "Проверьте список: если что-то пропущено, допишите отдельным сообщением.",
+    );
     return;
   }
 

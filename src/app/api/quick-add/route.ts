@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/rateLimit";
 import { logAiAction } from "@/lib/aiActionLog";
 import { buildTrackerContext } from "@/lib/trackerContext";
 import { answerTrackerQuestion } from "@/lib/telegramAssistant";
+import { extractMeetingNotes } from "@/lib/meetingNotes";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -34,6 +35,18 @@ export async function POST(req: Request) {
     // its own: it only classified the message. Answer it here, against a
     // read-only snapshot of this user's data, and hand the finished text
     // back so the bar can just show it. Same behaviour as the Telegram bot.
+    // Meeting notes: pull the action items out here so the bar can show them
+    // for confirmation. Nothing is created server-side — the client creates
+    // them through its normal task path once the user says so, same rule as
+    // the bot's "да".
+    const notesItem = result.items.find((it) => it.tool === "meeting_notes");
+    if (notesItem) {
+      const notes = String(notesItem.input.text || text);
+      const extracted = await extractMeetingNotes(notes, assignees);
+      await logAiAction(supabase, { userId: user.id, source: "web", inputText: text, success: true, resultSummary: "meeting_notes" });
+      return NextResponse.json({ items: [{ tool: "meeting_notes", input: extracted, droppedNames: [] }] });
+    }
+
     const questionItem = result.items.find((it) => it.tool === "answer_question");
     if (questionItem) {
       const question = String(questionItem.input.query || text);

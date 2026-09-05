@@ -14,6 +14,8 @@ export type TaskFields = {
 };
 export type MeetingFields = { title: string; date: string; time: string; participants: string[] };
 export type IdeaFields = { text: string; important: boolean };
+// One action item pulled out of dictated meeting notes, awaiting confirmation.
+export type ExtractedTask = { title: string; assignee: string; deadline: string; priority: "high" | "med" };
 
 type QuickAddItem =
   | { tool: "create_task"; input: TaskFields; droppedNames: string[] }
@@ -22,6 +24,7 @@ type QuickAddItem =
   | { tool: "ask_clarifying_question"; input: { question: string }; droppedNames: string[] }
   | { tool: "manage_item"; input: { action: string; itemType: string; query: string }; droppedNames: string[] }
   | { tool: "answer_question"; input: { answer?: string; query?: string }; droppedNames: string[] }
+  | { tool: "meeting_notes"; input: { summary?: string; tasks?: ExtractedTask[] }; droppedNames: string[] }
   | { tool: "cant_help"; input: Record<string, never>; droppedNames: string[] };
 
 export interface QuickAddProvider {
@@ -51,7 +54,7 @@ const INPUT_STYLE = {
   color: "var(--ink)",
 } as const;
 
-type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "answer" | "error";
+type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "answer" | "notes-preview" | "error";
 
 export default function QuickAdd({ provider }: { provider?: QuickAddProvider } = {}) {
   // The legacy UI has no React-owned state to hand this component, so it
@@ -113,6 +116,9 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
   // /api/quick-add) — shown right here rather than sending the user to the
   // Telegram bot for it.
   const [answer, setAnswer] = useState("");
+  // Action items extracted from dictated meeting notes — shown for review,
+  // created only when the user confirms.
+  const [notes, setNotes] = useState<{ summary: string; tasks: ExtractedTask[] } | null>(null);
 
   // Voice input (browser-native, free, no server round trip). Dictation is
   // the whole interaction here: when you stop talking, the phrase goes
@@ -241,6 +247,17 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
       setStatus("idea-preview");
       return;
     }
+    if (item.tool === "meeting_notes") {
+      const tasks = item.input.tasks || [];
+      if (!tasks.length) {
+        setStatus("answer");
+        setAnswer([item.input.summary || "", "Поручений в этом рассказе не нашёл."].filter(Boolean).join("\n\n"));
+        return;
+      }
+      setNotes({ summary: item.input.summary || "", tasks });
+      setStatus("notes-preview");
+      return;
+    }
     if (item.tool === "answer_question") {
       setAnswer(item.input.answer || "");
       setStatus("answer");
@@ -267,6 +284,7 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
     setClarifyQuestion("");
     setClarifyAnswer("");
     setAnswer("");
+    setNotes(null);
     setIdeaPreview(null);
     setTaskPreview(null);
     setMeetingPreview(null);
@@ -297,6 +315,13 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
     api?.createTask(taskPreview);
     reset();
   }
+  function confirmNotes() {
+    if (!notes) return;
+    for (const t of notes.tasks) {
+      api?.createTask({ title: t.title, description: "", assignee: t.assignee, priority: t.priority, term: "short", deadline: t.deadline });
+    }
+    reset();
+  }
   function confirmMeeting() {
     if (!meetingPreview) return;
     api?.createMeeting(meetingPreview);
@@ -306,7 +331,7 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
   function renderFormBody(): ReactNode {
     return (
       <>
-        {status !== "clarify" && status !== "idea-preview" && status !== "task-preview" && status !== "meeting-preview" && status !== "answer" && (
+        {status !== "clarify" && status !== "idea-preview" && status !== "task-preview" && status !== "meeting-preview" && status !== "answer" && status !== "notes-preview" && (
           <form onSubmit={onSubmit} style={{ display: "flex", gap: 8 }}>
             <input
               type="text"
@@ -390,6 +415,35 @@ export default function QuickAdd({ provider }: { provider?: QuickAddProvider } =
             <div className="qap-actions">
               <button className="btn btn-primary btn-small" onClick={confirmMeeting}>Сохранить</button>
               <button className="btn btn-small" onClick={reset}>Отмена</button>
+            </div>
+          </div>
+        )}
+
+        {status === "notes-preview" && notes && (
+          <div className="quick-add-preview">
+            {notes.summary && (
+              <div className="qap-row" style={{ display: "block", color: "var(--ink-soft)" }}>
+                {notes.summary}
+              </div>
+            )}
+            <div className="qap-row" style={{ display: "block" }}>
+              Поручений: {notes.tasks.length}
+            </div>
+            {notes.tasks.map((t, i) => (
+              <div className="qap-row" key={i}>
+                <span style={{ color: "var(--ink)" }}>{t.title}</span>
+                {t.assignee && <span className="task-assignee">{t.assignee}</span>}
+                {t.deadline && <span className="pill pill-date">{t.deadline}</span>}
+                {t.priority === "high" && <span className="pill pill-high">Высокий</span>}
+              </div>
+            ))}
+            <div className="qap-actions">
+              <button className="btn btn-primary btn-small" onClick={confirmNotes}>
+                Создать все
+              </button>
+              <button className="btn btn-small" onClick={reset}>
+                Отмена
+              </button>
             </div>
           </div>
         )}

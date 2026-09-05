@@ -10,7 +10,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type ManageAction = "complete" | "success" | "no_result" | "reopen" | "delete";
 export type ManageItemType = "task" | "meeting";
 
-export type PendingAction = { itemType: ManageItemType; id: string; title: string };
+// Two things wait for a "да": deleting one item, and creating the batch of
+// tasks pulled out of dictated meeting notes. The delete shape is kept
+// exactly as it was, without a discriminator, so rows already sitting in
+// telegram_accounts.pending_action from before this existed still resolve.
+export type PendingDelete = { itemType: ManageItemType; id: string; title: string };
+export type PendingCreateTasks = {
+  kind: "create_tasks";
+  userId: string;
+  tasks: { title: string; assignee: string; deadline: string; priority: "high" | "med" }[];
+};
+export type PendingAction = PendingDelete | PendingCreateTasks;
+
+function isCreateTasks(p: PendingAction): p is PendingCreateTasks {
+  return (p as PendingCreateTasks).kind === "create_tasks";
+}
 
 function fmtDate(iso: string): string {
   if (!iso) return "";
@@ -135,7 +149,28 @@ export async function resolvePendingAction(
 ): Promise<string> {
   const admin = createAdminClient();
   const normalized = replyText.trim().toLowerCase();
-  if (!AFFIRMATIVE.includes(normalized)) {
+  const confirmed = AFFIRMATIVE.includes(normalized);
+
+  if (isCreateTasks(pending)) {
+    if (!confirmed) return "Отменено — ни одной задачи не создал.";
+    const rows = pending.tasks.map((t) => ({
+      id: "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      user_id: pending.userId,
+      title: t.title,
+      description: "",
+      assignee: t.assignee || "",
+      priority: t.priority,
+      term: "short",
+      status: "in_progress",
+      deadline: t.deadline || null,
+      recur: "none",
+    }));
+    const { error } = await admin.from("tasks").insert(rows);
+    if (error) return "Не получилось создать задачи: " + error.message;
+    return `✓ Создано задач: ${rows.length}\n` + rows.map((r) => `• ${r.title}${r.assignee ? " — " + r.assignee : ""}`).join("\n");
+  }
+
+  if (!confirmed) {
     return `Отменено, «${pending.title}» не тронул.`;
   }
   const { error } = await applyAction(admin, pending.itemType, "delete", pending.id);
