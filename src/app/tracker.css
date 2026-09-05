@@ -45,7 +45,16 @@
     margin:0; background:var(--bg); color:var(--ink);
     font-family:var(--sans); font-size:14px; line-height:1.5;
     padding-bottom:60px;
+    /* The page's own scrollbar is now the only one in the tracker (panels
+       no longer scroll separately), so it gets the thin, dark-theme-matched
+       styling the panel scrollbars used to have, rather than the browser's
+       default light/blocky chrome. */
+    scrollbar-width:thin; scrollbar-color:var(--line) transparent;
   }
+  body::-webkit-scrollbar{width:8px;}
+  body::-webkit-scrollbar-track{background:transparent;}
+  body::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px;}
+  body::-webkit-scrollbar-thumb:hover{background:var(--ink-soft);}
   header{
     background:var(--paper); border-bottom:1px solid var(--line);
     padding:16px 28px; position:sticky; top:0; z-index:20;
@@ -87,21 +96,19 @@
   }
   @media (max-width:1150px){
     .layout{grid-template-columns:1fr !important;}
-    /* In desktop's 3-column layout, a side zone is its own independently
-       scrolling sticky column (max-height + overflow:auto). Stacked into
-       one column on mobile, that turned into a second, nested scrollbar
-       inside the page's own — reset it here so panels just flow with the
-       page like everything else. Zone order is fixed on mobile (tasks
-       first) regardless of how panels were rearranged on desktop — a
-       narrow screen has no "left/right" for that arrangement to mean
-       anything, so it falls back to the one order that always makes sense. */
-    .layout [data-zone]{position:static !important; max-height:none !important; overflow:visible !important;}
+    /* Zone order is fixed on mobile (tasks first) regardless of how panels
+       were rearranged on desktop — a narrow screen has no "left/right" for
+       that arrangement to mean anything, so it falls back to the one order
+       that always makes sense. */
     [data-zone="left"]{order:2;}
     [data-zone="center"]{order:1;}
     [data-zone="right"]{order:3;}
   }
   .dash-zone{min-width:0; border-radius:10px; transition:background .15s ease, box-shadow .15s ease;}
-  [data-zone="left"], [data-zone="right"]{position:sticky; top:84px; max-height:calc(100vh - 100px); overflow:auto;}
+  /* One scrollbar for the whole tracker: the side columns are part of the
+     page flow rather than independently scrolling sticky panes, so whichever
+     column is longest — tasks, meetings or ideas — is what carries the page
+     down, and there is never a scrollbar inside a scrollbar. */
   .dash-zone.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
 
   /* ---------- Panel constructor: drag panels between/within zones ---------- */
@@ -224,18 +231,12 @@
   .idea-meta{font-size:11px; color:var(--ink-soft); font-family:var(--mono); margin-top:3px;}
   .idea-del{cursor:pointer; color:var(--ink-soft); background:none; border:none; font-size:15px; line-height:1; flex:none;}
   .idea-del:hover{color:var(--high);}
-  /* The "important" marker is a dot hung 4px outside the card's top-right
-     corner (.idea-item.important::after). Inside a scroll container that
-     overflow counts, so the list drew a horizontal scrollbar even with two
-     ideas in it — the padding gives the dot room to sit inside the scrollable
-     area, and the negative margins keep the cards aligned as before. */
-  #ideaList{max-height:60vh; overflow:auto; padding:5px 5px 0; margin:-5px -5px 0;}
-  /* Thin, dark-theme-matched scrollbars instead of the browser's default
-     (often light/blocky, especially in mobile WebViews) chrome. */
-  #ideaList, #meetingsForDay{scrollbar-width:thin; scrollbar-color:var(--line) transparent;}
-  #ideaList::-webkit-scrollbar, #meetingsForDay::-webkit-scrollbar{width:6px;}
-  #ideaList::-webkit-scrollbar-track, #meetingsForDay::-webkit-scrollbar-track{background:transparent;}
-  #ideaList::-webkit-scrollbar-thumb, #meetingsForDay::-webkit-scrollbar-thumb{background:var(--line); border-radius:3px;}
+  /* No scrollbar of its own: the whole page scrolls instead (see the
+     [data-zone] rule), so a long list of ideas just makes the page taller.
+     The padding is still needed — the "important" dot sits 4px outside the
+     card's corner (.idea-item.important::after) and would otherwise widen
+     the panel. */
+  #ideaList{padding:5px 5px 0; margin:-5px -5px 0;}
 
   .section-title{
     font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft);
@@ -447,7 +448,7 @@
   /* Calendar: meetings */
   .cal-dot.meeting{background:var(--today);}
   .cal-filter-note{align-items:center;}
-  #meetingsForDay{margin-top:2px; max-height:50vh; overflow:auto; border-radius:8px; transition:background .15s ease, box-shadow .15s ease;}
+  #meetingsForDay{margin-top:2px; border-radius:8px; transition:background .15s ease, box-shadow .15s ease;}
   #meetingsForDay.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
   .meeting-chip{
     display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:6px 10px;
@@ -474,10 +475,9 @@
     flex:none; cursor:default; padding:2px 3px; border-radius:4px;
   }
   .meeting-chip .mpeople:hover{background:var(--paper);}
-  /* Подсказка со списком участников вынесена за пределы прокручиваемой панели
-     "Встречи" (#meetingsForDay{overflow:auto}) — иначе она бы обрезалась
-     скроллом для встреч ближе к низу списка. Позиционируется через JS
-     (position:fixed) и живёт одним общим элементом в конце <body>. */
+  /* Подсказка со списком участников выносится в конец <body> и
+     позиционируется через JS (position:fixed) — так она не зависит от
+     обрезки/контекста наложения родительской панели. */
   .people-tooltip{
     display:none; position:fixed; z-index:300;
     background:var(--paper); border:1px solid var(--line); border-radius:6px;
