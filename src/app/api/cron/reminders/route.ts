@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTelegramMessage } from "@/lib/telegram";
-import { moscowNow, dateStr, minutesOfDay, isDueToday, isOverdue, type TaskRow } from "@/lib/taskLogic";
+import { moscowNow, dateStr, minutesOfDay } from "@/lib/taskLogic";
 import { isRussianWorkingDay } from "@/lib/workCalendar";
+import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
+import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
+
+// Not before 08:00 Moscow time: the briefing is a morning read, and the
+// pinger runs around the clock.
+const BRIEF_FROM_MINUTES = 8 * 60;
 
 // Called every few minutes by an external pinger (Vercel's own free cron is
 // once-a-day only, too coarse for "meeting in 15 minutes"). Checks every
@@ -30,7 +36,7 @@ export async function GET(req: Request) {
   const today = dateStr(now);
   const nowMin = minutesOfDay(now);
 
-  // The daily task digest is work-day only: no "просрочено / на сегодня" on
+  // The morning briefing and the weekly review are work-day only: nothing on
   // weekends or public holidays (including the shifted days off the Russian
   // производственный календарь introduces). Meeting reminders below are NOT
   // gated by this — a meeting deliberately scheduled on a day off still
@@ -44,33 +50,38 @@ export async function GET(req: Request) {
     const chatId = acc.telegram_chat_id as number;
     const userId = acc.user_id as string;
 
-    const tasks: TaskRow[] = [];
-    if (workingDay) {
-      const { data } = await admin
-        .from("tasks")
-        .select("id,title,assignee,status,deadline,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month")
-        .eq("user_id", userId)
-        .is("deleted_at", null);
-      tasks.push(...((data || []) as TaskRow[]));
-    }
-
-    const dueLines: string[] = [];
-    for (const t of tasks) {
-      if (t.status === "done") continue;
-      const overdue = isOverdue(t, today);
-      const dueToday = !overdue && isDueToday(t, now, today);
-      if (!overdue && !dueToday) continue;
-
-      const { error: insErr } = await admin
+    // The morning briefing replaces what used to be a line-per-task dump:
+    // one note saying what actually matters today and why. Sent once a day,
+    // on a working day, and not before BRIEF_FROM_MINUTES — a list of tasks
+    // arriving at 00:05 (whenever the pinger first ran after midnight) was
+    // no use to anybody.
+    if (workingDay && nowMin >= BRIEF_FROM_MINUTES) {
+      const { error: briefTaken } = await admin
         .from("telegram_notifications")
-        .insert({ telegram_chat_id: chatId, kind: "task_due", ref_id: t.id, notif_date: today });
-      if (insErr) continue; // already notified today, or a real error — skip either way
-
-      const label = overdue ? "⚠ Просрочено" : "● Сегодня";
-      dueLines.push(`${label}: «${t.title}»${t.assignee ? " — " + t.assignee : ""}`);
+        .insert({ telegram_chat_id: chatId, kind: "daily_brief", ref_id: today, notif_date: today });
+      if (!briefTaken) {
+        try {
+          const facts = await buildBriefFacts(admin, userId);
+          if (!briefIsEmpty(facts)) await sendTelegramMessage(chatId, await composeBrief(facts));
+        } catch (e) {
+          console.error("daily brief failed:", e);
+        }
+      }
     }
-    if (dueLines.length) {
-      await sendTelegramMessage(chatId, dueLines.join("\n"));
+
+    // Weekly review — Mondays, same time window, once a week.
+    if (workingDay && nowMin >= BRIEF_FROM_MINUTES && now.getUTCDay() === 1) {
+      const { error: weeklyTaken } = await admin
+        .from("telegram_notifications")
+        .insert({ telegram_chat_id: chatId, kind: "weekly_review", ref_id: today, notif_date: today });
+      if (!weeklyTaken) {
+        try {
+          const facts = await buildWeeklyFacts(admin, userId);
+          if (!weeklyIsEmpty(facts)) await sendTelegramMessage(chatId, await composeWeekly(facts));
+        } catch (e) {
+          console.error("weekly review failed:", e);
+        }
+      }
     }
 
     const { data: meetings } = await admin
