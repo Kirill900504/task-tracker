@@ -60,7 +60,11 @@
     padding:16px 28px; position:sticky; top:0; z-index:20;
   }
   .header-row{display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:16px;}
-  @media (max-width:900px){ .header-row{grid-template-columns:1fr; justify-items:start;} .header-quote{order:3; width:100%;} }
+  /* Below this the quote no longer gets a usable share of the header row —
+     squeezed between the logo and the buttons it collapsed into a narrow
+     column seven lines tall. It moves onto its own full-width line instead,
+     where it fits in one or two. */
+  @media (max-width:1250px){ .header-row{grid-template-columns:1fr; justify-items:start;} .header-quote{order:3; width:100%; padding:0;} }
   .brand{display:flex; align-items:center; gap:12px;}
   .brand-logo{
     width:44px; height:44px; flex:none; border-radius:var(--radius-sm); object-fit:cover;
@@ -430,10 +434,13 @@
     font-family:Georgia,'Times New Roman','PT Serif',serif; font-style:italic;
     padding:0 22px; min-width:0;
   }
+  /* Wraps onto a second line when the window is too narrow for it, rather
+     than being cut off mid-sentence with an ellipsis — the quote is there to
+     be read, and "…и есть недели, за которые случают…" is worse than two
+     lines. Stays one centred line whenever it fits. */
   .header-quote .hqline{
-    color:#FFFFFF; font-size:clamp(12px,1.5vw,20px); line-height:1.4;
-    white-space:nowrap; text-align:justify; text-align-last:justify;
-    overflow:hidden; text-overflow:ellipsis; display:block;
+    color:#FFFFFF; font-size:clamp(11px,1.05vw,17px); line-height:1.35;
+    text-align:center; display:block; text-wrap:balance;
   }
 
   /* Ideas: flag + inline edit */
