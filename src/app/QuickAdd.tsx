@@ -36,12 +36,6 @@ export interface QuickAddProvider {
   createIdea: (f: IdeaFields) => void;
 }
 
-declare global {
-  interface Window {
-    trackerAPI?: QuickAddProvider;
-  }
-}
-
 const MOBILE_QUERY = "(max-width: 768px)";
 const INPUT_STYLE = {
   flex: 1,
@@ -56,15 +50,11 @@ const INPUT_STYLE = {
 
 type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "answer" | "notes-preview" | "error";
 
-export default function QuickAdd({ provider }: { provider?: QuickAddProvider } = {}) {
-  // The legacy UI has no React-owned state to hand this component, so it
-  // reaches the vanilla-JS side through window.trackerAPI (see
-  // legacy-tracker.js's assignment at the very bottom of that file). The
-  // new UI passes a real provider backed by useTrackerData's actions
-  // instead — same shape, no global needed. Every call site below reads
-  // through `api`, never `window.trackerAPI` directly, so this component
-  // works unmodified under either UI.
-  const api = provider ?? (typeof window !== "undefined" ? window.trackerAPI : undefined);
+export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
+  // Backed by useTrackerData's actions, passed straight in. (This used to
+  // fall back to a window.trackerAPI global, which was how the old vanilla-JS
+  // UI handed its state over; that UI is gone.)
+  const api = provider;
 
   // The desktop portal target is normally already in the DOM by the time
   // this mounts (it's part of the static markup rendered alongside it), so
