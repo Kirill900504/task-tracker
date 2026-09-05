@@ -210,3 +210,91 @@ test("deleting a task survives an immediate sign-out", async ({ page }) => {
   await login(page);
   await expect(page.locator(".task", { hasText: title })).toHaveCount(0);
 });
+
+// The meeting form is where most of the UI work of the last weeks landed
+// (one-tap time grid, participant chips, outcome + result in the same
+// modal), and it is also where the modal-portal bug lived: .dash-panel has
+// container-type:inline-size, which made it the containing block for the
+// position:fixed overlay and left the Save button un-clickable. Playwright's
+// actionability checks are what caught that, so driving this form end to end
+// is the regression test for it.
+test("meeting: time slot, participants, then closing it with an outcome", async ({ page }) => {
+  const title = `E2E встреча-итог ${Date.now()}`;
+
+  await login(page);
+  await page.click("#addMeetingBtn");
+  await page.fill("#mTitle", title);
+  await page.locator("#mTimeGrid .time-slot", { hasText: "10:00" }).click();
+
+  const firstChip = page.locator("#mParticipants .participant-chip").first();
+  const participant = (await firstChip.textContent())?.trim() || "";
+  expect(participant).not.toBe("");
+  await firstChip.click();
+  await expect(firstChip).toHaveClass(/selected/);
+
+  await page.click("#meetingSaveBtn");
+  const chip = page.locator(".meeting-chip", { hasText: title });
+  await expect(chip).toBeVisible();
+  await waitForSaved(page);
+
+  // Reopen it: the slot and the participant come back as chosen, so the
+  // grid's selection really is what got saved and not just local state.
+  await chip.click();
+  await expect(page.locator("#mTime")).toHaveValue("10:00");
+  await expect(page.locator("#mParticipants .participant-chip", { hasText: participant })).toHaveClass(/selected/);
+
+  await page.fill("#mResult", "Договорились по срокам");
+  // «Успешно» writes the outcome and closes the modal on its own — there is
+  // no second Save step for it.
+  await page.click("#markSuccessBtn");
+  await expect(page.locator("#meetingOverlay")).toHaveCount(0);
+  await expect(chip).toHaveClass(/resolved/);
+  await expect(chip.locator(".mstatus.success")).toBeVisible();
+  await waitForSaved(page);
+
+  // And it is still closed, with its outcome, after a reload. "Показывать
+  // завершённые" is per-session, so it has to be turned back on first —
+  // resolved meetings are hidden by default.
+  await page.reload();
+  await expect(page.locator("#newTaskBtn")).toBeVisible();
+  await page.check("#showDoneCheckbox");
+  await expect(page.locator(".meeting-chip", { hasText: title })).toHaveClass(/resolved/);
+  await page.locator(".meeting-chip", { hasText: title }).click();
+  await expect(page.locator("#mResult")).toHaveValue("Договорились по срокам");
+});
+
+// A recurring task's rule has to survive the round trip through the
+// database — it is written across several columns (recur, recur_weekday…)
+// that only the modal reads back.
+test("a weekly recurring task keeps its rule across a reload", async ({ page }) => {
+  const title = `E2E повтор ${Date.now()}`;
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await page.selectOption("#fRecur", "weekly");
+  await page.selectOption("#fRecurWeekday", "3");
+  await page.selectOption("#fPriority", "high");
+  await page.click("#saveTaskBtn");
+  await expect(page.locator(".task", { hasText: title })).toBeVisible();
+  await waitForSaved(page);
+
+  await page.reload();
+  await page.locator(".task", { hasText: title }).click();
+  await expect(page.locator("#fRecur")).toHaveValue("weekly");
+  await expect(page.locator("#fRecurWeekday")).toHaveValue("3");
+  await expect(page.locator("#fPriority")).toHaveValue("high");
+});
+
+// "Сбросить расположение" kept reappearing on a fresh load even though
+// nothing had been rearranged: the saved layout was compared with
+// JSON.stringify, and Postgres reorders jsonb object keys, so the two were
+// never equal. It is only meant to show when the panels really have been
+// moved.
+test("the layout reset button stays hidden when nothing was rearranged", async ({ page }) => {
+  await login(page);
+  await expect(page.locator("#resetLayoutBtn")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator("#newTaskBtn")).toBeVisible();
+  await expect(page.locator("#resetLayoutBtn")).toHaveCount(0);
+});
