@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { moscowNow, dateStr, minutesOfDay, isDueToday, isOverdue, type TaskRow } from "@/lib/taskLogic";
+import { isRussianWorkingDay } from "@/lib/workCalendar";
 
 // Called every few minutes by an external pinger (Vercel's own free cron is
 // once-a-day only, too coarse for "meeting in 15 minutes"). Checks every
@@ -29,6 +30,13 @@ export async function GET(req: Request) {
   const today = dateStr(now);
   const nowMin = minutesOfDay(now);
 
+  // The daily task digest is work-day only: no "просрочено / на сегодня" on
+  // weekends or public holidays (including the shifted days off the Russian
+  // производственный календарь introduces). Meeting reminders below are NOT
+  // gated by this — a meeting deliberately scheduled on a day off still
+  // needs its 15-minute warning.
+  const workingDay = await isRussianWorkingDay(now);
+
   const { data: accounts } = await admin.from("telegram_accounts").select("telegram_chat_id, user_id");
   if (!accounts || !accounts.length) return NextResponse.json({ ok: true, checked: 0 });
 
@@ -36,14 +44,18 @@ export async function GET(req: Request) {
     const chatId = acc.telegram_chat_id as number;
     const userId = acc.user_id as string;
 
-    const { data: tasks } = await admin
-      .from("tasks")
-      .select("id,title,assignee,status,deadline,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month")
-      .eq("user_id", userId)
-      .is("deleted_at", null);
+    const tasks: TaskRow[] = [];
+    if (workingDay) {
+      const { data } = await admin
+        .from("tasks")
+        .select("id,title,assignee,status,deadline,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month")
+        .eq("user_id", userId)
+        .is("deleted_at", null);
+      tasks.push(...((data || []) as TaskRow[]));
+    }
 
     const dueLines: string[] = [];
-    for (const t of (tasks || []) as TaskRow[]) {
+    for (const t of tasks) {
       if (t.status === "done") continue;
       const overdue = isOverdue(t, today);
       const dueToday = !overdue && isDueToday(t, now, today);

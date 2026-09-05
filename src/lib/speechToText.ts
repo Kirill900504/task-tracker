@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import { pathToFileURL } from "node:url";
 // Type-only — erased at compile time, so this never triggers Node's
 // "node"-condition module resolution the way a value import would.
 import type { AutomaticSpeechRecognitionPipeline } from "@huggingface/transformers";
@@ -34,8 +35,8 @@ import type { AutomaticSpeechRecognitionPipeline } from "@huggingface/transforme
 // runtime instead is invisible to that static analysis (no literal
 // require()-style call for the bundler to find), so it can only ever
 // resolve for real, the way plain Node would.
-function findWebEntryPath(): string {
-  const segments = ["node_modules", "@huggingface", "transformers", "dist", "transformers.web.js"];
+function findInNodeModules(...segments: string[]): string {
+  const all = ["node_modules", ...segments];
   // turbopackIgnore: this path reaches into node_modules, so without the
   // hint Turbopack's tracer defensively assumes it might need *any* file in
   // the project and bundles everything (including /public) into the
@@ -43,13 +44,13 @@ function findWebEntryPath(): string {
   // serverExternalPackages in next.config.ts, so there's nothing here for
   // the tracer to usefully discover anyway.
   const candidates = [
-    path.join(/* turbopackIgnore: true */ process.cwd(), ...segments),
-    path.join(/* turbopackIgnore: true */ process.cwd(), "..", ...segments),
+    path.join(/* turbopackIgnore: true */ process.cwd(), ...all),
+    path.join(/* turbopackIgnore: true */ process.cwd(), "..", ...all),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
   }
-  throw new Error("Could not locate @huggingface/transformers web build (looked in: " + candidates.join(", ") + ")");
+  throw new Error("Could not locate " + all.join("/") + " (looked in: " + candidates.join(", ") + ")");
 }
 
 // Even wrapped in a function call, Turbopack still tried to statically
@@ -66,29 +67,58 @@ type TransformersModule = typeof import("@huggingface/transformers");
 let transformersPromise: Promise<TransformersModule> | null = null;
 function loadTransformers(): Promise<TransformersModule> {
   if (!transformersPromise) {
-    transformersPromise = dynamicImport(findWebEntryPath()) as Promise<TransformersModule>;
+    // The web build asks "am I in Node?" once, at module-load time, via
+    // process.release.name — and when the answer is yes it later requests
+    // the model as a FILE PATH, which only the *node* build can produce
+    // (it needs the on-disk cache that build owns). The web build has no
+    // such cache, so that request dead-ends in "Unable to get model file
+    // path or buffer" — exactly the error Telegram voice notes were
+    // failing with. Hiding Node during the import makes it take the
+    // browser path instead: download the model into a buffer and hand the
+    // buffer straight to onnxruntime-web, which is what we want anyway.
+    // Restored immediately afterwards so nothing else in the function sees
+    // a doctored process.release.
+    const originalRelease = process.release;
+    Object.defineProperty(process, "release", {
+      value: { ...originalRelease, name: "browser-shim" },
+      configurable: true,
+    });
+    const entry = pathToFileURL(findInNodeModules("@huggingface", "transformers", "dist", "transformers.web.js")).href;
+    transformersPromise = (dynamicImport(entry) as Promise<TransformersModule>).finally(() => {
+      Object.defineProperty(process, "release", { value: originalRelease, configurable: true });
+    });
   }
   return transformersPromise;
 }
 
-const MODEL_ID = "Xenova/whisper-tiny"; // multilingual (incl. Russian), ~40MB — small enough for a cold serverless start
+const MODEL_ID = "Xenova/whisper-tiny"; // multilingual (incl. Russian), the smallest Whisper that handles Russian
 let transcriberPromise: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
 
 function getTranscriber(): Promise<AutomaticSpeechRecognitionPipeline> {
   if (!transcriberPromise) {
     transcriberPromise = loadTransformers().then(({ pipeline, env }) => {
-      if (env.backends.onnx.wasm) env.backends.onnx.wasm.numThreads = 1;
-      // Vercel's writable scratch space — reused across warm invocations of
-      // the same container, so the ~40MB model only downloads once per cold start.
-      env.cacheDir = "/tmp/whisper-cache";
-      // "wasm" isn't a recognized device name in this version of the
-      // library (confirmed in production: "Unsupported device: 'wasm'.
-      // Should be one of: cuda, webgpu, cpu.") — "cpu" is what actually
-      // routes through the WASM backend in a non-GPU environment like this
-      // one; the *build* we load (transformers.web.js, see loadTransformers
-      // above) is what keeps it off the native onnxruntime-node bindings,
-      // regardless of this device name.
-      return pipeline("automatic-speech-recognition", MODEL_ID, { device: "cpu" });
+      const wasm = env.backends.onnx.wasm;
+      if (wasm) {
+        wasm.numThreads = 1;
+        // ORT's default is to pull its own runtime from a CDN over https,
+        // which Node's ESM loader flatly refuses to import ("Only URLs with
+        // a scheme in: file and data are supported"). Point it at the copy
+        // already sitting in node_modules instead.
+        wasm.wasmPaths = pathToFileURL(findInNodeModules("onnxruntime-web", "dist") + path.sep).href;
+      }
+      // Having made the library believe it is in a browser (see
+      // loadTransformers), its "local models" root is a bare "/models/"
+      // path it then tries to parse as a URL — which fails for every file.
+      // There is no local copy to find anyway: fetch it from the hub.
+      env.allowLocalModels = false;
+      // Now that the browser path is in play, the device name follows the
+      // browser naming too ("wasm", not "cpu").
+      //
+      // dtype is pinned to fp32 deliberately: the default quantised weights
+      // for this model are rejected outright by the ONNX runtime version we
+      // ship ("Missing required scale ... TransposeDQWeightsForMatMulNBits"),
+      // and fp16/int8 fail in their own ways. fp32 is the one that loads.
+      return pipeline("automatic-speech-recognition", MODEL_ID, { device: "wasm", dtype: "fp32" });
     });
   }
   return transcriberPromise;

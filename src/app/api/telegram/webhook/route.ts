@@ -180,6 +180,10 @@ export async function POST(req: Request) {
       // native-binding load failure there 500'd the *entire* webhook,
       // including plain task-creation texts (and Telegram retries a 500,
       // which risked creating duplicate tasks from the retried message).
+      // A cold container downloads the ~40MB model before it can transcribe
+      // anything, which takes the best part of a minute — say so, otherwise
+      // the bot just looks dead for that whole time.
+      await sendTelegramMessage(chatId, "🎙 Распознаю голосовое…");
       const { transcribeOggOpus } = await import("@/lib/speechToText");
       const bytes = await downloadTelegramFile(voiceFileId);
       const transcript = await transcribeOggOpus(bytes);
