@@ -179,6 +179,25 @@ export function sectionFromRow(r: SectionRow): Section {
   return { id: r.id, name: r.name, kind: (r.kind as Section["kind"]) || "work", sortOrder: r.sort_order || 0 };
 }
 
+// Compares two layouts by content, zone by zone.
+//
+// Comparing JSON.stringify() output instead (which is what this replaced)
+// quietly broke as soon as a layout came back from the database: panel_layout
+// is a jsonb column, and Postgres stores jsonb with its own key order (by key
+// length, so left/right/center) rather than the order it was written in. The
+// stored layout could be identical to the default and still not match as a
+// string — which is why "↺ Сбросить расположение" reappeared after every
+// reload even though nothing had been rearranged.
+export function sameLayout(a: PanelLayout | null | undefined, b: PanelLayout | null | undefined): boolean {
+  if (!a || !b) return a === b;
+  const zones: (keyof PanelLayout)[] = ["left", "center", "right"];
+  return zones.every((zone) => {
+    const x = a[zone] || [];
+    const y = b[zone] || [];
+    return x.length === y.length && x.every((panelId, i) => panelId === y[i]);
+  });
+}
+
 export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
   left: ["calPanel", "meetingsPanel"],
   center: ["mainCol"],

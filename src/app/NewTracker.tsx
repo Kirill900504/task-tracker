@@ -22,7 +22,7 @@ import ToastStack from "@/components/tracker/ToastStack";
 import DashboardLayout from "@/components/tracker/DashboardLayout";
 import { pad, todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
-import { DEFAULT_PANEL_LAYOUT, formatIdeaCreatedAt } from "@/lib/trackerRows";
+import { DEFAULT_PANEL_LAYOUT, formatIdeaCreatedAt, sameLayout } from "@/lib/trackerRows";
 import type { Meeting, MeetingPrefill, Task, TaskPrefill } from "@/types/tracker";
 import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
 
@@ -285,7 +285,7 @@ export default function NewTracker() {
                 📥 Установить
               </button>
             )}
-            {JSON.stringify(panelLayout) !== JSON.stringify(DEFAULT_PANEL_LAYOUT) && (
+            {!sameLayout(panelLayout, DEFAULT_PANEL_LAYOUT) && (
               <button
                 className="btn"
                 id="resetLayoutBtn"
