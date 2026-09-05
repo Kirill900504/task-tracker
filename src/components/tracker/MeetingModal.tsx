@@ -12,6 +12,7 @@ import { sanitizeAssigneeList } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
 import { openPickerOnClick } from "@/lib/pickerInput";
 import MicButton from "./MicButton";
+import AutoGrowTextarea from "./AutoGrowTextarea";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS: string[] = (() => {
@@ -142,7 +143,7 @@ export default function MeetingModal({
         <div className="field">
           <label>Название встречи</label>
           <div className="input-with-mic">
-            <input type="text" id="mTitle" placeholder="Например: Совещание по опту" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <AutoGrowTextarea id="mTitle" placeholder="Например: Совещание по опту" value={title} onChange={setTitle} singleLine />
             <MicButton value={title} onChange={setTitle} title="Надиктовать название" />
           </div>
         </div>
@@ -204,7 +205,7 @@ export default function MeetingModal({
               {resolved ? outcomeLabel(meeting.status) + (meeting.movedToDate ? " · перенесено на " + fmtDate(meeting.movedToDate) : "") : ""}
             </div>
             <div className="input-with-mic">
-              <textarea id="mResult" rows={2} placeholder="Кратко: что решили, что дальше…" value={result} onChange={(e) => setResult(e.target.value)} />
+              <AutoGrowTextarea id="mResult" minRows={2} placeholder="Кратко: что решили, что дальше…" value={result} onChange={setResult} />
               <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
             </div>
             <div className="outcome-actions">

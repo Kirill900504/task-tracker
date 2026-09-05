@@ -9,12 +9,27 @@
 import { useRef } from "react";
 import { useSpeechInput } from "@/hooks/useSpeechInput";
 
-export default function MicButton({ value, onChange, title = "Надиктовать" }: { value: string; onChange: (text: string) => void; title?: string }) {
+export default function MicButton({
+  value,
+  onChange,
+  onDone,
+  title = "Надиктовать",
+}: {
+  value: string;
+  onChange: (text: string) => void;
+  // Optional: act on the finished text the moment dictation stops (the
+  // ideas field saves the thought straight away rather than waiting for a
+  // second click). Receives the full field value, dictation appended.
+  onDone?: (text: string) => void;
+  title?: string;
+}) {
   // Captured when dictation starts so each interim result replaces only the
   // dictated part, not the text that was already in the field.
   const baseRef = useRef("");
+  const combine = (text: string) => (baseRef.current ? `${baseRef.current} ${text}` : text);
   const speech = useSpeechInput({
-    onTranscript: (text) => onChange(baseRef.current ? `${baseRef.current} ${text}` : text),
+    onTranscript: (text) => onChange(combine(text)),
+    onDone: onDone ? (text) => onDone(combine(text)) : undefined,
   });
 
   if (!speech.supported) return null;

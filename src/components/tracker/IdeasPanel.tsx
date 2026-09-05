@@ -8,6 +8,8 @@ import { uid } from "@/lib/uid";
 import IdeaItem from "./IdeaItem";
 import type { useToasts } from "@/hooks/useToasts";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
+import AutoGrowTextarea from "./AutoGrowTextarea";
+import MicButton from "./MicButton";
 
 export default function IdeasPanel({
   ideas,
@@ -30,11 +32,14 @@ export default function IdeasPanel({
   const [text, setText] = useState("");
   const visible = sortIdeasForList(ideas, showDone);
 
-  function add() {
-    const v = text.trim();
+  function addText(raw: string) {
+    const v = raw.trim();
     if (!v) return;
     actions.saveIdea({ id: uid(), text: v, important: false, done: false, createdAt: formatIdeaCreatedAt(new Date()), doneAt: "" });
     setText("");
+  }
+  function add() {
+    addText(text);
   }
 
   function deleteIdea(idea: Idea) {
@@ -51,19 +56,17 @@ export default function IdeasPanel({
         </div>
       </div>
       <div className="idea-add">
-        <input
-          type="text"
+        <AutoGrowTextarea
           id="ideaInput"
-          placeholder="Мысль, идея… Enter — сохранить"
+          placeholder="Мысль, идея… Enter — сохранить, 🎤 — надиктовать"
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              add();
-            }
-          }}
+          onChange={setText}
+          singleLine
+          onEnter={add}
         />
+        {/* Dictation saves the thought as soon as you stop talking — an idea
+            is a one-liner you want off your mind, not something to review. */}
+        <MicButton value={text} onChange={setText} onDone={(finalText) => addText(finalText)} title="Надиктовать мысль" />
         <button className="btn btn-primary btn-small" id="ideaAddBtn" onClick={add}>
           +
         </button>

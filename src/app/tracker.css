@@ -221,7 +221,12 @@
 
   /* Ideas */
   .idea-add{display:flex; gap:6px; margin-bottom:10px;}
-  .idea-add input{flex:1;}
+  .idea-add{align-items:flex-start;}
+  .idea-add input, .idea-add .auto-grow{flex:1; min-width:0;}
+  .idea-add .auto-grow{
+    padding:8px 10px; border:1px solid var(--line); border-radius:6px;
+    font-family:var(--sans); font-size:13px; background:var(--paper-soft); color:var(--ink);
+  }
   .idea-item{
     border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:6px;
     display:flex; justify-content:space-between; gap:10px; align-items:flex-start; background:var(--paper-soft);
@@ -362,6 +367,10 @@
     background:var(--paper-soft); color:var(--ink);
   }
   .field textarea{min-height:56px; resize:vertical;}
+  /* Grown to fit by JS (AutoGrowTextarea): overflow hidden so no inner
+     scrollbar ever appears, and no resize grip since the height is managed. */
+  .auto-grow{overflow:hidden; resize:none;}
+  .field .auto-grow{min-height:0;}
   /* A field you can dictate into: the mic sits beside the input, aligned to
      its top so it stays put next to a textarea that has been dragged taller. */
   .input-with-mic{display:flex; gap:6px; align-items:flex-start;}
@@ -453,7 +462,7 @@
   .idea-edit-input{
     width:100%; font-family:var(--sans); font-size:13px; padding:6px 8px;
     border:1px solid var(--accent); border-radius:5px; background:var(--paper);
-    color:var(--ink); resize:vertical; min-height:44px;
+    color:var(--ink); resize:none; min-height:0;
   }
 
   /* Calendar: meetings */

@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import type { Idea } from "@/types/tracker";
+import AutoGrowTextarea from "./AutoGrowTextarea";
+import MicButton from "./MicButton";
 
 export default function IdeaItem({
   idea,
@@ -60,21 +62,28 @@ export default function IdeaItem({
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         {editing ? (
-          <textarea
-            className="idea-edit-input"
-            autoFocus
-            defaultValue={idea.text}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={save}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                (e.target as HTMLTextAreaElement).blur();
-              } else if (e.key === "Escape") {
-                cancel();
-              }
-            }}
-          />
+          // The mic sits inside the edit row so a thought can be corrected by
+          // voice too. Dictating counts as typing here — it fills the draft
+          // and you still confirm with Enter (or by clicking away).
+          <div className="input-with-mic">
+            <AutoGrowTextarea
+              className="idea-edit-input"
+              autoFocus
+              value={draft}
+              onChange={setDraft}
+              onEnter={save}
+              // Clicking away still saves, as it always has — except when the
+              // click landed on this row's own mic button, which would
+              // otherwise end the edit before it could dictate anything.
+              onBlur={(e) => {
+                if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) save();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") cancel();
+              }}
+            />
+            <MicButton value={draft} onChange={setDraft} title="Надиктовать мысль" />
+          </div>
         ) : (
           <div className="idea-text" title="Нажмите, чтобы отредактировать" onClick={startEdit}>
             {idea.text}

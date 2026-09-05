@@ -11,6 +11,7 @@ import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
 import { openPickerOnClick } from "@/lib/pickerInput";
 import MicButton from "./MicButton";
+import AutoGrowTextarea from "./AutoGrowTextarea";
 
 const WEEKDAY_OPTIONS = [
   { value: "1", label: "Понедельник" },
@@ -164,12 +165,12 @@ export default function TaskModal({
         <div className="field">
           <label>Название задачи</label>
           <div className="input-with-mic">
-            <input
-              type="text"
+            <AutoGrowTextarea
               id="fTitle"
               placeholder="Например: Согласовать прайс с поставщиком"
               value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              onChange={(text) => setForm((f) => ({ ...f, title: text }))}
+              singleLine
             />
             <MicButton value={form.title} onChange={(text) => setForm((f) => ({ ...f, title: text }))} title="Надиктовать название" />
           </div>
@@ -178,7 +179,7 @@ export default function TaskModal({
         <div className="field">
           <label>Описание (необязательно)</label>
           <div className="input-with-mic">
-            <textarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(e) => setForm((f) => ({ ...f, desc: e.target.value }))} />
+            <AutoGrowTextarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} minRows={2} />
             <MicButton value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} title="Надиктовать описание" />
           </div>
         </div>
