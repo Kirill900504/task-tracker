@@ -17,6 +17,7 @@
     "@supabase/supabase-js": "^2.112.4",
     "next": "16.3.4",
     "ogg-opus-decoder": "^1.7.5",
+    "onnxruntime-web": "^1.29.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

@@ -114,11 +114,13 @@ function getTranscriber(): Promise<AutomaticSpeechRecognitionPipeline> {
       // Now that the browser path is in play, the device name follows the
       // browser naming too ("wasm", not "cpu").
       //
-      // dtype is pinned to fp32 deliberately: the default quantised weights
-      // for this model are rejected outright by the ONNX runtime version we
-      // ship ("Missing required scale ... TransposeDQWeightsForMatMulNBits"),
-      // and fp16/int8 fail in their own ways. fp32 is the one that loads.
-      return pipeline("automatic-speech-recognition", MODEL_ID, { device: "wasm", dtype: "fp32" });
+      // q8 (quantised) rather than fp32: 40MB of weights instead of 152MB,
+      // which is what a cold container has to download before it can
+      // transcribe anything — measured at ~17s versus ~27s locally. It only
+      // became usable after pinning onnxruntime-web to 1.29 (see
+      // package.json): on the version transformers pulls in by itself these
+      // weights are rejected with "Missing required scale ... MatMulNBits".
+      return pipeline("automatic-speech-recognition", MODEL_ID, { device: "wasm", dtype: "q8" });
     });
   }
   return transcriberPromise;
