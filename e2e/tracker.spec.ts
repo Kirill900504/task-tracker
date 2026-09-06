@@ -332,3 +332,59 @@ test("search finds a task and opens its card", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(page.locator("#searchOverlay")).toHaveCount(0);
 });
+
+// The offline path end to end: work done without a connection has to survive
+// a reload (it lives in IndexedDB, and the service worker serves the shell),
+// and reach the database once the connection is back.
+test("work done offline survives a reload and syncs when the network returns", async ({ page, context }) => {
+  // Longer than the default: an offline start deliberately waits out the
+  // network timeout before falling back to the local copy, and this test does
+  // that twice.
+  test.setTimeout(150_000);
+  const onlineTitle = `E2E онлайн ${Date.now()}`;
+  const offlineTitle = `E2E офлайн ${Date.now()}`;
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", onlineTitle);
+  await page.click("#saveTaskBtn");
+  await waitForSaved(page);
+
+  // Wait until the service worker is in control AND the shell is actually in
+  // its cache — until both are true, an offline reload has nothing to serve.
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 20_000 });
+  await page.waitForFunction(
+    async () => {
+      const cache = await caches.open("rokas-shell-v2");
+      return (await cache.match("/")) !== undefined;
+    },
+    null,
+    { timeout: 20_000 },
+  );
+
+  await context.setOffline(true);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", offlineTitle);
+  await page.click("#saveTaskBtn");
+  await expect(page.locator(".task", { hasText: offlineTitle })).toBeVisible();
+  // The save cannot land, and the tracker says so rather than pretending.
+  await expect(page.locator("#syncStatus")).toContainText("Не сохранилось", { timeout: 20_000 });
+
+  // Reload with no connection at all: the shell comes from the service
+  // worker and the data from the offline copy — including the task that
+  // never reached the database.
+  await page.reload();
+  await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator("#offlineBanner")).toBeVisible();
+  await expect(page.locator(".task", { hasText: onlineTitle })).toBeVisible();
+  await expect(page.locator(".task", { hasText: offlineTitle })).toBeVisible();
+
+  // Back on the network: the offline work is pushed without being asked.
+  await context.setOffline(false);
+  await expect(page.locator("#offlineBanner")).toHaveCount(0, { timeout: 30_000 });
+  await waitForSaved(page);
+
+  await page.reload();
+  await expect(page.locator(".task", { hasText: offlineTitle })).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator("#offlineBanner")).toHaveCount(0);
+});

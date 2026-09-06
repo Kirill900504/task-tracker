@@ -35,7 +35,7 @@ function formatClock(d: Date): string {
 }
 
 export default function NewTracker() {
-  const { loading, loadError, tasks, meetings, ideas, sections, assignees, panelLayout, syncStatus, actions } = useTrackerData();
+  const { loading, loadError, tasks, meetings, ideas, sections, assignees, panelLayout, syncStatus, offline, actions } = useTrackerData();
   const toasts = useToasts();
   const dateTimeConfirm = useDateTimeConfirm();
   const notifications = useNotifications({ tasks, meetings, saveTask: actions.saveTask, showToast: toasts.showToast, ready: !loading });
@@ -445,7 +445,16 @@ export default function NewTracker() {
               onIdeaDropped={convertIdeaToTask}
               justCreatedId={justCreatedTaskId}
               notifBanner={notifications.bannerText}
-              extraBanner={<SyncErrorBanner />}
+              extraBanner={
+                <>
+                  {offline && (
+                    <div className="notif-banner show" id="offlineBanner">
+                      <span>📴 Нет связи с облаком — показываю сохранённую копию. Всё, что записываете, отправится, как только связь вернётся.</span>
+                    </div>
+                  )}
+                  <SyncErrorBanner />
+                </>
+              }
             />
           ),
           ideasPanel: <IdeasPanel ideas={ideas} showDone={showDone} highlightId={highlightIdeaId} actions={actions} toasts={toasts} />,

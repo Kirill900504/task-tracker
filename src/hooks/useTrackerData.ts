@@ -41,6 +41,9 @@ import {
   type TaskRow,
 } from "@/lib/trackerRows";
 import type { Idea, Meeting, PanelLayout, Section, Task } from "@/types/tracker";
+import { clearSnapshot, loadSnapshot, saveSnapshot, type Snapshot, type TrackerLists } from "@/lib/offlineStore";
+import { applyLocalChanges, applyLocalNameChanges, hasUnsyncedWork } from "@/lib/offlineMerge";
+import { cacheShell } from "@/lib/shellCache";
 
 type Shadow = {
   tasks: Task[];
@@ -52,12 +55,27 @@ type Shadow = {
 
 export interface SyncStatus {
   pending: boolean;
+  // True while the tracker is running on its offline copy: it started
+  // without a connection (or lost it), so what you see came from
+  // IndexedDB and what you change is waiting to be sent.
   // Non-null while a save has failed and is waiting to retry — the UI
   // should keep this visible (not auto-hide it) until it clears.
   lastError: string | null;
   // False until the first write of the session, so a freshly loaded page
   // doesn't show a "✓ Сохранено" pill for something that never happened.
   everSaved: boolean;
+}
+
+const LAST_USER_KEY = "rokas-last-user";
+const NETWORK_TIMEOUT_MS = 8000;
+
+// Rejects rather than hanging: see boot()'s comment about connections that
+// accept a request and never answer.
+function withTimeout<T>(promise: Promise<T>, ms = NETWORK_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error("network timeout")), ms)),
+  ]);
 }
 
 function emptyShadow(): Shadow {
@@ -78,6 +96,7 @@ export function useTrackerData() {
   const [sections, setSections] = useState<Section[]>([]);
   const [panelLayout, setPanelLayoutState] = useState<PanelLayout>(DEFAULT_PANEL_LAYOUT);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ pending: false, lastError: null, everSaved: false });
+  const [offline, setOffline] = useState(false);
 
   const dbRef = useRef<SupabaseClient | null>(null);
   // Mirrors of the state above, read synchronously by persistAll()/
@@ -93,6 +112,44 @@ export function useTrackerData() {
   // self-reference in its own initializer (refs must only be touched
   // outside render — see the effect right after persistAll's declaration).
   const persistAllRef = useRef<() => void>(() => {});
+  const userIdRef = useRef<string | null>(null);
+  const offlineRef = useRef(false);
+  const realtimeReadyRef = useRef(false);
+  const panelLayoutRef = useRef<PanelLayout | null>(null);
+  const snapshotWritingRef = useRef(false);
+  const snapshotDirtyRef = useRef(false);
+
+  // Mirror the tracker into IndexedDB on every change. Both the live lists
+  // and the shadow go in: that pair is what lets the next start tell work
+  // that never reached the database from rows that merely came from it (see
+  // offlineMerge.ts).
+  //
+  // Written straight away rather than on a debounce timer. The whole point
+  // is to survive the tab being closed a moment after an edit, and a delay
+  // of even a few hundred milliseconds loses exactly that case — it did,
+  // measurably, in the offline test. Instead of a timer, writes are
+  // coalesced: while one is in flight the next is remembered as a single
+  // pending write, so a burst of edits still costs two writes, not ten, and
+  // the last one always carries the latest state.
+  const queueSnapshotSave = useCallback(() => {
+    function write() {
+      const uid = userIdRef.current;
+      if (!uid) return;
+      if (snapshotWritingRef.current) {
+        snapshotDirtyRef.current = true;
+        return;
+      }
+      snapshotWritingRef.current = true;
+      void saveSnapshot(uid, liveRef.current as TrackerLists, shadowRef.current as TrackerLists, panelLayoutRef.current).then(() => {
+        snapshotWritingRef.current = false;
+        if (snapshotDirtyRef.current) {
+          snapshotDirtyRef.current = false;
+          write();
+        }
+      });
+    }
+    write();
+  }, []);
 
   const persistAll = useCallback(() => {
     const db = dbRef.current;
@@ -110,6 +167,9 @@ export function useTrackerData() {
     // comment: shadow must always describe what was actually just synced.
     pendingCountRef.current++;
     setSyncStatus({ pending: true, lastError: null, everSaved: true });
+    // Written before the network is even tried, so the change survives the
+    // tab being closed while the save is still in flight or failing.
+    queueSnapshotSave();
     let hadError = false;
 
     syncChainRef.current = syncChainRef.current
@@ -194,6 +254,10 @@ export function useTrackerData() {
       .then(() => {
         pendingCountRef.current = Math.max(0, pendingCountRef.current - 1);
         hasPendingFailureRef.current = hadError;
+        // Again once the chain settles: the shadow has moved on, and the
+        // stored copy has to agree with it or the next start would re-send
+        // work that already landed.
+        queueSnapshotSave();
         setSyncStatus({
           pending: pendingCountRef.current > 0,
           lastError: hadError ? "Не сохранилось, повторю через 15с" : null,
@@ -212,7 +276,7 @@ export function useTrackerData() {
         if (hasPendingFailureRef.current) persistAllRef.current();
       }, 15000);
     }
-  }, []);
+  }, [queueSnapshotSave]);
 
   useEffect(() => {
     persistAllRef.current = persistAll;
@@ -263,6 +327,7 @@ export function useTrackerData() {
 
   const savePanelLayout = useCallback((layout: PanelLayout) => {
     setPanelLayoutState(layout);
+    panelLayoutRef.current = layout;
     const db = dbRef.current;
     if (!db) return;
     pendingCountRef.current++;
@@ -377,9 +442,27 @@ export function useTrackerData() {
     }
     const { error } = await db.auth.signOut();
     if (error) return { ok: false, reason: "error", message: error.message };
+    if (userIdRef.current) await clearSnapshot(userIdRef.current);
     router.push("/login");
     return { ok: true };
   }, [router]);
+
+  // Which account this browser last had open, so a start with no readable
+  // session still knows whose offline copy to show.
+  function lastUserId(): string | null {
+    try {
+      return localStorage.getItem(LAST_USER_KEY);
+    } catch {
+      return null;
+    }
+  }
+  function rememberUserId(uid: string) {
+    try {
+      localStorage.setItem(LAST_USER_KEY, uid);
+    } catch {
+      /* private window — offline start will just ask for sign-in */
+    }
+  }
 
   // ---- Boot: load auth session, initial data, panel layout, seed shadow,
   // subscribe to realtime. Mirrors legacy-tracker.js's boot() function.
@@ -388,37 +471,99 @@ export function useTrackerData() {
     const db = createClient();
     dbRef.current = db;
 
+    let booting = false;
     async function boot() {
-      const { data: sessionData } = await db.auth.getSession();
-      if (!sessionData.session) {
+      if (booting) return;
+      booting = true;
+      try {
+        await bootOnce();
+      } finally {
+        booting = false;
+      }
+    }
+
+    async function bootOnce() {
+      // Reading the session can itself need the network (an expired token is
+      // refreshed over it), and a connection that accepts requests but never
+      // answers — a captive wifi, a dead spot with full bars — would leave
+      // the app on "Загрузка…" forever. Every network step below is capped,
+      // and a cap means the offline copy, not an error.
+      let session = null;
+      try {
+        const { data: sessionData } = await withTimeout(db.auth.getSession());
+        session = sessionData.session;
+      } catch {
+        session = null;
+      }
+      if (cancelled) return;
+
+      if (!session) {
+        // No readable session. Offline that means the last user's copy is
+        // still the right thing to show; online it means sign in.
+        const lastUid = lastUserId();
+        const lastCache = lastUid ? await loadSnapshot(lastUid) : null;
+        if (lastCache && !navigator.onLine) {
+          setUserId(lastUid);
+          userIdRef.current = lastUid;
+          startFromCache(lastCache);
+          return;
+        }
         router.push("/login");
         return;
       }
-      const uid = sessionData.session.user.id;
-      if (cancelled) return;
-      setUserId(uid);
 
-      const results = await Promise.all([
-        db.from("tasks").select("*").is("deleted_at", null),
-        db.from("meetings").select("*").is("deleted_at", null),
-        db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }),
-        db.from("assignees").select("*").order("created_at", { ascending: true }),
-        db.from("sections").select("*").order("sort_order", { ascending: true }),
-      ]);
+      const uid = session.user.id;
+      setUserId(uid);
+      userIdRef.current = uid;
+      rememberUserId(uid);
+
+      // What the last session left behind — read before the network, so a
+      // start without a connection has something to show straight away.
+      const cached = await loadSnapshot(uid);
+
+      let results;
+      try {
+        results = await withTimeout(
+          Promise.all([
+            db.from("tasks").select("*").is("deleted_at", null),
+            db.from("meetings").select("*").is("deleted_at", null),
+            db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }),
+            db.from("assignees").select("*").order("created_at", { ascending: true }),
+            db.from("sections").select("*").order("sort_order", { ascending: true }),
+          ]),
+        );
+      } catch {
+        if (cancelled) return;
+        if (cached) {
+          startFromCache(cached);
+          return;
+        }
+        setLoadError("Нет связи с облаком");
+        setLoading(false);
+        return;
+      }
       if (cancelled) return;
 
       const failed = results.find((r) => r.error);
       if (failed) {
+        // Unreachable database — usually just no connection. Run on the
+        // offline copy instead of showing an error page: everything changed
+        // from here is stored locally and pushed by the usual retry (and by
+        // the `online` listener below) once the network is back.
+        if (cached) {
+          startFromCache(cached);
+          return;
+        }
         setLoadError(failed.error!.message);
         setLoading(false);
         return;
       }
 
-      const loadedTasks = (results[0].data as TaskRow[]).map(taskFromRow);
-      const loadedMeetings = (results[1].data as MeetingRow[]).map(meetingFromRow);
-      const loadedIdeas = (results[2].data as IdeaRow[]).map(ideaFromRow);
+      let loadedTasks = (results[0].data as TaskRow[]).map(taskFromRow);
+      let loadedMeetings = (results[1].data as MeetingRow[]).map(meetingFromRow);
+      let loadedIdeas = (results[2].data as IdeaRow[]).map(ideaFromRow);
       let loadedAssignees = (results[3].data as { name: string }[]).map((r) => r.name);
-      const loadedSections = (results[4].data as SectionRow[]).map(sectionFromRow);
+      let loadedSections = (results[4].data as SectionRow[]).map(sectionFromRow);
 
       // Baseline "already in the database" snapshot, taken before any
       // startup reconciliation below, so persistAll() only pushes what's
@@ -430,6 +575,18 @@ export function useTrackerData() {
         assignees: loadedAssignees.slice(),
         sections: snapshotList(loadedSections),
       };
+
+      // Work from a previous session that never reached the database is
+      // re-applied on top of what the server has now — item by item, so a
+      // row changed on another device in the meantime is not overwritten by
+      // a stale local copy of it (see offlineMerge.ts).
+      if (cached && hasUnsyncedWork(cached.live as unknown as Record<string, unknown[]>, cached.shadow as unknown as Record<string, unknown[]>)) {
+        loadedTasks = applyLocalChanges(loadedTasks, cached.live.tasks, cached.shadow.tasks);
+        loadedMeetings = applyLocalChanges(loadedMeetings, cached.live.meetings, cached.shadow.meetings);
+        loadedIdeas = applyLocalChanges(loadedIdeas, cached.live.ideas, cached.shadow.ideas);
+        loadedSections = applyLocalChanges(loadedSections, cached.live.sections, cached.shadow.sections);
+        loadedAssignees = applyLocalNameChanges(loadedAssignees, cached.live.assignees, cached.shadow.assignees);
+      }
 
       if (loadedAssignees.length === 0) loadedAssignees = DEFAULT_ASSIGNEES.slice();
       loadedTasks.forEach((t) => {
@@ -457,17 +614,63 @@ export function useTrackerData() {
 
       try {
         const prefsRes = await db.from("user_prefs").select("panel_layout").maybeSingle();
-        if (!cancelled) setPanelLayoutState((prefsRes.data?.panel_layout as PanelLayout) || DEFAULT_PANEL_LAYOUT);
+        if (!cancelled) {
+          const layout = (prefsRes.data?.panel_layout as PanelLayout) || DEFAULT_PANEL_LAYOUT;
+          setPanelLayoutState(layout);
+          panelLayoutRef.current = layout;
+        }
       } catch {
         if (!cancelled) setPanelLayoutState(DEFAULT_PANEL_LAYOUT);
       }
 
+      setOffline(false);
+      offlineRef.current = false;
       setLoading(false);
-      persistAllRef.current(); // sync any seeded/back-filled assignees
+      subscribeRealtime(uid);
+      persistAllRef.current(); // sync seeded/back-filled assignees and any offline work
+      // Now that the tracker has loaded for real, keep a copy of its shell for
+      // the next start without a connection.
+      void cacheShell();
+    }
 
-      // ---- Realtime: merge changes from another tab/device into both the
-      // live list and a CLONED copy in shadow (never the same object
-      // reference — see snapshotList()'s doc comment for why).
+    // Everything the last session had, straight from IndexedDB. The shadow
+    // goes back exactly as it was stored, so the difference between the two
+    // is still the unsent work — and the ordinary retry will send it.
+    function startFromCache(cached: Snapshot) {
+      liveRef.current = {
+        tasks: cached.live.tasks,
+        meetings: cached.live.meetings,
+        ideas: cached.live.ideas,
+        assignees: cached.live.assignees,
+        sections: cached.live.sections,
+      };
+      shadowRef.current = {
+        tasks: cached.shadow.tasks,
+        meetings: cached.shadow.meetings,
+        ideas: cached.shadow.ideas,
+        assignees: cached.shadow.assignees,
+        sections: cached.shadow.sections,
+      };
+      setTasks(cached.live.tasks);
+      setMeetings(cached.live.meetings);
+      setIdeas(cached.live.ideas);
+      setAssignees(cached.live.assignees);
+      setSections(cached.live.sections);
+      if (cached.panelLayout) {
+        setPanelLayoutState(cached.panelLayout);
+        panelLayoutRef.current = cached.panelLayout;
+      }
+      setOffline(true);
+      offlineRef.current = true;
+      setLoading(false);
+    }
+
+    // ---- Realtime: merge changes from another tab/device into both the
+    // live list and a CLONED copy in shadow (never the same object
+    // reference — see snapshotList()'s doc comment for why).
+    function subscribeRealtime(uid: string) {
+      if (realtimeReadyRef.current) return;
+      realtimeReadyRef.current = true;
       const filter = `user_id=eq.${uid}`;
       db.channel("tracker-sync")
         .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter }, (payload) => {
@@ -534,8 +737,31 @@ export function useTrackerData() {
     }
 
     boot();
+
+    // Back on the network: an offline start has no server data and no
+    // realtime subscription, so it re-runs the whole boot — which reads the
+    // cache again (the offline work is in it by now) and merges. A normal
+    // session that merely lost a save just retries it, instead of sitting
+    // out the remaining 15 seconds.
+    function onOnline() {
+      if (cancelled) return;
+      if (offlineRef.current) boot();
+      else if (hasPendingFailureRef.current) persistAllRef.current();
+    }
+    window.addEventListener("online", onOnline);
+
+    // The event is not enough on its own: it reports the operating system's
+    // idea of a connection, which says nothing about whether anything can
+    // actually be reached (hotel wifi, a captive portal, a VPN coming back).
+    // So while running on the offline copy, simply try again periodically.
+    const offlineRetry = setInterval(() => {
+      if (!cancelled && offlineRef.current) boot();
+    }, 15000);
+
     return () => {
       cancelled = true;
+      window.removeEventListener("online", onOnline);
+      clearInterval(offlineRetry);
     };
     // Intentionally run once on mount — re-running boot() on every render
     // would re-subscribe realtime channels and re-fetch everything.
@@ -567,6 +793,7 @@ export function useTrackerData() {
     sections,
     panelLayout,
     syncStatus,
+    offline,
     actions: {
       saveTask,
       deleteTask,
