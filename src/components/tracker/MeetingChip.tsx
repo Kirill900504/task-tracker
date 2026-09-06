@@ -30,6 +30,9 @@ export default function MeetingChip({
   const [peopleAnchor, setPeopleAnchor] = useState<DOMRect | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const participants = sanitizeAssigneeList(meeting.participants);
+  // Who answered «Буду» in Telegram — shown against the participant count,
+  // so a glance says how many are actually coming.
+  const confirmed = (meeting.confirmedBy || []).filter((name) => participants.includes(name));
   const showQuickActions = !meeting.status || meeting.status === "planned";
 
   // Placed by writing to the DOM once it has been measured (its own size
@@ -83,14 +86,16 @@ export default function MeetingChip({
           onMouseEnter={(e) => setPeopleAnchor(e.currentTarget.getBoundingClientRect())}
           onMouseLeave={() => setPeopleAnchor(null)}
         >
-          👥 {participants.length}
+          👥 {confirmed.length > 0 ? `${confirmed.length}/${participants.length}` : participants.length}
         </span>
       )}
       {peopleAnchor &&
         createPortal(
           <div ref={tooltipRef} id="peopleTooltip" className="people-tooltip" style={{ display: "block", top: -9999, left: -9999 }}>
+            {/* A tick against everyone who answered «Буду» in Telegram. */}
             {participants.map((p) => (
               <div className="prow" key={p}>
+                {confirmed.includes(p) ? "✅ " : ""}
                 {p}
               </div>
             ))}

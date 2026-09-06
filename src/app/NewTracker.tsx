@@ -28,6 +28,7 @@ import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
 import { mergeResult } from "@/lib/meetingLink";
 import SearchOverlay from "@/components/tracker/SearchOverlay";
 import ExportMenu from "@/components/tracker/ExportMenu";
+import TeamModal from "@/components/tracker/TeamModal";
 import type { SearchResult } from "@/lib/localSearch";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -65,6 +66,7 @@ export default function NewTracker() {
   const [justCreatedTaskId, setJustCreatedTaskId] = useState<string | null>(null);
   const [justCreatedMeetingId, setJustCreatedMeetingId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
   const [openExistingTaskId, setOpenExistingTaskId] = useState<string | null>(null);
   const [openExistingMeetingId, setOpenExistingMeetingId] = useState<string | null>(null);
   const [highlightIdeaId, setHighlightIdeaId] = useState<string | null>(null);
@@ -312,6 +314,7 @@ export default function NewTracker() {
       <ToastStack toasts={toasts.toasts} onUndo={toasts.undo} onDismiss={toasts.dismiss} />
       {dateTimeConfirm.dialog}
       <QuickAdd provider={quickAddProvider} />
+      {teamOpen && <TeamModal onClose={() => setTeamOpen(false)} />}
       {searchOpen && (
         <SearchOverlay
           tasks={tasks}
@@ -375,6 +378,9 @@ export default function NewTracker() {
                 ↺ Сбросить расположение
               </button>
             )}
+            <button className="btn" id="teamBtn" title="Кто на связи в Telegram" onClick={() => setTeamOpen(true)}>
+              👥 Команда
+            </button>
             <ExportMenu tasks={tasks} meetings={meetings} ideas={ideas} sections={sections} assignees={assignees} />
             {telegram.visible && (
               <button className="btn" id="telegramLinkBtn" onClick={telegram.link}>

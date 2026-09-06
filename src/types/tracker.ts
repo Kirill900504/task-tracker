@@ -31,6 +31,10 @@ export interface Task {
   // ISO timestamp of when the task was last marked done ("" while open).
   // Drives the "most recently closed first" order of the завершённые list.
   completedAt: string;
+  // Set when the colleague this is addressed to pressed «Принял» in
+  // Telegram. Read-only here: the tracker shows it and never writes it,
+  // so an open tab can never overwrite what someone just confirmed.
+  acceptedAt?: string;
 }
 
 export interface Meeting {
@@ -45,6 +49,9 @@ export interface Meeting {
   // ISO timestamp of when the meeting was closed (success/no_result), ""
   // while it is still planned.
   resolvedAt: string;
+  // Participants who pressed «Буду» in Telegram. Read-only here, same
+  // reasoning as Task.acceptedAt.
+  confirmedBy?: string[];
 }
 
 export interface Idea {

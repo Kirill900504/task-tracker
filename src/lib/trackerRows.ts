@@ -24,6 +24,9 @@ export type TaskRow = {
   section_id: string | null;
   manual_order: number | null;
   completed_at: string | null;
+  // Written by the Telegram bot only (see colleagueReplies.ts), which is
+  // why it is optional here: taskToRow never produces it.
+  accepted_at?: string | null;
 };
 
 export type MeetingRow = {
@@ -36,6 +39,8 @@ export type MeetingRow = {
   result: string;
   moved_to_date: string | null;
   resolved_at: string | null;
+  // Written by the bot only, like TaskRow.accepted_at.
+  confirmed_by?: string[] | null;
 };
 
 export type IdeaRow = {
@@ -118,6 +123,7 @@ export function taskFromRow(r: TaskRow): Task {
     sectionId: r.section_id || "",
     manualOrder: r.manual_order != null ? r.manual_order : null,
     completedAt: r.completed_at || "",
+    acceptedAt: r.accepted_at || "",
   };
 }
 
@@ -146,6 +152,7 @@ export function meetingFromRow(r: MeetingRow): Meeting {
     result: r.result || "",
     movedToDate: r.moved_to_date || "",
     resolvedAt: r.resolved_at || "",
+    confirmedBy: r.confirmed_by || [],
   };
 }
 

@@ -5,6 +5,7 @@
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { sendToTelegram, useColleagues } from "@/hooks/useColleagues";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso } from "@/lib/calendarLogic";
 import { fmtDate } from "@/lib/taskDisplay";
@@ -57,6 +58,8 @@ export default function MeetingModal({
   const [title, setTitle] = useState(meeting?.title ?? prefill?.title ?? "");
   const [time, setTime] = useState(meeting?.time || prefill?.time || "10:00");
   const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? prefill?.participants ?? []));
+  const { colleagues } = useColleagues();
+  const [sendState, setSendState] = useState("");
   const [result, setResult] = useState(meeting?.result ?? "");
   const [rescheduleDate, setRescheduleDate] = useState(meeting ? addDaysIso(meeting.date, 1) : "");
   const [rescheduleTime, setRescheduleTime] = useState(meeting?.time || "10:00");
@@ -74,6 +77,24 @@ export default function MeetingModal({
 
   function toggleParticipant(name: string) {
     setParticipants((prev) => (prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name]));
+  }
+
+  const linkedNames = colleagues.filter((c) => c.linked).map((c) => c.name);
+  const canSend = isEditing && participants.some((p) => linkedNames.includes(p));
+
+  async function handleSend() {
+    if (!meeting) return;
+    setSendState("Отправляю…");
+    const outcome = await sendToTelegram("meeting", meeting.id);
+    if ("error" in outcome) {
+      setSendState(outcome.error);
+      return;
+    }
+    setSendState(
+      outcome.sentTo.length
+        ? `Отправлено: ${outcome.sentTo.join(", ")}` + (outcome.failed.length ? `; не дошло: ${outcome.failed.join(", ")}` : "")
+        : `Не дошло: ${outcome.failed.join(", ")}`,
+    );
   }
 
   function save() {
@@ -231,6 +252,8 @@ export default function MeetingModal({
           </div>
         )}
 
+        {sendState && <div className="send-result" id="meetingSendResult">{sendState}</div>}
+
         <div className="modal-actions">
           <div className="left">
             {isEditing && (
@@ -249,6 +272,11 @@ export default function MeetingModal({
             )}
           </div>
           <div className="left">
+            {canSend && (
+              <button className="btn" id="sendMeetingBtn" type="button" title="Отправить участникам в Telegram" onClick={handleSend}>
+                ✈ Отправить
+              </button>
+            )}
             <button className="btn" id="meetingCancelBtn" onClick={onClose}>
               Отмена
             </button>

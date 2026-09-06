@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendTelegramMessage, downloadTelegramFile } from "@/lib/telegram";
+import { sendTelegramMessage, downloadTelegramFile, answerCallbackQuery, editTelegramMessage } from "@/lib/telegram";
+import { decodeCallback, findColleagueByChat } from "@/lib/colleagues";
+import { handleColleagueCallback, colleagueHelp } from "@/lib/colleagueReplies";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
@@ -250,16 +252,37 @@ export async function POST(req: Request) {
 
   const update = await req.json().catch(() => null);
   const updateId: number | undefined = update?.update_id;
+  const callbackQuery = update?.callback_query;
   const message = update?.message;
   const chatId: number | undefined = message?.chat?.id;
   const voiceFileId: string | undefined = message?.voice?.file_id;
   let text: string | undefined = message?.text;
 
-  if (!chatId) {
+  const admin = createAdminClient();
+
+  // A tapped button under a task or a meeting. Handled before anything
+  // else: it carries its own chat and needs none of the machinery below.
+  if (callbackQuery) {
+    const pressedChatId: number | undefined = callbackQuery.message?.chat?.id;
+    const action = decodeCallback(callbackQuery.data);
+    if (!pressedChatId || !action) {
+      await answerCallbackQuery(callbackQuery.id, "Не понял, что нажато");
+      return NextResponse.json({ ok: true });
+    }
+    const outcome = await handleColleagueCallback(admin, pressedChatId, action);
+    await answerCallbackQuery(callbackQuery.id, outcome.toast);
+    if (outcome.rewriteTo && callbackQuery.message?.message_id) {
+      await editTelegramMessage(pressedChatId, callbackQuery.message.message_id, outcome.rewriteTo);
+    }
+    if (outcome.notifyOwner) {
+      await sendTelegramMessage(outcome.notifyOwner.chatId, outcome.notifyOwner.text);
+    }
     return NextResponse.json({ ok: true });
   }
 
-  const admin = createAdminClient();
+  if (!chatId) {
+    return NextResponse.json({ ok: true });
+  }
 
   // Telegram redelivers an update it didn't get a fast/successful response
   // to — observed in production as the bot repeating the same reply to the
@@ -322,7 +345,7 @@ export async function POST(req: Request) {
     }
     const { data: linkRow, error: lookupError } = await admin
       .from("telegram_link_codes")
-      .select("user_id, expires_at")
+      .select("user_id, expires_at, assignee_id")
       .eq("code", code)
       .maybeSingle();
 
@@ -332,6 +355,32 @@ export async function POST(req: Request) {
     }
     if (!linkRow || new Date(linkRow.expires_at).getTime() < Date.now()) {
       await sendTelegramMessage(chatId, "Код неверный или уже истёк. Запросите новый в приложении.");
+      return NextResponse.json({ ok: true });
+    }
+
+    // A code issued for a colleague attaches this chat to that person
+    // instead of granting access to the tracker. They get what is sent to
+    // them and nothing else — see colleagueReplies.ts.
+    if (linkRow.assignee_id) {
+      const { data: person, error: linkError } = await admin
+        .from("assignees")
+        .update({
+          telegram_chat_id: chatId,
+          telegram_username: message?.from?.username || null,
+          linked_at: new Date().toISOString(),
+        })
+        .eq("id", linkRow.assignee_id)
+        .select("name")
+        .maybeSingle();
+      if (linkError) {
+        await sendTelegramMessage(chatId, "Не удалось подключиться: " + linkError.message);
+        return NextResponse.json({ ok: true });
+      }
+      await admin.from("telegram_link_codes").delete().eq("code", code);
+      await sendTelegramMessage(
+        chatId,
+        `✓ Готово, ${person?.name || "вы"} на связи. Сюда будут приходить задачи и встречи — отвечать можно кнопками под сообщением.`,
+      );
       return NextResponse.json({ ok: true });
     }
 
@@ -362,6 +411,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
   if (!account) {
+    const colleague = await findColleagueByChat(admin, chatId);
+    if (colleague) {
+      await sendTelegramMessage(chatId, colleagueHelp(colleague.name));
+      return NextResponse.json({ ok: true });
+    }
     await sendTelegramMessage(chatId, "Этот чат ещё не привязан. Откройте трекер на сайте → «Подключить Telegram».");
     return NextResponse.json({ ok: true });
   }

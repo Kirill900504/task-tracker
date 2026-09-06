@@ -7,6 +7,7 @@
 // against the new UI with minimal changes.
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { sendToTelegram, useColleagues } from "@/hooks/useColleagues";
 import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
 import { openPickerOnClick } from "@/lib/pickerInput";
@@ -69,6 +70,8 @@ export default function TaskModal({
   onAddSection: (section: Section) => void;
   onRemoveSection: (id: string) => void;
 }) {
+  const { colleagues } = useColleagues();
+  const [sendState, setSendState] = useState("");
   const [form, setForm] = useState(() => emptyForm(task, prefill));
 
   // Esc closes the modal, same as legacy's global keydown handler.
@@ -82,6 +85,26 @@ export default function TaskModal({
 
   const isEditing = !!task;
   const assigneeOptions = form.assignee && !assignees.includes(form.assignee) ? [...assignees, form.assignee] : assignees;
+
+  // Sending is only offered once the task exists and its assignee is
+  // actually reachable — a button that cannot work is worse than no button.
+  const linkedNames = colleagues.filter((c) => c.linked).map((c) => c.name);
+  const canSend = isEditing && !!form.assignee && linkedNames.includes(form.assignee);
+
+  async function handleSend() {
+    if (!task) return;
+    setSendState("Отправляю…");
+    const result = await sendToTelegram("task", task.id);
+    if ("error" in result) {
+      setSendState(result.error);
+      return;
+    }
+    setSendState(
+      result.sentTo.length
+        ? `Отправлено: ${result.sentTo.join(", ")}` + (result.failed.length ? `; не дошло: ${result.failed.join(", ")}` : "")
+        : `Не дошло: ${result.failed.join(", ")}`,
+    );
+  }
 
   function save() {
     const title = form.title.trim();
@@ -310,6 +333,8 @@ export default function TaskModal({
           </div>
         </div>
 
+        {sendState && <div className="send-result" id="taskSendResult">{sendState}</div>}
+
         <div className="modal-actions">
           <div className="left">
             {isEditing && (
@@ -328,6 +353,11 @@ export default function TaskModal({
             )}
           </div>
           <div className="left">
+            {canSend && (
+              <button className="btn" id="sendTaskBtn" type="button" title="Отправить исполнителю в Telegram" onClick={handleSend}>
+                ✈ Отправить
+              </button>
+            )}
             <button className="btn" id="cancelBtn" onClick={onClose}>
               Отмена
             </button>

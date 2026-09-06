@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { sendToTelegram, useColleagues } from "@/hooks/useColleagues";
 import type { Idea } from "@/types/tracker";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
@@ -22,9 +24,24 @@ export default function IdeaItem({
   // way a freshly created task flashes.
   highlighted?: boolean;
 }) {
+  const { colleagues } = useColleagues();
+  // Who to send this thought to is asked at the moment of sending: unlike a
+  // task, a thought has no assignee of its own.
+  const [pickerAt, setPickerAt] = useState<DOMRect | null>(null);
+  const [sendNote, setSendNote] = useState("");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(idea.text);
   const savedRef = useRef(false);
+
+  const linked = colleagues.filter((c) => c.linked);
+
+  async function sendTo(name: string) {
+    setPickerAt(null);
+    setSendNote("Отправляю…");
+    const result = await sendToTelegram("idea", idea.id, [name]);
+    setSendNote("error" in result ? result.error : result.sentTo.length ? `Отправлено: ${result.sentTo.join(", ")}` : `Не дошло: ${result.failed.join(", ")}`);
+    setTimeout(() => setSendNote(""), 4000);
+  }
 
   function startEdit() {
     setDraft(idea.text);
@@ -97,6 +114,18 @@ export default function IdeaItem({
         <div className="idea-meta">{idea.createdAt}</div>
       </div>
       <div className="idea-actions">
+        {linked.length > 0 && (
+          <button
+            className="idea-flag"
+            title="Отправить в Telegram"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPickerAt(e.currentTarget.getBoundingClientRect());
+            }}
+          >
+            ✈
+          </button>
+        )}
         <button
           className={"idea-flag" + (idea.important ? " active" : "")}
           title={idea.important ? "Снять пометку «Важно»" : "Отметить «Важно»"}
@@ -118,6 +147,24 @@ export default function IdeaItem({
           ×
         </button>
       </div>
+      {sendNote && <div className="send-result">{sendNote}</div>}
+      {pickerAt &&
+        createPortal(
+          <>
+            <div className="export-backdrop" onClick={() => setPickerAt(null)} />
+            <div className="export-menu" style={{ top: pickerAt.bottom + 6, right: Math.max(8, window.innerWidth - pickerAt.right) }}>
+              <div className="export-sep" style={{ borderTop: 0, marginTop: 0, paddingTop: 2 }}>
+                Кому отправить
+              </div>
+              {linked.map((person) => (
+                <button key={person.id} className="export-item" onClick={() => sendTo(person.name)}>
+                  {person.name}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }

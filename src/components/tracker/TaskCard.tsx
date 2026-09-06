@@ -73,6 +73,10 @@ export default function TaskCard({
           {!task.deadline && task.recur !== "none" && isDueTodayHighlight(task) && <span className="pill pill-date due-today-text">● Выполнить сегодня</span>}
           <span className={"pill " + priorityClass(task.priority)}>{priorityLabel(task.priority)}</span>
           {recurLabel(task) && <span className="pill pill-recur">{recurLabel(task)}</span>}
+          {/* Pressed «Принял» in Telegram — the answer to «взял в работу?»,
+              without having to ask. Dropped once the task is done, where it
+              would only be noise. */}
+          {task.acceptedAt && task.status !== "done" && <span className="pill pill-accepted">✅ принял</span>}
         </div>
       </div>
     </div>

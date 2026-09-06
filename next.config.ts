@@ -16,7 +16,11 @@ const SUPABASE_WS = SUPABASE_ORIGIN.replace(/^https:/, "wss:");
 
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  // 'unsafe-eval' only in development: React's dev build uses eval() for
+  // debugging features (reconstructing call stacks, and so on) and floods
+  // the console with CSP errors without it. The production build never
+  // calls eval, so the deployed policy stays without it.
+  process.env.NODE_ENV === "production" ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
