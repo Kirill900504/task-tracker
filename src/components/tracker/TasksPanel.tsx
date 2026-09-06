@@ -285,7 +285,7 @@ export default function TasksPanel({
       )}
       {extraBanner}
       <div className="toolbar">
-        <button className="btn btn-primary" id="newTaskBtn" onClick={() => setModalState({ open: true, task: null })}>
+        <button className="btn btn-primary" id="newTaskBtn" title="Новая задача (N)" onClick={() => setModalState({ open: true, task: null })}>
           + Новая задача
         </button>
         <div className="search-wrap" id="quickAddSlot" />

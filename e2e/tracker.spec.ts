@@ -415,3 +415,25 @@ test("export writes a CSV of the tasks", async ({ page }) => {
   expect(csv).toContain(title);
   expect(csv.split("\r\n")[0]).toContain("Задача;Описание");
 });
+
+// The four keys, driven as real key presses: a remap that silently stops
+// working is invisible until you reach for it.
+test("hotkeys open a task, a meeting and the idea field, Esc closes", async ({ page }) => {
+  await login(page);
+  await page.locator("body").click();
+
+  await page.keyboard.press("n");
+  await expect(page.locator("#fTitle")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#fTitle")).toHaveCount(0);
+
+  await page.keyboard.press("b");
+  await expect(page.locator("#mTitle")).toBeVisible();
+  // Dated, so the form is ready to save rather than complaining about a date.
+  await expect(page.locator("#mDate")).not.toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#mTitle")).toHaveCount(0);
+
+  await page.keyboard.press("m");
+  await expect(page.locator("#ideaInput")).toBeFocused();
+});

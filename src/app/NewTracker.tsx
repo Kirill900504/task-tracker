@@ -69,7 +69,7 @@ export default function NewTracker() {
   const [openExistingMeetingId, setOpenExistingMeetingId] = useState<string | null>(null);
   const [highlightIdeaId, setHighlightIdeaId] = useState<string | null>(null);
 
-  // Hotkeys: N — task, M — meeting, I — idea, "/" — search. Keyed off the
+  // Hotkeys: N — task, B — meeting, M — idea, "/" — search. Keyed off the
   // physical key (e.code) so they work on a Russian layout too, and ignored
   // while typing or with a modal already up. The open-modal check reads the
   // DOM rather than lifting every panel's modal state up here: each modal
@@ -87,14 +87,14 @@ export default function NewTracker() {
         setOpenTaskRequest({});
         return;
       }
-      if (e.code === "KeyM") {
+      if (e.code === "KeyB") {
         e.preventDefault();
         // Same default as the panel's own «+»: the day picked in the calendar,
         // otherwise today — never an empty date the form would reject.
         setOpenMeetingRequest({ date: selectedDate ?? todayStr() });
         return;
       }
-      if (e.code === "KeyI") {
+      if (e.code === "KeyM") {
         // The ideas panel can be collapsed — open it first, then put the
         // cursor in its input once it has actually rendered.
         e.preventDefault();

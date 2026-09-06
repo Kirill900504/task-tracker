@@ -13,6 +13,24 @@ import { useEffect } from "react";
 export default function RegisterSW() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
+
+    // Not in development. The worker serves build assets cache-first, and
+    // dev chunk URLs are not content-hashed the way production's are — so an
+    // edited file keeps being served from the cache, and you end up debugging
+    // yesterday's code. Anything registered by an earlier run is removed too,
+    // or it would go on serving that stale copy on its own.
+    if (process.env.NODE_ENV !== "production") {
+      void navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) void registration.unregister();
+      });
+      if (typeof caches !== "undefined") {
+        void caches.keys().then((names) => {
+          for (const name of names) void caches.delete(name);
+        });
+      }
+      return;
+    }
+
     navigator.serviceWorker.register("/sw.js").catch(() => {
       /* an unavailable worker only costs offline support, never the app */
     });

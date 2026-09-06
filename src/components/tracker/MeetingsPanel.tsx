@@ -144,7 +144,7 @@ export default function MeetingsPanel({
         <div className="panel-title">
           Встречи <span className="count">{sorted.length}</span>
         </div>
-        <button className="btn btn-primary btn-small" id="addMeetingBtn" onClick={() => setModalState({ open: true, meeting: null, prefill: { date: selectedDay ?? todayStr() } })}>
+        <button className="btn btn-primary btn-small" id="addMeetingBtn" title="Новая встреча (B)" onClick={() => setModalState({ open: true, meeting: null, prefill: { date: selectedDay ?? todayStr() } })}>
           +
         </button>
       </div>

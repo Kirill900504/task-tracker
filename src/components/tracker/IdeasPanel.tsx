@@ -61,7 +61,7 @@ export default function IdeasPanel({
       <div className="idea-add">
         <AutoGrowTextarea
           id="ideaInput"
-          placeholder="Мысль, идея… Enter — сохранить, 🎤 — надиктовать"
+          placeholder="Мысль, идея (M)… Enter — сохранить, 🎤 — надиктовать"
           value={text}
           onChange={setText}
           singleLine
