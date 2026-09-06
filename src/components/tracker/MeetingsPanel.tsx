@@ -20,6 +20,8 @@ export default function MeetingsPanel({
   toasts,
   dateTimeConfirm,
   openMeetingRequest,
+  openExistingMeetingId,
+  onOpenExistingHandled,
   onOpenMeetingHandled,
   onRequestedMeetingSaved,
   onIdeaDropped,
@@ -42,6 +44,9 @@ export default function MeetingsPanel({
   // Lets a sibling (the calendar) request opening the "new meeting" modal
   // for a specific date, e.g. from the date popover's "+ Встреча" button.
   openMeetingRequest: MeetingPrefill | null;
+  // The global search asking for this meeting's card to be opened.
+  openExistingMeetingId?: string | null;
+  onOpenExistingHandled?: () => void;
   onOpenMeetingHandled: () => void;
   // Fires only for a meeting saved from such a request, so the parent can
   // finish whatever started it — e.g. an idea dragged onto a calendar day
@@ -56,12 +61,17 @@ export default function MeetingsPanel({
   // See TasksPanel's identical pattern: an external open request from a
   // sibling (the calendar's date popover) is treated as an alternate open
   // source rather than synced into local state via an effect.
-  const modalOpen = modalState.open || openMeetingRequest !== null;
-  const modalMeeting = modalState.open ? modalState.meeting : null;
+  // The card the global search asked for, worked out during render rather
+  // than pushed into state by an effect — same shape as openMeetingRequest.
+  const requestedMeeting = openExistingMeetingId ? (meetings.find((m) => m.id === openExistingMeetingId) ?? null) : null;
+
+  const modalOpen = modalState.open || openMeetingRequest !== null || requestedMeeting !== null;
+  const modalMeeting = modalState.open ? modalState.meeting : requestedMeeting;
   const modalPrefill = modalState.open ? modalState.prefill : (openMeetingRequest ?? undefined);
   function closeModal() {
     setModalState({ open: false, meeting: null });
     if (openMeetingRequest !== null) onOpenMeetingHandled();
+    if (openExistingMeetingId) onOpenExistingHandled?.();
   }
   function handleModalSave(m: Meeting) {
     actions.saveMeeting(m);

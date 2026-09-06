@@ -14,6 +14,7 @@ import MicButton from "./MicButton";
 export default function IdeasPanel({
   ideas,
   showDone,
+  highlightId,
   actions,
   toasts,
   dragHandleProps,
@@ -28,6 +29,8 @@ export default function IdeasPanel({
     restoreIdea: (idea: Idea) => void;
   };
   toasts: ReturnType<typeof useToasts>;
+  // The idea the global search just jumped to, briefly flashed.
+  highlightId?: string | null;
 } & PanelDragProps) {
   const [text, setText] = useState("");
   const visible = sortIdeasForList(ideas, showDone);
@@ -83,6 +86,7 @@ export default function IdeasPanel({
               onToggleImportant={() => actions.saveIdea({ ...idea, important: !idea.important })}
               onEditText={(newText) => actions.saveIdea({ ...idea, text: newText })}
               onDelete={() => deleteIdea(idea)}
+              highlighted={highlightId === idea.id}
             />
           ))
         )}

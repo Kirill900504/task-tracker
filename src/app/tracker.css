@@ -610,3 +610,30 @@
   /* This dialog is short and never needs the top-aligned/scrollable
      treatment the longer task/meeting forms use — center it properly. */
   #confirmDateTimeOverlay{align-items:center;}
+
+  /* Глобальный поиск ("/") */
+  #searchOverlay{align-items:flex-start; padding-top:12vh;}
+  .search-modal{
+    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-2); width:100%; max-width:620px; overflow:hidden;
+    animation:modal-in .18s cubic-bezier(.2,.9,.3,1.1);
+  }
+  @media (prefers-reduced-motion: reduce){ .search-modal{animation:none;} }
+  .search-input{
+    width:100%; padding:14px 16px; border:0; border-bottom:1px solid var(--line);
+    background:var(--paper); color:var(--ink); font-family:var(--sans); font-size:15px; outline:none;
+  }
+  .search-results{max-height:min(56vh, 460px); overflow-y:auto; padding:6px 0;}
+  .search-group{
+    font-family:var(--mono); font-size:11px; color:var(--ink-soft);
+    padding:8px 16px 4px; text-transform:uppercase; letter-spacing:.04em;
+  }
+  .search-hit{
+    display:flex; align-items:baseline; gap:10px; padding:7px 16px; cursor:pointer;
+    border-left:2px solid transparent;
+  }
+  .search-hit.active{background:var(--paper-soft); border-left-color:var(--accent);}
+  .search-hit-title{color:var(--ink); font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .search-hit-meta{color:var(--ink-soft); font-size:11px; font-family:var(--mono); flex:none; max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .search-hit.done .search-hit-title{color:var(--ink-soft); text-decoration:line-through;}
+  .search-empty{color:var(--ink-soft); font-size:13px; padding:18px 16px; text-align:center;}

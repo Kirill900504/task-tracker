@@ -27,6 +27,8 @@ export default function TasksPanel({
   calendarFilterDate,
   openTaskRequest,
   onOpenTaskHandled,
+  openExistingTaskId,
+  onOpenExistingHandled,
   onIdeaDropped,
   justCreatedId,
   notifBanner,
@@ -57,6 +59,10 @@ export default function TasksPanel({
   calendarFilterDate: string | null;
   openTaskRequest: TaskPrefill | null;
   onOpenTaskHandled: () => void;
+  // The global search asking for this task's card to be opened. Separate
+  // from openTaskRequest, which prefills a NEW task.
+  openExistingTaskId?: string | null;
+  onOpenExistingHandled?: () => void;
   // A dropped idea becomes a task in whichever column it landed on — the
   // idea's own removal/undo is handled by the parent (NewTracker), which
   // owns both tasks and ideas state.
@@ -105,12 +111,17 @@ export default function TasksPanel({
   // "new task" modal for a specific date — treated as an alternate open
   // source alongside the internal button-click state, rather than synced
   // into it via an effect (which would cause an extra render pass).
-  const modalOpen = modalState.open || openTaskRequest !== null;
-  const modalTask = modalState.open ? modalState.task : null;
+  // The card the global search asked for, worked out during render rather
+  // than pushed into state by an effect — same shape as openTaskRequest.
+  const requestedTask = openExistingTaskId ? (tasks.find((t) => t.id === openExistingTaskId) ?? null) : null;
+
+  const modalOpen = modalState.open || openTaskRequest !== null || requestedTask !== null;
+  const modalTask = modalState.open ? modalState.task : requestedTask;
   const modalPrefill = modalState.open ? modalState.prefill : (openTaskRequest ?? undefined);
   function closeModal() {
     setModalState({ open: false, task: null });
     if (openTaskRequest !== null) onOpenTaskHandled();
+    if (openExistingTaskId) onOpenExistingHandled?.();
   }
 
   const sectionById = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections]);

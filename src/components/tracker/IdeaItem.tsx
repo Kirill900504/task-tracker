@@ -11,12 +11,16 @@ export default function IdeaItem({
   onToggleImportant,
   onEditText,
   onDelete,
+  highlighted,
 }: {
   idea: Idea;
   onToggleDone: () => void;
   onToggleImportant: () => void;
   onEditText: (text: string) => void;
   onDelete: () => void;
+  // Set when the global search sent you here — flashes the item the same
+  // way a freshly created task flashes.
+  highlighted?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(idea.text);
@@ -43,7 +47,8 @@ export default function IdeaItem({
 
   return (
     <div
-      className={"idea-item" + (idea.important ? " important" : "") + (idea.done ? " done" : "")}
+      className={"idea-item" + (idea.important ? " important" : "") + (idea.done ? " done" : "") + (highlighted ? " just-created" : "")}
+      data-idea-id={idea.id}
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData("application/x-idea-id", idea.id);

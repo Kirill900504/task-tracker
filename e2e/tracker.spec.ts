@@ -298,3 +298,37 @@ test("the layout reset button stays hidden when nothing was rearranged", async (
   await expect(page.locator("#newTaskBtn")).toBeVisible();
   await expect(page.locator("#resetLayoutBtn")).toHaveCount(0);
 });
+
+// Global search: "/" (or the button), type, click a hit — the item's own card
+// opens. Covers the wiring between the overlay and each panel's modal, which
+// is where a search that "finds but cannot open" would break.
+test("search finds a task and opens its card", async ({ page }) => {
+  const title = `E2E поиск ${Date.now()}`;
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await page.click("#saveTaskBtn");
+  await expect(page.locator(".task", { hasText: title })).toBeVisible();
+  await waitForSaved(page);
+
+  // The keyboard route, not the button: "/" is the way this is meant to be used.
+  await page.locator("body").click();
+  await page.keyboard.press("/");
+  await expect(page.locator("#searchInput")).toBeFocused();
+
+  await page.fill("#searchInput", "поиск");
+  const hit = page.locator(".search-hit", { hasText: title });
+  await expect(hit).toBeVisible();
+  await hit.click();
+
+  await expect(page.locator("#searchOverlay")).toHaveCount(0);
+  await expect(page.locator("#fTitle")).toHaveValue(title);
+
+  // Esc closes the search without opening anything.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("/");
+  await expect(page.locator("#searchInput")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#searchOverlay")).toHaveCount(0);
+});

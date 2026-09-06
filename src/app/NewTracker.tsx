@@ -26,6 +26,8 @@ import { DEFAULT_PANEL_LAYOUT, formatIdeaCreatedAt, sameLayout } from "@/lib/tra
 import type { Meeting, MeetingPrefill, Task, TaskPrefill } from "@/types/tracker";
 import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
 import { mergeResult } from "@/lib/meetingLink";
+import SearchOverlay from "@/components/tracker/SearchOverlay";
+import type { SearchResult } from "@/lib/localSearch";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 function formatClock(d: Date): string {
@@ -61,24 +63,54 @@ export default function NewTracker() {
   const [openMeetingRequest, setOpenMeetingRequest] = useState<MeetingPrefill | null>(null);
   const [justCreatedTaskId, setJustCreatedTaskId] = useState<string | null>(null);
   const [justCreatedMeetingId, setJustCreatedMeetingId] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [openExistingTaskId, setOpenExistingTaskId] = useState<string | null>(null);
+  const [openExistingMeetingId, setOpenExistingMeetingId] = useState<string | null>(null);
+  const [highlightIdeaId, setHighlightIdeaId] = useState<string | null>(null);
 
-  // Hotkey N — new task. Keyed off the physical key (e.code) so it works on a
-  // Russian layout too, and ignored while typing or with a modal already up.
-  // The open-modal check reads the DOM rather than lifting every panel's modal
-  // state up here: each modal renders `.overlay.open`, same as legacy did.
+  // Hotkeys: N — task, M — meeting, I — idea, "/" — search. Keyed off the
+  // physical key (e.code) so they work on a Russian layout too, and ignored
+  // while typing or with a modal already up. The open-modal check reads the
+  // DOM rather than lifting every panel's modal state up here: each modal
+  // renders `.overlay.open`, same as legacy did.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.code !== "KeyN" || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const el = document.activeElement as HTMLElement | null;
       const tag = (el?.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select" || el?.isContentEditable) return;
       if (document.querySelector(".overlay.open")) return;
-      e.preventDefault();
-      setOpenTaskRequest({});
+
+      if (e.code === "KeyN") {
+        e.preventDefault();
+        setOpenTaskRequest({});
+        return;
+      }
+      if (e.code === "KeyM") {
+        e.preventDefault();
+        // Same default as the panel's own «+»: the day picked in the calendar,
+        // otherwise today — never an empty date the form would reject.
+        setOpenMeetingRequest({ date: selectedDate ?? todayStr() });
+        return;
+      }
+      if (e.code === "KeyI") {
+        // The ideas panel can be collapsed — open it first, then put the
+        // cursor in its input once it has actually rendered.
+        e.preventDefault();
+        setIdeasOpen(true);
+        setTimeout(() => document.getElementById("ideaInput")?.focus(), 60);
+        return;
+      }
+      // Both the key next to the right shift and the one Russian layouts put
+      // "/" on reach this the same way — match the character, not the code.
+      if (e.key === "/" || e.key === ".") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [selectedDate]);
 
   function flashTask(id: string) {
     setJustCreatedTaskId(id);
@@ -183,6 +215,27 @@ export default function NewTracker() {
     });
   }
 
+  function openSearchResult(result: SearchResult) {
+    setSearchOpen(false);
+    if (result.kind === "task") {
+      setOpenExistingTaskId(result.id);
+      return;
+    }
+    if (result.kind === "meeting") {
+      setOpenExistingMeetingId(result.id);
+      return;
+    }
+    // An idea has no card of its own — show it where it lives, opening the
+    // panel (and the completed list, for one already ticked off) if needed.
+    setIdeasOpen(true);
+    if (result.done) setShowDone(true);
+    setHighlightIdeaId(result.id);
+    setTimeout(() => {
+      document.querySelector(`[data-idea-id="${result.id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 60);
+    setTimeout(() => setHighlightIdeaId((cur) => (cur === result.id ? null : cur)), 1600);
+  }
+
   const quickAddProvider: QuickAddProvider = {
     getAssignees: () => assignees,
     prefillNewTask: (f) => setOpenTaskRequest({ title: f.title, desc: f.description, assignee: f.assignee, priority: f.priority, term: f.term, deadline: f.deadline }),
@@ -258,6 +311,15 @@ export default function NewTracker() {
       <ToastStack toasts={toasts.toasts} onUndo={toasts.undo} onDismiss={toasts.dismiss} />
       {dateTimeConfirm.dialog}
       <QuickAdd provider={quickAddProvider} />
+      {searchOpen && (
+        <SearchOverlay
+          tasks={tasks}
+          meetings={meetings}
+          ideas={ideas}
+          onClose={() => setSearchOpen(false)}
+          onOpenResult={openSearchResult}
+        />
+      )}
       {syncStatus.everSaved && (
         <SyncStatusPill
           key={syncStatus.pending ? "pending" : syncStatus.lastError ? "error:" + syncStatus.lastError : "saved"}
@@ -283,6 +345,9 @@ export default function NewTracker() {
             </div>
           </div>
           <div className="header-btns">
+            <button className="btn" id="searchBtn" title="Поиск по трекеру (/)" onClick={() => setSearchOpen(true)}>
+              🔍 Поиск
+            </button>
             <button className={"btn" + (ideasOpen ? " active" : "")} id="ideasToggleBtn" onClick={() => setIdeasOpen((v) => !v)}>
               💡 Идеи
             </button>
@@ -352,6 +417,8 @@ export default function NewTracker() {
               toasts={toasts}
               dateTimeConfirm={dateTimeConfirm}
               openMeetingRequest={openMeetingRequest}
+              openExistingMeetingId={openExistingMeetingId}
+              onOpenExistingHandled={() => setOpenExistingMeetingId(null)}
               onOpenMeetingHandled={() => {
                 setOpenMeetingRequest(null);
                 setPendingIdeaConversion(null);
@@ -372,6 +439,8 @@ export default function NewTracker() {
               onShowDoneChange={setShowDone}
               calendarFilterDate={selectedDate}
               openTaskRequest={openTaskRequest}
+              openExistingTaskId={openExistingTaskId}
+              onOpenExistingHandled={() => setOpenExistingTaskId(null)}
               onOpenTaskHandled={() => setOpenTaskRequest(null)}
               onIdeaDropped={convertIdeaToTask}
               justCreatedId={justCreatedTaskId}
@@ -379,7 +448,7 @@ export default function NewTracker() {
               extraBanner={<SyncErrorBanner />}
             />
           ),
-          ideasPanel: <IdeasPanel ideas={ideas} showDone={showDone} actions={actions} toasts={toasts} />,
+          ideasPanel: <IdeasPanel ideas={ideas} showDone={showDone} highlightId={highlightIdeaId} actions={actions} toasts={toasts} />,
         }}
       />
     </>
