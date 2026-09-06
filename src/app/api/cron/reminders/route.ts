@@ -27,7 +27,14 @@ type MeetingRow = {
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  if (url.searchParams.get("secret") !== process.env.CRON_SECRET) {
+  // Two ways to authenticate, header first. A secret in the query string is
+  // written into every access log it passes through — the external pinger
+  // that calls this every five minutes can send a header instead, and the
+  // query form stays only so switching it over is not a flag day.
+  const secret = process.env.CRON_SECRET;
+  const headerAuth = req.headers.get("authorization") === `Bearer ${secret}`;
+  const queryAuth = url.searchParams.get("secret") === secret;
+  if (!secret || (!headerAuth && !queryAuth)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

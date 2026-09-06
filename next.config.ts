@@ -1,6 +1,51 @@
 import type { NextConfig } from "next";
 
+
+// Security headers. Everything the tracker needs is its own origin plus
+// Supabase (REST, auth and the realtime websocket) — no analytics, no fonts,
+// no third-party scripts at all — so the policy can be narrow.
+//
+// 'unsafe-inline' for scripts is the one concession: Next inlines its
+// hydration payload and bootstrap in the document, and the alternative (a
+// per-request nonce threaded through the proxy) buys little here, where no
+// third-party code is loaded and every string that reaches the DOM goes
+// through React's escaping — there is no innerHTML, no dangerouslySetInnerHTML
+// and no eval anywhere in the client bundle.
+const SUPABASE_ORIGIN = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://*.supabase.co";
+const SUPABASE_WS = SUPABASE_ORIGIN.replace(/^https:/, "wss:");
+
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS}`,
+  "media-src 'self' blob:",
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  // Nothing here is ever meant to be embedded in another page — this is the
+  // modern equivalent of X-Frame-Options, kept alongside it for older browsers.
+  "frame-ancestors 'none'",
+].join("; ");
+
+const SECURITY_HEADERS = [
+  { key: "Content-Security-Policy", value: CSP },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // The microphone is used for dictation, by this origin only; nothing else
+  // is needed, so everything else is switched off.
+  { key: "Permissions-Policy", value: "microphone=(self), camera=(), geolocation=(), payment=(), usb=()" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+];
 const nextConfig: NextConfig = {
+  async headers() {
+    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+  },
   // Speech-to-text (Telegram voice messages) pulls in ONNX runtime + a
   // Whisper model — large, and does dynamic requires that Next's bundler
   // shouldn't try to trace/tree-shake. Keep them as plain node_modules
