@@ -27,6 +27,7 @@ import type { Meeting, MeetingPrefill, Task, TaskPrefill } from "@/types/tracker
 import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
 import { mergeResult } from "@/lib/meetingLink";
 import SearchOverlay from "@/components/tracker/SearchOverlay";
+import ExportMenu from "@/components/tracker/ExportMenu";
 import type { SearchResult } from "@/lib/localSearch";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -374,6 +375,7 @@ export default function NewTracker() {
                 ↺ Сбросить расположение
               </button>
             )}
+            <ExportMenu tasks={tasks} meetings={meetings} ideas={ideas} sections={sections} assignees={assignees} />
             {telegram.visible && (
               <button className="btn" id="telegramLinkBtn" onClick={telegram.link}>
                 🔗 Telegram

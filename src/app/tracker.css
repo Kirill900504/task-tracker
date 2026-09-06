@@ -637,3 +637,20 @@
   .search-hit-meta{color:var(--ink-soft); font-size:11px; font-family:var(--mono); flex:none; max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .search-hit.done .search-hit-title{color:var(--ink-soft); text-decoration:line-through;}
   .search-empty{color:var(--ink-soft); font-size:13px; padding:18px 16px; text-align:center;}
+
+  /* Меню выгрузки */
+  .export-backdrop{position:fixed; inset:0; z-index:120;}
+  .export-menu{
+    position:fixed; z-index:121; min-width:220px; padding:6px;
+    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-md);
+    box-shadow:var(--shadow-2); display:flex; flex-direction:column; gap:2px;
+  }
+  .export-item{
+    text-align:left; padding:8px 10px; border:0; border-radius:6px; cursor:pointer;
+    background:transparent; color:var(--ink); font-family:var(--sans); font-size:13px;
+  }
+  .export-item:hover{background:var(--paper-soft);}
+  .export-sep{
+    font-family:var(--mono); font-size:11px; color:var(--ink-soft);
+    padding:8px 10px 2px; border-top:1px solid var(--line); margin-top:4px;
+  }

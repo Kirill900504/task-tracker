@@ -388,3 +388,30 @@ test("work done offline survives a reload and syncs when the network returns", a
   await expect(page.locator(".task", { hasText: offlineTitle })).toBeVisible({ timeout: 20_000 });
   await expect(page.locator("#offlineBanner")).toHaveCount(0);
 });
+
+// Taking the data out has to actually produce a file the browser saves —
+// something only a real browser can prove.
+test("export writes a CSV of the tasks", async ({ page }) => {
+  const title = `E2E экспорт ${Date.now()}`;
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await page.click("#saveTaskBtn");
+  await expect(page.locator(".task", { hasText: title })).toBeVisible();
+  await waitForSaved(page);
+
+  await page.click("#exportBtn");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator(".export-item", { hasText: "Задачи" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^rokas-задачи-\d{4}-\d{2}-\d{2}\.csv$/u);
+
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  const csv = Buffer.concat(chunks).toString("utf8");
+  expect(csv).toContain(title);
+  expect(csv.split("\r\n")[0]).toContain("Задача;Описание");
+});
