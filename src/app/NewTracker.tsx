@@ -11,7 +11,7 @@ import { useToasts } from "@/hooks/useToasts";
 import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
-import { useTelegramLink } from "@/hooks/useTelegramLink";
+import { useBotLink } from "@/hooks/useBotLink";
 import SyncErrorBanner from "@/components/tracker/SyncErrorBanner";
 import SyncStatusPill from "@/components/tracker/SyncStatusPill";
 import TasksPanel from "@/components/tracker/TasksPanel";
@@ -48,7 +48,7 @@ export default function NewTracker() {
   const dateTimeConfirm = useDateTimeConfirm();
   const notifications = useNotifications({ tasks, meetings, saveTask: actions.saveTask, showToast: toasts.showToast, ready: !loading });
   const installPrompt = useInstallPrompt();
-  const telegram = useTelegramLink();
+  const botLink = useBotLink();
 
   const [clockText, setClockText] = useState(() => formatClock(new Date()));
   useEffect(() => {
@@ -440,7 +440,8 @@ export default function NewTracker() {
                   ]
                 : []),
               ...(installPrompt.visible ? [{ id: "install", label: "📥 Установить приложение", onSelect: installPrompt.promptInstall }] : []),
-              ...(telegram.visible ? [{ id: "tg", label: "🔗 Подключить Telegram", onSelect: telegram.link }] : []),
+              ...(botLink.needs.telegram ? [{ id: "tg", label: "🔗 Подключить Telegram", onSelect: () => botLink.link("telegram") }] : []),
+              ...(botLink.needs.max ? [{ id: "max", label: "🔗 Подключить MAX", onSelect: () => botLink.link("max") }] : []),
               { id: "signout", label: "Выйти", onSelect: () => actions.signOut() },
             ]}
           />
@@ -522,13 +523,18 @@ export default function NewTracker() {
                 ↺ Сбросить расположение
               </button>
             )}
-            <button className="btn" id="teamBtn" title="Кто на связи в Telegram" onClick={() => setTeamOpen(true)}>
+            <button className="btn" id="teamBtn" title="Кто на связи в мессенджерах" onClick={() => setTeamOpen(true)}>
               👥 Команда
             </button>
             <ExportMenu tasks={tasks} meetings={meetings} ideas={ideas} sections={sections} assignees={assignees} />
-            {telegram.visible && (
-              <button className="btn" id="telegramLinkBtn" onClick={telegram.link}>
+            {botLink.needs.telegram && (
+              <button className="btn" id="telegramLinkBtn" onClick={() => botLink.link("telegram")}>
                 🔗 Telegram
+              </button>
+            )}
+            {botLink.needs.max && (
+              <button className="btn" id="maxLinkBtn" onClick={() => botLink.link("max")}>
+                🔗 MAX
               </button>
             )}
             <button className="btn" id="signOutBtn" onClick={() => actions.signOut()}>

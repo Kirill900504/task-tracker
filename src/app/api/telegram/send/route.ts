@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rateLimit";
-import { sendTelegramMessage } from "@/lib/telegram";
-import { ideaMessage, meetingButtons, meetingMessage, taskButtons, taskMessage } from "@/lib/colleagues";
+import { chatsFor, ideaMessage, meetingButtons, meetingMessage, taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
+import { sendToColleague } from "@/lib/botDelivery";
+import type { BotChannelConfig } from "@/lib/botTransport";
 
 // Sending a task, a meeting or a thought to the colleague it concerns.
 //
@@ -12,8 +13,12 @@ import { ideaMessage, meetingButtons, meetingMessage, taskButtons, taskMessage }
 // the content, and cannot be used to push arbitrary text through the bot.
 // Who it goes to is worked out here too: the task's assignee, the meeting's
 // participants, or, for a thought, the named person.
+//
+// Which messenger it travels through is not the caller's business either:
+// a colleague is connected to Telegram, to MAX, or to both, and one message
+// goes to whichever they connected first (see chatsFor).
 
-type Recipient = { id: string; name: string; chatId: number };
+type Recipient = { id: string; name: string; target: { channel: BotChannelConfig; chatId: number } };
 
 async function recipientsByName(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -21,16 +26,21 @@ async function recipientsByName(
 ): Promise<{ linked: Recipient[]; unlinked: string[] }> {
   const wanted = names.filter(Boolean);
   if (!wanted.length) return { linked: [], unlinked: [] };
-  const { data } = await supabase.from("assignees").select("id, name, telegram_chat_id").in("name", wanted);
-  const rows = (data || []) as { id: string; name: string; telegram_chat_id: number | null }[];
+  const { data } = await supabase.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("name", wanted);
+  const rows = (data || []) as ColleagueRow[];
   const linked: Recipient[] = [];
   const unlinked: string[] = [];
   for (const name of wanted) {
     const row = rows.find((r) => r.name === name);
-    if (row?.telegram_chat_id) linked.push({ id: row.id, name: row.name, chatId: row.telegram_chat_id });
+    const target = row ? chatsFor(row)[0] : undefined;
+    if (row && target) linked.push({ id: row.id, name: row.name, target });
     else unlinked.push(name);
   }
   return { linked, unlinked };
+}
+
+function nobodyReachable(unlinked: string[], fallback: string): string {
+  return unlinked.length ? `Не подключены ни к Telegram, ни к MAX: ${unlinked.join(", ")}` : fallback;
 }
 
 export async function POST(req: Request) {
@@ -62,10 +72,10 @@ export async function POST(req: Request) {
     if (!task) return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
     const { linked, unlinked } = await recipientsByName(supabase, to.length ? to : [task.assignee as string]);
     if (!linked.length) {
-      return NextResponse.json({ error: unlinked.length ? `Не подключён к Telegram: ${unlinked.join(", ")}` : "Некому отправлять" }, { status: 400 });
+      return NextResponse.json({ error: nobodyReachable(unlinked, "Некому отправлять") }, { status: 400 });
     }
     for (const person of linked) {
-      const result = await sendTelegramMessage(person.chatId, taskMessage(task, from), { buttons: taskButtons(task.id as string) });
+      const result = await sendToColleague(person.target, taskMessage(task, from), taskButtons(task.id as string));
       if (result.ok) sentTo.push(person.name);
       else failed.push(`${person.name} (${result.error})`);
     }
@@ -78,10 +88,10 @@ export async function POST(req: Request) {
     const names = to.length ? to : ((meeting.participants as string[]) || []);
     const { linked, unlinked } = await recipientsByName(supabase, names);
     if (!linked.length) {
-      return NextResponse.json({ error: unlinked.length ? `Не подключены к Telegram: ${unlinked.join(", ")}` : "Некому отправлять" }, { status: 400 });
+      return NextResponse.json({ error: nobodyReachable(unlinked, "Некому отправлять") }, { status: 400 });
     }
     for (const person of linked) {
-      const result = await sendTelegramMessage(person.chatId, meetingMessage(meeting, from), { buttons: meetingButtons(meeting.id as string) });
+      const result = await sendToColleague(person.target, meetingMessage(meeting, from), meetingButtons(meeting.id as string));
       if (result.ok) sentTo.push(person.name);
       else failed.push(`${person.name} (${result.error})`);
     }
@@ -93,10 +103,10 @@ export async function POST(req: Request) {
     if (!idea) return NextResponse.json({ error: "Мысль не найдена" }, { status: 404 });
     const { linked, unlinked } = await recipientsByName(supabase, to);
     if (!linked.length) {
-      return NextResponse.json({ error: unlinked.length ? `Не подключён к Telegram: ${unlinked.join(", ")}` : "Выберите, кому отправить" }, { status: 400 });
+      return NextResponse.json({ error: nobodyReachable(unlinked, "Выберите, кому отправить") }, { status: 400 });
     }
     for (const person of linked) {
-      const result = await sendTelegramMessage(person.chatId, ideaMessage(idea.text as string, from));
+      const result = await sendToColleague(person.target, ideaMessage(idea.text as string, from));
       if (result.ok) sentTo.push(person.name);
       else failed.push(`${person.name} (${result.error})`);
     }

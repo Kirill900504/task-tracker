@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendTelegramMessage } from "@/lib/telegram";
+import { notifyOwner } from "@/lib/botDelivery";
 import { moscowNow, dateStr, minutesOfDay } from "@/lib/taskLogic";
 import { isRussianWorkingDay } from "@/lib/workCalendar";
 import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
@@ -12,9 +12,13 @@ const BRIEF_FROM_MINUTES = 8 * 60;
 
 // Called every few minutes by an external pinger (Vercel's own free cron is
 // once-a-day only, too coarse for "meeting in 15 minutes"). Checks every
-// linked Telegram account for newly-due tasks and soon-starting meetings —
+// connected account for newly-due tasks and soon-starting meetings —
 // mirrors checkDueTasks()/checkMeetingReminders() in legacy-tracker.js, but
 // server-side so it fires even when no browser tab is open.
+//
+// Owners are counted once, whichever messengers they use: a reminder goes to
+// all of them (notifyOwner), and the "already sent" record is keyed by the
+// person, so connecting a second messenger never doubles the morning brief.
 
 type MeetingRow = {
   id: string;
@@ -50,12 +54,14 @@ export async function GET(req: Request) {
   // needs its 15-minute warning.
   const workingDay = await isRussianWorkingDay(now);
 
-  const { data: accounts } = await admin.from("telegram_accounts").select("telegram_chat_id, user_id");
-  if (!accounts || !accounts.length) return NextResponse.json({ ok: true, checked: 0 });
+  const [{ data: tgAccounts }, { data: maxAccounts }] = await Promise.all([
+    admin.from("telegram_accounts").select("user_id"),
+    admin.from("max_accounts").select("user_id"),
+  ]);
+  const userIds = [...new Set([...(tgAccounts || []), ...(maxAccounts || [])].map((r) => r.user_id as string))];
+  if (!userIds.length) return NextResponse.json({ ok: true, checked: 0 });
 
-  for (const acc of accounts) {
-    const chatId = acc.telegram_chat_id as number;
-    const userId = acc.user_id as string;
+  for (const userId of userIds) {
 
     // The morning briefing replaces what used to be a line-per-task dump:
     // one note saying what actually matters today and why. Sent once a day,
@@ -65,11 +71,11 @@ export async function GET(req: Request) {
     if (workingDay && nowMin >= BRIEF_FROM_MINUTES) {
       const { error: briefTaken } = await admin
         .from("telegram_notifications")
-        .insert({ telegram_chat_id: chatId, kind: "daily_brief", ref_id: today, notif_date: today });
+        .insert({ user_id: userId, kind: "daily_brief", ref_id: today, notif_date: today });
       if (!briefTaken) {
         try {
           const facts = await buildBriefFacts(admin, userId);
-          if (!briefIsEmpty(facts)) await sendTelegramMessage(chatId, await composeBrief(facts));
+          if (!briefIsEmpty(facts)) await notifyOwner(admin, userId, await composeBrief(facts));
         } catch (e) {
           console.error("daily brief failed:", e);
         }
@@ -80,11 +86,11 @@ export async function GET(req: Request) {
     if (workingDay && nowMin >= BRIEF_FROM_MINUTES && now.getUTCDay() === 1) {
       const { error: weeklyTaken } = await admin
         .from("telegram_notifications")
-        .insert({ telegram_chat_id: chatId, kind: "weekly_review", ref_id: today, notif_date: today });
+        .insert({ user_id: userId, kind: "weekly_review", ref_id: today, notif_date: today });
       if (!weeklyTaken) {
         try {
           const facts = await buildWeeklyFacts(admin, userId);
-          if (!weeklyIsEmpty(facts)) await sendTelegramMessage(chatId, await composeWeekly(facts));
+          if (!weeklyIsEmpty(facts)) await notifyOwner(admin, userId, await composeWeekly(facts));
         } catch (e) {
           console.error("weekly review failed:", e);
         }
@@ -108,17 +114,17 @@ export async function GET(req: Request) {
       if (nowMin >= mMin - 15 && nowMin < mMin) {
         const { error } = await admin
           .from("telegram_notifications")
-          .insert({ telegram_chat_id: chatId, kind: "meeting_soon", ref_id: m.id, notif_date: today });
-        if (!error) await sendTelegramMessage(chatId, `🔔 Через 15 минут: «${m.title}» (${m.time})${who}`);
+          .insert({ user_id: userId, kind: "meeting_soon", ref_id: m.id, notif_date: today });
+        if (!error) await notifyOwner(admin, userId, `🔔 Через 15 минут: «${m.title}» (${m.time})${who}`);
       }
       if (nowMin >= mMin && nowMin <= mMin + 5) {
         const { error } = await admin
           .from("telegram_notifications")
-          .insert({ telegram_chat_id: chatId, kind: "meeting_now", ref_id: m.id, notif_date: today });
-        if (!error) await sendTelegramMessage(chatId, `🔔 Встреча сейчас: «${m.title}»${who}`);
+          .insert({ user_id: userId, kind: "meeting_now", ref_id: m.id, notif_date: today });
+        if (!error) await notifyOwner(admin, userId, `🔔 Встреча сейчас: «${m.title}»${who}`);
       }
     }
   }
 
-  return NextResponse.json({ ok: true, checked: accounts.length });
+  return NextResponse.json({ ok: true, checked: userIds.length });
 }

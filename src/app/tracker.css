@@ -876,8 +876,11 @@
       left:0; right:0; bottom:0; top:auto; z-index:420;
       min-width:0; padding:8px 10px calc(10px + env(safe-area-inset-bottom, 0px));
       border-radius:16px 16px 0 0; border-bottom:0;
-      animation:modal-sheet-up .18s ease-out;
+      /* Проявляется, а не выезжает: лист с кнопками появляется под самым
+         пальцем, и движущаяся под ним кнопка — это промах по соседней. */
+      animation:sheet-fade .14s ease-out;
     }
+    @keyframes sheet-fade{ from{opacity:0;} to{opacity:1;} }
     .action-sheet .export-item{padding:15px 12px; font-size:15px; border-radius:10px;}
     .action-sheet .action-menu-title{padding:10px 12px 6px; max-width:none; white-space:normal;}
     .action-sheet-cancel{

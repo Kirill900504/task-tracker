@@ -1,248 +1,19 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendTelegramMessage, downloadTelegramFile, answerCallbackQuery, editTelegramMessage } from "@/lib/telegram";
-import { decodeCallback, findColleagueByChat } from "@/lib/colleagues";
-import { handleColleagueCallback, colleagueHelp } from "@/lib/colleagueReplies";
-import { parseQuickAdd } from "@/lib/quickAdd";
-import { checkRateLimit } from "@/lib/rateLimit";
-import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
-import { handleManageItem, resolvePendingAction, type ManageAction, type ManageItemType, type PendingAction } from "@/lib/telegramManage";
-import { logAiAction } from "@/lib/aiActionLog";
-import { buildTrackerContext } from "@/lib/trackerContext";
-import { answerTrackerQuestion } from "@/lib/telegramAssistant";
-import { extractMeetingNotes } from "@/lib/meetingNotes";
-import { findMeetingForNotes } from "@/lib/meetingLink";
-import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
-import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
+import { downloadTelegramFile, telegramTransport } from "@/lib/telegram";
+import { decodeCallback } from "@/lib/colleagues";
+import { handleColleagueCallback } from "@/lib/colleagueReplies";
+import { handleLinkCode, handleText, type BotContext } from "@/lib/botPipeline";
+import { notifyOwner } from "@/lib/botDelivery";
+import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
+
+// Telegram's side of the bot: the update format, voice files, and Telegram's
+// own retry behaviour. What a message MEANS is not decided here — that is
+// botPipeline.ts, shared with MAX, so the two bots can never drift apart.
 
 // Voice transcription (cold-start model download + WASM inference) can run
 // well past the default function timeout — Vercel's default is too short.
 export const maxDuration = 60;
-
-function uid(): string {
-  return "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-
-function fmtDate(iso: string): string {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
-}
-
-function droppedNote(dropped: string[]): string {
-  if (!dropped.length) return "";
-  return "\n⚠ Не нашёл в списке исполнителей, пропустил: " + dropped.join(", ");
-}
-
-async function replyForResult(
-  chatId: number,
-  admin: ReturnType<typeof createAdminClient>,
-  userId: string,
-  tool: string,
-  input: Record<string, unknown>,
-  droppedNames: string[],
-) {
-  if (tool === "create_task") {
-    const row = {
-      id: uid(),
-      user_id: userId,
-      title: String(input.title || ""),
-      description: String(input.description || ""),
-      assignee: String(input.assignee || ""),
-      priority: input.priority === "high" ? "high" : "med",
-      term: input.term === "long" ? "long" : "short",
-      status: "in_progress",
-      deadline: input.deadline || null,
-      recur: "none",
-    };
-    const { error } = await admin.from("tasks").insert(row);
-    if (error) {
-      await sendTelegramMessage(chatId, "Не получилось сохранить задачу: " + error.message);
-      return;
-    }
-    const lines = [`✓ Задача: «${row.title}»`];
-    if (row.deadline) lines.push("Срок: " + fmtDate(row.deadline as string));
-    if (row.assignee) lines.push("Исполнитель: " + row.assignee);
-    if (row.priority === "high") lines.push("Приоритет: высокий");
-    await sendTelegramMessage(chatId, lines.join("\n") + droppedNote(droppedNames));
-    return;
-  }
-
-  if (tool === "create_meeting") {
-    const row = {
-      id: uid(),
-      user_id: userId,
-      date: String(input.date || ""),
-      time: String(input.time || ""),
-      title: String(input.title || ""),
-      participants: Array.isArray(input.participants) ? input.participants : [],
-      status: "planned",
-      result: "",
-    };
-    if (!row.date) {
-      await sendTelegramMessage(chatId, "Не понял дату встречи — уточните, пожалуйста.");
-      return;
-    }
-    const { error } = await admin.from("meetings").insert(row);
-    if (error) {
-      await sendTelegramMessage(chatId, "Не получилось сохранить встречу: " + error.message);
-      return;
-    }
-    const lines = [`✓ Встреча: «${row.title}»`, `${fmtDate(row.date)}${row.time ? ", " + row.time : ""}`];
-    if (row.participants.length) lines.push("Участники: " + row.participants.join(", "));
-    await sendTelegramMessage(chatId, lines.join("\n") + droppedNote(droppedNames));
-    return;
-  }
-
-  if (tool === "create_idea") {
-    const row = {
-      id: uid(),
-      user_id: userId,
-      text: String(input.text || ""),
-      important: !!input.important,
-      done: false,
-    };
-    const { error } = await admin.from("ideas").insert(row);
-    if (error) {
-      await sendTelegramMessage(chatId, "Не получилось сохранить идею: " + error.message);
-      return;
-    }
-    await sendTelegramMessage(chatId, `💡 Идея сохранена: «${row.text}»`);
-    return;
-  }
-
-  if (tool === "ask_clarifying_question") {
-    await sendTelegramMessage(chatId, String(input.question || "Уточните, пожалуйста."));
-    return;
-  }
-
-  if (tool === "manage_item") {
-    const action = input.action as ManageAction;
-    const itemType = input.itemType as ManageItemType;
-    const query = String(input.query || "").trim();
-    if (!query) {
-      await sendTelegramMessage(chatId, "Не понял, какую задачу или встречу вы имеете в виду — уточните название.");
-      return;
-    }
-    const { reply, pendingAction } = await handleManageItem(userId, action, itemType, query);
-    if (pendingAction) {
-      await admin.from("telegram_accounts").update({ pending_action: pendingAction }).eq("telegram_chat_id", chatId);
-    }
-    await sendTelegramMessage(chatId, reply);
-    return;
-  }
-
-  if (tool === "meeting_notes") {
-    const notes = String(input.text || "").trim();
-    if (!notes) {
-      await sendTelegramMessage(chatId, "Не расслышал итоги встречи — перескажите ещё раз.");
-      return;
-    }
-    const { data: assigneeRows } = await admin.from("assignees").select("name").eq("user_id", userId);
-    const known = (assigneeRows || []).map((r) => r.name as string);
-    const { summary, tasks } = await extractMeetingNotes(notes, known);
-    // Which meeting this recap is about, if any still stands open — matched
-    // in code, see meetingLink. When it matches, the same confirmation also
-    // closes that meeting and writes the recap into its card, so a dictated
-    // outcome doesn't leave the meeting hanging as "запланирована".
-    const meeting = await findMeetingForNotes(admin, userId, notes);
-    const meetingLine = meeting ? `🗓 Встречу «${meeting.title}» от ${fmtDate(meeting.date)} закрою и запишу в неё этот итог.` : "";
-    const pendingMeeting = meeting && summary ? { id: meeting.id, title: meeting.title, result: meeting.result, summary } : undefined;
-
-    if (!tasks.length) {
-      if (pendingMeeting) {
-        await admin
-          .from("telegram_accounts")
-          .update({ pending_action: { kind: "create_tasks", userId, tasks: [], meeting: pendingMeeting } })
-          .eq("telegram_chat_id", chatId);
-        await sendTelegramMessage(
-          chatId,
-          "📝 " + summary + "\n\nПоручений в рассказе не нашёл.\n" + meetingLine + "\n\nЗакрываю? Ответьте «да» — любой другой ответ отменит.",
-        );
-        return;
-      }
-      await sendTelegramMessage(
-        chatId,
-        (summary ? "📝 " + summary + "\n\n" : "") + "Поручений в этом рассказе не нашёл. Если что-то нужно завести — скажите отдельной фразой.",
-      );
-      return;
-    }
-
-    // Never created straight away: a monologue is exactly the input where a
-    // model can turn a passing remark into a task, so the list is shown and
-    // waits for an explicit "да" (handled by resolvePendingAction).
-    const lines = tasks.map((t, i) => {
-      const bits = [t.assignee || "без исполнителя"];
-      if (t.deadline) bits.push("до " + fmtDate(t.deadline));
-      if (t.priority === "high") bits.push("важно");
-      return `${i + 1}) ${t.title} — ${bits.join(", ")}`;
-    });
-    await admin
-      .from("telegram_accounts")
-      .update({ pending_action: { kind: "create_tasks", userId, tasks, meeting: pendingMeeting } })
-      .eq("telegram_chat_id", chatId);
-    await sendTelegramMessage(
-      chatId,
-      (summary ? "📝 " + summary + "\n\n" : "") +
-        `Нашёл поручений: ${tasks.length}\n${lines.join("\n")}\n` +
-        (pendingMeeting ? meetingLine + "\n" : "") +
-        "\nСоздать их? Ответьте «да» — любой другой ответ отменит.\n" +
-        "Проверьте список: если что-то пропущено, допишите отдельным сообщением.",
-    );
-    return;
-  }
-
-  if (tool === "bulk_move") {
-    const scope = (["tasks", "meetings", "both"] as const).includes(input.scope as BulkScope) ? (input.scope as BulkScope) : "both";
-    const { plan, error } = await planBulkMove(userId, { scope, from: String(input.from || ""), to: String(input.to || "") });
-    if (error || !plan) {
-      await sendTelegramMessage(chatId, error || "Не понял, что переносить.");
-      return;
-    }
-    // Shown and confirmed before anything moves — a bulk edit is the one
-    // place a misunderstanding is expensive to undo.
-    await admin
-      .from("telegram_accounts")
-      .update({ pending_action: { kind: "bulk_move", plan } })
-      .eq("telegram_chat_id", chatId);
-    await sendTelegramMessage(chatId, describePlan(plan) + "\n\nПереношу? Ответьте «да» — любой другой ответ отменит.");
-    return;
-  }
-
-  if (tool === "search_tracker") {
-    const query = String(input.query || "").trim();
-    if (!query) {
-      await sendTelegramMessage(chatId, "Что искать? Назовите тему или человека.");
-      return;
-    }
-    const hits = await searchTracker(admin, userId, query);
-    await sendTelegramMessage(chatId, await summariseSearch(query, hits));
-    return;
-  }
-
-  if (tool === "answer_question") {
-    const question = String(input.query || "").trim();
-    if (!question) {
-      await sendTelegramMessage(chatId, "Не понял вопрос — переспросите, пожалуйста.");
-      return;
-    }
-    // Two-step on purpose: the parse above only decided "this is a question".
-    // The answer needs the user's actual data, which is fetched here and
-    // handed to the model as a read-only snapshot (see trackerContext).
-    const context = await buildTrackerContext(admin, userId);
-    const answer = await answerTrackerQuestion(question, context);
-    await sendTelegramMessage(chatId, answer);
-    return;
-  }
-
-  // cant_help, or anything unrecognized — an honest "I don't do that" beats
-  // silently failing or (the bug this replaced) echoing the user's message.
-  await sendTelegramMessage(
-    chatId,
-    "Это не похоже ни на поручение, ни на вопрос о делах. " +
-      "Напишите поручение («завтра позвонить Сергею») или спросите про свои задачи («что горит на этой неделе»).",
-  );
-}
 
 export async function POST(req: Request) {
   const secret = req.headers.get("x-telegram-bot-api-secret-token");
@@ -259,6 +30,7 @@ export async function POST(req: Request) {
   let text: string | undefined = message?.text;
 
   const admin = createAdminClient();
+  const transport = telegramTransport();
 
   // A tapped button under a task or a meeting. Handled before anything
   // else: it carries its own chat and needs none of the machinery below.
@@ -266,16 +38,20 @@ export async function POST(req: Request) {
     const pressedChatId: number | undefined = callbackQuery.message?.chat?.id;
     const action = decodeCallback(callbackQuery.data);
     if (!pressedChatId || !action) {
-      await answerCallbackQuery(callbackQuery.id, "Не понял, что нажато");
+      await transport.resolveCallback({ callbackId: callbackQuery.id, chatId: pressedChatId ?? 0, toast: "Не понял, что нажато" });
       return NextResponse.json({ ok: true });
     }
-    const outcome = await handleColleagueCallback(admin, pressedChatId, action);
-    await answerCallbackQuery(callbackQuery.id, outcome.toast);
-    if (outcome.rewriteTo && callbackQuery.message?.message_id) {
-      await editTelegramMessage(pressedChatId, callbackQuery.message.message_id, outcome.rewriteTo);
-    }
+    const outcome = await handleColleagueCallback(admin, pressedChatId, action, TELEGRAM_CHANNEL);
+    await transport.resolveCallback({
+      callbackId: callbackQuery.id,
+      chatId: pressedChatId,
+      messageId: callbackQuery.message?.message_id != null ? String(callbackQuery.message.message_id) : undefined,
+      toast: outcome.toast,
+      rewriteTo: outcome.rewriteTo,
+    });
     if (outcome.notifyOwner) {
-      await sendTelegramMessage(outcome.notifyOwner.chatId, outcome.notifyOwner.text);
+      const colleagueOwner = await admin.from("assignees").select("user_id").eq("telegram_chat_id", pressedChatId).limit(1).maybeSingle();
+      if (colleagueOwner.data?.user_id) await notifyOwner(admin, colleagueOwner.data.user_id as string, outcome.notifyOwner);
     }
     return NextResponse.json({ ok: true });
   }
@@ -283,6 +59,8 @@ export async function POST(req: Request) {
   if (!chatId) {
     return NextResponse.json({ ok: true });
   }
+
+  const ctx: BotContext = { admin, transport, channel: TELEGRAM_CHANNEL, chatId };
 
   // Telegram redelivers an update it didn't get a fast/successful response
   // to — observed in production as the bot repeating the same reply to the
@@ -315,18 +93,18 @@ export async function POST(req: Request) {
       // A cold container downloads the ~40MB model before it can transcribe
       // anything, which takes the best part of a minute — say so, otherwise
       // the bot just looks dead for that whole time.
-      await sendTelegramMessage(chatId, "🎙 Распознаю голосовое…");
+      await transport.send(chatId, "🎙 Распознаю голосовое…");
       const { transcribeOggOpus } = await import("@/lib/speechToText");
       const bytes = await downloadTelegramFile(voiceFileId);
       const transcript = await transcribeOggOpus(bytes);
       if (!transcript) {
-        await sendTelegramMessage(chatId, "Не расслышал — попробуйте ещё раз или напишите текстом.");
+        await transport.send(chatId, "Не расслышал — попробуйте ещё раз или напишите текстом.");
         return NextResponse.json({ ok: true });
       }
-      await sendTelegramMessage(chatId, "🎙 Распознал: «" + transcript + "»");
+      await transport.send(chatId, "🎙 Распознал: «" + transcript + "»");
       text = transcript;
     } catch (e) {
-      await sendTelegramMessage(chatId, "Не получилось распознать голос: " + (e instanceof Error ? e.message : String(e)));
+      await transport.send(chatId, "Не получилось распознать голос: " + (e instanceof Error ? e.message : String(e)));
       return NextResponse.json({ ok: true });
     }
   }
@@ -338,185 +116,10 @@ export async function POST(req: Request) {
   }
 
   if (text.startsWith("/start")) {
-    const code = text.replace("/start", "").trim();
-    if (!code) {
-      await sendTelegramMessage(chatId, "Откройте трекер на сайте и нажмите «Подключить Telegram», чтобы получить код.");
-      return NextResponse.json({ ok: true });
-    }
-    const { data: linkRow, error: lookupError } = await admin
-      .from("telegram_link_codes")
-      .select("user_id, expires_at, assignee_id")
-      .eq("code", code)
-      .maybeSingle();
-
-    if (lookupError) {
-      await sendTelegramMessage(chatId, "Внутренняя ошибка базы: " + lookupError.message);
-      return NextResponse.json({ ok: true });
-    }
-    if (!linkRow || new Date(linkRow.expires_at).getTime() < Date.now()) {
-      await sendTelegramMessage(chatId, "Код неверный или уже истёк. Запросите новый в приложении.");
-      return NextResponse.json({ ok: true });
-    }
-
-    // A code issued for a colleague attaches this chat to that person
-    // instead of granting access to the tracker. They get what is sent to
-    // them and nothing else — see colleagueReplies.ts.
-    if (linkRow.assignee_id) {
-      const { data: person, error: linkError } = await admin
-        .from("assignees")
-        .update({
-          telegram_chat_id: chatId,
-          telegram_username: message?.from?.username || null,
-          linked_at: new Date().toISOString(),
-        })
-        .eq("id", linkRow.assignee_id)
-        .select("name")
-        .maybeSingle();
-      if (linkError) {
-        await sendTelegramMessage(chatId, "Не удалось подключиться: " + linkError.message);
-        return NextResponse.json({ ok: true });
-      }
-      await admin.from("telegram_link_codes").delete().eq("code", code);
-      await sendTelegramMessage(
-        chatId,
-        `✓ Готово, ${person?.name || "вы"} на связи. Сюда будут приходить задачи и встречи — отвечать можно кнопками под сообщением.`,
-      );
-      return NextResponse.json({ ok: true });
-    }
-
-    const { error: upsertError } = await admin
-      .from("telegram_accounts")
-      .upsert({ telegram_chat_id: chatId, user_id: linkRow.user_id });
-    if (upsertError) {
-      await sendTelegramMessage(chatId, "Не удалось привязать аккаунт: " + upsertError.message);
-      return NextResponse.json({ ok: true });
-    }
-    await admin.from("telegram_link_codes").delete().eq("code", code);
-    await sendTelegramMessage(
-      chatId,
-      "✓ Готово, аккаунт привязан. Теперь просто пишите сюда — например «завтра позвонить Сергею».\n" +
-        "Также понимаю: «сегодня», «просрочено», «встречи», «помощь».",
-    );
+    await handleLinkCode(ctx, text.replace("/start", ""), message?.from?.username || null);
     return NextResponse.json({ ok: true });
   }
 
-  const { data: account, error: accountError } = await admin
-    .from("telegram_accounts")
-    .select("user_id, pending_context, pending_action")
-    .eq("telegram_chat_id", chatId)
-    .maybeSingle();
-
-  if (accountError) {
-    await sendTelegramMessage(chatId, "Внутренняя ошибка базы: " + accountError.message);
-    return NextResponse.json({ ok: true });
-  }
-  if (!account) {
-    const colleague = await findColleagueByChat(admin, chatId);
-    if (colleague) {
-      await sendTelegramMessage(chatId, colleagueHelp(colleague.name));
-      return NextResponse.json({ ok: true });
-    }
-    await sendTelegramMessage(chatId, "Этот чат ещё не привязан. Откройте трекер на сайте → «Подключить Telegram».");
-    return NextResponse.json({ ok: true });
-  }
-
-  const { allowed } = await checkRateLimit(admin, account.user_id, "telegram", 20, 60);
-  if (!allowed) {
-    await sendTelegramMessage(chatId, "Слишком много сообщений подряд, подождите минуту.");
-    return NextResponse.json({ ok: true });
-  }
-
-  // A pending delete confirmation always wins over everything else — the
-  // next message is either "да" or a cancel, never a new request.
-  if (account.pending_action) {
-    await admin.from("telegram_accounts").update({ pending_action: null }).eq("telegram_chat_id", chatId);
-    const reply = await resolvePendingAction(account.pending_action as PendingAction, text);
-    await sendTelegramMessage(chatId, reply);
-    return NextResponse.json({ ok: true });
-  }
-
-  // Read-only query commands ("сегодня", "просрочено", "встречи") are matched
-  // before quick-add — free, instant, and can't be misparsed by the LLM.
-  // They also break out of any pending clarify flow, since answering "сегодня"
-  // to a clarifying question isn't a real answer to it.
-  const queryKind = matchQueryCommand(text);
-  if (queryKind) {
-    if (account.pending_context) {
-      await admin.from("telegram_accounts").update({ pending_context: null }).eq("telegram_chat_id", chatId);
-    }
-    const reply = await replyForQuery(queryKind, account.user_id);
-    await sendTelegramMessage(chatId, reply);
-    return NextResponse.json({ ok: true });
-  }
-
-  const hadPendingContext = !!account.pending_context;
-  const effectiveText = hadPendingContext ? `${account.pending_context}. Уточнение: ${text.trim()}` : text.trim();
-  if (hadPendingContext) {
-    await admin.from("telegram_accounts").update({ pending_context: null }).eq("telegram_chat_id", chatId);
-  }
-
-  const { data: assigneeRows } = await admin.from("assignees").select("name").eq("user_id", account.user_id);
-  const assignees = (assigneeRows || []).map((r) => r.name as string);
-
-  try {
-    const { items } = await parseQuickAdd(effectiveText, assignees);
-    let toProcess = items;
-
-    // Loop guard: allow at most ONE clarifying round-trip. An exact-text
-    // comparison here previously let this slip through in production — the
-    // model phrased each follow-up slightly differently, so it never matched,
-    // and pending_context grew without bound across many replies (turning
-    // into an ever-larger, eventually corrupted blob that kept re-triggering
-    // the same stuck question). Capping by round instead of by text content
-    // closes that regardless of what the model says the second time. Only
-    // applies when the whole message is a single clarifying question — a
-    // multi-item batch that includes one alongside real items just drops it
-    // below instead.
-    if (toProcess.length === 1 && toProcess[0].tool === "ask_clarifying_question" && hadPendingContext) {
-      toProcess = [{ tool: "cant_help", input: {}, droppedNames: [] }];
-    }
-
-    const isSingleClarify = toProcess.length === 1 && toProcess[0].tool === "ask_clarifying_question";
-    if (isSingleClarify) {
-      // Defensive cap — this can only ever be the *first* round now, but
-      // truncate anyway so a single oversized message can't wedge the column.
-      await admin
-        .from("telegram_accounts")
-        .update({ pending_context: effectiveText.slice(0, 500) })
-        .eq("telegram_chat_id", chatId);
-    }
-
-    // A clarifying question can't be answered in a multi-item batch (there's
-    // nowhere to hold several pending questions at once) — process the
-    // actionable items and quietly drop that one rather than derail the
-    // whole message over an unclear fragment.
-    const finalItems = isSingleClarify ? toProcess : toProcess.filter((it) => it.tool !== "ask_clarifying_question");
-    for (const it of finalItems) {
-      await replyForResult(chatId, admin, account.user_id, it.tool, it.input, it.droppedNames);
-    }
-    await logAiAction(admin, {
-      userId: account.user_id,
-      source: "telegram",
-      inputText: effectiveText,
-      success: true,
-      resultSummary: finalItems.map((it) => it.tool).join(", "),
-    });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    // Classification failed — most often because the message was a question
-    // and the model answered it in prose instead of returning JSON. Rather
-    // than show "В ответе нет JSON", treat it as a question: that path only
-    // reads data, so the worst case is an unhelpful answer, never a wrong
-    // edit. A real failure there falls through to the error message.
-    try {
-      const context = await buildTrackerContext(admin, account.user_id);
-      await sendTelegramMessage(chatId, await answerTrackerQuestion(effectiveText, context));
-      await logAiAction(admin, { userId: account.user_id, source: "telegram", inputText: effectiveText, success: true, resultSummary: "answer_question (fallback)" });
-    } catch {
-      await sendTelegramMessage(chatId, "Не получилось разобрать сообщение: " + message);
-      await logAiAction(admin, { userId: account.user_id, source: "telegram", inputText: effectiveText, success: false, errorMessage: message });
-    }
-  }
-
+  await handleText(ctx, text);
   return NextResponse.json({ ok: true });
 }

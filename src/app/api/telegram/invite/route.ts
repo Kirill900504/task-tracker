@@ -2,21 +2,16 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { botUsername, inviteChannel, inviteLink, randomCode } from "@/lib/botInvite";
 
 // An invite for one colleague: a short-lived code and the link that carries
-// it. Telegram will not let a bot write to someone who has never opened it,
-// so this one-time step — they tap the link and press Start — is what makes
-// everything else possible.
+// it. Neither messenger will let a bot write to someone who has never opened
+// it, so this one-time step — they tap the link and press Start — is what
+// makes everything else possible.
 //
-// The code is bound to the assignee row, so pressing Start attaches that
-// chat to that person and to nothing else.
-
-function randomCode(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
-  let out = "";
-  for (let i = 0; i < 8; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return out;
-}
+// The code is bound to the assignee row AND to the messenger it was issued
+// for, so pressing Start attaches that chat to that person, and a code shown
+// with the Telegram link cannot be used to connect a MAX chat.
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -34,8 +29,15 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => null);
   const assigneeId = typeof body?.assigneeId === "string" ? body.assigneeId : "";
+  const channel = inviteChannel(body?.channel);
   if (!assigneeId) {
     return NextResponse.json({ error: "Не указан исполнитель" }, { status: 400 });
+  }
+  if (!botUsername(channel)) {
+    return NextResponse.json(
+      { error: channel === "max" ? "Бот в MAX ещё не подключён — нужен токен от MAX для партнёров" : "Бот в Telegram не настроен" },
+      { status: 400 },
+    );
   }
 
   // Read through the USER's client, not the admin one: RLS is what proves
@@ -46,16 +48,16 @@ export async function POST(req: Request) {
 
   const code = randomCode();
   const admin = createAdminClient();
-  const { error } = await admin.from("telegram_link_codes").insert({ code, user_id: user.id, assignee_id: assignee.id });
+  const { error } = await admin.from("telegram_link_codes").insert({ code, user_id: user.id, assignee_id: assignee.id, channel });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME || "";
   return NextResponse.json({
     code,
+    channel,
     name: assignee.name,
-    botUsername,
-    link: botUsername ? `https://t.me/${botUsername}?start=${code}` : "",
+    botUsername: botUsername(channel),
+    link: inviteLink(channel, code),
   });
 }

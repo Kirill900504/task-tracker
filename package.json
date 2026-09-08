@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:rls": "node --env-file=.env.local scripts/test-rls.mjs",
-    "test:e2e": "node --env-file=.env.local node_modules/@playwright/test/cli.js test"
+    "test:e2e": "node --env-file=.env.local node_modules/@playwright/test/cli.js test",
+    "test:bots": "node --env-file=.env.local scripts/test-bots.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

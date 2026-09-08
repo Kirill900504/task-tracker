@@ -201,6 +201,11 @@ async function main() {
   await testServerOnlyTable("telegram_notifications", { telegram_chat_id: 1, kind: "task_due", ref_id: "x", notif_date: "2026-09-06" });
   await testServerOnlyTable("telegram_processed_updates", { update_id: Math.floor(Math.random() * 1e9) });
 
+  // The MAX tables are the same shape and the same rules: written only by
+  // the webhook with the service-role key, never by a signed-in browser.
+  await testServerOnlyTable("max_accounts", { max_user_id: Math.floor(Math.random() * 1e9), user_id: "00000000-0000-0000-0000-000000000000" });
+  await testServerOnlyTable("max_processed_updates", { update_key: "rls-" + Math.random().toString(36).slice(2) });
+
   console.log(`\n${failures === 0 ? "ALL PASSED" : failures + " FAILURE(S)"}`);
   process.exit(failures === 0 ? 0 : 1);
 }

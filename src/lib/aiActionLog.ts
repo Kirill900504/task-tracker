@@ -7,7 +7,7 @@ export async function logAiAction(
   client: SupabaseClient,
   params: {
     userId: string;
-    source: "telegram" | "web";
+    source: "telegram" | "web" | "max";
     inputText: string;
     success: boolean;
     resultSummary?: string;

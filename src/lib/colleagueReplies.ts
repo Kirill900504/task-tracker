@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
 import { findColleagueByChat } from "@/lib/colleagues";
+import type { BotChannelConfig } from "@/lib/botTransport";
 
 // What happens when a colleague presses a button under a task or a meeting.
 //
@@ -10,15 +11,20 @@ import { findColleagueByChat } from "@/lib/colleagues";
 // the person the item is actually addressed to, and the item has to belong
 // to their owner. Nothing is taken from the message itself — a callback can
 // be replayed or forged, an id is not a permission.
+//
+// Which messenger the press came from is passed in: the checks are the same
+// in Telegram and in MAX, only the column that identifies the chat differs.
 
 export type CallbackOutcome = {
-  // Shown as a small toast on the button the person tapped.
+  // Shown as a small toast on the button the person tapped, where the
+  // messenger has toasts (MAX does not — see maxTransport).
   toast: string;
   // The message is rewritten to this, so the chat shows what happened
   // instead of buttons that no longer do anything.
   rewriteTo?: string;
-  // The owner hears about it in their own chat.
-  notifyOwner?: { chatId: number; text: string };
+  // The owner hears about it — in every messenger he is connected to, which
+  // the caller resolves (see botDelivery.notifyOwner).
+  notifyOwner?: string;
 };
 
 export function colleagueHelp(name: string): string {
@@ -28,17 +34,13 @@ export function colleagueHelp(name: string): string {
   );
 }
 
-async function ownerChat(admin: SupabaseClient, userId: string): Promise<number | null> {
-  const { data } = await admin.from("telegram_accounts").select("telegram_chat_id").eq("user_id", userId).limit(1).maybeSingle();
-  return (data?.telegram_chat_id as number) ?? null;
-}
-
 export async function handleColleagueCallback(
   admin: SupabaseClient,
   chatId: number,
   action: CallbackAction,
+  channel: BotChannelConfig,
 ): Promise<CallbackOutcome> {
-  const colleague = await findColleagueByChat(admin, chatId);
+  const colleague = await findColleagueByChat(admin, chatId, channel);
   if (!colleague) return { toast: "Этот чат не подключён" };
 
   if (action.kind === "task") {
@@ -56,11 +58,10 @@ export async function handleColleagueCallback(
 
     if (action.action === "acc") {
       await admin.from("tasks").update({ accepted_at: new Date().toISOString() }).eq("id", task.id);
-      const chat = await ownerChat(admin, colleague.user_id);
       return {
         toast: "Принято",
         rewriteTo: `📋 ${task.title}\n\n✅ Принято в работу`,
-        notifyOwner: chat ? { chatId: chat, text: `✅ ${colleague.name} принял в работу: «${task.title}»` } : undefined,
+        notifyOwner: `✅ ${colleague.name} принял в работу: «${task.title}»`,
       };
     }
 
@@ -69,11 +70,10 @@ export async function handleColleagueCallback(
         .from("tasks")
         .update({ status: "done", completed_at: new Date().toISOString() })
         .eq("id", task.id);
-      const chat = await ownerChat(admin, colleague.user_id);
       return {
         toast: "Отмечено выполненным",
         rewriteTo: `📋 ${task.title}\n\n🏁 Выполнено`,
-        notifyOwner: chat ? { chatId: chat, text: `🏁 ${colleague.name} выполнил: «${task.title}»` } : undefined,
+        notifyOwner: `🏁 ${colleague.name} выполнил: «${task.title}»`,
       };
     }
   }
@@ -97,12 +97,11 @@ export async function handleColleagueCallback(
         .update({ confirmed_by: [...confirmed, colleague.name] })
         .eq("id", meeting.id);
     }
-    const chat = await ownerChat(admin, colleague.user_id);
     const when = fmtDate(meeting.date as string) + (meeting.time ? ", " + meeting.time : "");
     return {
       toast: "Отметил, что будете",
       rewriteTo: `📅 ${meeting.title}\n${when}\n\n✅ Вы подтвердили участие`,
-      notifyOwner: chat ? { chatId: chat, text: `✅ ${colleague.name} будет на встрече «${meeting.title}» (${when})` } : undefined,
+      notifyOwner: `✅ ${colleague.name} будет на встрече «${meeting.title}» (${when})`,
     };
   }
 

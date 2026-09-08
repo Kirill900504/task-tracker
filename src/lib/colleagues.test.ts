@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { encodeCallback, decodeCallback, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons } from "@/lib/colleagues";
+import { encodeCallback, decodeCallback, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, chatsFor } from "@/lib/colleagues";
 
 describe("callback data", () => {
   it("survives a round trip", () => {
@@ -61,11 +61,34 @@ describe("what a colleague receives", () => {
 describe("buttons", () => {
   it("offers accept and done on a task, both carrying its id", () => {
     const rows = taskButtons("t42");
-    expect(rows[0].map((b) => b.callback_data)).toEqual(["t:acc:t42", "t:done:t42"]);
+    expect(rows[0].map((b) => b.data)).toEqual(["t:acc:t42", "t:done:t42"]);
   });
 
   it("offers a single confirmation on a meeting", () => {
     expect(meetingButtons("m7")[0]).toHaveLength(1);
-    expect(meetingButtons("m7")[0][0].callback_data).toBe("m:yes:m7");
+    expect(meetingButtons("m7")[0][0].data).toBe("m:yes:m7");
+  });
+});
+
+describe("chatsFor", () => {
+  const row = { id: "a1", name: "Игорь Витковский" };
+
+  it("says where a colleague can be written to", () => {
+    expect(chatsFor({ ...row, telegram_chat_id: 111, max_user_id: null })).toEqual([
+      { channel: expect.objectContaining({ id: "telegram" }), chatId: 111 },
+    ]);
+    expect(chatsFor({ ...row, telegram_chat_id: null, max_user_id: 222 })).toEqual([
+      { channel: expect.objectContaining({ id: "max" }), chatId: 222 },
+    ]);
+  });
+
+  it("puts Telegram first for someone connected to both, so one message goes out and not two", () => {
+    const both = chatsFor({ ...row, telegram_chat_id: 111, max_user_id: 222 });
+    expect(both).toHaveLength(2);
+    expect(both[0].channel.id).toBe("telegram");
+  });
+
+  it("gives nothing for someone who has connected nothing", () => {
+    expect(chatsFor({ ...row, telegram_chat_id: null, max_user_id: null })).toEqual([]);
   });
 });

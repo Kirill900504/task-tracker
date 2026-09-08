@@ -33,11 +33,14 @@ export async function updateSession(request: NextRequest) {
   // has a chance to, so it must not redirect this away first.
   const isResetPasswordPage = request.nextUrl.pathname.startsWith("/reset-password");
   if (isResetPasswordPage) return supabaseResponse;
-  // Telegram and the external cron pinger call these with their own
+  // The messengers and the external cron pinger call these with their own
   // secret-token checks, not a browser session — never gate them behind
-  // the login redirect.
+  // the login redirect. (A missed entry here does not fail loudly: the POST
+  // is redirected to /login and comes back 405, with nothing in the logs to
+  // say why — which is exactly how the MAX webhook first behaved.)
   const isServerToServerRoute =
     request.nextUrl.pathname.startsWith("/api/telegram/webhook") ||
+    request.nextUrl.pathname.startsWith("/api/max/webhook") ||
     request.nextUrl.pathname.startsWith("/api/cron/");
   if (isServerToServerRoute) return supabaseResponse;
 

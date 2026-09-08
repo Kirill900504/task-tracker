@@ -1,3 +1,5 @@
+import type { BotTransport } from "@/lib/botTransport";
+
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
@@ -89,4 +91,23 @@ export async function downloadTelegramFile(fileId: string): Promise<ArrayBuffer>
   if (!path) throw new Error("Telegram getFile: " + JSON.stringify(info));
   const fileRes = await fetch(`https://api.telegram.org/file/bot${TOKEN}/${path}`);
   return fileRes.arrayBuffer();
+}
+
+// The Telegram side of the shared bot interface (see botTransport.ts). The
+// functions above stay as they are — this only translates the neutral shapes
+// into Telegram's own.
+export function telegramTransport(): BotTransport {
+  return {
+    channel: "telegram",
+    label: "Telegram",
+    async send(chatId, text, options) {
+      const buttons = options?.buttons?.map((row) => row.map((b) => ({ text: b.text, callback_data: b.data })));
+      const result = await sendTelegramMessage(chatId, text, buttons?.length ? { buttons } : undefined);
+      return { ok: result.ok, error: result.error, messageId: result.messageId != null ? String(result.messageId) : undefined };
+    },
+    async resolveCallback({ callbackId, chatId, messageId, toast, rewriteTo }) {
+      await answerCallbackQuery(callbackId, toast);
+      if (rewriteTo && messageId) await editTelegramMessage(chatId, Number(messageId), rewriteTo);
+    },
+  };
 }

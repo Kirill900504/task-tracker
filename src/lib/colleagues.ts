@@ -1,13 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { InlineButton } from "@/lib/telegram";
+import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
+import { BOT_CHANNELS } from "@/lib/botTransport";
 import { fmtDate } from "@/lib/taskDisplay";
 
 // Sending an item to the person it is addressed to, and understanding what
 // they press in reply.
 //
-// A colleague is a row in `assignees` with a Telegram chat attached — not a
-// user of the tracker. They never sign in, own nothing, and see only what is
-// sent to them. Everything they are allowed to do is checked here against
+// A colleague is a row in `assignees` with a messenger chat attached — not
+// a user of the tracker. They never sign in, own nothing, and see only what
+// is sent to them. Telegram or MAX makes no difference here: the same row
+// can carry either, or both. Everything they are allowed to do is checked here against
 // the item itself: the button carries an id, and the id has to belong to an
 // item addressed to that very chat.
 
@@ -15,11 +17,12 @@ export type ColleagueRow = {
   id: string;
   name: string;
   telegram_chat_id: number | null;
+  max_user_id: number | null;
 };
 
 export type SendKind = "task" | "meeting" | "idea";
 
-// Кто это нажал и что именно — упаковано в callback_data, у которого
+// Кто это нажал и что именно — упаковано в данные кнопки, у которых
 // Telegram ограничивает длину 64 байтами, поэтому только вид, действие и id.
 export type CallbackAction = { kind: SendKind; action: string; id: string };
 
@@ -60,39 +63,52 @@ export function ideaMessage(text: string, from: string): string {
   return `💡 Мысль от ${from}:\n\n${text}`;
 }
 
-export function taskButtons(taskId: string): InlineButton[][] {
+export function taskButtons(taskId: string): BotButton[][] {
   return [
     [
-      { text: "✅ Принял", callback_data: encodeCallback("task", "acc", taskId) },
-      { text: "🏁 Сделал", callback_data: encodeCallback("task", "done", taskId) },
+      { text: "✅ Принял", data: encodeCallback("task", "acc", taskId) },
+      { text: "🏁 Сделал", data: encodeCallback("task", "done", taskId) },
     ],
   ];
 }
 
-export function meetingButtons(meetingId: string): InlineButton[][] {
-  return [[{ text: "✅ Буду", callback_data: encodeCallback("meeting", "yes", meetingId) }]];
+export function meetingButtons(meetingId: string): BotButton[][] {
+  return [[{ text: "✅ Буду", data: encodeCallback("meeting", "yes", meetingId) }]];
 }
 
 // An idea is not an instruction — there is nothing to accept or finish, so it
 // goes without buttons.
-export function ideaButtons(): InlineButton[][] {
+export function ideaButtons(): BotButton[][] {
   return [];
 }
 
 export async function findColleagueByChat(
   admin: SupabaseClient,
   chatId: number,
+  channel: BotChannelConfig,
 ): Promise<{ id: string; name: string; user_id: string } | null> {
   const { data } = await admin
     .from("assignees")
     .select("id, name, user_id")
-    .eq("telegram_chat_id", chatId)
+    .eq(channel.chatColumn, chatId)
     .limit(1)
     .maybeSingle();
   return (data as { id: string; name: string; user_id: string } | null) || null;
 }
 
 export async function listColleagues(admin: SupabaseClient, userId: string): Promise<ColleagueRow[]> {
-  const { data } = await admin.from("assignees").select("id, name, telegram_chat_id").eq("user_id", userId).order("created_at");
+  const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").eq("user_id", userId).order("created_at");
   return (data || []) as ColleagueRow[];
+}
+
+// Where this person can be written to, in the order the channels are listed.
+// A colleague connected to both gets one message, not two: the first
+// messenger they connected through is the one that is used.
+export function chatsFor(row: ColleagueRow): { channel: BotChannelConfig; chatId: number }[] {
+  const out: { channel: BotChannelConfig; chatId: number }[] = [];
+  for (const channel of BOT_CHANNELS) {
+    const id = channel.id === "telegram" ? row.telegram_chat_id : row.max_user_id;
+    if (id != null) out.push({ channel, chatId: id });
+  }
+  return out;
 }
