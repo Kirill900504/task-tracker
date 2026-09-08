@@ -11,6 +11,7 @@ import { isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
 import { getDragAfterElement } from "@/lib/dndDom";
 import TaskCard from "./TaskCard";
 import TaskModal from "./TaskModal";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import type { useToasts } from "@/hooks/useToasts";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 
@@ -77,6 +78,11 @@ export default function TasksPanel({
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterSection, setFilterSection] = useState("all");
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
+  const isMobile = useIsMobile();
+  // On a phone the four filter controls cost a third of the screen before
+  // a single task is visible, and most days none of them is touched — so
+  // they fold away, with a dot on the button when any is actually set.
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Collapsible columns, persisted per column exactly like legacy did
   // (localStorage key kkt_collapsed_<colId>) so the choice survives reloads.
@@ -284,36 +290,52 @@ export default function TasksPanel({
         </div>
       )}
       {extraBanner}
-      <div className="toolbar">
-        <button className="btn btn-primary" id="newTaskBtn" title="Новая задача (N)" onClick={() => setModalState({ open: true, task: null })}>
-          + Новая задача
-        </button>
-        <div className="search-wrap" id="quickAddSlot" />
-        <select id="filterSection" value={filterSection} onChange={(e) => setFilterSection(e.target.value)}>
-          <option value="all">Все разделы</option>
-          {sections.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <select id="filterAssignee" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
-          <option value="all">Все исполнители</option>
-          {assignees.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </select>
-        <select id="filterPriority" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-          <option value="all">Любой приоритет</option>
-          <option value="high">Высокий</option>
-          <option value="med">Средний</option>
-        </select>
-        <label className="check-wrap">
-          <input type="checkbox" id="showDoneCheckbox" checked={showDone} onChange={(e) => onShowDoneChange(e.target.checked)} /> Показывать завершённые
-        </label>
-      </div>
+      {(() => {
+        const filtersActive = filterSection !== "all" || filterAssignee !== "all" || filterPriority !== "all";
+        const collapsed = isMobile && !filtersOpen;
+        return (
+          <div className={"toolbar" + (collapsed ? " collapsed" : "")}>
+            <button className="btn btn-primary" id="newTaskBtn" title="Новая задача (N)" onClick={() => setModalState({ open: true, task: null })}>
+              + Новая задача
+            </button>
+            {isMobile && (
+              <button
+                className={"btn toolbar-filter-toggle" + (filtersActive ? " has-filters" : "")}
+                id="mobileFiltersBtn"
+                onClick={() => setFiltersOpen((v) => !v)}
+              >
+                {filtersOpen ? "Скрыть фильтры" : "Фильтры"}
+                {filtersActive && <span className="toolbar-filter-dot" />}
+              </button>
+            )}
+            <div className="search-wrap" id="quickAddSlot" />
+            <select id="filterSection" value={filterSection} onChange={(e) => setFilterSection(e.target.value)}>
+              <option value="all">Все разделы</option>
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <select id="filterAssignee" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
+              <option value="all">Все исполнители</option>
+              {assignees.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+            <select id="filterPriority" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+              <option value="all">Любой приоритет</option>
+              <option value="high">Высокий</option>
+              <option value="med">Средний</option>
+            </select>
+            <label className="check-wrap">
+              <input type="checkbox" id="showDoneCheckbox" checked={showDone} onChange={(e) => onShowDoneChange(e.target.checked)} /> Показывать завершённые
+            </label>
+          </div>
+        );
+      })()}
 
       <div className="columns">
         {renderColumn(shortOpen, "Нет краткосрочных задач по текущим фильтрам", "Краткосрочные", "short", shortColRef)}

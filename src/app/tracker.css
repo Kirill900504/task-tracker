@@ -670,3 +670,176 @@
   .team-error{font-size:12px; color:var(--high); margin-bottom:10px;}
   .send-result{font-size:12px; color:var(--ink-soft); margin-top:8px;}
   .pill-accepted{color:var(--long-border); background:rgba(60,92,70,.18); border:1px solid var(--long-border);}
+
+  /* ============ Мобильная версия ============
+     Всё внутри одного медиазапроса: десктоп этого не видит вообще. */
+  @media (max-width:768px){
+    body{ padding:0; }
+
+    /* Шапка — одна строка вместо трёх */
+    .mobile-header{
+      position:sticky; top:0; z-index:200;
+      display:flex; align-items:center; gap:10px;
+      padding:calc(8px + env(safe-area-inset-top, 0px)) 12px 8px;
+      background:var(--paper); border-bottom:1px solid var(--line);
+    }
+    .mobile-brand{display:flex; align-items:center; gap:9px; flex:1; min-width:0;}
+    .mobile-logo{width:32px; height:32px; border-radius:7px; flex:none;}
+    .mobile-brand-text{min-width:0;}
+    .mobile-title{font-family:var(--display); font-size:15px; font-weight:700; color:var(--ink); line-height:1.1;}
+    .mobile-date{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    /* 44px — минимальная зона, по которой палец попадает не глядя. */
+    .mobile-icon-btn{
+      flex:none; width:44px; height:44px; border-radius:10px;
+      border:1px solid var(--line); background:var(--paper-soft); color:var(--ink);
+      font-size:17px; line-height:1; cursor:pointer;
+    }
+    .mobile-icon-btn:active{background:var(--line);}
+    .mobile-menu{min-width:230px; right:12px;}
+    .mobile-menu .export-item{padding:12px 12px; font-size:14px;}
+    .mobile-menu .export-item:disabled{color:var(--ink-soft); cursor:default;}
+
+    /* Контент и нижняя навигация */
+    .mobile-main{
+      padding:12px 12px calc(76px + env(safe-area-inset-bottom, 0px));
+      min-height:calc(100vh - 120px);
+    }
+    .mobile-nav{
+      position:fixed; left:0; right:0; bottom:0; z-index:210;
+      display:grid; grid-template-columns:repeat(5, 1fr);
+      background:var(--paper); border-top:1px solid var(--line);
+      padding-bottom:env(safe-area-inset-bottom, 0px);
+    }
+    .mobile-tab{
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+      padding:9px 2px 8px; border:0; background:none; cursor:pointer;
+      color:var(--ink-soft); font-family:var(--sans); font-size:10.5px;
+      border-top:2px solid transparent; margin-top:-1px;
+    }
+    .mobile-tab.active{color:var(--accent); border-top-color:var(--accent);}
+    .mobile-tab-icon{position:relative; font-size:17px; line-height:1;}
+    .mobile-tab-badge{
+      position:absolute; top:-6px; left:11px;
+      min-width:16px; height:16px; padding:0 4px; border-radius:8px;
+      background:var(--high); color:#2A130D; font-family:var(--mono); font-size:10px; font-weight:700;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .mobile-tab.active .mobile-tab-badge{background:var(--accent); color:#F3F8FA;}
+    .mobile-tab-label{line-height:1;}
+
+    /* Панели внутри вкладок: без рамок и ручек перетаскивания —
+       конструктор панелей на телефоне не нужен. */
+    .mobile-main .dash-panel{
+      border:0; background:none; padding:0; margin:0; box-shadow:none;
+      container-type:normal;
+    }
+    .mobile-main .panel-drag-handle{display:none;}
+    .mobile-main .dash-panel-head{padding:0 0 10px;}
+    .mobile-main .panel-title{font-size:12px;}
+    #meetingsForDay, #ideaList, #mainCol{max-height:none; overflow:visible;}
+
+    /* Экран «Сегодня» */
+    .today-block{margin-bottom:18px;}
+    .today-heading{
+      margin:0 0 8px; font-family:var(--mono); font-size:11px; font-weight:600;
+      text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft);
+    }
+    .today-heading.overdue{color:var(--high);}
+    .today-heading.muted{opacity:.7;}
+    .today-meeting{
+      width:100%; display:flex; align-items:baseline; gap:10px; text-align:left;
+      padding:13px 12px; margin-bottom:8px; border:1px solid var(--line); border-radius:var(--radius-md);
+      background:var(--paper); color:var(--ink); font-family:var(--sans); font-size:14px; cursor:pointer;
+    }
+    .today-meeting.muted{opacity:.65;}
+    .today-meeting-time{font-family:var(--mono); font-size:13px; color:var(--accent); flex:none;}
+    .today-meeting-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+    .today-meeting-people{font-size:12px; color:var(--ink-soft); flex:none;}
+    .today-undated{
+      width:100%; padding:13px; border:1px dashed var(--line); border-radius:var(--radius-md);
+      background:none; color:var(--ink-soft); font-family:var(--sans); font-size:13px; cursor:pointer;
+    }
+    .today-empty{text-align:center; padding:56px 20px;}
+    .today-empty-mark{
+      width:56px; height:56px; margin:0 auto 14px; border-radius:50%;
+      background:var(--accent-soft); color:var(--accent);
+      display:flex; align-items:center; justify-content:center; font-size:26px;
+    }
+    .today-empty-title{font-size:16px; color:var(--ink); margin-bottom:4px;}
+    .today-empty-sub{font-size:13px; color:var(--ink-soft); margin-bottom:14px;}
+
+    /* Карточки под палец */
+    .task{padding:14px 12px; margin-bottom:9px;}
+    .task-title{font-size:15px;}
+    .check{width:26px; height:26px;}
+    .idea-item{padding:13px 12px;}
+    .meeting-chip{padding:13px 12px;}
+
+    /* Модалки — во весь экран, кнопки всегда под рукой */
+    /* Выше нижней навигации (z-index 210), иначе она перекрывает кнопки
+       модалки — «Сохранить» оказывается недоступной для нажатия. */
+    .overlay{padding:0; align-items:stretch; z-index:400;}
+    .modal{
+      max-width:none; width:100%; margin:0; border-radius:0; border:0;
+      min-height:100%; padding:16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+      display:flex; flex-direction:column;
+    }
+    .modal h2{font-size:18px;}
+    /* 16px — ниже этого iOS зумит страницу при фокусе в поле. */
+    .field input, .field textarea, .field select,
+    .search-input, .time-input{font-size:16px !important;}
+    .field input[type=date], .field input[type=time]{min-height:44px;}
+    .modal-actions{
+      position:sticky; bottom:0; margin-top:auto; padding-top:12px;
+      background:var(--paper); border-top:1px solid var(--line);
+    }
+    .modal-actions .btn{min-height:44px; padding:0 16px;}
+    .time-slot, .participant-chip{min-height:38px;}
+
+    /* Быстрый ввод не должен налезать на навигацию */
+    .quick-add-fab{bottom:calc(78px + env(safe-area-inset-bottom, 0px));}
+    #syncStatus{bottom:calc(80px + env(safe-area-inset-bottom, 0px));}
+    /* Тосты уезжают под шапку, чтобы не спорить с нижней навигацией. */
+    #toast-stack{top:auto; bottom:calc(84px + env(safe-area-inset-bottom, 0px)); right:12px; left:12px; max-width:none;}
+
+    /* Поиск открывается листом сверху, а не по центру */
+    #searchOverlay{padding-top:0;}
+    .search-modal{max-width:none; border-radius:0; min-height:100%;}
+    .search-results{max-height:none;}
+  }
+
+  @media (max-width:768px){
+    /* Панель задач на телефоне: заголовок дублирует вкладку, ручка панелей
+       не нужна — остаётся только то, чем пользуются. */
+    .mobile-main #mainCol > .dash-panel-head{display:none;}
+    .mobile-main .dash-drag-handle{display:none;}
+
+    .toolbar{gap:8px;}
+    .toolbar #newTaskBtn{flex:1; min-height:46px; font-size:15px;}
+    .toolbar-filter-toggle{position:relative; min-height:46px;}
+    .toolbar-filter-dot{
+      position:absolute; top:8px; right:8px; width:7px; height:7px; border-radius:50%;
+      background:var(--accent);
+    }
+    /* Свёрнуто — на экране только «Новая задача» и «Фильтры». */
+    .toolbar.collapsed select,
+    .toolbar.collapsed .check-wrap{display:none;}
+    .toolbar select{min-height:44px; font-size:16px;}
+    .toolbar .check-wrap{min-height:40px;}
+  }
+
+  @media (max-width:768px){
+    /* Свайп по карточке */
+    .swipe-wrap{position:relative; overflow:hidden; border-radius:var(--radius-md); margin-bottom:9px;}
+    .swipe-wrap .task{margin-bottom:0; transition:transform .18s ease;}
+    .swipe-hint{
+      position:absolute; inset:0; display:flex; align-items:center; padding-left:18px;
+      background:var(--long-border); color:#0B2116; font-size:13px; font-weight:600;
+      border-radius:var(--radius-md); opacity:.55;
+    }
+    .swipe-wrap.armed .swipe-hint{opacity:1;}
+
+    /* Модалка выезжает снизу, а не «вырастает» из центра */
+    .modal{animation:modal-sheet-up .2s ease-out;}
+    @keyframes modal-sheet-up{ from{transform:translateY(24px); opacity:.6;} to{transform:none; opacity:1;} }
+  }

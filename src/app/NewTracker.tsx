@@ -29,6 +29,11 @@ import { mergeResult } from "@/lib/meetingLink";
 import SearchOverlay from "@/components/tracker/SearchOverlay";
 import ExportMenu from "@/components/tracker/ExportMenu";
 import TeamModal from "@/components/tracker/TeamModal";
+import MobileShell, { type MobileTab } from "@/components/tracker/MobileShell";
+import MobileHeader from "@/components/tracker/MobileHeader";
+import TodayScreen from "@/components/tracker/TodayScreen";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -38,6 +43,7 @@ function formatClock(d: Date): string {
 
 export default function NewTracker() {
   const { loading, loadError, tasks, meetings, ideas, sections, assignees, panelLayout, syncStatus, offline, actions } = useTrackerData();
+  const isMobile = useIsMobile();
   const toasts = useToasts();
   const dateTimeConfirm = useDateTimeConfirm();
   const notifications = useNotifications({ tasks, meetings, saveTask: actions.saveTask, showToast: toasts.showToast, ready: !loading });
@@ -67,6 +73,7 @@ export default function NewTracker() {
   const [justCreatedMeetingId, setJustCreatedMeetingId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<MobileTab>("today");
   const [openExistingTaskId, setOpenExistingTaskId] = useState<string | null>(null);
   const [openExistingMeetingId, setOpenExistingMeetingId] = useState<string | null>(null);
   const [highlightIdeaId, setHighlightIdeaId] = useState<string | null>(null);
@@ -302,6 +309,78 @@ export default function NewTracker() {
     },
   };
 
+  // Built once and handed to whichever layout is on screen: the desktop's
+  // three-column constructor, or the phone's one-section-at-a-time shell.
+  const panels = {
+        calPanel: (
+          <CalendarPanel
+            tasks={tasks}
+            meetings={meetings}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            onRequestNewTask={(date) => setOpenTaskRequest({ deadline: date })}
+            onRequestNewMeeting={(date) => setOpenMeetingRequest({ date })}
+            dateTimeConfirm={dateTimeConfirm}
+            onIdeaDroppedOnDate={ideaDroppedOnDate}
+            onTaskDroppedOnDate={taskDroppedOnDate}
+            onRescheduleMeeting={(meeting, date, time) => {
+              actions.saveMeeting({ ...meeting, date, time: time || meeting.time });
+              toasts.showToast("Встреча перенесена", meeting.title, () => actions.saveMeeting(meeting));
+            }}
+          />
+        ),
+        meetingsPanel: (
+          <MeetingsPanel
+            meetings={meetings}
+            assignees={assignees}
+            showResolved={showDone}
+            selectedDay={selectedDate}
+            actions={actions}
+            toasts={toasts}
+            dateTimeConfirm={dateTimeConfirm}
+            openMeetingRequest={openMeetingRequest}
+            openExistingMeetingId={openExistingMeetingId}
+            onOpenExistingHandled={() => setOpenExistingMeetingId(null)}
+            onOpenMeetingHandled={() => {
+              setOpenMeetingRequest(null);
+              setPendingIdeaConversion(null);
+            }}
+            onRequestedMeetingSaved={requestedMeetingSaved}
+            onIdeaDropped={convertIdeaToMeeting}
+            justCreatedId={justCreatedMeetingId}
+          />
+        ),
+        mainCol: (
+          <TasksPanel
+            tasks={tasks}
+            sections={sections}
+            assignees={assignees}
+            actions={actions}
+            toasts={toasts}
+            showDone={showDone}
+            onShowDoneChange={setShowDone}
+            calendarFilterDate={selectedDate}
+            openTaskRequest={openTaskRequest}
+            openExistingTaskId={openExistingTaskId}
+            onOpenExistingHandled={() => setOpenExistingTaskId(null)}
+            onOpenTaskHandled={() => setOpenTaskRequest(null)}
+            onIdeaDropped={convertIdeaToTask}
+            justCreatedId={justCreatedTaskId}
+            notifBanner={notifications.bannerText}
+            extraBanner={
+              <>
+                {offline && (
+                  <div className="notif-banner show" id="offlineBanner">
+                    <span>📴 Нет связи с облаком — показываю сохранённую копию. Всё, что записываете, отправится, как только связь вернётся.</span>
+                  </div>
+                )}
+                <SyncErrorBanner />
+              </>
+            }
+          />
+        ),
+        ideasPanel: <IdeasPanel ideas={ideas} showDone={showDone} highlightId={highlightIdeaId} actions={actions} toasts={toasts} />,
+  };
   if (loadError) {
     return <div style={{ padding: 24 }}>Не удалось загрузить данные из облака: {loadError}</div>;
   }
@@ -331,6 +410,60 @@ export default function NewTracker() {
           autoHide={!syncStatus.pending && !syncStatus.lastError}
         />
       )}
+      {isMobile ? (
+        <>
+          <MobileHeader
+            clockText={clockText}
+            onSearch={() => setSearchOpen(true)}
+            items={[
+              { id: "team", label: "👥 Команда", onSelect: () => setTeamOpen(true) },
+              { id: "done", label: showDone ? "🙈 Скрыть завершённые" : "👁 Показать завершённые", onSelect: () => setShowDone((v) => !v) },
+              ...(notifications.permission !== "unsupported"
+                ? [
+                    {
+                      id: "notif",
+                      label: notifications.permission === "granted" ? "🔔 Уведомления включены" : "🔔 Включить уведомления",
+                      onSelect: notifications.requestPermission,
+                      disabled: notifications.permission === "granted",
+                    },
+                  ]
+                : []),
+              ...(installPrompt.visible ? [{ id: "install", label: "📥 Установить приложение", onSelect: installPrompt.promptInstall }] : []),
+              ...(telegram.visible ? [{ id: "tg", label: "🔗 Подключить Telegram", onSelect: telegram.link }] : []),
+              { id: "signout", label: "Выйти", onSelect: () => actions.signOut() },
+            ]}
+          />
+          <MobileShell
+            tab={mobileTab}
+            onTabChange={setMobileTab}
+            badges={{
+              today: todayCount(buildToday(tasks, meetings)),
+              meetings: meetings.filter((m) => !m.status || m.status === "planned").length,
+              ideas: ideas.filter((i) => !i.done).length,
+            }}
+          >
+            {/* Every section stays mounted and is merely hidden: switching tabs
+                keeps scroll position and open editors, and the modals inside
+                them are portalled to <body>, so they show over the shell. */}
+            <div hidden={mobileTab !== "today"}>
+              <TodayScreen
+                tasks={tasks}
+                meetings={meetings}
+                sections={sections}
+                onToggleTask={(task) => actions.saveTask({ ...task, status: task.status === "done" ? "in_progress" : "done", completedAt: task.status === "done" ? "" : new Date().toISOString() })}
+                onOpenTask={(task) => setOpenExistingTaskId(task.id)}
+                onOpenMeeting={(meeting) => setOpenExistingMeetingId(meeting.id)}
+                onGoToTasks={() => setMobileTab("tasks")}
+              />
+            </div>
+            <div hidden={mobileTab !== "tasks"}>{panels.mainCol}</div>
+            <div hidden={mobileTab !== "meetings"}>{panels.meetingsPanel}</div>
+            <div hidden={mobileTab !== "ideas"}>{panels.ideasPanel}</div>
+            <div hidden={mobileTab !== "calendar"}>{panels.calPanel}</div>
+          </MobileShell>
+        </>
+      ) : (
+        <>
       <header>
         <div className="header-row">
           <div className="brand">
@@ -397,77 +530,10 @@ export default function NewTracker() {
         layout={panelLayout}
         onLayoutChange={actions.savePanelLayout}
         hiddenPanels={[...(calOpen ? [] : ["calPanel"]), ...(ideasOpen ? [] : ["ideasPanel"])]}
-        panels={{
-          calPanel: (
-            <CalendarPanel
-              tasks={tasks}
-              meetings={meetings}
-              selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
-              onRequestNewTask={(date) => setOpenTaskRequest({ deadline: date })}
-              onRequestNewMeeting={(date) => setOpenMeetingRequest({ date })}
-              dateTimeConfirm={dateTimeConfirm}
-              onIdeaDroppedOnDate={ideaDroppedOnDate}
-              onTaskDroppedOnDate={taskDroppedOnDate}
-              onRescheduleMeeting={(meeting, date, time) => {
-                actions.saveMeeting({ ...meeting, date, time: time || meeting.time });
-                toasts.showToast("Встреча перенесена", meeting.title, () => actions.saveMeeting(meeting));
-              }}
-            />
-          ),
-          meetingsPanel: (
-            <MeetingsPanel
-              meetings={meetings}
-              assignees={assignees}
-              showResolved={showDone}
-              selectedDay={selectedDate}
-              actions={actions}
-              toasts={toasts}
-              dateTimeConfirm={dateTimeConfirm}
-              openMeetingRequest={openMeetingRequest}
-              openExistingMeetingId={openExistingMeetingId}
-              onOpenExistingHandled={() => setOpenExistingMeetingId(null)}
-              onOpenMeetingHandled={() => {
-                setOpenMeetingRequest(null);
-                setPendingIdeaConversion(null);
-              }}
-              onRequestedMeetingSaved={requestedMeetingSaved}
-              onIdeaDropped={convertIdeaToMeeting}
-              justCreatedId={justCreatedMeetingId}
-            />
-          ),
-          mainCol: (
-            <TasksPanel
-              tasks={tasks}
-              sections={sections}
-              assignees={assignees}
-              actions={actions}
-              toasts={toasts}
-              showDone={showDone}
-              onShowDoneChange={setShowDone}
-              calendarFilterDate={selectedDate}
-              openTaskRequest={openTaskRequest}
-              openExistingTaskId={openExistingTaskId}
-              onOpenExistingHandled={() => setOpenExistingTaskId(null)}
-              onOpenTaskHandled={() => setOpenTaskRequest(null)}
-              onIdeaDropped={convertIdeaToTask}
-              justCreatedId={justCreatedTaskId}
-              notifBanner={notifications.bannerText}
-              extraBanner={
-                <>
-                  {offline && (
-                    <div className="notif-banner show" id="offlineBanner">
-                      <span>📴 Нет связи с облаком — показываю сохранённую копию. Всё, что записываете, отправится, как только связь вернётся.</span>
-                    </div>
-                  )}
-                  <SyncErrorBanner />
-                </>
-              }
-            />
-          ),
-          ideasPanel: <IdeasPanel ideas={ideas} showDone={showDone} highlightId={highlightIdeaId} actions={actions} toasts={toasts} />,
-        }}
+        panels={panels}
       />
+        </>
+      )}
     </>
   );
 }

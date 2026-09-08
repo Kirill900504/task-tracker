@@ -3,6 +3,8 @@
 import type { DragEvent } from "react";
 import type { Section, Task } from "@/types/tracker";
 import { fmtDate, isDueTodayHighlight, isOverdue, priorityClass, priorityLabel, recurLabel } from "@/lib/taskDisplay";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import { useSwipeComplete } from "@/hooks/useSwipeComplete";
 
 export default function TaskCard({
   task,
@@ -25,10 +27,15 @@ export default function TaskCard({
   justCreated?: boolean;
   dropIndicatorBefore?: boolean;
 }) {
+  const isMobile = useIsMobile();
+  // Finishing something is the action of the day — on a phone it is a
+  // swipe to the right, and reopening it is the same swipe again.
+  const swipe = useSwipeComplete(onToggleDone, isMobile);
+
   const overdue = isOverdue(task);
   const dueToday = !overdue && isDueTodayHighlight(task);
 
-  return (
+  const card = (
     <div
       className={
         "task" +
@@ -41,6 +48,8 @@ export default function TaskCard({
         (dropIndicatorBefore ? " drag-indicator" : "")
       }
       data-id={task.id}
+      style={swipe.offset ? { transform: `translateX(${swipe.offset}px)`, transition: "none" } : undefined}
+      {...swipe.handlers}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -79,6 +88,17 @@ export default function TaskCard({
           {task.acceptedAt && task.status !== "done" && <span className="pill pill-accepted">✅ принял</span>}
         </div>
       </div>
+    </div>
+  );
+
+  if (!isMobile) return card;
+
+  // The swipe hint lives behind the card, so it appears from under it as
+  // the card slides.
+  return (
+    <div className={"swipe-wrap" + (swipe.armed ? " armed" : "")}>
+      <div className="swipe-hint">{task.status === "done" ? "↩ вернуть" : "✓ готово"}</div>
+      {card}
     </div>
   );
 }
