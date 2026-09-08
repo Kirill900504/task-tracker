@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { sendToTelegram, useColleagues } from "@/hooks/useColleagues";
 import type { Idea } from "@/types/tracker";
+import ActionMenu from "./ActionMenu";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
 
@@ -13,6 +13,8 @@ export default function IdeaItem({
   onToggleImportant,
   onEditText,
   onDelete,
+  onConvertToTask,
+  onConvertToMeeting,
   highlighted,
 }: {
   idea: Idea;
@@ -20,6 +22,11 @@ export default function IdeaItem({
   onToggleImportant: () => void;
   onEditText: (text: string) => void;
   onDelete: () => void;
+  // Turning a thought into work used to be a drag — onto a task column or
+  // onto a calendar day. A finger cannot do that, so the same two
+  // conversions are also a button; the drag still works with a mouse.
+  onConvertToTask: (term: "short" | "long") => void;
+  onConvertToMeeting: () => void;
   // Set when the global search sent you here — flashes the item the same
   // way a freshly created task flashes.
   highlighted?: boolean;
@@ -28,6 +35,7 @@ export default function IdeaItem({
   // Who to send this thought to is asked at the moment of sending: unlike a
   // task, a thought has no assignee of its own.
   const [pickerAt, setPickerAt] = useState<DOMRect | null>(null);
+  const [convertAt, setConvertAt] = useState<DOMRect | null>(null);
   const [sendNote, setSendNote] = useState("");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(idea.text);
@@ -36,7 +44,6 @@ export default function IdeaItem({
   const linked = colleagues.filter((c) => c.linked);
 
   async function sendTo(name: string) {
-    setPickerAt(null);
     setSendNote("Отправляю…");
     const result = await sendToTelegram("idea", idea.id, [name]);
     setSendNote("error" in result ? result.error : result.sentTo.length ? `Отправлено: ${result.sentTo.join(", ")}` : `Не дошло: ${result.failed.join(", ")}`);
@@ -114,6 +121,17 @@ export default function IdeaItem({
         <div className="idea-meta">{idea.createdAt}</div>
       </div>
       <div className="idea-actions">
+        <button
+          className="idea-flag idea-convert"
+          title="Сделать задачей или встречей"
+          data-convert-idea={idea.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            setConvertAt(e.currentTarget.getBoundingClientRect());
+          }}
+        >
+          ⇢
+        </button>
         {linked.length > 0 && (
           <button
             className="idea-flag"
@@ -148,23 +166,26 @@ export default function IdeaItem({
         </button>
       </div>
       {sendNote && <div className="send-result">{sendNote}</div>}
-      {pickerAt &&
-        createPortal(
-          <>
-            <div className="export-backdrop" onClick={() => setPickerAt(null)} />
-            <div className="export-menu" style={{ top: pickerAt.bottom + 6, right: Math.max(8, window.innerWidth - pickerAt.right) }}>
-              <div className="export-sep" style={{ borderTop: 0, marginTop: 0, paddingTop: 2 }}>
-                Кому отправить
-              </div>
-              {linked.map((person) => (
-                <button key={person.id} className="export-item" onClick={() => sendTo(person.name)}>
-                  {person.name}
-                </button>
-              ))}
-            </div>
-          </>,
-          document.body,
-        )}
+      {convertAt && (
+        <ActionMenu
+          anchor={convertAt}
+          title="Во что превратить"
+          onClose={() => setConvertAt(null)}
+          items={[
+            { id: "short", label: "✓ В задачи — краткосрочная", onSelect: () => onConvertToTask("short") },
+            { id: "long", label: "✓ В задачи — долгосрочная", onSelect: () => onConvertToTask("long") },
+            { id: "meeting", label: "📅 Назначить встречу", onSelect: () => onConvertToMeeting() },
+          ]}
+        />
+      )}
+      {pickerAt && (
+        <ActionMenu
+          anchor={pickerAt}
+          title="Кому отправить"
+          onClose={() => setPickerAt(null)}
+          items={linked.map((person) => ({ id: person.id, label: person.name, onSelect: () => sendTo(person.name) }))}
+        />
+      )}
     </div>
   );
 }

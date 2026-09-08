@@ -365,6 +365,7 @@ export default function NewTracker() {
             onOpenExistingHandled={() => setOpenExistingTaskId(null)}
             onOpenTaskHandled={() => setOpenTaskRequest(null)}
             onIdeaDropped={convertIdeaToTask}
+            onTaskToMeeting={(id) => taskDroppedOnDate(id, selectedDate ?? todayStr())}
             justCreatedId={justCreatedTaskId}
             notifBanner={notifications.bannerText}
             extraBanner={
@@ -379,7 +380,17 @@ export default function NewTracker() {
             }
           />
         ),
-        ideasPanel: <IdeasPanel ideas={ideas} showDone={showDone} highlightId={highlightIdeaId} actions={actions} toasts={toasts} />,
+        ideasPanel: (
+          <IdeasPanel
+            ideas={ideas}
+            showDone={showDone}
+            highlightId={highlightIdeaId}
+            actions={actions}
+            toasts={toasts}
+            onConvertToTask={convertIdeaToTask}
+            onConvertToMeeting={convertIdeaToMeeting}
+          />
+        ),
   };
   if (loadError) {
     return <div style={{ padding: 24 }}>Не удалось загрузить данные из облака: {loadError}</div>;

@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import type { DragEvent } from "react";
 import type { Section, Task } from "@/types/tracker";
 import { fmtDate, isDueTodayHighlight, isOverdue, priorityClass, priorityLabel, recurLabel } from "@/lib/taskDisplay";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSwipeComplete } from "@/hooks/useSwipeComplete";
+import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
 
 export default function TaskCard({
   task,
@@ -16,6 +18,7 @@ export default function TaskCard({
   onDragEnd,
   justCreated,
   dropIndicatorBefore,
+  menuItems,
 }: {
   task: Task;
   section: Section | null;
@@ -26,8 +29,14 @@ export default function TaskCard({
   onDragEnd?: () => void;
   justCreated?: boolean;
   dropIndicatorBefore?: boolean;
+  // Everything the card can do that a mouse would do by dragging it —
+  // moving it up the column, sending it to the other column, turning it into
+  // a meeting. Shown only on a phone: with a mouse the drag is still there
+  // and is faster.
+  menuItems?: ActionMenuItem[];
 }) {
   const isMobile = useIsMobile();
+  const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
   // Finishing something is the action of the day — on a phone it is a
   // swipe to the right, and reopening it is the same swipe again.
   const swipe = useSwipeComplete(onToggleDone, isMobile);
@@ -88,6 +97,20 @@ export default function TaskCard({
           {task.acceptedAt && task.status !== "done" && <span className="pill pill-accepted">✅ принял</span>}
         </div>
       </div>
+      {isMobile && !!menuItems?.length && (
+        <button
+          className="task-menu-btn"
+          title="Действия"
+          data-task-menu={task.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            setMenuAt(e.currentTarget.getBoundingClientRect());
+          }}
+        >
+          ⋮
+        </button>
+      )}
+      {menuAt && !!menuItems?.length && <ActionMenu anchor={menuAt} title={task.title} items={menuItems} onClose={() => setMenuAt(null)} />}
     </div>
   );
 

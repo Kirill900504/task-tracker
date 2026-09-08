@@ -10,6 +10,7 @@ import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
 import { getDragAfterElement } from "@/lib/dndDom";
 import TaskCard from "./TaskCard";
+import type { ActionMenuItem } from "./ActionMenu";
 import TaskModal from "./TaskModal";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { useToasts } from "@/hooks/useToasts";
@@ -31,6 +32,7 @@ export default function TasksPanel({
   openExistingTaskId,
   onOpenExistingHandled,
   onIdeaDropped,
+  onTaskToMeeting,
   justCreatedId,
   notifBanner,
   extraBanner,
@@ -68,6 +70,9 @@ export default function TasksPanel({
   // idea's own removal/undo is handled by the parent (NewTracker), which
   // owns both tasks and ideas state.
   onIdeaDropped: (ideaId: string, term: Term) => void;
+  // «Назначить встречу» from a card's menu — the phone's version of
+  // dragging the task onto a calendar day.
+  onTaskToMeeting?: (taskId: string) => void;
   justCreatedId?: string | null;
   notifBanner?: string | null;
   // Rendered under the notification banner, in the same slot legacy's
@@ -232,6 +237,35 @@ export default function TasksPanel({
     });
   }
 
+  // Ordering by hand is a drag with a mouse, and a finger has no drag at
+  // all. Renumbering the whole column is exactly what handleDrop does, so
+  // both routes leave manualOrder in the same shape.
+  function moveWithinColumn(t: Task, to: "top" | "bottom") {
+    const others = (t.term === "short" ? shortOpen : longOpen).filter((x) => x.id !== t.id).map((x) => x.id);
+    const ids = to === "top" ? [t.id, ...others] : [...others, t.id];
+    ids.forEach((id, i) => {
+      const task = tasks.find((x) => x.id === id);
+      if (!task || task.manualOrder === i) return;
+      actions.saveTask({ ...task, manualOrder: i });
+    });
+  }
+
+  function menuItemsFor(t: Task): ActionMenuItem[] {
+    const items: ActionMenuItem[] = [
+      { id: "top", label: "⬆ Наверх списка", onSelect: () => moveWithinColumn(t, "top") },
+      { id: "bottom", label: "⬇ В конец списка", onSelect: () => moveWithinColumn(t, "bottom") },
+      {
+        id: "term",
+        // Moving between columns was also a drag; the modal has the same
+        // field, but this is one tap instead of four.
+        label: t.term === "short" ? "→ В долгосрочные" : "→ В краткосрочные",
+        onSelect: () => actions.saveTask({ ...t, term: t.term === "short" ? "long" : "short", manualOrder: null }),
+      },
+    ];
+    if (onTaskToMeeting) items.push({ id: "meeting", label: "📅 Назначить встречу", onSelect: () => onTaskToMeeting(t.id) });
+    return items;
+  }
+
   function renderColumn(list: Task[], emptyText: string, countLabel: string, term: Term, ref: RefObject<HTMLDivElement | null>) {
     const colId = term === "short" ? "colShort" : "colLong";
     const collapsed = collapsedCols[colId];
@@ -260,6 +294,7 @@ export default function TasksPanel({
                 onOpen={() => setModalState({ open: true, task: t })}
                 isDragging={draggingTaskId === t.id}
                 justCreated={justCreatedId === t.id}
+                menuItems={isMobile ? menuItemsFor(t) : undefined}
                 dropIndicatorBefore={dropIndicator?.term === term && dropIndicator.beforeId === t.id}
                 onDragStart={(e) => {
                   e.dataTransfer.setData("application/x-task-id", t.id);

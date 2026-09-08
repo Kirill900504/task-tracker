@@ -466,7 +466,12 @@
     content:""; position:absolute; top:-4px; right:-4px; width:9px; height:9px;
     border-radius:50%; background:var(--high); box-shadow:0 0 0 2px var(--paper);
   }
-  .idea-actions{display:flex; flex-direction:column; gap:4px; align-items:center; flex:none;}
+  /* Две кнопки в ряд: вертикальной стопкой четыре штуки были бы выше самой
+     мысли. Прижаты вправо, чтобы неполный ряд не висел в воздухе. */
+  .idea-actions{
+    display:flex; flex-wrap:wrap; justify-content:flex-end; align-content:flex-start;
+    gap:3px 2px; width:52px; flex:none;
+  }
   .idea-flag{cursor:pointer; background:none; border:none; font-size:14px; opacity:.4; padding:2px 4px; line-height:1;}
   .idea-flag.active{opacity:1;}
   .idea-flag:hover{opacity:.85;}
@@ -654,6 +659,14 @@
     font-family:var(--mono); font-size:11px; color:var(--ink-soft);
     padding:8px 10px 2px; border-top:1px solid var(--line); margin-top:4px;
   }
+  /* Меню действий карточки: у кнопки на десктопе, листом снизу на телефоне
+     (см. мобильный блок в конце файла). */
+  .action-menu-title{
+    font-family:var(--mono); font-size:11px; color:var(--ink-soft);
+    padding:4px 10px 6px; max-width:250px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .idea-convert{font-size:15px;}
 
   /* Команда в Telegram */
   .team-list{display:flex; flex-direction:column; gap:2px; margin-bottom:14px;}
@@ -842,4 +855,33 @@
     /* Модалка выезжает снизу, а не «вырастает» из центра */
     .modal{animation:modal-sheet-up .2s ease-out;}
     @keyframes modal-sheet-up{ from{transform:translateY(24px); opacity:.6;} to{transform:none; opacity:1;} }
+
+    /* «⋮» на карточке задачи — то, что на десктопе делается мышью:
+       порядок в колонке, перенос в другую, встреча по задаче. */
+    .task-menu-btn{
+      flex:none; width:38px; height:38px; margin:-6px -8px 0 0;
+      border:0; background:none; color:var(--ink-soft);
+      font-size:20px; line-height:1; cursor:pointer;
+    }
+    .task-menu-btn:active{color:var(--ink);}
+
+    /* Кнопки мысли — под палец, а не под курсор */
+    .idea-actions{width:76px; gap:4px 2px;}
+    .idea-flag, .idea-del{padding:7px 8px; font-size:16px; opacity:.6;}
+
+    /* Лист действий снизу: там, где палец, и всегда одного размера,
+       в отличие от выпадашки у крохотной иконки. */
+    .sheet-backdrop{z-index:418; background:rgba(0,0,0,.38);}
+    .action-sheet{
+      left:0; right:0; bottom:0; top:auto; z-index:420;
+      min-width:0; padding:8px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+      border-radius:16px 16px 0 0; border-bottom:0;
+      animation:modal-sheet-up .18s ease-out;
+    }
+    .action-sheet .export-item{padding:15px 12px; font-size:15px; border-radius:10px;}
+    .action-sheet .action-menu-title{padding:10px 12px 6px; max-width:none; white-space:normal;}
+    .action-sheet-cancel{
+      margin-top:4px; border-top:1px solid var(--line); border-radius:0;
+      text-align:center; color:var(--ink-soft);
+    }
   }
