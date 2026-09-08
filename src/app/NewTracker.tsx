@@ -393,7 +393,24 @@ export default function NewTracker() {
         ),
   };
   if (loadError) {
-    return <div style={{ padding: 24 }}>Не удалось загрузить данные из облака: {loadError}</div>;
+    // Not a dead end: the tracker keeps trying in the background and opens
+    // itself the moment the connection answers. The buttons are for the
+    // cases where waiting will not help — a stuck session most of all.
+    return (
+      <div className="boot-error">
+        <div className="boot-error-mark">📡</div>
+        <div className="boot-error-title">Не получилось загрузить данные</div>
+        <div className="boot-error-sub">{loadError}. Пробую снова каждые 15 секунд — как только связь появится, трекер откроется сам.</div>
+        <div className="boot-error-actions">
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>
+            Повторить сейчас
+          </button>
+          <button className="btn" onClick={() => actions.signOut()}>
+            Выйти
+          </button>
+        </div>
+      </div>
+    );
   }
   if (loading) {
     return <div style={{ padding: 24 }}>Загрузка…</div>;

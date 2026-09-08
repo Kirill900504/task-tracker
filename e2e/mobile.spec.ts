@@ -146,3 +146,25 @@ test("a task is moved between columns and to the top of one from its card menu",
   await page.click(".action-sheet .export-item:has-text('Наверх списка')");
   await expect(page.locator("#colLong .task").first()).toContainText(title);
 });
+
+test("a notification is closed by its cross on the phone too", async ({ page }) => {
+  const text = `E2E тост моб ${Date.now()}`;
+
+  await login(page);
+  await page.click('[data-tab="ideas"]');
+  await page.fill("#ideaInput", text);
+  await page.click("#ideaAddBtn");
+  const idea = page.locator(".idea-item", { hasText: text });
+  await expect(idea).toBeVisible();
+  await idea.locator(".idea-del").click();
+
+  const toast = page.locator(".toast", { hasText: "Идея удалена" });
+  await expect(toast).toBeVisible();
+  // A finger needs a target it can hit without looking.
+  const box = await toast.locator(".close").boundingBox();
+  expect(box?.width).toBeGreaterThanOrEqual(36);
+  expect(box?.height).toBeGreaterThanOrEqual(36);
+
+  await toast.locator(".close").click();
+  await expect(toast).toHaveCount(0);
+});

@@ -68,6 +68,11 @@ export interface SyncStatus {
 
 const LAST_USER_KEY = "rokas-last-user";
 const NETWORK_TIMEOUT_MS = 8000;
+// A first start on a new device has no offline copy to fall back on, so
+// there is nothing to gain by giving up quickly — and a cold start on a
+// phone (waking radio, token refresh, five queries) can genuinely take
+// longer than the cap above.
+const SLOW_START_TIMEOUT_MS = 20000;
 
 // Rejects rather than hanging: see boot()'s comment about connections that
 // accept a request and never answer.
@@ -521,9 +526,8 @@ export function useTrackerData() {
       // start without a connection has something to show straight away.
       const cached = await loadSnapshot(uid);
 
-      let results;
-      try {
-        results = await withTimeout(
+      const loadAll = (ms?: number) =>
+        withTimeout(
           Promise.all([
             db.from("tasks").select("*").is("deleted_at", null),
             db.from("meetings").select("*").is("deleted_at", null),
@@ -531,16 +535,28 @@ export function useTrackerData() {
             db.from("assignees").select("*").order("created_at", { ascending: true }),
             db.from("sections").select("*").order("sort_order", { ascending: true }),
           ]),
+          ms,
         );
+
+      let results;
+      try {
+        results = await loadAll();
       } catch {
         if (cancelled) return;
         if (cached) {
           startFromCache(cached);
           return;
         }
-        setLoadError("Нет связи с облаком");
-        setLoading(false);
-        return;
+        // Nothing stored to show instead, so being patient costs nothing and
+        // saves the start: on a phone opening the installed app cold, the
+        // first attempt can time out on a connection that is perfectly fine.
+        try {
+          results = await loadAll(SLOW_START_TIMEOUT_MS);
+        } catch {
+          if (cancelled) return;
+          failLoad("Нет связи с облаком");
+          return;
+        }
       }
       if (cancelled) return;
 
@@ -554,8 +570,7 @@ export function useTrackerData() {
           startFromCache(cached);
           return;
         }
-        setLoadError(failed.error!.message);
-        setLoading(false);
+        failLoad(failed.error!.message);
         return;
       }
 
@@ -625,12 +640,25 @@ export function useTrackerData() {
 
       setOffline(false);
       offlineRef.current = false;
+      setLoadError(null);
       setLoading(false);
       subscribeRealtime(uid);
       persistAllRef.current(); // sync seeded/back-filled assignees and any offline work
       // Now that the tracker has loaded for real, keep a copy of its shell for
       // the next start without a connection.
       void cacheShell();
+    }
+
+    // Data that could not be loaded and has no stored copy. The reason is
+    // shown, but the app also goes on trying: the periodic retry below only
+    // runs while it considers itself offline, and without that flag an
+    // error screen was a dead end with no way back — which is what a cold
+    // start on the phone ran into.
+    function failLoad(message: string) {
+      setLoadError(message);
+      setLoading(false);
+      setOffline(true);
+      offlineRef.current = true;
     }
 
     // Everything the last session had, straight from IndexedDB. The shadow
@@ -662,6 +690,7 @@ export function useTrackerData() {
       }
       setOffline(true);
       offlineRef.current = true;
+      setLoadError(null);
       setLoading(false);
     }
 

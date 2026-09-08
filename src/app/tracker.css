@@ -409,11 +409,22 @@
   }
   #syncStatus.show{opacity:1;}
   .toast{
-    background:var(--accent); color:#F3F8FA; padding:12px 14px; border-radius:var(--radius-md); font-size:13px;
+    position:relative;
+    background:var(--accent); color:#F3F8FA; padding:12px 40px 12px 14px; border-radius:var(--radius-md); font-size:13px;
     box-shadow:var(--shadow-2); animation:slidein .2s ease-out; pointer-events:auto;
   }
   .toast b{display:block; margin-bottom:2px; font-size:12px; opacity:.75; font-family:var(--mono); text-transform:uppercase; letter-spacing:.04em;}
-  .toast .close{float:right; cursor:pointer; opacity:.7; margin-left:8px;}
+  /* Крестик — отдельным слоем поверх текста, а не float внутри него.
+     Плавающий элемент рисуется НИЖЕ строчного содержимого соседнего блока,
+     поэтому клик по нему попадал в заголовок: крестик было видно, но нажать
+     его было нельзя — ни мышью, ни пальцем. */
+  .toast .close{
+    position:absolute; top:6px; right:6px; z-index:1;
+    width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+    padding:0; border:0; border-radius:7px; background:none; color:inherit;
+    font-family:var(--sans); font-size:17px; line-height:1; cursor:pointer; opacity:.75;
+  }
+  .toast .close:hover{opacity:1; background:rgba(255,255,255,.16);}
   .toast-undo{
     display:block; margin-top:8px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4);
     color:#F3F8FA; border-radius:5px; padding:4px 10px; font-size:12px; cursor:pointer; font-family:var(--sans);
@@ -684,6 +695,15 @@
   .send-result{font-size:12px; color:var(--ink-soft); margin-top:8px;}
   .pill-accepted{color:var(--long-border); background:rgba(60,92,70,.18); border:1px solid var(--long-border);}
 
+  /* Экран «данные не загрузились»: сообщение и выход из положения,
+     а не тупик с одной строчкой текста. */
+  .boot-error{max-width:420px; margin:0 auto; padding:64px 20px; text-align:center;}
+  .boot-error-mark{font-size:34px; margin-bottom:12px;}
+  .boot-error-title{font-family:var(--display); font-size:19px; color:var(--ink); margin-bottom:8px;}
+  .boot-error-sub{font-size:13px; color:var(--ink-soft); line-height:1.5; margin-bottom:18px;}
+  .boot-error-actions{display:flex; gap:8px; justify-content:center; flex-wrap:wrap;}
+  .boot-error-actions .btn{min-height:42px; padding:0 18px;}
+
   /* ============ Мобильная версия ============
      Всё внутри одного медиазапроса: десктоп этого не видит вообще. */
   @media (max-width:768px){
@@ -814,6 +834,9 @@
     #syncStatus{bottom:calc(80px + env(safe-area-inset-bottom, 0px));}
     /* Тосты уезжают под шапку, чтобы не спорить с нижней навигацией. */
     #toast-stack{top:auto; bottom:calc(84px + env(safe-area-inset-bottom, 0px)); right:12px; left:12px; max-width:none;}
+    /* Под палец, а не под курсор */
+    .toast{padding-right:52px;}
+    .toast .close{width:40px; height:40px; top:4px; right:4px; font-size:20px;}
 
     /* Поиск открывается листом сверху, а не по центру */
     #searchOverlay{padding-top:0;}

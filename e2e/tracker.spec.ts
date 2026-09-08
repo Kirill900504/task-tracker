@@ -463,3 +463,33 @@ test("the team screen offers colleagues to invite, but never the owner himself",
   await page.click("#teamCloseBtn");
   await expect(page.locator("#teamOverlay")).toHaveCount(0);
 });
+
+// The cross on a toast used to be floated into the message, and a floated
+// element is painted UNDER the text of the block next to it — so the cross
+// was visible, sat where it looked like it sat, and swallowed nothing: every
+// click landed on the title instead. Notifications could only be waited out.
+test("a notification is closed by its cross", async ({ page }) => {
+  const text = `E2E тост ${Date.now()}`;
+
+  await login(page);
+  await page.fill("#ideaInput", text);
+  await page.click("#ideaAddBtn");
+  const idea = page.locator(".idea-item", { hasText: text });
+  await expect(idea).toBeVisible();
+  await idea.locator(".idea-del").click();
+
+  const toast = page.locator(".toast", { hasText: "Идея удалена" });
+  await expect(toast).toBeVisible();
+  // The cross has to be the thing under the pointer at its own centre —
+  // being visible there is not the same as being clickable there.
+  const onTop = await page.evaluate(() => {
+    const close = document.querySelector(".toast .close");
+    if (!close) return false;
+    const r = close.getBoundingClientRect();
+    return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === close;
+  });
+  expect(onTop).toBe(true);
+
+  await toast.locator(".close").click();
+  await expect(toast).toHaveCount(0);
+});

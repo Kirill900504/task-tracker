@@ -15,9 +15,11 @@ export default function ToastStack({
     <div id="toast-stack">
       {toasts.map((t) => (
         <div className="toast" key={t.id}>
-          <span className="close" onClick={() => onDismiss(t.id)}>
+          {/* A button, and placed over the text rather than floated into it —
+              see .toast .close in tracker.css for what floating cost. */}
+          <button className="close" aria-label="Закрыть" onClick={() => onDismiss(t.id)}>
             ×
-          </span>
+          </button>
           <b>{t.title}</b>
           {t.body}
           {t.onUndo && (
