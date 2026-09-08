@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sameLayout, DEFAULT_PANEL_LAYOUT } from "./trackerRows";
+import { sameLayout, isSelfAssignee, DEFAULT_ASSIGNEES, DEFAULT_PANEL_LAYOUT } from "./trackerRows";
 import type { PanelLayout } from "@/types/tracker";
 
 describe("sameLayout", () => {
@@ -43,5 +43,21 @@ describe("sameLayout", () => {
   it("is safe with nothing to compare", () => {
     expect(sameLayout(null, null)).toBe(true);
     expect(sameLayout(null, DEFAULT_PANEL_LAYOUT)).toBe(false);
+  });
+});
+
+describe("isSelfAssignee", () => {
+  it("recognises the owner's own row, and nobody else's", () => {
+    expect(isSelfAssignee("Кирилл (я)")).toBe(true);
+    // Trailing space is what an assignee typed by hand tends to carry.
+    expect(isSelfAssignee("Кирилл (я) ")).toBe(true);
+    expect(isSelfAssignee("Игорь Витковский")).toBe(false);
+    expect(isSelfAssignee("")).toBe(false);
+    // A colleague whose name merely mentions the letter must not be caught.
+    expect(isSelfAssignee("Яна Ярцева")).toBe(false);
+  });
+
+  it("matches exactly one of the names the tracker ships with", () => {
+    expect(DEFAULT_ASSIGNEES.filter(isSelfAssignee)).toEqual(["Кирилл (я)"]);
   });
 });

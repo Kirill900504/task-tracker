@@ -444,3 +444,22 @@ test("hotkeys open a task, a meeting and the idea field, Esc closes", async ({ p
   await page.keyboard.press("m");
   await expect(page.locator("#ideaInput")).toBeFocused();
 });
+
+// The team screen lists who can be written to in Telegram. The owner's own
+// row sits in the same assignee list (so work can be put on himself), but a
+// bot cannot write to the person running it — offering to invite him was an
+// offer that could never be accepted.
+test("the team screen offers colleagues to invite, but never the owner himself", async ({ page }) => {
+  await login(page);
+  // The assignee list reaches the database on the first sync; the team
+  // screen reads it from there, not from the page's own state.
+  await waitForSaved(page);
+
+  await page.click("#teamBtn");
+  await expect(page.locator("#teamList")).toBeVisible();
+  await expect(page.locator(".team-name", { hasText: "Игорь Витковский" })).toBeVisible();
+  await expect(page.locator(".team-name", { hasText: "(я)" })).toHaveCount(0);
+
+  await page.click("#teamCloseBtn");
+  await expect(page.locator("#teamOverlay")).toHaveCount(0);
+});

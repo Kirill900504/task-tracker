@@ -9,7 +9,7 @@ import { sendToTelegram, useColleagues } from "@/hooks/useColleagues";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso } from "@/lib/calendarLogic";
 import { fmtDate } from "@/lib/taskDisplay";
-import { sanitizeAssigneeList } from "@/lib/trackerRows";
+import { isSelfAssignee, sanitizeAssigneeList } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
 import { openPickerOnClick } from "@/lib/pickerInput";
 import MicButton from "./MicButton";
@@ -23,10 +23,6 @@ const TIME_SLOTS: string[] = (() => {
   }
   return out;
 })();
-
-// The account owner is the one scheduling, so he is not offered as someone
-// to add — see the participant grid.
-const SELF_ASSIGNEE = "Кирилл (я)";
 
 function outcomeLabel(status: MeetingStatus): string {
   if (status === "success") return "✅ Успешно завершена";
@@ -73,7 +69,9 @@ export default function MeetingModal({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const selectableAssignees = assignees.filter((a) => a !== SELF_ASSIGNEE);
+  // The account owner is the one scheduling, so he is not offered as
+  // someone to add to his own meeting.
+  const selectableAssignees = assignees.filter((a) => !isSelfAssignee(a));
 
   function toggleParticipant(name: string) {
     setParticipants((prev) => (prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name]));

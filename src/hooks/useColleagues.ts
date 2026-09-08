@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { isSelfAssignee } from "@/lib/trackerRows";
 
 // Who on the team is reachable in Telegram.
 //
@@ -22,12 +23,17 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
   const db = createClient();
   const { data, error } = await db.from("assignees").select("id, name, telegram_chat_id, telegram_username").order("created_at");
   if (error || !data) return null;
-  return data.map((r) => ({
-    id: r.id as string,
-    name: r.name as string,
-    linked: r.telegram_chat_id != null,
-    username: (r.telegram_username as string) || null,
-  }));
+  // The owner's own row is dropped here rather than in the team screen: a
+  // bot cannot write to the person running it, so «пригласить самого себя»
+  // is an offer that could never work, wherever it appeared.
+  return data
+    .filter((r) => !isSelfAssignee((r.name as string) || ""))
+    .map((r) => ({
+      id: r.id as string,
+      name: r.name as string,
+      linked: r.telegram_chat_id != null,
+      username: (r.telegram_username as string) || null,
+    }));
 }
 
 export function useColleagues() {

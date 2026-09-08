@@ -211,6 +211,15 @@ export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
   right: ["ideasPanel"],
 };
 
+// The owner is in the assignee list so that work can be put on himself —
+// the «(я)» marker is how that list has always said which row he is. He is
+// never someone to invite to Telegram or to send anything to, so the places
+// that offer people ask this rather than each keeping its own copy of the
+// name.
+export function isSelfAssignee(name: string): boolean {
+  return name.trim().endsWith("(я)");
+}
+
 export const DEFAULT_ASSIGNEES: string[] = [
   "Кирилл (я)",
   "Игорь Витковский",
