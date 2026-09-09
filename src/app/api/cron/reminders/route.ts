@@ -5,7 +5,7 @@ import { moscowNow, dateStr, minutesOfDay } from "@/lib/taskLogic";
 import { isRussianWorkingDay } from "@/lib/workCalendar";
 import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
-import { dueReminder, minutesUntil, ownerReminder, participantReminder } from "@/lib/meetingReminders";
+import { dueReminder, minutesUntil, ownerReminder, participantReminder, recapAsk, recapDue } from "@/lib/meetingReminders";
 import { voteTally, type MeetingVote } from "@/lib/meetingVotes";
 import { chatsFor, meetingButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
@@ -34,6 +34,7 @@ type MeetingRow = {
   participants: string[];
   status: string;
   vote_round?: number | null;
+  result?: string | null;
 };
 
 type VoteRow = {
@@ -64,6 +65,11 @@ export async function GET(req: Request) {
   const tomorrowDate = new Date(now);
   tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
   const tomorrow = dateStr(tomorrowDate);
+  // Вчерашние нужны для второго вопроса про итог — того, что не ответили
+  // в тот же день.
+  const yesterdayDate = new Date(now);
+  yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
+  const yesterday = dateStr(yesterdayDate);
   const nowMin = minutesOfDay(now);
 
   // The morning briefing and the weekly review are work-day only: nothing on
@@ -177,7 +183,27 @@ export async function GET(req: Request) {
               };
             });
 
-          const text = composePeopleReview(personStats(participation, now));
+          let text = composePeopleReview(personStats(participation, now));
+
+          // Встречи, у которых так и не появилось итога. Спрашивать про
+          // каждую в третий раз бессмысленно — а одной строкой раз в неделю
+          // видно, что переговоры проходят, а решений после них не остаётся.
+          const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+          const { data: noRecap } = await admin
+            .from("meetings")
+            .select("title, date, result")
+            .eq("user_id", userId)
+            .eq("status", "planned")
+            .lt("date", dateStr(threeDaysAgo))
+            .is("deleted_at", null);
+          const forgotten = ((noRecap || []) as { title: string; date: string }[]).filter(
+            (m) => !(m as { result?: string }).result,
+          );
+          if (forgotten.length) {
+            const list = forgotten.slice(0, 5).map((m) => `• ${m.title} (${m.date.split("-").reverse().join(".")})`);
+            text = (text ? text + "\n\n" : "📊 Неделя по людям\n\n") + "Встречи без итога:\n" + list.join("\n");
+          }
+
           if (text) await notifyOwner(admin, userId, text);
         } catch (e) {
           console.error("people review failed:", e);
@@ -203,9 +229,9 @@ export async function GET(req: Request) {
     // Сегодняшние и завтрашние: за сутки напоминают именно накануне.
     const { data: meetings } = await admin
       .from("meetings")
-      .select("id,title,date,time,participants,status,vote_round")
+      .select("id,title,date,time,participants,status,vote_round,result")
       .eq("user_id", userId)
-      .in("date", [today, tomorrow])
+      .in("date", [yesterday, today, tomorrow])
       .is("deleted_at", null);
 
     for (const m of (meetings || []) as MeetingRow[]) {
@@ -213,7 +239,26 @@ export async function GET(req: Request) {
       const [hh, mm] = m.time.split(":").map(Number);
       if (Number.isNaN(hh) || Number.isNaN(mm)) continue;
 
-      const window = dueReminder(minutesUntil(m.date, hh * 60 + mm, today, nowMin));
+      const startMinutes = hh * 60 + mm;
+
+      // Итог встречи (C4): спрашивают у того, кто её собрал. Через два часа
+      // после начала, и ещё раз на следующее утро, если так и не ответили.
+      // Дальше не дёргают — встреча без итога попадёт в понедельничную
+      // сводку, и это уже другой разговор.
+      if (!m.result) {
+        const recap = recapDue(m.date, startMinutes, today, yesterday, nowMin, BRIEF_FROM_MINUTES);
+        if (recap) {
+          const { error: recapTaken } = await admin
+            .from("telegram_notifications")
+            .insert({ user_id: userId, kind: recap, ref_id: m.id, notif_date: today });
+          if (!recapTaken) {
+            const whenPast = `${m.date.split("-").reverse().join(".")}, ${m.time}`;
+            await notifyOwner(admin, userId, recapAsk(recap, m.title, whenPast));
+          }
+        }
+      }
+
+      const window = dueReminder(minutesUntil(m.date, startMinutes, today, nowMin));
       if (!window) continue;
 
       const when = `${m.date.split("-").reverse().join(".")}, ${m.time}`;

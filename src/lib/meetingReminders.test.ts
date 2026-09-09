@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueReminder, minutesUntil, ownerReminder, participantReminder } from "./meetingReminders";
+import { dueReminder, minutesUntil, ownerReminder, participantReminder, recapAsk, recapDue } from "./meetingReminders";
 
 describe("сколько осталось до встречи", () => {
   it("сегодняшняя считается по часам", () => {
@@ -77,5 +77,29 @@ describe("что человек читает", () => {
     expect(text).toContain("будут: Аня");
     expect(text).toContain("не смогут: Борис");
     expect(text).toContain("не ответили: Глеб");
+  });
+});
+
+describe("когда спрашивать про итог", () => {
+  it("через два часа после начала, а не сразу", () => {
+    expect(recapDue("2026-09-09", 10 * 60, "2026-09-09", "2026-09-08", 11 * 60, 480)).toBeNull();
+    expect(recapDue("2026-09-09", 10 * 60, "2026-09-09", "2026-09-08", 12 * 60, 480)).toBe("meeting_recap");
+  });
+
+  it("на следующее утро спрашивает второй раз", () => {
+    expect(recapDue("2026-09-08", 10 * 60, "2026-09-09", "2026-09-08", 9 * 60, 480)).toBe("meeting_recap_day2");
+  });
+
+  it("но не среди ночи", () => {
+    expect(recapDue("2026-09-08", 10 * 60, "2026-09-09", "2026-09-08", 3 * 60, 480)).toBeNull();
+  });
+
+  it("позавчерашние уже не дёргает — это в понедельничную сводку", () => {
+    expect(recapDue("2026-09-05", 10 * 60, "2026-09-09", "2026-09-08", 12 * 60, 480)).toBeNull();
+  });
+
+  it("первый вопрос вежливее второго", () => {
+    expect(recapAsk("meeting_recap", "Планёрка", "09.09.2026, 10:00")).toContain("Что решили?");
+    expect(recapAsk("meeting_recap_day2", "Планёрка", "09.09.2026, 10:00")).toContain("до сих пор нет итога");
   });
 });

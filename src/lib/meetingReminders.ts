@@ -96,3 +96,41 @@ export function ownerReminder(
   if (tally.pending.length) lines.push(`не ответили: ${tally.pending.join(", ")}`);
   return lines.join("\n");
 }
+
+// ---------------------------------------------------------------- итог
+
+// Через сколько минут после начала спрашивать, чем встреча кончилась.
+// Два часа — не чтобы угадать длительность, а чтобы не спросить у человека,
+// который ещё сидит в переговорной.
+export const RECAP_AFTER_MINUTES = 120;
+
+export type RecapKind = "meeting_recap" | "meeting_recap_day2";
+
+// Первый вопрос — в тот же день, через два часа после начала. Второй —
+// на следующее утро, если так и не ответили: встреча без итога через три
+// дня попадает уже в понедельничную сводку, и это другой разговор.
+export function recapDue(
+  meetingDate: string,
+  meetingMinutes: number,
+  today: string,
+  yesterday: string,
+  nowMinutes: number,
+  briefFromMinutes: number,
+): RecapKind | null {
+  if (meetingDate === today) {
+    const since = nowMinutes - meetingMinutes;
+    return since >= RECAP_AFTER_MINUTES ? "meeting_recap" : null;
+  }
+  if (meetingDate === yesterday && nowMinutes >= briefFromMinutes) return "meeting_recap_day2";
+  return null;
+}
+
+export function recapAsk(kind: RecapKind, title: string, when: string): string {
+  if (kind === "meeting_recap") {
+    return (
+      `📝 Встреча прошла: «${title}» (${when}).\n\n` +
+      "Что решили? Ответьте сообщением или голосом — запишу в итог встречи."
+    );
+  }
+  return `📝 У встречи «${title}» (${when}) до сих пор нет итога. Что решили?`;
+}
