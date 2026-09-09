@@ -32,6 +32,7 @@ export function colleagueHelp(name: string): string {
     `${name}, сюда приходят задачи и встречи — отвечать можно кнопками под сообщением.\n\n` +
     "«🏁 Сделал» и «⛔ Не могу» после нажатия попросят одно сообщение: что именно сделано или почему не выйдет. " +
     "Оно уходит постановщику.\n\n" +
+    "Просто написанное сообщение попадёт в обсуждение вашей последней открытой задачи — я скажу, какой именно.\n\n" +
     "Свои задачи здесь пока не заводятся."
   );
 }
@@ -225,6 +226,9 @@ export async function handleColleagueText(
   admin: SupabaseClient,
   colleague: { id: string; name: string; user_id: string },
   text: string,
+  // Из какого мессенджера пришло: в обсуждении это видно строкой «из
+  // Telegram», и подменять её на другую значит врать в записи.
+  source: "telegram" | "max" = "telegram",
 ): Promise<{ reply: string; notifyOwner?: string } | null> {
   const body = text.trim();
   if (!body) return null;
@@ -251,7 +255,7 @@ export async function handleColleagueText(
 
   // Причина отказа от встречи ждёт ответа ровно так же — незаполненная
   // строка и есть заданный вопрос.
-  if (!rows.length) return handleMeetingReason(admin, colleague, body);
+  if (!rows.length) return (await handleMeetingReason(admin, colleague, body)) ?? handleChatMessage(admin, colleague, body, source);
 
   // Самая свежая: человек отвечает на то, что нажал только что.
   rows.sort((a, b) => Date.parse(b.done_at || b.declined_at || "") - Date.parse(a.done_at || a.declined_at || ""));
@@ -310,5 +314,54 @@ async function handleMeetingReason(
   return {
     reply: `Записал: не будете на «${title}» — ${body}`,
     notifyOwner: `❌ ${colleague.name} не придёт на «${title}» (${when}): ${body}`,
+  };
+}
+
+
+// Сообщение, которое никуда не отвечает, попадает в обсуждение задачи.
+//
+// Отвечать из мессенджера обязательно: руководитель вне офиса иначе
+// выпадает из разговора о собственной задаче, а разговор уходит туда, где
+// его никто потом не найдёт. Какой именно задачи — определяется по самой
+// свежей открытой, и в ответе прямо называется: угадывание, о котором
+// сказали вслух, человек поправит сам следующим сообщением.
+async function handleChatMessage(
+  admin: SupabaseClient,
+  colleague: { id: string; name: string; user_id: string },
+  body: string,
+  source: "telegram" | "max",
+): Promise<{ reply: string; notifyOwner?: string } | null> {
+  const { data } = await admin
+    .from("task_participants")
+    .select("task_id, created_at, tasks(title, status, deleted_at)")
+    .eq("assignee_id", colleague.id)
+    .eq("user_id", colleague.user_id)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  type Row = {
+    task_id: string;
+    created_at: string;
+    tasks: { title: string; status: string | null; deleted_at: string | null } | { title: string; status: string | null; deleted_at: string | null }[] | null;
+  };
+
+  const rows = ((data as Row[]) || []).map((r) => ({
+    taskId: r.task_id,
+    task: Array.isArray(r.tasks) ? r.tasks[0] : r.tasks,
+  }));
+  const open = rows.find((r) => r.task && !r.task.deleted_at && r.task.status !== "done");
+  if (!open || !open.task) return null;
+
+  await admin.from("item_comments").insert({
+    item_kind: "task",
+    item_id: open.taskId,
+    body,
+    author_assignee_id: colleague.id,
+    source,
+  });
+
+  return {
+    reply: `Записал в обсуждение задачи «${open.task.title}».`,
+    notifyOwner: `💬 ${colleague.name} по задаче «${open.task.title}»: ${body}`,
   };
 }

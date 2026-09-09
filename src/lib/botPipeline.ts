@@ -345,7 +345,7 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       // пока единственным ответом коллеги было нажатие кнопки. Теперь
       // кнопка «Сделал» просит сказать, что именно сделано, а «Не могу» —
       // почему, и вот этот текст и приходит сюда следующим сообщением.
-      const answered = await handleColleagueText(ctx.admin, colleague, trimmed);
+      const answered = await handleColleagueText(ctx.admin, colleague, trimmed, ctx.channel.id);
       if (answered) {
         await say(ctx, answered.reply);
         if (answered.notifyOwner) await notifyOwner(ctx.admin, colleague.user_id, answered.notifyOwner);

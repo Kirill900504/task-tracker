@@ -13,6 +13,7 @@ import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
 import { openPickerOnClick } from "@/lib/pickerInput";
 import TaskParticipants from "./TaskParticipants";
+import ItemChat from "./ItemChat";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import type { Participant, PersonOption } from "@/hooks/useTaskParticipants";
 import MicButton from "./MicButton";
@@ -258,6 +259,10 @@ export default function TaskModal({
             Исполнителей, соисполнителей и наблюдателей можно будет добавить сразу после сохранения.
           </div>
         )}
+
+        {/* Обсуждение — там же, где задача. Только у сохранённой: у
+            несуществующей ещё нечего обсуждать. */}
+        {task && <ItemChat kind="task" itemId={task.id} />}
 
         <div className="field">
           <label>Раздел</label>

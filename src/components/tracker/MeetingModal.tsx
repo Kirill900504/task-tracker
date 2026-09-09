@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useColleagues } from "@/hooks/useColleagues";
 import SendMenu from "./SendMenu";
+import ItemChat from "./ItemChat";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso } from "@/lib/calendarLogic";
 import { fmtDate } from "@/lib/taskDisplay";
@@ -239,6 +240,10 @@ export default function MeetingModal({
             </div>
           </div>
         )}
+
+        {/* Обсуждение встречи — то же самое обсуждение, что и у задачи:
+            одна таблица, один вид, одни правила. */}
+        {meeting && <ItemChat kind="meeting" itemId={meeting.id} />}
 
         {sendState && <div className="send-result" id="meetingSendResult">{sendState}</div>}
         {sendAt && meeting && (
