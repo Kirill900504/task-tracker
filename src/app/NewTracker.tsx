@@ -34,6 +34,7 @@ import MobileHeader from "@/components/tracker/MobileHeader";
 import TodayScreen from "@/components/tracker/TodayScreen";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
+import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import ManagerScreen from "@/components/tracker/ManagerScreen";
 import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
@@ -333,7 +334,11 @@ export default function NewTracker() {
             onIdeaDroppedOnDate={ideaDroppedOnDate}
             onTaskDroppedOnDate={taskDroppedOnDate}
             onRescheduleMeeting={(meeting, date, time) => {
-              actions.saveMeeting({ ...meeting, date, time: time || meeting.time });
+              const moved = { ...meeting, date, time: time || meeting.time };
+              actions.saveMeeting(moved);
+              // Перетащили в календаре — это тот же перенос, что и правка
+              // даты в карточке, и голосование обнуляется так же.
+              void bumpVoteRoundIfMoved(meeting.id, meeting, moved);
               toasts.showToast("Встреча перенесена", meeting.title, () => actions.saveMeeting(meeting));
             }}
           />

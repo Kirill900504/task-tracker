@@ -7,6 +7,9 @@ import { todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import MeetingChip from "./MeetingChip";
 import MeetingModal from "./MeetingModal";
+import { useMeetingVotes } from "@/hooks/useMeetingVotes";
+import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
+import { voteTally } from "@/lib/meetingVotes";
 import type { useToasts } from "@/hooks/useToasts";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
@@ -55,6 +58,9 @@ export default function MeetingsPanel({
   onIdeaDropped: (ideaId: string) => void;
   justCreatedId?: string | null;
 } & PanelDragProps) {
+  // Голосование по встречам — один слой на всю панель, как участники у
+  // задач: и карточки, и форма читают отсюда.
+  const votes = useMeetingVotes();
   const [ideaDragOver, setIdeaDragOver] = useState(false);
   const [modalState, setModalState] = useState<{ open: boolean; meeting: Meeting | null; prefill?: MeetingPrefill }>({ open: false, meeting: null });
 
@@ -74,7 +80,12 @@ export default function MeetingsPanel({
     if (openExistingMeetingId) onOpenExistingHandled?.();
   }
   function handleModalSave(m: Meeting) {
+    const before = modalMeeting;
     actions.saveMeeting(m);
+    // Строки голосования держатся за списком участников, а не редактируются
+    // рядом с ним: два списка одних и тех же людей расходятся за неделю.
+    void votes.sync(m.id, m.participants);
+    if (before) void bumpVoteRoundIfMoved(m.id, before, m);
     // Runs before closeModal() (the modal saves, then closes), so the
     // request is still open here and this only fires for requested opens.
     if (!modalState.open && openMeetingRequest !== null) onRequestedMeetingSaved?.(m);
@@ -179,6 +190,7 @@ export default function MeetingsPanel({
               onDelete={() => deleteMeeting(m)}
               onQuickStatus={(status) => setStatus(m, status, m.result)}
               onQuickReschedule={() => quickReschedule(m)}
+              votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
               justCreated={justCreatedId === m.id}
             />
           ))

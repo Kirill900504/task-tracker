@@ -140,10 +140,10 @@ export async function handleColleagueCallback(
     }
   }
 
-  if (action.kind === "meeting" && action.action === "yes") {
+  if (action.kind === "meeting" && (action.action === "yes" || action.action === "no")) {
     const { data: meeting } = await admin
       .from("meetings")
-      .select("id, title, date, time, participants, confirmed_by, user_id")
+      .select("id, title, date, time, participants, confirmed_by, user_id, vote_round")
       .eq("id", action.id)
       .is("deleted_at", null)
       .maybeSingle();
@@ -152,18 +152,47 @@ export async function handleColleagueCallback(
       return { toast: "Эта встреча уже не ваша" };
     }
 
-    const confirmed = (meeting.confirmed_by as string[]) || [];
-    if (!confirmed.includes(colleague.name)) {
-      await admin
-        .from("meetings")
-        .update({ confirmed_by: [...confirmed, colleague.name] })
-        .eq("id", meeting.id);
-    }
     const when = fmtDate(meeting.date as string) + (meeting.time ? ", " + meeting.time : "");
+    const round = Number((meeting as { vote_round?: number }).vote_round ?? 1) || 1;
+    const coming = action.action === "yes";
+
+    // Ответ пишется в строку голосования — там же, где его ждёт карточка.
+    // Раунд обязателен: ответ принадлежит тому времени, о котором спросили,
+    // и после переноса он перестаёт считаться подтверждением сам собой.
+    const { data: existing } = await admin
+      .from("meeting_participants")
+      .select("id")
+      .eq("meeting_id", meeting.id)
+      .eq("assignee_id", colleague.id)
+      .maybeSingle();
+
+    const patch = {
+      response: coming ? "yes" : "no",
+      reason: null,
+      responded_at: new Date().toISOString(),
+      round,
+    };
+    if (existing) await admin.from("meeting_participants").update(patch).eq("id", (existing as { id: string }).id);
+    else await admin.from("meeting_participants").insert({ meeting_id: meeting.id, assignee_id: colleague.id, role: "participant", ...patch });
+
+    // confirmed_by остаётся в согласии со строками, пока его кто-то читает.
+    const confirmed = ((meeting.confirmed_by as string[]) || []).filter((n) => n !== colleague.name);
+    await admin
+      .from("meetings")
+      .update({ confirmed_by: coming ? [...confirmed, colleague.name] : confirmed })
+      .eq("id", meeting.id);
+
+    if (coming) {
+      return {
+        toast: "Отметил, что будете",
+        rewriteTo: `📅 ${meeting.title}\n${when}\n\n✅ Вы подтвердили участие`,
+        notifyOwner: `✅ ${colleague.name} будет на встрече «${meeting.title}» (${when})`,
+      };
+    }
     return {
-      toast: "Отметил, что будете",
-      rewriteTo: `📅 ${meeting.title}\n${when}\n\n✅ Вы подтвердили участие`,
-      notifyOwner: `✅ ${colleague.name} будет на встрече «${meeting.title}» (${when})`,
+      toast: "Передал",
+      rewriteTo: `📅 ${meeting.title}\n${when}\n\n❌ Вы не сможете\nНапишите одним сообщением, почему — это увидит организатор.`,
+      notifyOwner: `❌ ${colleague.name} не сможет быть на встрече «${meeting.title}» (${when})`,
     };
   }
 
@@ -219,7 +248,10 @@ export async function handleColleagueText(
   const rows = ((data as Row[]) || []).filter(
     (r) => (r.done_at && !r.done_comment) || (r.declined_at && !r.decline_reason),
   );
-  if (!rows.length) return null;
+
+  // Причина отказа от встречи ждёт ответа ровно так же — незаполненная
+  // строка и есть заданный вопрос.
+  if (!rows.length) return handleMeetingReason(admin, colleague, body);
 
   // Самая свежая: человек отвечает на то, что нажал только что.
   rows.sort((a, b) => Date.parse(b.done_at || b.declined_at || "") - Date.parse(a.done_at || a.declined_at || ""));
@@ -238,5 +270,45 @@ export async function handleColleagueText(
   return {
     reply: `Записал: не сможете «${title}» — ${body}`,
     notifyOwner: `⛔ ${colleague.name} не может «${title}»: ${body}`,
+  };
+}
+
+
+// Причина, по которой человек не придёт на встречу.
+//
+// Отдельная функция, а не ещё одна ветка выше: у задач и встреч разные
+// таблицы и разные слова, а общий у них только приём — вопрос хранится
+// как незаполненное поле, а не как запись в очереди.
+async function handleMeetingReason(
+  admin: SupabaseClient,
+  colleague: { id: string; name: string; user_id: string },
+  body: string,
+): Promise<{ reply: string; notifyOwner?: string } | null> {
+  const { data } = await admin
+    .from("meeting_participants")
+    .select("id, response, reason, responded_at, meetings(title, date, time)")
+    .eq("assignee_id", colleague.id)
+    .eq("user_id", colleague.user_id)
+    .eq("response", "no")
+    .is("reason", null);
+
+  type Row = {
+    id: string;
+    responded_at: string | null;
+    meetings: { title: string; date: string; time: string | null } | { title: string; date: string; time: string | null }[] | null;
+  };
+
+  const rows = ((data as Row[]) || []).slice();
+  if (!rows.length) return null;
+  rows.sort((a, b) => Date.parse(b.responded_at || "") - Date.parse(a.responded_at || ""));
+  const row = rows[0];
+  const m = Array.isArray(row.meetings) ? row.meetings[0] : row.meetings;
+  const title = m?.title || "";
+  const when = m ? fmtDate(m.date) + (m.time ? ", " + m.time : "") : "";
+
+  await admin.from("meeting_participants").update({ reason: body }).eq("id", row.id);
+  return {
+    reply: `Записал: не будете на «${title}» — ${body}`,
+    notifyOwner: `❌ ${colleague.name} не придёт на «${title}» (${when}): ${body}`,
   };
 }

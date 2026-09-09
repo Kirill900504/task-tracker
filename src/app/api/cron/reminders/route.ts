@@ -5,6 +5,10 @@ import { moscowNow, dateStr, minutesOfDay } from "@/lib/taskLogic";
 import { isRussianWorkingDay } from "@/lib/workCalendar";
 import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
+import { dueReminder, minutesUntil, ownerReminder, participantReminder } from "@/lib/meetingReminders";
+import { voteTally, type MeetingVote } from "@/lib/meetingVotes";
+import { chatsFor, meetingButtons, type ColleagueRow } from "@/lib/colleagues";
+import { sendToColleague } from "@/lib/botDelivery";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -27,6 +31,15 @@ type MeetingRow = {
   time: string;
   participants: string[];
   status: string;
+  vote_round?: number | null;
+};
+
+type VoteRow = {
+  assignee_id: string;
+  response: "none" | "yes" | "no";
+  reason: string | null;
+  round: number;
+  assignees: { name: string } | { name: string }[] | null;
 };
 
 export async function GET(req: Request) {
@@ -45,6 +58,10 @@ export async function GET(req: Request) {
   const admin = createAdminClient();
   const now = moscowNow();
   const today = dateStr(now);
+  // «За сутки» напоминают накануне, поэтому в выборку берётся и завтра.
+  const tomorrowDate = new Date(now);
+  tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+  const tomorrow = dateStr(tomorrowDate);
   const nowMin = minutesOfDay(now);
 
   // The morning briefing and the weekly review are work-day only: nothing on
@@ -97,31 +114,79 @@ export async function GET(req: Request) {
       }
     }
 
+    // Сегодняшние и завтрашние: за сутки напоминают именно накануне.
     const { data: meetings } = await admin
       .from("meetings")
-      .select("id,title,date,time,participants,status")
+      .select("id,title,date,time,participants,status,vote_round")
       .eq("user_id", userId)
-      .eq("date", today)
+      .in("date", [today, tomorrow])
       .is("deleted_at", null);
 
     for (const m of (meetings || []) as MeetingRow[]) {
       if (m.status !== "planned" || !m.time) continue;
       const [hh, mm] = m.time.split(":").map(Number);
       if (Number.isNaN(hh) || Number.isNaN(mm)) continue;
-      const mMin = hh * 60 + mm;
-      const who = m.participants && m.participants.length ? " · " + m.participants.join(", ") : "";
 
-      if (nowMin >= mMin - 15 && nowMin < mMin) {
-        const { error } = await admin
-          .from("telegram_notifications")
-          .insert({ user_id: userId, kind: "meeting_soon", ref_id: m.id, notif_date: today });
-        if (!error) await notifyOwner(admin, userId, `🔔 Через 15 минут: «${m.title}» (${m.time})${who}`);
+      const window = dueReminder(minutesUntil(m.date, hh * 60 + mm, today, nowMin));
+      if (!window) continue;
+
+      const when = `${m.date.split("-").reverse().join(".")}, ${m.time}`;
+      const round = Number((m as { vote_round?: number }).vote_round ?? 1) || 1;
+
+      // Ответы — источник правды о том, кого ещё спрашивать. Их может не
+      // быть вовсе (встреча заведена до того, как появилось голосование):
+      // тогда не ответил никто, что и есть правда.
+      const { data: voteRows } = await admin
+        .from("meeting_participants")
+        .select("assignee_id, response, reason, round, assignees(name)")
+        .eq("meeting_id", m.id);
+
+      const votes: MeetingVote[] = ((voteRows || []) as VoteRow[]).map((v) => ({
+        assigneeId: v.assignee_id,
+        name: Array.isArray(v.assignees) ? v.assignees[0]?.name || "" : v.assignees?.name || "",
+        role: "participant",
+        response: v.response,
+        reason: v.reason,
+        round: v.round,
+      }));
+      const named = new Set(votes.map((v) => v.name));
+      for (const name of m.participants || []) {
+        if (!named.has(name)) votes.push({ assigneeId: "", name, role: "participant", response: "none", reason: null, round });
       }
-      if (nowMin >= mMin && nowMin <= mMin + 5) {
+
+      const tally = voteTally(votes, round);
+
+      const { error: ownerDup } = await admin
+        .from("telegram_notifications")
+        .insert({ user_id: userId, kind: window.kind, ref_id: m.id, notif_date: today });
+      if (!ownerDup) await notifyOwner(admin, userId, ownerReminder(window.kind, m.title, when, tally));
+
+      // Кому именно писать: молчащим — вопрос, согласившимся — напоминание.
+      const wanted = window.audience === "unanswered" ? tally.pending : tally.yes;
+      if (!wanted.length) continue;
+
+      const { data: people } = await admin
+        .from("assignees")
+        .select("id, name, telegram_chat_id, max_user_id")
+        .eq("user_id", userId)
+        .in("name", wanted);
+
+      for (const person of (people || []) as ColleagueRow[]) {
+        const target = chatsFor(person)[0];
+        if (!target) continue;
+        // Дедупликация по человеку, а не по встрече: иначе первый же
+        // отправленный участник закроет окно для всех остальных.
         const { error } = await admin
           .from("telegram_notifications")
-          .insert({ user_id: userId, kind: "meeting_now", ref_id: m.id, notif_date: today });
-        if (!error) await notifyOwner(admin, userId, `🔔 Встреча сейчас: «${m.title}»${who}`);
+          .insert({ user_id: userId, kind: window.kind, ref_id: `${m.id}:${person.id}`, notif_date: today });
+        if (error) continue;
+        await sendToColleague(
+          target,
+          participantReminder(window.kind, m.title, when, window.audience),
+          // Молчащему кнопки нужны: напоминание без них — это просьба
+          // ответить куда-то не сюда.
+          window.audience === "unanswered" ? meetingButtons(m.id) : undefined,
+        );
       }
     }
   }

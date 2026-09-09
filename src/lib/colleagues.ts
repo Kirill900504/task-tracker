@@ -77,8 +77,16 @@ export function taskButtons(taskId: string): BotButton[][] {
   ];
 }
 
+// «Не смогу» — не вежливость, а половина смысла: список подтвердивших не
+// отличает того, кто не придёт, от того, кто просто не ответил, а
+// организатору нужна именно эта разница. Причина спрашивается следом.
 export function meetingButtons(meetingId: string): BotButton[][] {
-  return [[{ text: "✅ Буду", data: encodeCallback("meeting", "yes", meetingId) }]];
+  return [
+    [
+      { text: "✅ Буду", data: encodeCallback("meeting", "yes", meetingId) },
+      { text: "❌ Не смогу", data: encodeCallback("meeting", "no", meetingId) },
+    ],
+  ];
 }
 
 // An idea is not an instruction — there is nothing to accept or finish, so it

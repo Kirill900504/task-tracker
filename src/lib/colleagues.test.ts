@@ -72,8 +72,11 @@ describe("buttons", () => {
     expect(rows[1][0].text).toContain("Не могу");
   });
 
-  it("offers a single confirmation on a meeting", () => {
-    expect(meetingButtons("m7")[0]).toHaveLength(1);
+  it("asks a meeting both ways: приду и не приду", () => {
+    // Один вариант ответа не отличал «не придёт» от «не ответил», а
+    // организатору нужна именно эта разница.
+    expect(meetingButtons("m7")[0]).toHaveLength(2);
+    expect(meetingButtons("m7")[0].map((b) => b.data)).toEqual(["m:yes:m7", "m:no:m7"]);
     expect(meetingButtons("m7")[0][0].data).toBe("m:yes:m7");
   });
 });

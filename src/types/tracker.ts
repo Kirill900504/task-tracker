@@ -59,6 +59,9 @@ export interface Meeting {
   // Participants who pressed «Буду» in Telegram. Read-only here, same
   // reasoning as Task.acceptedAt.
   confirmedBy?: string[];
+  // Какой это круг голосования. Растёт при переносе: ответы, данные о
+  // прежнем времени, перестают считаться подтверждением (см. meetingVotes).
+  voteRound?: number;
 }
 
 export interface Idea {

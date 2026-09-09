@@ -41,6 +41,7 @@ export type MeetingRow = {
   result: string;
   moved_to_date: string | null;
   resolved_at: string | null;
+  vote_round?: number | null;
   // Written by the bot only, like TaskRow.accepted_at.
   confirmed_by?: string[] | null;
 };
@@ -157,6 +158,7 @@ export function meetingFromRow(r: MeetingRow): Meeting {
     movedToDate: r.moved_to_date || "",
     resolvedAt: r.resolved_at || "",
     confirmedBy: r.confirmed_by || [],
+    voteRound: r.vote_round ?? 1,
   };
 }
 

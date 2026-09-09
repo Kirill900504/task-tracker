@@ -13,6 +13,7 @@ export default function MeetingChip({
   onDelete,
   onQuickStatus,
   onQuickReschedule,
+  votes,
   justCreated,
 }: {
   meeting: Meeting;
@@ -21,6 +22,10 @@ export default function MeetingChip({
   onDelete: () => void;
   onQuickStatus: (status: "success" | "no_result") => void;
   onQuickReschedule: () => void;
+  // Итог голосования за текущий круг: кто придёт, кто не сможет и с какой
+  // причиной, кто молчит. Считается в панели — сами строки живут отдельным
+  // слоем (см. useMeetingVotes).
+  votes?: { yes: string[]; no: { name: string; reason: string }[]; pending: string[] };
   justCreated?: boolean;
 }) {
   // The participants tooltip lives in <body> and is positioned from the
@@ -86,19 +91,26 @@ export default function MeetingChip({
           onMouseEnter={(e) => setPeopleAnchor(e.currentTarget.getBoundingClientRect())}
           onMouseLeave={() => setPeopleAnchor(null)}
         >
-          👥 {confirmed.length > 0 ? `${confirmed.length}/${participants.length}` : participants.length}
+          👥 {votes ? `${votes.yes.length}/${participants.length}` : confirmed.length > 0 ? `${confirmed.length}/${participants.length}` : participants.length}
+          {votes && votes.no.length > 0 && <span className="mpeople-no"> · {votes.no.length} не смогут</span>}
         </span>
       )}
       {peopleAnchor &&
         createPortal(
           <div ref={tooltipRef} id="peopleTooltip" className="people-tooltip" style={{ display: "block", top: -9999, left: -9999 }}>
-            {/* A tick against everyone who answered «Буду» in Telegram. */}
-            {participants.map((p) => (
-              <div className="prow" key={p}>
-                {confirmed.includes(p) ? "✅ " : ""}
-                {p}
-              </div>
-            ))}
+            {/* Отказ и молчание — разные вещи, и именно эта разница нужна,
+                чтобы понимать, кого ещё спрашивать. */}
+            {participants.map((p) => {
+              const said = votes?.no.find((n) => n.name === p);
+              const coming = votes ? votes.yes.includes(p) : confirmed.includes(p);
+              return (
+                <div className="prow" key={p}>
+                  {coming ? "✅ " : said ? "❌ " : votes ? "· " : ""}
+                  {p}
+                  {said?.reason ? ` — ${said.reason}` : ""}
+                </div>
+              );
+            })}
           </div>,
           document.body,
         )}

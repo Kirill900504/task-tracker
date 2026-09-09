@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { isSelfAssignee } from "@/lib/trackerRows";
 import type { TaskParticipant, TaskParticipantRole } from "@/lib/taskProgress";
 
 // Кто на задаче: исполнители, соисполнители, наблюдатели.
@@ -130,8 +131,24 @@ export function useTaskParticipants() {
       // here, so a row cannot land in the wrong workspace (migration 0019).
       await db.from("task_participants").insert({ task_id: taskId, assignee_id: assigneeId, role });
       await load();
+
+      // Назначить и не сказать — это и есть «дал задание, а он не в курсе».
+      // «Назначена» — один из трёх видов уведомлений, которые нельзя
+      // выключить, поэтому отправка не спрашивает разрешения и не зависит
+      // от кнопки ✈: та осталась для «покажи это ещё и Ане».
+      //
+      // Молча ничего не делает, если человек не подключён ни к одному
+      // мессенджеру — он всё равно увидит задачу, когда откроет трекер.
+      const person = people.find((p) => p.id === assigneeId);
+      if (person && !isSelfAssignee(person.name)) {
+        void fetch("/api/telegram/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "task", id: taskId, to: [person.name] }),
+        }).catch(() => {});
+      }
     },
-    [load],
+    [load, people],
   );
 
   const setRole = useCallback(
