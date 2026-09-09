@@ -80,33 +80,85 @@ function shape(rows: Row[]): AssignedTask[] {
     }));
 }
 
+export type AssignedMeeting = {
+  participantId: string;
+  meetingId: string;
+  title: string;
+  date: string;
+  time: string;
+  response: "none" | "yes" | "no";
+  reason: string | null;
+  // Круг голосования строки и текущий круг встречи: ответ из прежнего
+  // круга ничего не говорит о новом времени и считается неотвеченным.
+  round: number;
+  meetingRound: number;
+};
+
 export function useAssignedWork(assigneeId: string) {
   const [tasks, setTasks] = useState<AssignedTask[]>([]);
+  const [meetings, setMeetings] = useState<AssignedMeeting[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchAll = useCallback(async (): Promise<AssignedTask[]> => {
-    if (!assigneeId) return [];
+  const fetchAll = useCallback(async (): Promise<{ tasks: AssignedTask[]; meetings: AssignedMeeting[] }> => {
+    if (!assigneeId) return { tasks: [], meetings: [] };
     const db = createClient();
-    const { data } = await db
-      .from("task_participants")
-      .select(
-        "id, task_id, role, accepted_at, done_at, done_comment, declined_at, decline_reason, reschedule_to, reschedule_reason, " +
-          "tasks(title, description, deadline, priority, status, approval_state, approval_comment, deleted_at)",
-      )
-      .eq("assignee_id", assigneeId);
-    return shape((data as unknown as Row[]) || []);
+    const today = new Date().toISOString().slice(0, 10);
+    const [{ data }, { data: meetingRows }] = await Promise.all([
+      db
+        .from("task_participants")
+        .select(
+          "id, task_id, role, accepted_at, done_at, done_comment, declined_at, decline_reason, reschedule_to, reschedule_reason, " +
+            "tasks(title, description, deadline, priority, status, approval_state, approval_comment, deleted_at)",
+        )
+        .eq("assignee_id", assigneeId),
+      // Прошедшие встречи руководителю не нужны: голосовать по ним поздно,
+      // а список тем длиннее.
+      db
+        .from("meeting_participants")
+        .select("id, meeting_id, response, reason, round, meetings(title, date, time, status, vote_round, deleted_at)")
+        .eq("assignee_id", assigneeId),
+    ]);
+
+    type MRow = {
+      id: string;
+      meeting_id: string;
+      response: "none" | "yes" | "no";
+      reason: string | null;
+      round: number;
+      meetings: { title: string; date: string; time: string | null; status: string; vote_round: number | null; deleted_at: string | null } | null;
+    };
+
+    const meetings = ((meetingRows as unknown as MRow[]) || [])
+      .filter((r) => r.meetings && !r.meetings.deleted_at && r.meetings.status === "planned" && r.meetings.date >= today)
+      .map((r) => ({
+        participantId: r.id,
+        meetingId: r.meeting_id,
+        title: r.meetings!.title,
+        date: r.meetings!.date,
+        time: r.meetings!.time || "",
+        response: r.response,
+        reason: r.reason,
+        round: r.round,
+        meetingRound: Number(r.meetings!.vote_round ?? 1) || 1,
+      }))
+      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+
+    return { tasks: shape((data as unknown as Row[]) || []), meetings };
   }, [assigneeId]);
 
   const reload = useCallback(async () => {
-    setTasks(await fetchAll());
+    const { tasks: t, meetings: m } = await fetchAll();
+    setTasks(t);
+    setMeetings(m);
     setLoading(false);
   }, [fetchAll]);
 
   useEffect(() => {
     let cancelled = false;
-    fetchAll().then((list) => {
+    fetchAll().then(({ tasks: t, meetings: m }) => {
       if (cancelled) return;
-      setTasks(list);
+      setTasks(t);
+      setMeetings(m);
       setLoading(false);
     });
 
@@ -116,14 +168,13 @@ export function useAssignedWork(assigneeId: string) {
     const channel = db
       .channel("assigned-work")
       .on("postgres_changes", { event: "*", schema: "public", table: "task_participants" }, () => {
-        fetchAll().then((list) => {
-          if (!cancelled) setTasks(list);
-        });
+        void reload();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => {
-        fetchAll().then((list) => {
-          if (!cancelled) setTasks(list);
-        });
+        void reload();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "meeting_participants" }, () => {
+        void reload();
       })
       .subscribe();
 
@@ -131,7 +182,7 @@ export function useAssignedWork(assigneeId: string) {
       cancelled = true;
       void db.removeChannel(channel);
     };
-  }, [fetchAll]);
+  }, [fetchAll, reload]);
 
   const accept = useCallback(
     async (participantId: string) => {
@@ -182,5 +233,20 @@ export function useAssignedWork(assigneeId: string) {
     [reload],
   );
 
-  return { tasks, loading, accept, report, decline, askReschedule, reload };
+  // Голос по встрече: тот же ответ, что кнопкой в мессенджере, и в тот же
+  // круг — иначе после переноса он засчитался бы за подтверждение нового
+  // времени, о котором человека не спрашивали.
+  const vote = useCallback(
+    async (participantId: string, response: "yes" | "no", reason: string, round: number) => {
+      const db = createClient();
+      await db
+        .from("meeting_participants")
+        .update({ response, reason: reason || null, responded_at: new Date().toISOString(), round })
+        .eq("id", participantId);
+      await reload();
+    },
+    [reload],
+  );
+
+  return { tasks, meetings, loading, accept, report, decline, askReschedule, vote, reload };
 }

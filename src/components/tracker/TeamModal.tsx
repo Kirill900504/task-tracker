@@ -43,7 +43,7 @@ const MEMBER_LABEL: Record<string, string> = {
 };
 
 export default function TeamModal({ onClose }: { onClose: () => void }) {
-  const { colleagues, loading, reload, invite, inviteToTracker, unlink } = useColleagues();
+  const { colleagues, loading, reload, invite, inviteToTracker, setTrackerAccess, unlink } = useColleagues();
   const [inviteFor, setInviteFor] = useState<{ name: string; link: string; kind: InviteKind } | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -153,9 +153,28 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                     </>
                   )}
                   {(person.member === "active" || person.member === "disabled") && (
-                    <span className={person.member === "active" ? "team-status linked" : "team-status"}>
-                      {MEMBER_LABEL[person.member]}
-                    </span>
+                    <>
+                      <span className={person.member === "active" ? "team-status linked" : "team-status"}>
+                        {MEMBER_LABEL[person.member]}
+                      </span>
+                      <button
+                        className="btn btn-small"
+                        type="button"
+                        onClick={() => {
+                          const turnOff = person.member === "active";
+                          if (
+                            turnOff &&
+                            !confirm(
+                              `Отключить доступ ${person.name} в трекер? Задачи и его отчёты останутся на месте — исчезнет только вход.`,
+                            )
+                          )
+                            return;
+                          void setTrackerAccess(person.id, !turnOff);
+                        }}
+                      >
+                        {person.member === "active" ? "Отключить вход" : "Вернуть вход"}
+                      </button>
+                    </>
                   )}
                 </div>
               );

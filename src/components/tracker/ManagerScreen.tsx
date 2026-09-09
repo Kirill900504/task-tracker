@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { useAssignedWork, type AssignedTask } from "@/hooks/useAssignedWork";
+import { useAssignedWork, type AssignedMeeting, type AssignedTask } from "@/hooks/useAssignedWork";
 import { fmtDate } from "@/lib/taskDisplay";
 import { canDecline, canReportDone } from "@/lib/taskProgress";
+import { canVoteNo, isCurrent } from "@/lib/meetingVotes";
 import { byDeadline, canAnswer, isOverdueFor, workGroup } from "@/lib/assignedWork";
 
 // Что видит руководитель, когда войдёт по приглашению.
@@ -20,16 +21,18 @@ import { byDeadline, canAnswer, isOverdueFor, workGroup } from "@/lib/assignedWo
 // is worse than one that never offered it.
 
 export default function ManagerScreen({ assigneeId, name }: { assigneeId: string; name: string }) {
-  const { tasks, loading, accept, report, decline, askReschedule } = useAssignedWork(assigneeId);
+  const { tasks, meetings, loading, accept, report, decline, askReschedule, vote } = useAssignedWork(assigneeId);
   return (
     <ManagerScreenInner
       name={name}
       tasks={tasks}
+      meetings={meetings}
       loading={loading}
       accept={accept}
       report={report}
       decline={decline}
       askReschedule={askReschedule}
+      vote={vote}
     />
   );
 }
@@ -39,19 +42,23 @@ export default function ManagerScreen({ assigneeId, name }: { assigneeId: string
 export function ManagerScreenInner({
   name,
   tasks,
+  meetings = [],
   loading,
   accept,
   report,
   decline,
   askReschedule,
+  vote,
 }: {
   name: string;
   tasks: AssignedTask[];
+  meetings?: AssignedMeeting[];
   loading: boolean;
   accept: (participantId: string) => void;
   report: (participantId: string, comment: string) => void;
   decline: (participantId: string, reason: string) => void;
   askReschedule: (participantId: string, to: string, reason: string) => void;
+  vote?: (participantId: string, response: "yes" | "no", reason: string, round: number) => void;
 }) {
   const groups = useMemo(() => {
     const out: Record<"new" | "work" | "done", AssignedTask[]> = { new: [], work: [], done: [] };
@@ -150,10 +157,59 @@ export function ManagerScreenInner({
 
       {loading && <div className="empty">Загрузка…</div>}
 
-      {!loading && tasks.length === 0 && (
+      {!loading && tasks.length === 0 && meetings.length === 0 && (
         <div className="ms-empty">
           Пока ничего не назначено. Когда появится задача — она будет здесь, и придёт в мессенджер, если он подключён.
         </div>
+      )}
+
+      {!loading && meetings.length > 0 && (
+        <section className="ms-group">
+          <div className="section-title">
+            Встречи <span className="count">{meetings.length}</span>
+          </div>
+          {meetings.map((m) => {
+            // Ответ из прежнего круга не считается: время переносили, и о
+            // новом этого человека ещё не спрашивали.
+            const answered = isCurrent({ ...m, assigneeId: "", name: "", role: "participant" }, m.meetingRound) && m.response !== "none";
+            return (
+              <div className="ms-card" key={m.participantId}>
+                <div className="ms-card-title">{m.title}</div>
+                <div className="ms-card-meta">
+                  <span className="pill pill-date">
+                    {m.date.split("-").reverse().join(".")}
+                    {m.time ? ", " + m.time : ""}
+                  </span>
+                  {answered && m.response === "yes" && <span className="pill pill-accepted">✅ вы будете</span>}
+                  {answered && m.response === "no" && <span className="pill pill-blocked">❌ не сможете</span>}
+                </div>
+                {answered && m.response === "no" && m.reason && <div className="ms-declined">Причина: {m.reason}</div>}
+                {!answered && vote && (
+                  <div className="ms-actions">
+                    <button className="btn btn-small btn-primary" type="button" onClick={() => vote(m.participantId, "yes", "", m.meetingRound)}>
+                      ✅ Буду
+                    </button>
+                    <button
+                      className="btn btn-small"
+                      type="button"
+                      onClick={() => {
+                        const reason = prompt(`Почему не сможете быть на «${m.title}»?`, "");
+                        if (reason === null) return;
+                        if (!canVoteNo(reason)) {
+                          alert("Причина обязательна: организатору важно знать, переносить встречу или нет.");
+                          return;
+                        }
+                        vote(m.participantId, "no", reason.trim(), m.meetingRound);
+                      }}
+                    >
+                      ❌ Не смогу
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </section>
       )}
 
       {!loading && groups.new.length > 0 && (

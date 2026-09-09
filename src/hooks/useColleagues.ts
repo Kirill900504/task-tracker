@@ -129,6 +129,26 @@ export function useColleagues() {
     [reload],
   );
 
+  // Увольнение (A4): доступ выключается, данные остаются на месте. Строка
+  // участия в задачах никуда не девается — иначе вместе с человеком из
+  // трекера исчезло бы и то, что он делал, и задачи стали бы ничьими
+  // задним числом.
+  const setTrackerAccess = useCallback(
+    async (assigneeId: string, active: boolean) => {
+      const db = createClient();
+      await db
+        .from("workspace_members")
+        .update(
+          active
+            ? { status: "active", disabled_at: null }
+            : { status: "disabled", disabled_at: new Date().toISOString() },
+        )
+        .eq("assignee_id", assigneeId);
+      await reload();
+    },
+    [reload],
+  );
+
   const unlink = useCallback(
     async (assigneeId: string, channel: ColleagueChannel) => {
       const db = createClient();
@@ -142,7 +162,7 @@ export function useColleagues() {
     [reload],
   );
 
-  return { colleagues, loading, reload, invite, inviteToTracker, unlink };
+  return { colleagues, loading, reload, invite, inviteToTracker, setTrackerAccess, unlink };
 }
 
 export type SendResult = { sentTo: string[]; failed: string[] } | { error: string };
