@@ -30,7 +30,9 @@ export type CallbackOutcome = {
 export function colleagueHelp(name: string): string {
   return (
     `${name}, сюда приходят задачи и встречи — отвечать можно кнопками под сообщением.\n\n` +
-    "Свои задачи здесь не заводятся: это канал в одну сторону, чтобы ничего не терялось."
+    "«🏁 Сделал» и «⛔ Не могу» после нажатия попросят одно сообщение: что именно сделано или почему не выйдет. " +
+    "Оно уходит постановщику.\n\n" +
+    "Свои задачи здесь пока не заводятся."
   );
 }
 
@@ -52,11 +54,29 @@ export async function handleColleagueCallback(
       .maybeSingle();
     // Addressed to someone else, or belonging to another owner: the same
     // answer either way, so a stray id tells the presser nothing.
-    if (!task || task.user_id !== colleague.user_id || task.assignee !== colleague.name) {
-      return { toast: "Эта задача уже не ваша" };
-    }
+    if (!task || task.user_id !== colleague.user_id) return { toast: "Эта задача уже не ваша" };
+
+    // Since a task can be shared, "is this yours" is a row in
+    // task_participants — and, for everything created before that table
+    // existed, still the name in tasks.assignee. Both are accepted: the
+    // second is not legacy cruft, it is how a task with a single executor
+    // is written to this day.
+    const { data: part } = await admin
+      .from("task_participants")
+      .select("id, role, done_at")
+      .eq("task_id", task.id)
+      .eq("assignee_id", colleague.id)
+      .maybeSingle();
+    const participant = part as { id: string; role: string; done_at: string | null } | null;
+    if (!participant && task.assignee !== colleague.name) return { toast: "Эта задача уже не ваша" };
 
     if (action.action === "acc") {
+      if (participant) {
+        await admin.from("task_participants").update({ accepted_at: new Date().toISOString() }).eq("id", participant.id);
+      }
+      // Written in both places while both exist: the card reads the task's
+      // own accepted_at, and rewriting only one of the two would make the
+      // screen and the messenger disagree about the same fact.
       await admin.from("tasks").update({ accepted_at: new Date().toISOString() }).eq("id", task.id);
       return {
         toast: "Принято",
@@ -66,6 +86,26 @@ export async function handleColleagueCallback(
     }
 
     if (action.action === "done") {
+      if (participant) {
+        // done_comment stays empty on purpose: it is what the next message
+        // from this person fills (see handleColleagueText). An unfinished
+        // row IS the "waiting for a comment" state — no second table, and
+        // nothing to clean up if he never answers.
+        await admin
+          .from("task_participants")
+          .update({ done_at: new Date().toISOString(), done_comment: null, declined_at: null, decline_reason: null })
+          .eq("id", participant.id);
+        const closed = await closeIfEveryoneReported(admin, task.id);
+        return {
+          toast: "Отмечено",
+          rewriteTo: `📋 ${task.title}\n\n🏁 Отмечено выполненным.\nНапишите одним сообщением, что именно сделано — это увидит постановщик.`,
+          notifyOwner: closed
+            ? `🏁 ${colleague.name} выполнил: «${task.title}» — отчитались все, задача ждёт вашей приёмки`
+            : `🏁 ${colleague.name} выполнил свою часть: «${task.title}»`,
+        };
+      }
+
+      // Один исполнитель, участников нет — прежнее поведение целиком.
       await admin
         .from("tasks")
         .update({ status: "done", completed_at: new Date().toISOString() })
@@ -74,6 +114,28 @@ export async function handleColleagueCallback(
         toast: "Отмечено выполненным",
         rewriteTo: `📋 ${task.title}\n\n🏁 Выполнено`,
         notifyOwner: `🏁 ${colleague.name} выполнил: «${task.title}»`,
+      };
+    }
+
+    if (action.action === "no") {
+      if (!participant) {
+        // Отказаться от задачи, у которой нет строки участника, значит
+        // отказаться неизвестно за кого — писать в саму задачу «не могу»
+        // некуда, поэтому это остаётся сообщением постановщику.
+        return {
+          toast: "Передал",
+          rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
+          notifyOwner: `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
+        };
+      }
+      await admin
+        .from("task_participants")
+        .update({ declined_at: new Date().toISOString(), decline_reason: null, done_at: null, done_comment: null })
+        .eq("id", participant.id);
+      return {
+        toast: "Передал",
+        rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
+        notifyOwner: `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
       };
     }
   }
@@ -106,4 +168,75 @@ export async function handleColleagueCallback(
   }
 
   return { toast: "Это действие больше не доступно" };
+}
+
+// Все ли исполнители отчитались — и если да, задача уходит на приёмку.
+//
+// Приёмка не закрывает задачу сама: B4 — «он отчитался» и «я проверил» это
+// разные события, и второе принадлежит человеку, а не боту. Поэтому здесь
+// выставляется только состояние ожидания, а `status` не трогается вовсе:
+// им владеет синхронизация трекера, и запись мимо неё откатится первой же
+// открытой вкладкой.
+export async function closeIfEveryoneReported(admin: SupabaseClient, taskId: string): Promise<boolean> {
+  const { data } = await admin.from("task_participants").select("role, done_at").eq("task_id", taskId);
+  const executors = ((data as { role: string; done_at: string | null }[]) || []).filter((p) => p.role === "executor");
+  if (!executors.length || executors.some((p) => !p.done_at)) return false;
+  await admin.from("tasks").update({ approval_state: "awaiting_review" }).eq("id", taskId);
+  return true;
+}
+
+// Сообщение от коллеги, когда с него ждут комментарий или причину.
+//
+// The pending state is not stored anywhere separately: a row with done_at
+// and no comment, or declined_at and no reason, IS the question waiting for
+// an answer. That keeps the flow to one table and means an unanswered
+// question simply shows up in the tracker as «сделал (без комментария)» —
+// visible, rather than lost in a queue somebody has to remember to drain.
+export async function handleColleagueText(
+  admin: SupabaseClient,
+  colleague: { id: string; name: string; user_id: string },
+  text: string,
+): Promise<{ reply: string; notifyOwner?: string } | null> {
+  const body = text.trim();
+  if (!body) return null;
+
+  const { data } = await admin
+    .from("task_participants")
+    .select("id, task_id, done_at, done_comment, declined_at, decline_reason, tasks(title)")
+    .eq("assignee_id", colleague.id)
+    .eq("user_id", colleague.user_id);
+
+  type Row = {
+    id: string;
+    task_id: string;
+    done_at: string | null;
+    done_comment: string | null;
+    declined_at: string | null;
+    decline_reason: string | null;
+    tasks: { title: string } | { title: string }[] | null;
+  };
+
+  const rows = ((data as Row[]) || []).filter(
+    (r) => (r.done_at && !r.done_comment) || (r.declined_at && !r.decline_reason),
+  );
+  if (!rows.length) return null;
+
+  // Самая свежая: человек отвечает на то, что нажал только что.
+  rows.sort((a, b) => Date.parse(b.done_at || b.declined_at || "") - Date.parse(a.done_at || a.declined_at || ""));
+  const row = rows[0];
+  const title = Array.isArray(row.tasks) ? row.tasks[0]?.title || "" : row.tasks?.title || "";
+
+  if (row.done_at && !row.done_comment) {
+    await admin.from("task_participants").update({ done_comment: body }).eq("id", row.id);
+    return {
+      reply: `Записал по задаче «${title}»: ${body}`,
+      notifyOwner: `🏁 ${colleague.name} по задаче «${title}»: ${body}`,
+    };
+  }
+
+  await admin.from("task_participants").update({ decline_reason: body }).eq("id", row.id);
+  return {
+    reply: `Записал: не сможете «${title}» — ${body}`,
+    notifyOwner: `⛔ ${colleague.name} не может «${title}»: ${body}`,
+  };
 }

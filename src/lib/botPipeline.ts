@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig, BotTransport } from "@/lib/botTransport";
-import { colleagueHelp } from "@/lib/colleagueReplies";
+import { colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
 import { findColleagueByChat } from "@/lib/colleagues";
+import { notifyOwner } from "@/lib/botDelivery";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
@@ -340,6 +341,16 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     }
     const colleague = await findColleagueByChat(ctx.admin, ctx.chatId, ctx.channel);
     if (colleague) {
+      // Раньше здесь был тупик: «это канал в одну сторону». Он и был им,
+      // пока единственным ответом коллеги было нажатие кнопки. Теперь
+      // кнопка «Сделал» просит сказать, что именно сделано, а «Не могу» —
+      // почему, и вот этот текст и приходит сюда следующим сообщением.
+      const answered = await handleColleagueText(ctx.admin, colleague, trimmed);
+      if (answered) {
+        await say(ctx, answered.reply);
+        if (answered.notifyOwner) await notifyOwner(ctx.admin, colleague.user_id, answered.notifyOwner);
+        return;
+      }
       await say(ctx, colleagueHelp(colleague.name));
       return;
     }

@@ -64,6 +64,14 @@ describe("buttons", () => {
     expect(rows[0].map((b) => b.data)).toEqual(["t:acc:t42", "t:done:t42"]);
   });
 
+  it("gives a третью дверь: не могу", () => {
+    // Без неё человек, который не может, просто молчит — ровно тот сбой,
+    // ради устранения которого весь этот механизм и существует.
+    const rows = taskButtons("t42");
+    expect(rows[1][0].data).toBe("t:no:t42");
+    expect(rows[1][0].text).toContain("Не могу");
+  });
+
   it("offers a single confirmation on a meeting", () => {
     expect(meetingButtons("m7")[0]).toHaveLength(1);
     expect(meetingButtons("m7")[0][0].data).toBe("m:yes:m7");

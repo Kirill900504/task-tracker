@@ -63,12 +63,17 @@ export function ideaMessage(text: string, from: string): string {
   return `💡 Мысль от ${from}:\n\n${text}`;
 }
 
+// Три двери, а не две. «Принял» и «Сделал» описывают только тот случай,
+// когда всё идёт хорошо; человеку, который не может, раньше оставалось
+// молчать — а молчание и есть тот сбой, ради устранения которого всё это
+// затевалось. Причина спрашивается следом, отдельным сообщением.
 export function taskButtons(taskId: string): BotButton[][] {
   return [
     [
       { text: "✅ Принял", data: encodeCallback("task", "acc", taskId) },
       { text: "🏁 Сделал", data: encodeCallback("task", "done", taskId) },
     ],
+    [{ text: "⛔ Не могу", data: encodeCallback("task", "no", taskId) }],
   ];
 }
 
