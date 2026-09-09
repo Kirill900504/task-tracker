@@ -434,7 +434,12 @@ export default function TasksPanel({
           prefill={modalPrefill}
           sections={sections}
           assignees={assignees}
-          onSave={actions.saveTask}
+          onSave={(t) => {
+            actions.saveTask(t);
+            // Задача только что создана — строка исполнителя заводится по
+            // тому имени, которое человек уже выбрал в поле выше.
+            void participants.ensureExecutorByName(t.id, t.assignee);
+          }}
           onDelete={() => modalTask && deleteTask(modalTask)}
           onClose={closeModal}
           onAddAssignee={actions.addAssignee}

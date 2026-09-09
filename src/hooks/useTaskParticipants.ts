@@ -151,6 +151,23 @@ export function useTaskParticipants() {
     [load, people],
   );
 
+  // Поле «Исполнитель» и список участников — не два разных механизма, а
+  // короткая и полная запись одного и того же. Поэтому сохранение задачи с
+  // исполнителем заводит ему строку само: иначе человек, привыкший к полю,
+  // получил бы задачу без единого участника и без единого отчёта, а список
+  // выглядел бы необязательной добавкой, которую можно не заполнять.
+  const ensureExecutorByName = useCallback(
+    async (taskId: string, name: string) => {
+      const clean = (name || "").trim();
+      if (!clean || isSelfAssignee(clean)) return;
+      const person = people.find((p) => p.name === clean);
+      if (!person) return;
+      if ((byTask[taskId] || []).some((p) => p.assigneeId === person.id)) return;
+      await add(taskId, person.id, "executor");
+    },
+    [people, byTask, add],
+  );
+
   const setRole = useCallback(
     async (participantId: string, role: TaskParticipantRole) => {
       const db = createClient();
@@ -240,7 +257,7 @@ export function useTaskParticipants() {
   );
 
   return useMemo(
-    () => ({ loading, people, forTask, availableFor, add, setRole, remove, approve, returnForRework, forceClose, reload: load }),
-    [loading, people, forTask, availableFor, add, setRole, remove, approve, returnForRework, forceClose, load],
+    () => ({ loading, people, forTask, availableFor, add, ensureExecutorByName, setRole, remove, approve, returnForRework, forceClose, reload: load }),
+    [loading, people, forTask, availableFor, add, ensureExecutorByName, setRole, remove, approve, returnForRework, forceClose, load],
   );
 }
