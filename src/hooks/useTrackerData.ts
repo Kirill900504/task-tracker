@@ -87,7 +87,11 @@ function emptyShadow(): Shadow {
   return { tasks: [], meetings: [], ideas: [], assignees: [], sections: [] };
 }
 
-export function useTrackerData() {
+// `enabled: false` останавливает всё до загрузки: ни чтения, ни подписок,
+// ни синхронизации. Нужно ровно для одного случая — вошёл руководитель, и
+// пространство, которое этот слой умеет загружать и писать, ему не
+// принадлежит. Хук нельзя вызвать условно, поэтому условие живёт внутри.
+export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
@@ -472,6 +476,7 @@ export function useTrackerData() {
   // ---- Boot: load auth session, initial data, panel layout, seed shadow,
   // subscribe to realtime. Mirrors legacy-tracker.js's boot() function.
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     const db = createClient();
     dbRef.current = db;
@@ -800,9 +805,11 @@ export function useTrackerData() {
       clearInterval(offlineRetry);
     };
     // Intentionally run once on mount — re-running boot() on every render
-    // would re-subscribe realtime channels and re-fetch everything.
+    // would re-subscribe realtime channels and re-fetch everything. The one
+    // dependency is `enabled`, which flips at most once: from "не знаем, кто
+    // вошёл" to "владелец", when the role has been resolved.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enabled]);
 
   // ---- Warn before closing/reloading the tab with unsaved or unsent work —
   // can't await a promise here, but the browser's native confirm at least

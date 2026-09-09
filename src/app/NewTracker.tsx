@@ -52,7 +52,12 @@ export default function NewTracker() {
   // ему чужой инструмент со снятыми кнопками.
   const identity = useWorkspaceRole();
 
-  const { loading, loadError, tasks, meetings, ideas, sections, assignees, panelLayout, syncStatus, offline, actions } = useTrackerData();
+  // Пока роль не выяснена — не грузим ничего: половина людей, которые
+  // сюда войдут, к этому пространству отношения не имеют, и тянуть его
+  // «на всякий случай» значит писать чужие данные в чужую базу от их имени.
+  const isOwner = !identity.loading && identity.role === "owner";
+  const { loading, loadError, tasks, meetings, ideas, sections, assignees, panelLayout, syncStatus, offline, actions } =
+    useTrackerData({ enabled: isOwner });
   const isMobile = useIsMobile();
   const toasts = useToasts();
   const dateTimeConfirm = useDateTimeConfirm();
@@ -411,16 +416,7 @@ export default function NewTracker() {
   // его загрузка руководителя не касается, и её ошибка не должна
   // показывать ему «не получилось загрузить данные».
   if (!identity.loading && identity.role === "manager") {
-    return (
-      <>
-        <ManagerScreen assigneeId={identity.assigneeId} name={identity.name} />
-        <div className="ms-signout">
-          <button className="btn btn-small" onClick={() => actions.signOut()}>
-            Выйти
-          </button>
-        </div>
-      </>
-    );
+    return <ManagerScreen assigneeId={identity.assigneeId} name={identity.name} />;
   }
 
   if (loadError) {
@@ -443,7 +439,7 @@ export default function NewTracker() {
       </div>
     );
   }
-  if (loading) {
+  if (identity.loading || loading) {
     return <div style={{ padding: 24 }}>Загрузка…</div>;
   }
 

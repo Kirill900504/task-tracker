@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { useAssignedWork, type AssignedMeeting, type AssignedTask } from "@/hooks/useAssignedWork";
 import { fmtDate } from "@/lib/taskDisplay";
 import { canDecline, canReportDone } from "@/lib/taskProgress";
@@ -60,6 +62,14 @@ export function ManagerScreenInner({
   askReschedule: (participantId: string, to: string, reason: string) => void;
   vote?: (participantId: string, response: "yes" | "no", reason: string, round: number) => void;
 }) {
+  const router = useRouter();
+
+  async function signOut() {
+    await createClient().auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
   const groups = useMemo(() => {
     const out: Record<"new" | "work" | "done", AssignedTask[]> = { new: [], work: [], done: [] };
     for (const t of tasks) out[workGroup(t)].push(t);
@@ -153,6 +163,12 @@ export function ManagerScreenInner({
           <h1 className="ms-title">{name || "Ваши задачи"}</h1>
           <div className="ms-sub">То, что адресовано вам. Отвечать можно здесь или в мессенджере — это одно и то же.</div>
         </div>
+        {/* Свой выход, а не общий: слой данных владельца для руководителя
+            не запускается вовсе, и его signOut здесь просто некому
+            выполнить. */}
+        <button className="btn btn-small ms-exit" type="button" onClick={() => void signOut()}>
+          Выйти
+        </button>
       </div>
 
       {loading && <div className="empty">Загрузка…</div>}

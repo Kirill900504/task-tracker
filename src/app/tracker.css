@@ -1103,7 +1103,8 @@
      he cannot see anyway.
      ---------------------------------------------------------------- */
   .ms{max-width:760px; margin:0 auto; padding:24px 16px 40px;}
-  .ms-head{margin-bottom:20px;}
+  .ms-head{margin-bottom:20px; display:flex; align-items:flex-start; justify-content:space-between; gap:16px;}
+  .ms-exit{flex:none;}
   .ms-title{font-family:var(--display); font-size:22px; font-weight:800; margin:0 0 6px; letter-spacing:-.015em;}
   .ms-sub{color:var(--ink-soft); font-size:13px; line-height:1.5;}
   .ms-empty{
@@ -1133,7 +1134,6 @@
      это единственное, что человек здесь вообще нажимает. */
   .ms-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;}
   .ms-actions .btn{min-height:36px;}
-  .ms-signout{max-width:760px; margin:0 auto 40px; padding:0 16px; text-align:right;}
   @media (max-width:520px){
     .ms{padding:18px 12px 32px;}
     .ms-actions{flex-direction:column; align-items:stretch;}
