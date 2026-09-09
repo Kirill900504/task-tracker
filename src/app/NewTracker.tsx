@@ -33,6 +33,8 @@ import MobileShell, { type MobileTab } from "@/components/tracker/MobileShell";
 import MobileHeader from "@/components/tracker/MobileHeader";
 import TodayScreen from "@/components/tracker/TodayScreen";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
+import ManagerScreen from "@/components/tracker/ManagerScreen";
 import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
 
@@ -42,6 +44,13 @@ function formatClock(d: Date): string {
 }
 
 export default function NewTracker() {
+  // Владелец или руководитель. Развилка стоит первой строкой и до всего
+  // остального: руководителю не нужен ни один из механизмов ниже — ни
+  // синхронизация чужого пространства, ни напоминания владельца, ни
+  // конструктор панелей, — а грузить их «на всякий случай» значит показать
+  // ему чужой инструмент со снятыми кнопками.
+  const identity = useWorkspaceRole();
+
   const { loading, loadError, tasks, meetings, ideas, sections, assignees, panelLayout, syncStatus, offline, actions } = useTrackerData();
   const isMobile = useIsMobile();
   const toasts = useToasts();
@@ -392,6 +401,23 @@ export default function NewTracker() {
           />
         ),
   };
+  // Руководитель попадает на свой экран, а не в трекер владельца с
+  // выключенными кнопками. Проверка стоит до loadError/loading владельца:
+  // его загрузка руководителя не касается, и её ошибка не должна
+  // показывать ему «не получилось загрузить данные».
+  if (!identity.loading && identity.role === "manager") {
+    return (
+      <>
+        <ManagerScreen assigneeId={identity.assigneeId} name={identity.name} />
+        <div className="ms-signout">
+          <button className="btn btn-small" onClick={() => actions.signOut()}>
+            Выйти
+          </button>
+        </div>
+      </>
+    );
+  }
+
   if (loadError) {
     // Not a dead end: the tracker keeps trying in the background and opens
     // itself the moment the connection answers. The buttons are for the
