@@ -25,6 +25,9 @@ export type MemberState = "none" | "invited" | "active" | "disabled";
 export type Colleague = {
   id: string;
   name: string;
+  // Направление, которое человек ведёт. Пусто, пока его не указали при
+  // приглашении: понедельничная сводка группирует людей по нему.
+  direction: string;
   linked: boolean;
   telegram: boolean;
   max: boolean;
@@ -51,10 +54,12 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
   // and a deployment that is ahead of its database must still show the team
   // screen rather than an empty one. An error here means "nobody has a login
   // yet", which is the truth in that situation anyway.
-  const { data: members } = await db.from("workspace_members").select("assignee_id, status");
+  const { data: members } = await db.from("workspace_members").select("assignee_id, status, direction");
   const memberOf = new Map<string, MemberState>();
+  const directionOf = new Map<string, string>();
   for (const row of members || []) {
     memberOf.set(row.assignee_id as string, (row.status as MemberState) || "none");
+    directionOf.set(row.assignee_id as string, (row.direction as string) || "");
   }
 
   // The owner's own row is dropped here rather than in the team screen: a
@@ -70,6 +75,7 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
       linked: r.telegram_chat_id != null || r.max_user_id != null,
       username: ((r.telegram_username || r.max_username) as string) || null,
       member: memberOf.get(r.id as string) || "none",
+      direction: directionOf.get(r.id as string) || "",
     }));
 }
 
@@ -115,11 +121,11 @@ export function useColleagues() {
   // link to hand over — the same shape as `invite` above, so the team screen
   // treats the two the same way.
   const inviteToTracker = useCallback(
-    async (assigneeId: string): Promise<{ link: string; code: string } | { error: string }> => {
+    async (assigneeId: string, direction = ""): Promise<{ link: string; code: string } | { error: string }> => {
       const res = await fetch("/api/workspace/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assigneeId }),
+        body: JSON.stringify({ assigneeId, direction }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.error) return { error: data?.error || "Не получилось создать приглашение" };
@@ -133,6 +139,15 @@ export function useColleagues() {
   // участия в задачах никуда не девается — иначе вместе с человеком из
   // трекера исчезло бы и то, что он делал, и задачи стали бы ничьими
   // задним числом.
+  const setDirection = useCallback(
+    async (assigneeId: string, direction: string) => {
+      const db = createClient();
+      await db.from("workspace_members").update({ direction }).eq("assignee_id", assigneeId);
+      await reload();
+    },
+    [reload],
+  );
+
   const setTrackerAccess = useCallback(
     async (assigneeId: string, active: boolean) => {
       const db = createClient();
@@ -162,7 +177,7 @@ export function useColleagues() {
     [reload],
   );
 
-  return { colleagues, loading, reload, invite, inviteToTracker, setTrackerAccess, unlink };
+  return { colleagues, loading, reload, invite, inviteToTracker, setDirection, setTrackerAccess, unlink };
 }
 
 export type SendResult = { sentTo: string[]; failed: string[] } | { error: string };

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { isQuietHour } from "@/lib/quietHours";
 import type { TaskParticipant, TaskParticipantRole } from "@/lib/taskProgress";
 
 // Кто на задаче: исполнители, соисполнители, наблюдатели.
@@ -139,8 +140,12 @@ export function useTaskParticipants() {
       //
       // Молча ничего не делает, если человек не подключён ни к одному
       // мессенджеру — он всё равно увидит задачу, когда откроет трекер.
+      // Ночью трекер молчит (E2): задача не потеряется — она придёт в
+      // утренней сводке строкой «ждут вашего ответа». Разбудить человека
+      // ради задачи, к которой он всё равно приступит утром, — верный
+      // способ научить его выключать уведомления совсем.
       const person = people.find((p) => p.id === assigneeId);
-      if (person && !isSelfAssignee(person.name)) {
+      if (person && !isSelfAssignee(person.name) && !isQuietHour()) {
         void fetch("/api/telegram/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

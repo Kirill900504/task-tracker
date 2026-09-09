@@ -43,7 +43,7 @@ const MEMBER_LABEL: Record<string, string> = {
 };
 
 export default function TeamModal({ onClose }: { onClose: () => void }) {
-  const { colleagues, loading, reload, invite, inviteToTracker, setTrackerAccess, unlink } = useColleagues();
+  const { colleagues, loading, reload, invite, inviteToTracker, setDirection, setTrackerAccess, unlink } = useColleagues();
   const [inviteFor, setInviteFor] = useState<{ name: string; link: string; kind: InviteKind } | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -59,9 +59,13 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     setInviteFor({ name, link: result.link, kind: channel });
   }
 
-  async function handleTrackerInvite(id: string, name: string) {
+  async function handleTrackerInvite(id: string, name: string, currentDirection = "") {
     setError("");
-    const result = await inviteToTracker(id);
+    // Направление спрашивается здесь, а не отдельным экраном: это
+    // единственный момент, когда о человеке и так думают, и без него
+    // понедельничная сводка по направлениям остаётся пустой колонкой.
+    const direction = prompt(`Какое направление ведёт ${name}? (можно оставить пустым)`, currentDirection) ?? "";
+    const result = await inviteToTracker(id, direction.trim());
     if ("error" in result) {
       setError(result.error);
       return;
@@ -147,7 +151,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                   {person.member === "invited" && (
                     <>
                       <span className="team-status">{MEMBER_LABEL.invited}</span>
-                      <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name)}>
+                      <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name, person.direction)}>
                         Ссылка ещё раз
                       </button>
                     </>
@@ -156,7 +160,20 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                     <>
                       <span className={person.member === "active" ? "team-status linked" : "team-status"}>
                         {MEMBER_LABEL[person.member]}
+                        {person.direction ? ` · ${person.direction}` : ""}
                       </span>
+                      <button
+                        className="btn btn-small"
+                        type="button"
+                        title="Направление"
+                        onClick={() => {
+                          const next = prompt(`Какое направление ведёт ${person.name}?`, person.direction);
+                          if (next === null) return;
+                          void setDirection(person.id, next.trim());
+                        }}
+                      >
+                        Направление
+                      </button>
                       <button
                         className="btn btn-small"
                         type="button"
