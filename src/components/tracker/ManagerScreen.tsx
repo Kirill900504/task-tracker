@@ -8,6 +8,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 import { canDecline, canReportDone } from "@/lib/taskProgress";
 import { canVoteNo, isCurrent } from "@/lib/meetingVotes";
 import { byDeadline, canAnswer, isOverdueFor, workGroup } from "@/lib/assignedWork";
+import { personStats } from "@/lib/peopleReview";
 
 // Что видит руководитель, когда войдёт по приглашению.
 //
@@ -112,6 +113,26 @@ export function ManagerScreenInner({
 
   const today = new Date().toISOString().slice(0, 10);
 
+  // Считается той же функцией, что и понедельничная сводка владельца:
+  // одна арифметика на двоих — единственный способ, чтобы цифры сошлись.
+  const stats = useMemo(() => {
+    if (!tasks.length) return null;
+    const [only] = personStats(
+      tasks.map((t) => ({
+        name: name || "я",
+        direction: "",
+        createdAt: t.acceptedAt || t.doneAt || new Date().toISOString(),
+        acceptedAt: t.acceptedAt,
+        doneAt: t.doneAt,
+        declinedAt: t.declinedAt,
+        deadline: t.deadline,
+        status: t.status,
+      })),
+      new Date(),
+    );
+    return only || null;
+  }, [tasks, name]);
+
   function card(t: AssignedTask) {
     const overdue = isOverdueFor(t, today);
     return (
@@ -170,6 +191,32 @@ export function ManagerScreenInner({
           Выйти
         </button>
       </div>
+
+      {/* G4: своя цифра меняет поведение дешевле любого разговора — и та
+          же самая, что владелец видит в понедельник. Показывать человеку
+          одно, а начальнику про него другое было бы началом недоверия. */}
+      {!loading && stats && (
+        <div className="ms-stats">
+          <span className="ms-stat">
+            <b>{stats.open}</b> в работе
+          </span>
+          {stats.overdue > 0 && (
+            <span className="ms-stat ms-stat-bad">
+              <b>{stats.overdue}</b> просрочено
+            </span>
+          )}
+          {stats.doneThisWeek > 0 && (
+            <span className="ms-stat">
+              <b>{stats.doneThisWeek}</b> закрыто за неделю
+            </span>
+          )}
+          {stats.onTimeShare !== null && (
+            <span className="ms-stat">
+              в срок <b>{Math.round(stats.onTimeShare * 100)}%</b>
+            </span>
+          )}
+        </div>
+      )}
 
       {loading && <div className="empty">Загрузка…</div>}
 
