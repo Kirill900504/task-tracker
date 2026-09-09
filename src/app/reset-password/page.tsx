@@ -9,11 +9,14 @@ import { createClient } from "@/lib/supabase/client";
 // short-lived recovery session on load (detectSessionInUrl, on by
 // default) — this page just waits for that, then lets the user set a new
 // password with it.
+//
+// Same shell as /login and /join (.auth-* in tracker.css).
 export default function ResetPasswordPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -60,53 +63,64 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div className="modal" style={{ maxWidth: 360, width: "100%" }}>
-        <h2>Новый пароль</h2>
+    <div className="auth-screen">
+      <div className="auth-card">
+        <div className="auth-brand">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size local logo; next/image adds nothing */}
+          <img src="/favicon.png" alt="" />
+          <span>РОКАС</span>
+        </div>
 
-        {!ready && !done && (
-          <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Проверяю ссылку…</p>
-        )}
+        <h1 className="auth-title">Новый пароль</h1>
+
+        {!ready && !done && <p className="auth-sub" style={{ margin: 0 }}>Проверяю ссылку…</p>}
 
         {ready && !done && (
-          <form onSubmit={handleSubmit}>
-            <div className="field">
-              <label htmlFor="newPassword">Новый пароль</label>
-              <input
-                id="newPassword"
-                type="password"
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="confirmPassword">Повторите пароль</label>
-              <input
-                id="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                required
-              />
-            </div>
-            {error && <div style={{ color: "var(--high)", fontSize: 13, marginBottom: 12 }}>{error}</div>}
-            <div className="modal-actions">
-              <div className="left" />
-              <div className="left">
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? "Сохраняю…" : "Сохранить пароль"}
+          <>
+            <p className="auth-sub">Задайте пароль, с которым будете входить дальше.</p>
+            <form onSubmit={handleSubmit}>
+              {error && <div className="auth-error">{error}</div>}
+
+              <div className="auth-field has-peek">
+                <label htmlFor="newPassword">Новый пароль</label>
+                <input
+                  id="newPassword"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="auth-peek"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+                >
+                  {showPassword ? "скрыть" : "показать"}
                 </button>
               </div>
-            </div>
-          </form>
+
+              <div className="auth-field">
+                <label htmlFor="confirmPassword">Повторите пароль</label>
+                <input
+                  id="confirmPassword"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  required
+                />
+              </div>
+
+              <button type="submit" className="auth-btn" disabled={loading}>
+                {loading ? "Сохраняю…" : "Сохранить пароль"}
+              </button>
+            </form>
+          </>
         )}
 
-        {done && (
-          <p style={{ fontSize: 13, color: "var(--ink)" }}>✓ Пароль сохранён, перехожу в трекер…</p>
-        )}
+        {done && <p className="auth-sub" style={{ margin: 0 }}>✓ Пароль сохранён, перехожу в трекер…</p>}
       </div>
     </div>
   );

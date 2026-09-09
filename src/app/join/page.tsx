@@ -12,6 +12,10 @@ import { emailProblem, passwordProblem } from "@/lib/workspaceInvite";
 // The name is fetched before anything is typed, because the first question
 // in the head of a person opening an unexpected link is "is this for me".
 // Seeing his own name answers it faster than any amount of explanation.
+//
+// It is also the first thing anyone ever sees of this tracker, which is why
+// it is not a dialog box floating in an empty page — see .auth-* in
+// tracker.css, shared with /login and /reset-password.
 
 function JoinForm() {
   const router = useRouter();
@@ -97,59 +101,72 @@ function JoinForm() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div className="modal" style={{ maxWidth: 380, width: "100%" }}>
-        {checking && <div className="empty">Проверяем приглашение…</div>}
+    <div className="auth-screen">
+      <div className="auth-card">
+        <div className="auth-brand">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size local logo; next/image adds nothing */}
+          <img src="/favicon.png" alt="" />
+          <span>РОКАС</span>
+        </div>
+
+        {checking && <p className="auth-sub" style={{ margin: 0 }}>Проверяем приглашение…</p>}
 
         {!checking && inviteError && (
           <>
-            <h2>Приглашение не действует</h2>
-            <p style={{ fontSize: 13, marginBottom: 16 }}>{inviteError}</p>
-            <div className="modal-actions">
-              <div className="left" />
-              <div className="left">
-                <button type="button" className="btn" onClick={() => router.push("/login")}>
-                  Ко входу
-                </button>
-              </div>
-            </div>
+            <h1 className="auth-title">Приглашение не действует</h1>
+            <p className="auth-sub">{inviteError}</p>
+            <button type="button" className="auth-btn auth-btn-quiet" onClick={() => router.push("/login")}>
+              Перейти ко входу
+            </button>
           </>
         )}
 
         {!checking && !inviteError && (
           <>
-            <h2>{invitedName ? `${invitedName}, добро пожаловать` : "Добро пожаловать"}</h2>
-            <p style={{ fontSize: 13, marginBottom: 16 }}>
+            <h1 className="auth-title">{invitedName ? `${invitedName}, добро пожаловать` : "Добро пожаловать"}</h1>
+            <p className="auth-sub">
               Придумайте пароль — дальше вы будете входить с этой почтой и паролем. Здесь вы увидите задачи и встречи,
               которые вас касаются.
             </p>
 
             <form onSubmit={handleSubmit}>
-              <div className="field">
+              {error && <div className="auth-error">{error}</div>}
+
+              <div className="auth-field">
                 <label htmlFor="joinEmail">Почта</label>
                 <input
                   id="joinEmail"
                   type="email"
                   autoComplete="email"
+                  placeholder="ivanov@company.ru"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
 
-              <div className="field">
+              <div className="auth-field has-peek">
                 <label htmlFor="joinPassword">Пароль</label>
                 <input
                   id="joinPassword"
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
+                  placeholder="не короче 8 символов"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
+                <button
+                  type="button"
+                  className="auth-peek"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+                >
+                  {showPassword ? "скрыть" : "показать"}
+                </button>
               </div>
 
-              <div className="field">
+              <div className="auth-field">
                 <label htmlFor="joinRepeat">Пароль ещё раз</label>
                 <input
                   id="joinRepeat"
@@ -161,22 +178,14 @@ function JoinForm() {
                 />
               </div>
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 12 }}>
-                <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />
-                Показать пароль
-              </label>
-
-              {error && <div className="team-error">{error}</div>}
-
-              <div className="modal-actions">
-                <div className="left" />
-                <div className="left">
-                  <button type="submit" className="btn btn-primary" disabled={busy}>
-                    {busy ? "Заходим…" : "Войти в трекер"}
-                  </button>
-                </div>
-              </div>
+              <button type="submit" className="auth-btn" disabled={busy}>
+                {busy ? "Заходим…" : "Войти в трекер"}
+              </button>
             </form>
+
+            <p className="auth-hint">
+              Ссылка одноразовая и действует 7 дней. Если не сработала — попросите прислать новую.
+            </p>
           </>
         )}
       </div>
@@ -188,7 +197,15 @@ function JoinForm() {
 // to prerender the page at all.
 export default function JoinPage() {
   return (
-    <Suspense fallback={<div className="empty">Загрузка…</div>}>
+    <Suspense
+      fallback={
+        <div className="auth-screen">
+          <div className="auth-card">
+            <p className="auth-sub" style={{ margin: 0 }}>Загрузка…</p>
+          </div>
+        </div>
+      }
+    >
       <JoinForm />
     </Suspense>
   );

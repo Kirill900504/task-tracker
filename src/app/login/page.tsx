@@ -4,6 +4,13 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+// The front door. Shares its look with /join and /reset-password (.auth-*
+// in tracker.css) — they are one screen with different words on it, and
+// three hand-styled near-copies is how three screens drift apart.
+//
+// There is no "register" link and there will not be one: an account here
+// exists because the owner invited the person (see /join).
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -50,86 +57,96 @@ export default function LoginPage() {
     setMode("sent");
   }
 
-  if (mode === "forgot" || mode === "sent") {
+  const brand = (
+    <div className="auth-brand">
+      {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size local logo; next/image adds nothing */}
+      <img src="/favicon.png" alt="" />
+      <span>РОКАС</span>
+    </div>
+  );
+
+  if (mode === "sent") {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-        <div className="modal" style={{ maxWidth: 360, width: "100%" }}>
-          <h2>Восстановление пароля</h2>
-          {mode === "sent" ? (
-            <>
-              <p style={{ fontSize: 13, color: "var(--ink)", marginBottom: 16 }}>
-                Если <b>{resetEmail}</b> зарегистрирована в трекере — на неё отправлена ссылка для смены пароля. Проверьте почту (и папку «Спам»).
-              </p>
-              <div className="modal-actions">
-                <div className="left" />
-                <div className="left">
-                  <button type="button" className="btn btn-primary" onClick={() => setMode("signin")}>
-                    Назад ко входу
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <form onSubmit={handleForgotSubmit}>
-              <div className="field">
-                <label htmlFor="resetEmail">Почта</label>
-                <input
-                  id="resetEmail"
-                  type="email"
-                  autoComplete="email"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  required
-                />
-              </div>
-              {resetError && <div style={{ color: "var(--high)", fontSize: 13, marginBottom: 12 }}>{resetError}</div>}
-              <div className="modal-actions">
-                <div className="left">
-                  <button type="button" className="btn" onClick={() => setMode("signin")}>
-                    Назад
-                  </button>
-                </div>
-                <div className="left">
-                  <button type="submit" className="btn btn-primary" disabled={resetLoading}>
-                    {resetLoading ? "Отправляю…" : "Отправить ссылку"}
-                  </button>
-                </div>
-              </div>
-            </form>
-          )}
+      <div className="auth-screen">
+        <div className="auth-card">
+          {brand}
+          <h1 className="auth-title">Письмо отправлено</h1>
+          <p className="auth-sub">
+            Если <b style={{ color: "var(--ink)" }}>{resetEmail}</b> зарегистрирована в трекере — на неё ушла ссылка для
+            смены пароля. Проверьте почту, в том числе папку «Спам».
+          </p>
+          <button type="button" className="auth-btn auth-btn-quiet" onClick={() => setMode("signin")}>
+            Назад ко входу
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "forgot") {
+    return (
+      <div className="auth-screen">
+        <div className="auth-card">
+          {brand}
+          <h1 className="auth-title">Восстановление пароля</h1>
+          <p className="auth-sub">Пришлём ссылку, по которой можно задать новый пароль.</p>
+
+          <form onSubmit={handleForgotSubmit}>
+            {resetError && <div className="auth-error">{resetError}</div>}
+
+            <div className="auth-field">
+              <label htmlFor="resetEmail">Почта</label>
+              <input
+                id="resetEmail"
+                type="email"
+                autoComplete="email"
+                placeholder="ivanov@company.ru"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                required
+              />
+            </div>
+
+            <button type="submit" className="auth-btn" disabled={resetLoading}>
+              {resetLoading ? "Отправляю…" : "Отправить ссылку"}
+            </button>
+          </form>
+
+          <div className="auth-foot">
+            <button type="button" className="auth-link" onClick={() => setMode("signin")}>
+              Назад ко входу
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-      }}
-    >
-      <form onSubmit={handleSubmit} className="modal" style={{ maxWidth: 360, width: "100%" }}>
-        <h2>Вход в трекер</h2>
+    <div className="auth-screen">
+      <div className="auth-card">
+        {brand}
+        <h1 className="auth-title">Вход в трекер</h1>
+        <p className="auth-sub">Задачи, встречи и мысли — то, что касается вас.</p>
 
-        <div className="field">
-          <label htmlFor="email">Почта</label>
-          <input
-            id="email"
-            type="text"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
+        <form onSubmit={handleSubmit}>
+          {error && <div className="auth-error">{error}</div>}
 
-        <div className="field">
-          <label htmlFor="password">Пароль</label>
-          <div style={{ position: "relative" }}>
+          <div className="auth-field">
+            <label htmlFor="email">Почта</label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="ivanov@company.ru"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="auth-field has-peek">
+            <label htmlFor="password">Пароль</label>
             <input
               id="password"
               type={showPassword ? "text" : "password"}
@@ -137,42 +154,26 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              style={{
-                width: "100%",
-                padding: "8px 34px 8px 10px",
-                border: "1px solid var(--line)",
-                borderRadius: 6,
-                fontFamily: "var(--sans)",
-                fontSize: 13,
-                background: "var(--paper-soft)",
-                color: "var(--ink)",
-              }}
             />
             <button
               type="button"
+              className="auth-peek"
               onClick={() => setShowPassword((v) => !v)}
-              title={showPassword ? "Скрыть пароль" : "Показать пароль"}
-              style={{
-                position: "absolute",
-                right: 4,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 15,
-                padding: "4px 6px",
-                lineHeight: 1,
-                color: "var(--ink-soft)",
-              }}
+              aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
             >
-              {showPassword ? "🙈" : "👁"}
+              {showPassword ? "скрыть" : "показать"}
             </button>
           </div>
+
+          <button type="submit" className="auth-btn" disabled={loading}>
+            {loading ? "Входим…" : "Войти"}
+          </button>
+        </form>
+
+        <div className="auth-foot">
           <button
             type="button"
-            className="btn-ghost"
-            style={{ marginTop: 6, fontSize: 12, textDecoration: "underline", padding: 0 }}
+            className="auth-link"
             onClick={() => {
               setResetEmail(email);
               setMode("forgot");
@@ -181,20 +182,7 @@ export default function LoginPage() {
             Забыли пароль?
           </button>
         </div>
-
-        {error && (
-          <div style={{ color: "var(--high)", fontSize: 13, marginBottom: 12 }}>{error}</div>
-        )}
-
-        <div className="modal-actions">
-          <div className="left" />
-          <div className="left">
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? "Входим…" : "Войти"}
-            </button>
-          </div>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }
