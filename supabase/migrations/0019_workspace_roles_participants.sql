@@ -701,3 +701,9 @@ alter publication supabase_realtime add table public.idea_recipients;
 alter publication supabase_realtime add table public.item_comments;
 alter publication supabase_realtime add table public.comment_reactions;
 alter publication supabase_realtime add table public.workspace_members;
+
+-- Конец файла. Строка ниже — намеренно незакрытый комментарий: если при
+-- копировании в конец прилипнет что-нибудь лишнее (индикатор раскладки,
+-- подпись из браузера), оно окажется внутри комментария и не сломает
+-- миграцию. Один такой случай уже стоил Кириллу непонятной ошибки.
+-- 
