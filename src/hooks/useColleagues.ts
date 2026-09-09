@@ -17,6 +17,11 @@ import { isSelfAssignee } from "@/lib/trackerRows";
 
 export type ColleagueChannel = "telegram" | "max";
 
+// Whether this person also has a LOGIN, which is a different question from
+// whether a bot can write to him: a manager may live entirely in Telegram,
+// entirely in the tracker, or in both.
+export type MemberState = "none" | "invited" | "active" | "disabled";
+
 export type Colleague = {
   id: string;
   name: string;
@@ -24,6 +29,7 @@ export type Colleague = {
   telegram: boolean;
   max: boolean;
   username: string | null;
+  member: MemberState;
 };
 
 // Set only when a MAX bot exists for this install — creating one needs a
@@ -40,6 +46,17 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
     .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username")
     .order("created_at");
   if (error || !data) return null;
+
+  // Read separately and forgivingly: this table arrives with migration 0019,
+  // and a deployment that is ahead of its database must still show the team
+  // screen rather than an empty one. An error here means "nobody has a login
+  // yet", which is the truth in that situation anyway.
+  const { data: members } = await db.from("workspace_members").select("assignee_id, status");
+  const memberOf = new Map<string, MemberState>();
+  for (const row of members || []) {
+    memberOf.set(row.assignee_id as string, (row.status as MemberState) || "none");
+  }
+
   // The owner's own row is dropped here rather than in the team screen: a
   // bot cannot write to the person running it, so «пригласить самого себя»
   // is an offer that could never work, wherever it appeared.
@@ -52,6 +69,7 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
       max: r.max_user_id != null,
       linked: r.telegram_chat_id != null || r.max_user_id != null,
       username: ((r.telegram_username || r.max_username) as string) || null,
+      member: memberOf.get(r.id as string) || "none",
     }));
 }
 
@@ -93,6 +111,24 @@ export function useColleagues() {
     [],
   );
 
+  // The other kind of invitation: a login rather than a chat. Returns the
+  // link to hand over — the same shape as `invite` above, so the team screen
+  // treats the two the same way.
+  const inviteToTracker = useCallback(
+    async (assigneeId: string): Promise<{ link: string; code: string } | { error: string }> => {
+      const res = await fetch("/api/workspace/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigneeId }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.error) return { error: data?.error || "Не получилось создать приглашение" };
+      await reload();
+      return { link: data.link as string, code: data.code as string };
+    },
+    [reload],
+  );
+
   const unlink = useCallback(
     async (assigneeId: string, channel: ColleagueChannel) => {
       const db = createClient();
@@ -106,7 +142,7 @@ export function useColleagues() {
     [reload],
   );
 
-  return { colleagues, loading, reload, invite, unlink };
+  return { colleagues, loading, reload, invite, inviteToTracker, unlink };
 }
 
 export type SendResult = { sentTo: string[]; failed: string[] } | { error: string };

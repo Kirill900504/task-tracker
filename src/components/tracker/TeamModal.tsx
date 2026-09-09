@@ -13,12 +13,38 @@ import { MAX_AVAILABLE, useColleagues, type ColleagueChannel } from "@/hooks/use
 //
 // A person can be connected to both messengers; what is sent goes to one of
 // them (see chatsFor), so the second is a spare route rather than a copy.
+//
+// Since the tracker became multi-user there is a third kind of invitation
+// here, and it is not a messenger at all: a login. A manager who works at a
+// computer wants the tracker itself; one who is always on the road wants
+// Telegram; most want both. They are offered side by side because that is
+// how the choice is actually made — per person, not per company.
 
 const CHANNEL_LABEL: Record<ColleagueChannel, string> = { telegram: "Telegram", max: "MAX" };
 
+type InviteKind = ColleagueChannel | "tracker";
+
+const INVITE_LABEL: Record<InviteKind, string> = { telegram: "Telegram", max: "MAX", tracker: "трекер" };
+const INVITE_LIFETIME: Record<InviteKind, string> = {
+  telegram: "действует 15 минут",
+  max: "действует 15 минут",
+  tracker: "действует 7 дней",
+};
+const INVITE_HINT: Record<InviteKind, string> = {
+  telegram: "Отправьте ссылку человеку — он откроет её и нажмёт «Start».",
+  max: "Отправьте ссылку человеку — он откроет её и нажмёт «Start».",
+  tracker: "Отправьте ссылку человеку — он придумает себе пароль и сразу окажется в трекере.",
+};
+
+const MEMBER_LABEL: Record<string, string> = {
+  invited: "приглашён в трекер",
+  active: "в трекере",
+  disabled: "доступ отключён",
+};
+
 export default function TeamModal({ onClose }: { onClose: () => void }) {
-  const { colleagues, loading, reload, invite, unlink } = useColleagues();
-  const [inviteFor, setInviteFor] = useState<{ name: string; link: string; channel: ColleagueChannel } | null>(null);
+  const { colleagues, loading, reload, invite, inviteToTracker, unlink } = useColleagues();
+  const [inviteFor, setInviteFor] = useState<{ name: string; link: string; kind: InviteKind } | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -30,7 +56,18 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
       return;
     }
     setCopied(false);
-    setInviteFor({ name, link: result.link, channel });
+    setInviteFor({ name, link: result.link, kind: channel });
+  }
+
+  async function handleTrackerInvite(id: string, name: string) {
+    setError("");
+    const result = await inviteToTracker(id);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    setCopied(false);
+    setInviteFor({ name, link: result.link, kind: "tracker" });
   }
 
   async function copyLink() {
@@ -51,7 +88,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div className="overlay open" id="teamOverlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h2>Команда в мессенджерах</h2>
+        <h2>Команда</h2>
 
         {loading && <div className="empty">Загрузка…</div>}
 
@@ -99,6 +136,27 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                       )}
                     </>
                   )}
+
+                  {/* Приглашение в сам трекер — отдельно от мессенджеров:
+                      это логин, а не чат, и одно другого не заменяет. */}
+                  {person.member === "none" && (
+                    <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name)}>
+                      + В трекер
+                    </button>
+                  )}
+                  {person.member === "invited" && (
+                    <>
+                      <span className="team-status">{MEMBER_LABEL.invited}</span>
+                      <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name)}>
+                        Ссылка ещё раз
+                      </button>
+                    </>
+                  )}
+                  {(person.member === "active" || person.member === "disabled") && (
+                    <span className={person.member === "active" ? "team-status linked" : "team-status"}>
+                      {MEMBER_LABEL[person.member]}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -108,7 +166,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
         {inviteFor && (
           <div className="field" id="inviteBlock">
             <label>
-              Ссылка в {CHANNEL_LABEL[inviteFor.channel]} для {inviteFor.name} — действует 15 минут
+              Ссылка в {INVITE_LABEL[inviteFor.kind]} для {inviteFor.name} — {INVITE_LIFETIME[inviteFor.kind]}
             </label>
             <div className="invite-link">{inviteFor.link}</div>
             <div className="outcome-actions">
@@ -119,7 +177,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                 Проверить, подключился ли
               </button>
             </div>
-            <div className="team-hint">Отправьте ссылку человеку — он откроет её и нажмёт «Start».</div>
+            <div className="team-hint">{INVITE_HINT[inviteFor.kind]}</div>
           </div>
         )}
 

@@ -33,6 +33,13 @@ export async function updateSession(request: NextRequest) {
   // has a chance to, so it must not redirect this away first.
   const isResetPasswordPage = request.nextUrl.pathname.startsWith("/reset-password");
   if (isResetPasswordPage) return supabaseResponse;
+  // Redeeming an invitation is by definition done by someone who has no
+  // account yet — sending him to /login would send him to a form he cannot
+  // pass. The page and the route it posts to are the only public ones, and
+  // the invite code is what stands in for a session there.
+  const isJoinPage = request.nextUrl.pathname.startsWith("/join");
+  const isJoinRoute = request.nextUrl.pathname.startsWith("/api/workspace/join");
+  if (isJoinPage || isJoinRoute) return supabaseResponse;
   // The messengers and the external cron pinger call these with their own
   // secret-token checks, not a browser session — never gate them behind
   // the login redirect. (A missed entry here does not fail loudly: the POST
