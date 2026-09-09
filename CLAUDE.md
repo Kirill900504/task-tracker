@@ -122,6 +122,13 @@ by a running `next start` (and by OneDrive) — stop the server first.
 
 ## Open threads
 
+- **The tracker is becoming multi-user** — fourteen managers who sign in,
+  tasks with several executors, meetings that are voted on, a chat inside
+  the item. Every decision behind it is written down in `docs/multiuser.md`
+  (in Russian, because they are his words): read that before touching
+  anything about people, roles or participation, and do not re-litigate what
+  is settled there. The foundation — migration 0019, `taskProgress.ts`,
+  `meetingVotes.ts` — is written; the migration is NOT yet applied.
 - **MAX** is written and deployed but inert: a bot token requires a verified
   organisation profile (ООО/ИП/самозанятый) on dev.max.ru, which he does not
   have yet. Set `MAX_BOT_TOKEN`, `MAX_WEBHOOK_SECRET`,
