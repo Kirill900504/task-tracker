@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -12,7 +13,7 @@ import { join } from "node:path";
 // environment — e.g. `node --env-file=.env.local` isn't usable here since
 // Playwright is its own process; use `npx dotenv-run` or export them first.)
 
-const { email, password } = JSON.parse(readFileSync(join(__dirname, ".e2e-user.json"), "utf8"));
+const { id: userId, email, password } = JSON.parse(readFileSync(join(__dirname, ".e2e-user.json"), "utf8"));
 
 test("full loop: login, task, meeting, idea, calendar, logout", async ({ page }) => {
   const stamp = Date.now();
@@ -492,4 +493,45 @@ test("a notification is closed by its cross", async ({ page }) => {
 
   await toast.locator(".close").click();
   await expect(toast).toHaveCount(0);
+});
+
+// Sending used to be a single button that went to the task's assignee and
+// nowhere else: if the person you wanted was not the assignee — or the
+// assignee was in no messenger at all — the tracker could not reach them.
+// Now the ✈ opens the list of everyone who is connected, with the people the
+// item already concerns at the top.
+test("a task can be sent to any connected colleague, not only its assignee", async ({ page }) => {
+  const title = `E2E отправка ${Date.now()}`;
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  await login(page);
+  // The default assignee list reaches the database on the first sync; the
+  // colleague is connected there, the way the bot's invite would have.
+  await waitForSaved(page);
+  const { error } = await admin
+    .from("assignees")
+    .update({ telegram_chat_id: 900000000 + (Date.now() % 1000000), telegram_username: "e2e_colleague" })
+    .eq("user_id", userId)
+    .eq("name", "Игорь Витковский");
+  expect(error).toBeNull();
+
+  // A task addressed to nobody in particular — the point being that it can
+  // still be sent.
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await page.click("#saveTaskBtn");
+  await page.click(`.task:has-text("${title}")`);
+
+  await expect(page.locator("#sendTaskBtn")).toBeVisible();
+  await page.click("#sendTaskBtn");
+  const menu = page.locator(".action-menu");
+  await expect(menu).toBeVisible();
+  await expect(menu.locator(".export-item", { hasText: "Игорь Витковский" })).toBeVisible();
+
+  // Nothing is sent by opening the menu.
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(page.locator("#taskSendResult")).toHaveCount(0);
 });

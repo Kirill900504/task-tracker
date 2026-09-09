@@ -5,7 +5,8 @@
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { sendToTelegram, useColleagues } from "@/hooks/useColleagues";
+import { useColleagues } from "@/hooks/useColleagues";
+import SendMenu from "./SendMenu";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso } from "@/lib/calendarLogic";
 import { fmtDate } from "@/lib/taskDisplay";
@@ -56,6 +57,7 @@ export default function MeetingModal({
   const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? prefill?.participants ?? []));
   const { colleagues } = useColleagues();
   const [sendState, setSendState] = useState("");
+  const [sendAt, setSendAt] = useState<DOMRect | null>(null);
   const [result, setResult] = useState(meeting?.result ?? "");
   const [rescheduleDate, setRescheduleDate] = useState(meeting ? addDaysIso(meeting.date, 1) : "");
   const [rescheduleTime, setRescheduleTime] = useState(meeting?.time || "10:00");
@@ -77,23 +79,11 @@ export default function MeetingModal({
     setParticipants((prev) => (prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name]));
   }
 
+  // Same as the task modal: offered whenever anyone is connected, not only
+  // when a participant is — a meeting is often worth showing to someone who
+  // is not in it (see SendMenu, which puts the participants first anyway).
   const linkedNames = colleagues.filter((c) => c.linked).map((c) => c.name);
-  const canSend = isEditing && participants.some((p) => linkedNames.includes(p));
-
-  async function handleSend() {
-    if (!meeting) return;
-    setSendState("Отправляю…");
-    const outcome = await sendToTelegram("meeting", meeting.id);
-    if ("error" in outcome) {
-      setSendState(outcome.error);
-      return;
-    }
-    setSendState(
-      outcome.sentTo.length
-        ? `Отправлено: ${outcome.sentTo.join(", ")}` + (outcome.failed.length ? `; не дошло: ${outcome.failed.join(", ")}` : "")
-        : `Не дошло: ${outcome.failed.join(", ")}`,
-    );
-  }
+  const canSend = isEditing && linkedNames.length > 0;
 
   function save() {
     const trimmedTitle = title.trim();
@@ -251,6 +241,9 @@ export default function MeetingModal({
         )}
 
         {sendState && <div className="send-result" id="meetingSendResult">{sendState}</div>}
+        {sendAt && meeting && (
+          <SendMenu kind="meeting" id={meeting.id} concerns={participants} anchor={sendAt} onClose={() => setSendAt(null)} onResult={setSendState} />
+        )}
 
         <div className="modal-actions">
           <div className="left">
@@ -271,7 +264,13 @@ export default function MeetingModal({
           </div>
           <div className="left">
             {canSend && (
-              <button className="btn" id="sendMeetingBtn" type="button" title="Отправить участникам в Telegram" onClick={handleSend}>
+              <button
+                className="btn"
+                id="sendMeetingBtn"
+                type="button"
+                title="Отправить встречу коллеге в мессенджер"
+                onClick={(e) => setSendAt(e.currentTarget.getBoundingClientRect())}
+              >
                 ✈ Отправить
               </button>
             )}

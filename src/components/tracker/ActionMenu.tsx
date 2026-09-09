@@ -51,7 +51,7 @@ export default function ActionMenu({
     if (top + el.offsetHeight > window.innerHeight - 8) top = Math.max(8, anchor.top - el.offsetHeight - 6);
     el.style.top = top + "px";
     el.style.right = Math.max(8, window.innerWidth - anchor.right) + "px";
-  }, [anchor, isMobile]);
+  }, [anchor, isMobile, items.length]);
 
   return createPortal(
     <>

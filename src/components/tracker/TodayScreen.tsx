@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import type { Meeting, Section, Task } from "@/types/tracker";
 import TaskCard from "./TaskCard";
+import SendMenu from "./SendMenu";
 import { buildToday } from "@/lib/todayScreen";
 import { fmtDate } from "@/lib/taskDisplay";
 
@@ -18,6 +20,7 @@ export default function TodayScreen({
   onOpenTask,
   onOpenMeeting,
   onGoToTasks,
+  showToast,
 }: {
   tasks: Task[];
   meetings: Meeting[];
@@ -26,7 +29,14 @@ export default function TodayScreen({
   onOpenTask: (task: Task) => void;
   onOpenMeeting: (meeting: Meeting) => void;
   onGoToTasks: () => void;
+  // How the outcome of a send is said out loud here — the same toast stack
+  // the rest of the tracker answers with.
+  showToast: (message: string) => void;
 }) {
+  // Sending straight from the first screen: what you are about to miss is
+  // exactly what you most often want to hand to someone.
+  const [sendTask, setSendTask] = useState<Task | null>(null);
+  const sendMenuFor = (task: Task) => [{ id: "send", label: "✈ Отправить коллеге", onSelect: () => setSendTask(task) }];
   const data = buildToday(tasks, meetings);
   const sectionOf = (t: Task) => sections.find((s) => s.id === t.sectionId) ?? null;
   const nothing = !data.overdue.length && !data.dueToday.length && !data.meetingsToday.length && !data.meetingsTomorrow.length;
@@ -52,7 +62,14 @@ export default function TodayScreen({
         <section className="today-block">
           <h3 className="today-heading overdue">Просрочено · {data.overdue.length}</h3>
           {data.overdue.map((task) => (
-            <TaskCard key={task.id} task={task} section={sectionOf(task)} onToggleDone={() => onToggleTask(task)} onOpen={() => onOpenTask(task)} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              section={sectionOf(task)}
+              onToggleDone={() => onToggleTask(task)}
+              onOpen={() => onOpenTask(task)}
+              menuItems={sendMenuFor(task)}
+            />
           ))}
         </section>
       )}
@@ -61,7 +78,14 @@ export default function TodayScreen({
         <section className="today-block">
           <h3 className="today-heading">На сегодня · {data.dueToday.length}</h3>
           {data.dueToday.map((task) => (
-            <TaskCard key={task.id} task={task} section={sectionOf(task)} onToggleDone={() => onToggleTask(task)} onOpen={() => onOpenTask(task)} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              section={sectionOf(task)}
+              onToggleDone={() => onToggleTask(task)}
+              onOpen={() => onOpenTask(task)}
+              menuItems={sendMenuFor(task)}
+            />
           ))}
         </section>
       )}
@@ -89,6 +113,17 @@ export default function TodayScreen({
             </button>
           ))}
         </section>
+      )}
+
+      {sendTask && (
+        <SendMenu
+          kind="task"
+          id={sendTask.id}
+          concerns={[sendTask.assignee]}
+          anchor={null}
+          onClose={() => setSendTask(null)}
+          onResult={showToast}
+        />
       )}
 
       {!nothing && data.undatedCount > 0 && (

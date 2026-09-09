@@ -483,6 +483,7 @@ export default function NewTracker() {
                 onOpenTask={(task) => setOpenExistingTaskId(task.id)}
                 onOpenMeeting={(meeting) => setOpenExistingMeetingId(meeting.id)}
                 onGoToTasks={() => setMobileTab("tasks")}
+                showToast={toasts.showToast}
               />
             </div>
             <div hidden={mobileTab !== "tasks"}>{panels.mainCol}</div>

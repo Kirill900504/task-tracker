@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { sendToTelegram, useColleagues } from "@/hooks/useColleagues";
+import { useColleagues } from "@/hooks/useColleagues";
 import type { Idea } from "@/types/tracker";
 import ActionMenu from "./ActionMenu";
+import SendMenu from "./SendMenu";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
 
@@ -43,11 +44,12 @@ export default function IdeaItem({
 
   const linked = colleagues.filter((c) => c.linked);
 
-  async function sendTo(name: string) {
-    setSendNote("Отправляю…");
-    const result = await sendToTelegram("idea", idea.id, [name]);
-    setSendNote("error" in result ? result.error : result.sentTo.length ? `Отправлено: ${result.sentTo.join(", ")}` : `Не дошло: ${result.failed.join(", ")}`);
-    setTimeout(() => setSendNote(""), 4000);
+  // The note under the thought clears itself: unlike a modal, this row
+  // stays on screen, and yesterday's «Отправлено: Аня» would sit there for
+  // as long as the thought does.
+  function noteResult(message: string) {
+    setSendNote(message);
+    if (!message.startsWith("Отправляю")) setTimeout(() => setSendNote(""), 4000);
   }
 
   function startEdit() {
@@ -178,14 +180,7 @@ export default function IdeaItem({
           ]}
         />
       )}
-      {pickerAt && (
-        <ActionMenu
-          anchor={pickerAt}
-          title="Кому отправить"
-          onClose={() => setPickerAt(null)}
-          items={linked.map((person) => ({ id: person.id, label: person.name, onSelect: () => sendTo(person.name) }))}
-        />
-      )}
+      {pickerAt && <SendMenu kind="idea" id={idea.id} anchor={pickerAt} onClose={() => setPickerAt(null)} onResult={noteResult} />}
     </div>
   );
 }

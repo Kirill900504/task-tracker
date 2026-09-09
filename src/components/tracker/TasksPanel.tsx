@@ -12,6 +12,7 @@ import { getDragAfterElement } from "@/lib/dndDom";
 import TaskCard from "./TaskCard";
 import type { ActionMenuItem } from "./ActionMenu";
 import TaskModal from "./TaskModal";
+import SendMenu from "./SendMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { useToasts } from "@/hooks/useToasts";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
@@ -113,6 +114,9 @@ export default function TasksPanel({
   }
 
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  // The card whose «кому отправить» menu is open (phone only — with a
+  // mouse the same thing sits in the task's own form).
+  const [sendTask, setSendTask] = useState<Task | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ term: Term; beforeId: string | null } | null>(null);
   const [ideaDragOverTerm, setIdeaDragOverTerm] = useState<Term | null>(null);
   const shortColRef = useRef<HTMLDivElement | null>(null);
@@ -263,6 +267,9 @@ export default function TasksPanel({
       },
     ];
     if (onTaskToMeeting) items.push({ id: "meeting", label: "📅 Назначить встречу", onSelect: () => onTaskToMeeting(t.id) });
+    // Sending is in here rather than only in the editor because on a phone
+    // «скинуть Ане» should not cost opening a form and closing it again.
+    items.push({ id: "send", label: "✈ Отправить коллеге", onSelect: () => setSendTask(t) });
     return items;
   }
 
@@ -398,6 +405,17 @@ export default function TasksPanel({
             )}
           </div>
         </div>
+      )}
+
+      {sendTask && (
+        <SendMenu
+          kind="task"
+          id={sendTask.id}
+          concerns={[sendTask.assignee]}
+          anchor={null}
+          onClose={() => setSendTask(null)}
+          onResult={(message) => toasts.showToast(message)}
+        />
       )}
 
       {modalOpen && (
