@@ -214,6 +214,115 @@ async function main() {
   const { rows: stillThere } = await db.query("select id from public.task_participants where task_id = $1", [taskId]);
   check("но его участие в задачах сохранено", stillThere.length === 2);
 
+  // ---- Колонки, из которых читает интерфейс -------------------------
+  //
+  // TypeScript проверяет форму объекта, но не то, что колонка с таким
+  // именем существует: запрос с опечаткой компилируется и падает уже у
+  // человека на экране. Список ниже — то, что запрашивают хуки; если
+  // колонку переименуют, здесь станет видно раньше, чем в проде.
+  console.log("\nКолонки, которые читает интерфейс:");
+  const NEEDED = {
+    task_participants: [
+      "id", "user_id", "task_id", "assignee_id", "role", "accepted_at", "done_at", "done_comment",
+      "declined_at", "decline_reason", "reschedule_requested_at", "reschedule_to", "reschedule_reason", "created_at",
+    ],
+    meeting_participants: ["id", "user_id", "meeting_id", "assignee_id", "role", "response", "reason", "responded_at", "round"],
+    idea_recipients: ["id", "user_id", "idea_id", "assignee_id", "seen_at", "converted_task_id", "converted_meeting_id"],
+    item_comments: ["id", "user_id", "item_kind", "item_id", "author_assignee_id", "author_user_id", "body", "source", "created_at", "edited_at", "deleted_at"],
+    comment_reactions: ["id", "user_id", "comment_id", "actor_assignee_id", "actor_user_id", "emoji"],
+    workspace_members: ["id", "owner_id", "member_id", "assignee_id", "role", "status", "direction", "joined_at", "disabled_at"],
+    workspace_invites: ["code", "owner_id", "assignee_id", "email", "expires_at", "used_at", "used_by"],
+    tasks: ["created_by", "approval_state", "approval_comment", "approved_at", "force_closed_by", "force_closed_reason"],
+    meetings: ["created_by", "vote_round", "result_by", "result_at"],
+  };
+  for (const [table, columns] of Object.entries(NEEDED)) {
+    const { rows } = await db.query(
+      "select column_name from information_schema.columns where table_schema = 'public' and table_name = $1",
+      [table],
+    );
+    const have = new Set(rows.map((r) => r.column_name));
+    const missing = columns.filter((c) => !have.has(c));
+    check(`${table}: ${columns.length} колонок`, missing.length === 0);
+    if (missing.length) console.log("    нет: " + missing.join(", "));
+  }
+
+  console.log("\nОбсуждение и реакции:");
+  await db.query(
+    `insert into public.item_comments (user_id, item_kind, item_id, author_assignee_id, body)
+     values ($1,'task',$2,$3,'Второй комментарий')`,
+    [OWNER, taskId, byName["Аня"]],
+  );
+  const { rows: commentRows } = await db.query("select id from public.item_comments where item_id = $1 order by created_at", [taskId]);
+  check("комментарии складываются в порядке появления", commentRows.length === 2);
+
+  await db.query(
+    `insert into public.comment_reactions (user_id, comment_id, actor_assignee_id, emoji) values ($1,$2,$3,'👍')`,
+    [OWNER, commentRows[0].id, byName["Аня"]],
+  );
+  try {
+    await db.query(
+      `insert into public.comment_reactions (user_id, comment_id, actor_assignee_id, emoji) values ($1,$2,$3,'👍')`,
+      [OWNER, commentRows[0].id, byName["Аня"]],
+    );
+    check("одна и та же реакция не ставится дважды", false);
+  } catch {
+    check("одна и та же реакция не ставится дважды", true);
+  }
+  try {
+    await db.query(
+      `insert into public.comment_reactions (user_id, comment_id, actor_assignee_id, emoji) values ($1,$2,$3,'💩')`,
+      [OWNER, commentRows[0].id, byName["Аня"]],
+    );
+    check("эмодзи не из набора отклоняется", false);
+  } catch {
+    check("эмодзи не из набора отклоняется", true);
+  }
+
+  console.log("\nГолосование по встрече:");
+  // Доступ Ани выключен предыдущей проверкой — возвращаем, иначе дальше
+  // проверялось бы не голосование, а увольнение ещё раз.
+  await db.query("update public.workspace_members set status = 'active', disabled_at = null where member_id = $1", [MANAGER_A]);
+  const meetingId = "mtg_test_planerka";
+  await db.query(
+    `insert into public.meetings (id, user_id, date, time, title, participants) values ($1,$2,'2026-09-20','10:00','Планёрка', array['Аня','Борис'])`,
+    [meetingId, OWNER],
+  );
+  await db.query(
+    `insert into public.meeting_participants (user_id, meeting_id, assignee_id, role) values ($1,$2,$3,'participant'), ($1,$2,$4,'participant')`,
+    [OWNER, meetingId, byName["Аня"], byName["Борис"]],
+  );
+  await as(db, MANAGER_A, async () => {
+    const { rowCount } = await db.query(
+      "update public.meeting_participants set response = 'yes', responded_at = now(), round = 1 where meeting_id = $1 and assignee_id = $2",
+      [meetingId, byName["Аня"]],
+    );
+    check("участник голосует за себя", rowCount === 1);
+  });
+  await as(db, MANAGER_A, async () => {
+    const { rowCount } = await db.query(
+      "update public.meeting_participants set response = 'yes' where meeting_id = $1 and assignee_id = $2",
+      [meetingId, byName["Борис"]],
+    );
+    check("и не может проголосовать за другого", rowCount === 0);
+  });
+  try {
+    await db.query("update public.meeting_participants set response = 'может быть' where meeting_id = $1", [meetingId]);
+    check("посторонний ответ не принимается", false);
+  } catch {
+    check("посторонний ответ не принимается", true);
+  }
+
+  console.log("\nПриёмка:");
+  try {
+    await db.query("update public.tasks set approval_state = 'непонятно' where id = $1", [taskId]);
+    check("выдуманное состояние приёмки отклоняется", false);
+  } catch {
+    check("выдуманное состояние приёмки отклоняется", true);
+  }
+  await db.query("update public.tasks set approval_state = 'awaiting_review' where id = $1", [taskId]);
+  const { rows: approvalRows } = await db.query("select approval_state from public.tasks where id = $1", [taskId]);
+  check("состояние приёмки сохраняется", approvalRows[0].approval_state === "awaiting_review");
+
   await db.end();
   console.log(failures ? `\n${failures} проверок не прошло` : "\nВсе проверки прошли");
   process.exit(failures ? 1 : 0);
