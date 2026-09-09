@@ -150,7 +150,7 @@ export function useItemComments(kind: ItemKind, itemId: string) {
         .select("assignee_id")
         .eq("member_id", me?.user?.id || "")
         .maybeSingle();
-      await db.from("item_comments").insert({
+      const { error } = await db.from("item_comments").insert({
         item_kind: kind,
         item_id: itemId,
         body: text,
@@ -159,6 +159,10 @@ export function useItemComments(kind: ItemKind, itemId: string) {
         source: "app",
       });
       await reload();
+      // Сообщение, которое не сохранилось, не должно исчезнуть молча: чаще
+      // всего это задача, ещё не доехавшая до облака, и человеку надо дать
+      // повторить, а не гадать, куда делся его текст.
+      if (error) throw new Error(error.message);
     },
     [kind, itemId, reload],
   );

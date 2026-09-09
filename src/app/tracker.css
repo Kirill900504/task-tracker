@@ -1199,3 +1199,8 @@
     border:1px solid var(--line); border-radius:var(--radius-sm);
   }
   .chat-composer textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
+  .chat-error{
+    margin-top:8px; padding:8px 10px; border-radius:var(--radius-sm);
+    background:var(--high-bg); border:1px solid rgba(224,122,95,.4);
+    color:#F2C9BC; font-size:12.5px;
+  }

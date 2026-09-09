@@ -168,7 +168,23 @@ export function useTaskParticipants() {
       const person = people.find((p) => p.name === clean);
       if (!person) return;
       if ((byTask[taskId] || []).some((p) => p.assigneeId === person.id)) return;
-      await add(taskId, person.id, "executor");
+
+      // Задача, которую только что создали, ещё не в базе: локальное
+      // состояние — истина, а запись в облако идёт своим ходом. Вставить
+      // участника раньше значит сослаться на несуществующую строку и
+      // потерять его молча, без единой ошибки на экране. Поэтому сначала
+      // ждём, пока задача появится, — обычно это доли секунды.
+      const db = createClient();
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const { data } = await db.from("tasks").select("id").eq("id", taskId).maybeSingle();
+        if (data) {
+          await add(taskId, person.id, "executor");
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      // Не дождались (нет связи, задача не ушла в облако) — молча выходим:
+      // исполнителя можно добавить руками, а падать здесь незачем.
     },
     [people, byTask, add],
   );

@@ -111,9 +111,21 @@ export function useMeetingVotes() {
       const toDrop = existing.filter((r) => !wantedIds.has(r.assigneeId));
 
       if (toAdd.length) {
-        await db.from("meeting_participants").insert(
-          toAdd.map((assignee_id) => ({ meeting_id: meetingId, assignee_id, role: "participant" as const })),
-        );
+        // Только что созданная встреча ещё не в базе — локальное состояние
+        // истина, запись в облако идёт своим ходом. Строка голосования,
+        // вставленная раньше, сослалась бы на несуществующую встречу и
+        // пропала бы без единой ошибки на экране.
+        let exists = false;
+        for (let attempt = 0; attempt < 12 && !exists; attempt++) {
+          const { data } = await db.from("meetings").select("id").eq("id", meetingId).maybeSingle();
+          if (data) exists = true;
+          else await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        if (exists) {
+          await db.from("meeting_participants").insert(
+            toAdd.map((assignee_id) => ({ meeting_id: meetingId, assignee_id, role: "participant" as const })),
+          );
+        }
       }
       for (const row of toDrop) await db.from("meeting_participants").delete().eq("id", row.id);
       if (toAdd.length || toDrop.length) await reload();

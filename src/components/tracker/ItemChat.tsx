@@ -33,14 +33,22 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
   const [draft, setDraft] = useState("");
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSend() {
     const text = draft.trim();
     if (!text) return;
     setBusy(true);
-    await send(text);
+    setError("");
+    try {
+      await send(text);
+      setDraft("");
+    } catch {
+      // Текст остаётся в поле: повторить — это одно нажатие, а набирать
+      // заново то, что уже написал, никто не станет.
+      setError("Не отправилось. Проверьте связь и нажмите ещё раз.");
+    }
     setBusy(false);
-    setDraft("");
   }
 
   function handleEdit(id: string, current: string) {
@@ -137,6 +145,8 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
           )}
         </div>
       ))}
+
+      {error && <div className="chat-error">{error}</div>}
 
       <div className="chat-composer">
         <textarea
