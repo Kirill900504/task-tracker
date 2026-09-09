@@ -9,6 +9,8 @@ import { dueReminder, minutesUntil, ownerReminder, participantReminder } from "@
 import { voteTally, type MeetingVote } from "@/lib/meetingVotes";
 import { chatsFor, meetingButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
+import { buildManagerBrief, composeManagerBrief, managerBriefIsEmpty } from "@/lib/managerBrief";
+import { personStats, composePeopleReview, type ParticipationRow } from "@/lib/peopleReview";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -95,6 +97,90 @@ export async function GET(req: Request) {
           if (!briefIsEmpty(facts)) await notifyOwner(admin, userId, await composeBrief(facts));
         } catch (e) {
           console.error("daily brief failed:", e);
+        }
+      }
+    }
+
+    // Утренняя сводка каждому руководителю — та же услуга, что владельцу,
+    // только про его собственные дела. Идёт всем, кто подключён к
+    // мессенджеру: человек, который в трекер не заходит, узнаёт о
+    // просроченном там же, где отвечает на задачи.
+    if (workingDay && nowMin >= BRIEF_FROM_MINUTES) {
+      const { data: colleagues } = await admin
+        .from("assignees")
+        .select("id, name, telegram_chat_id, max_user_id")
+        .eq("user_id", userId);
+
+      for (const person of ((colleagues || []) as ColleagueRow[])) {
+        const target = chatsFor(person)[0];
+        if (!target) continue;
+        const { error: taken } = await admin
+          .from("telegram_notifications")
+          .insert({ user_id: userId, kind: "manager_brief", ref_id: `${today}:${person.id}`, notif_date: today });
+        if (taken) continue;
+        try {
+          const facts = await buildManagerBrief(admin, userId, person, today);
+          if (!managerBriefIsEmpty(facts)) await sendToColleague(target, composeManagerBrief(facts));
+        } catch (e) {
+          console.error("manager brief failed:", e);
+        }
+      }
+    }
+
+    // Понедельничная сводка по людям — единственное место, где видно не
+    // «что просрочено», а «кто просрочил»: материал для разговора, а не для
+    // ещё одного списка задач.
+    if (workingDay && nowMin >= BRIEF_FROM_MINUTES && now.getUTCDay() === 1) {
+      const { error: peopleTaken } = await admin
+        .from("telegram_notifications")
+        .insert({ user_id: userId, kind: "people_review", ref_id: today, notif_date: today });
+      if (!peopleTaken) {
+        try {
+          const { data: rows } = await admin
+            .from("task_participants")
+            .select("created_at, accepted_at, done_at, declined_at, assignees(name), tasks(deadline, status, deleted_at)")
+            .eq("user_id", userId)
+            .eq("role", "executor");
+
+          type Raw = {
+            created_at: string;
+            accepted_at: string | null;
+            done_at: string | null;
+            declined_at: string | null;
+            assignees: { name: string } | { name: string }[] | null;
+            tasks: { deadline: string | null; status: string | null; deleted_at: string | null } | null;
+          };
+
+          const { data: members } = await admin
+            .from("workspace_members")
+            .select("assignee_id, direction, assignees(name)")
+            .eq("owner_id", userId);
+          const directionOf = new Map<string, string>();
+          for (const m of ((members || []) as { direction: string; assignees: { name: string } | { name: string }[] | null }[])) {
+            const n = Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name;
+            if (n) directionOf.set(n, m.direction || "");
+          }
+
+          const participation: ParticipationRow[] = ((rows || []) as unknown as Raw[])
+            .filter((r) => r.tasks && !r.tasks.deleted_at)
+            .map((r) => {
+              const name = (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "";
+              return {
+                name,
+                direction: directionOf.get(name) || "",
+                createdAt: r.created_at,
+                acceptedAt: r.accepted_at,
+                doneAt: r.done_at,
+                declinedAt: r.declined_at,
+                deadline: r.tasks!.deadline || "",
+                status: r.tasks!.status || "in_progress",
+              };
+            });
+
+          const text = composePeopleReview(personStats(participation, now));
+          if (text) await notifyOwner(admin, userId, text);
+        } catch (e) {
+          console.error("people review failed:", e);
         }
       }
     }
