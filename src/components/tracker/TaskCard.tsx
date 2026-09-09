@@ -7,10 +7,13 @@ import { fmtDate, isDueTodayHighlight, isOverdue, priorityClass, priorityLabel, 
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSwipeComplete } from "@/hooks/useSwipeComplete";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
+import type { TaskStage } from "@/lib/taskProgress";
 
 export default function TaskCard({
   task,
   section,
+  progress,
+  stage,
   onToggleDone,
   onOpen,
   isDragging,
@@ -22,6 +25,11 @@ export default function TaskCard({
 }: {
   task: Task;
   section: Section | null;
+  // «2 из 4 · сделали: … · ждём: …» — пусто, пока исполнитель один или
+  // не назначен никто. Считается в TasksPanel, потому что участники живут
+  // отдельным слоем (см. useTaskParticipants).
+  progress?: string;
+  stage?: TaskStage;
   onToggleDone: () => void;
   onOpen: () => void;
   isDragging?: boolean;
@@ -95,7 +103,14 @@ export default function TaskCard({
               without having to ask. Dropped once the task is done, where it
               would only be noise. */}
           {task.acceptedAt && task.status !== "done" && <span className="pill pill-accepted">✅ принял</span>}
+          {/* Стадия важнее, чем «принял»: «на приёмке» — это очередь
+              Кирилла, «кто-то не может» — остановка, о которой иначе
+              узнаёшь последним. */}
+          {stage === "awaiting_review" && task.status !== "done" && <span className="pill pill-review">🔍 на приёмке</span>}
+          {stage === "blocked" && task.status !== "done" && <span className="pill pill-blocked">⛔ не может</span>}
+          {stage === "returned" && task.status !== "done" && <span className="pill pill-returned">↩ на доработке</span>}
         </div>
+        {progress && <div className="task-progress">{progress}</div>}
       </div>
       {isMobile && !!menuItems?.length && (
         <button

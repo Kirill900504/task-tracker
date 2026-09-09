@@ -1020,3 +1020,76 @@
     .auth-card{padding:24px 20px 20px; border-radius:var(--radius-md);}
     .auth-title{font-size:19px;}
   }
+
+  /* ---------------------------------------------------------------
+     Задача на нескольких: кто на ней, кто отчитался, кого ждём.
+
+     A single assignee needed no interface at all — a name and a tick. Four
+     people need one, because the useful question stopped being "готово?" and
+     became "кто именно ещё не ответил". Everything below exists to answer
+     that at a glance, on the card, without opening anything.
+     ---------------------------------------------------------------- */
+  .pill-review{color:var(--today); background:var(--today-bg); border:1px solid var(--today);}
+  .pill-blocked{color:var(--high); background:var(--high-bg); border:1px solid var(--high);}
+  .pill-returned{color:var(--med); background:var(--med-bg); border:1px solid var(--med);}
+
+  /* Своя строка, а не ещё одна «таблетка» в общем ряду: это единственное
+     место на карточке, где написано, сколько работы осталось. */
+  .task-progress{
+    margin-top:6px; font-size:12px; color:var(--ink-soft); font-family:var(--mono);
+    line-height:1.45;
+  }
+
+  .tp{
+    margin:0 0 14px; padding:12px 13px; border:1px solid var(--line);
+    border-radius:var(--radius-md); background:var(--paper-soft);
+  }
+  .tp-later{color:var(--ink-soft); font-size:12.5px;}
+  .tp-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;}
+  .tp-title{font-size:12px; color:var(--ink-soft); font-family:var(--mono); text-transform:uppercase; letter-spacing:.04em;}
+  .tp-stage{font-size:11.5px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--ink-soft);}
+  .tp-stage-accepted{color:var(--today); border-color:var(--today);}
+  .tp-stage-blocked{color:var(--high); border-color:var(--high);}
+  .tp-stage-awaiting_review{color:var(--today); border-color:var(--today); background:var(--today-bg);}
+  .tp-stage-returned{color:var(--med); border-color:var(--med);}
+  .tp-stage-done{color:var(--success); border-color:var(--success);}
+  .tp-progress{font-size:12.5px; color:var(--ink); font-family:var(--mono); margin-bottom:10px;}
+  .tp-returned{
+    font-size:12.5px; color:#F0D9A8; background:var(--med-bg);
+    border:1px solid rgba(224,184,77,.35); border-radius:var(--radius-sm);
+    padding:8px 10px; margin-bottom:10px;
+  }
+  .tp-empty{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
+  .tp-row{
+    display:flex; align-items:center; gap:8px; padding:6px 0;
+    border-top:1px solid var(--line); flex-wrap:wrap;
+  }
+  .tp-row:first-of-type{border-top:0;}
+  .tp-name{font-size:13px; color:var(--ink); min-width:110px; flex:0 1 auto;}
+  .tp-role{
+    font-size:12px; padding:4px 6px; border-radius:6px;
+    background:var(--paper); color:var(--ink); border:1px solid var(--line);
+  }
+  .tp-state{font-size:12px; flex:1 1 140px; min-width:0;}
+  .tp-done{color:var(--success);}
+  .tp-declined{color:var(--high);}
+  .tp-accepted{color:var(--long-border);}
+  .tp-waiting{color:var(--ink-soft);}
+  /* Кнопка «убрать с задачи» держится справа и не прыгает при переносе. */
+  .tp-remove{margin-left:auto; min-width:36px;}
+  .tp-add{display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap;}
+  .tp-add select{
+    font-size:12.5px; padding:6px 8px; border-radius:6px;
+    background:var(--paper); color:var(--ink); border:1px solid var(--line);
+  }
+  .tp-review{
+    margin-top:12px; padding:10px 11px; border-radius:var(--radius-sm);
+    background:var(--today-bg); border:1px solid var(--today);
+  }
+  .tp-review-text{font-size:12.5px; color:var(--ink); margin-bottom:8px;}
+  .tp-review-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .tp-force{margin-top:10px; color:var(--ink-soft);}
+  @media (max-width:560px){
+    .tp-name{min-width:0; flex:1 1 100%;}
+    .tp-state{flex:1 1 100%;}
+  }

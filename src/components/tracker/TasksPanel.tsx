@@ -14,6 +14,8 @@ import type { ActionMenuItem } from "./ActionMenu";
 import TaskModal from "./TaskModal";
 import SendMenu from "./SendMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useTaskParticipants } from "@/hooks/useTaskParticipants";
+import { progressLabel, taskStage } from "@/lib/taskProgress";
 import type { useToasts } from "@/hooks/useToasts";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 
@@ -85,6 +87,9 @@ export default function TasksPanel({
   const [filterSection, setFilterSection] = useState("all");
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
   const isMobile = useIsMobile();
+  // Кто на задаче — один слой на всю панель: и карточки, и форма
+  // читают отсюда, чтобы не заводить по подписке на каждую карточку.
+  const participants = useTaskParticipants();
   // On a phone the four filter controls cost a third of the screen before
   // a single task is visible, and most days none of them is touched — so
   // they fold away, with a dot on the button when any is actually set.
@@ -297,6 +302,8 @@ export default function TasksPanel({
                 key={t.id}
                 task={t}
                 section={sectionById.get(t.sectionId) ?? null}
+                progress={progressLabel(participants.forTask(t.id))}
+                stage={taskStage(participants.forTask(t.id), t.approvalState || "open")}
                 onToggleDone={() => toggleDone(t)}
                 onOpen={() => setModalState({ open: true, task: t })}
                 isDragging={draggingTaskId === t.id}
@@ -398,6 +405,8 @@ export default function TasksPanel({
                   key={t.id}
                   task={t}
                   section={sectionById.get(t.sectionId) ?? null}
+                  progress={progressLabel(participants.forTask(t.id))}
+                  stage={taskStage(participants.forTask(t.id), t.approvalState || "open")}
                   onToggleDone={() => toggleDone(t)}
                   onOpen={() => setModalState({ open: true, task: t })}
                 />
@@ -432,6 +441,24 @@ export default function TasksPanel({
           onRemoveAssignee={actions.removeAssignee}
           onAddSection={actions.saveSection}
           onRemoveSection={removeSection}
+          participants={modalTask ? participants.forTask(modalTask.id) : []}
+          availablePeople={modalTask ? participants.availableFor(modalTask.id) : []}
+          onAddParticipant={(assigneeId, role) => modalTask && void participants.add(modalTask.id, assigneeId, role)}
+          onSetParticipantRole={(id, role) => void participants.setRole(id, role)}
+          onRemoveParticipant={(id) => void participants.remove(id)}
+          onApproveWork={async (comment) => {
+            if (!modalTask) return;
+            await participants.approve(modalTask.id, comment);
+            // Статус — поле, которым владеет синхронизация, поэтому он
+            // переключается обычным путём, а не записью в базу мимо неё.
+            toggleDone({ ...modalTask, status: "in_progress" });
+          }}
+          onReturnWork={(comment) => modalTask && void participants.returnForRework(modalTask.id, comment)}
+          onForceCloseWork={async (reason) => {
+            if (!modalTask) return;
+            await participants.forceClose(modalTask.id, reason);
+            toggleDone({ ...modalTask, status: "in_progress" });
+          }}
         />
       )}
     </div>

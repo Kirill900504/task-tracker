@@ -10,6 +10,7 @@ export type TaskStatus = "in_progress" | "done";
 export type RecurKind = "none" | "daily" | "weekly" | "monthly" | "yearly";
 export type MeetingStatus = "planned" | "success" | "no_result";
 export type SectionKind = "work" | "personal";
+export type ApprovalState = "open" | "awaiting_review" | "accepted" | "returned";
 
 export interface Task {
   id: string;
@@ -35,6 +36,12 @@ export interface Task {
   // Telegram. Read-only here: the tracker shows it and never writes it,
   // so an open tab can never overwrite what someone just confirmed.
   acceptedAt?: string;
+  // Приёмка: отчитались все исполнители — дальше слово за постановщиком.
+  // Read-only in exactly the same sense as acceptedAt: written by the
+  // approval buttons through their own update, never by the sync (see
+  // taskToRow, which lists the columns it owns and this is not one).
+  approvalState?: ApprovalState;
+  approvalComment?: string;
 }
 
 export interface Meeting {

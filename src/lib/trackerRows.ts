@@ -27,6 +27,8 @@ export type TaskRow = {
   // Written by the Telegram bot only (see colleagueReplies.ts), which is
   // why it is optional here: taskToRow never produces it.
   accepted_at?: string | null;
+  approval_state?: string | null;
+  approval_comment?: string | null;
 };
 
 export type MeetingRow = {
@@ -124,6 +126,8 @@ export function taskFromRow(r: TaskRow): Task {
     manualOrder: r.manual_order != null ? r.manual_order : null,
     completedAt: r.completed_at || "",
     acceptedAt: r.accepted_at || "",
+    approvalState: (r.approval_state as Task["approvalState"]) || "open",
+    approvalComment: r.approval_comment || "",
   };
 }
 

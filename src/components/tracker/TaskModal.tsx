@@ -12,6 +12,9 @@ import SendMenu from "./SendMenu";
 import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
 import { openPickerOnClick } from "@/lib/pickerInput";
+import TaskParticipants from "./TaskParticipants";
+import type { TaskParticipantRole } from "@/lib/taskProgress";
+import type { Participant, PersonOption } from "@/hooks/useTaskParticipants";
 import MicButton from "./MicButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 
@@ -58,6 +61,14 @@ export default function TaskModal({
   onRemoveAssignee,
   onAddSection,
   onRemoveSection,
+  participants,
+  availablePeople,
+  onAddParticipant,
+  onSetParticipantRole,
+  onRemoveParticipant,
+  onApproveWork,
+  onReturnWork,
+  onForceCloseWork,
 }: {
   task: Task | null;
   prefill?: TaskPrefill;
@@ -70,6 +81,14 @@ export default function TaskModal({
   onRemoveAssignee: (name: string) => void;
   onAddSection: (section: Section) => void;
   onRemoveSection: (id: string) => void;
+  participants: Participant[];
+  availablePeople: PersonOption[];
+  onAddParticipant: (assigneeId: string, role: TaskParticipantRole) => void;
+  onSetParticipantRole: (participantId: string, role: TaskParticipantRole) => void;
+  onRemoveParticipant: (participantId: string) => void;
+  onApproveWork: (comment: string) => void;
+  onReturnWork: (comment: string) => void;
+  onForceCloseWork: (reason: string) => void;
 }) {
   const { colleagues } = useColleagues();
   const [sendState, setSendState] = useState("");
@@ -215,6 +234,30 @@ export default function TaskModal({
             </button>
           </div>
         </div>
+
+        {/* Один «исполнитель» выше остаётся: он — короткая запись «для кого
+            это вообще», её читают бот, сводка и все прежние экраны. Список
+            ниже — то, чего строкой не выразить: несколько исполнителей,
+            каждый со своим отчётом, плюс соисполнители и наблюдатели. */}
+        {task ? (
+          <TaskParticipants
+            taskId={task.id}
+            participants={participants}
+            available={availablePeople}
+            approvalState={task.approvalState || "open"}
+            approvalComment={task.approvalComment}
+            onAdd={onAddParticipant}
+            onSetRole={onSetParticipantRole}
+            onRemove={onRemoveParticipant}
+            onApprove={onApproveWork}
+            onReturn={onReturnWork}
+            onForceClose={onForceCloseWork}
+          />
+        ) : (
+          <div className="tp tp-later">
+            Исполнителей, соисполнителей и наблюдателей можно будет добавить сразу после сохранения.
+          </div>
+        )}
 
         <div className="field">
           <label>Раздел</label>
