@@ -50,6 +50,17 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
+  // Supabase, served from our own domain. Some mobile networks carry this
+  // site perfectly and never reach <project>.supabase.co at all, which left
+  // the tracker stuck on «нет связи с облаком» on an otherwise working phone.
+  // The browser client falls back to this path when the direct host does not
+  // answer — see src/lib/supabase/client.ts. Nothing new is exposed: it
+  // forwards the same requests, carrying the same keys, to the same public
+  // API, still behind the same row-level security.
+  async rewrites() {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
+    return [{ source: "/sb/:path*", destination: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/:path*` }];
+  },
   // Speech-to-text (Telegram voice messages) pulls in ONNX runtime + a
   // Whisper model — large, and does dynamic requires that Next's bundler
   // shouldn't try to trace/tree-shake. Keep them as plain node_modules

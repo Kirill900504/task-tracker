@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isRoutedThroughProxy } from "@/lib/supabase/client";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { diffAssignees, diffRows, removeById, snapshotList, upsertById } from "@/lib/trackerSync";
 import { refreshRecurringStatuses } from "@/lib/taskDisplay";
@@ -699,6 +699,13 @@ export function useTrackerData() {
     // reference — see snapshotList()'s doc comment for why).
     function subscribeRealtime(uid: string) {
       if (realtimeReadyRef.current) return;
+      // On a network that cannot reach Supabase directly the tracker runs
+      // over our own origin instead (see src/lib/supabase/client.ts) — and a
+      // websocket is the one thing that cannot go that way. Not subscribing
+      // is what already happens there; doing it deliberately just saves the
+      // radio a reconnection attempt every few seconds for nothing.
+      if (isRoutedThroughProxy()) return;
+
       realtimeReadyRef.current = true;
       const filter = `user_id=eq.${uid}`;
       db.channel("tracker-sync")
