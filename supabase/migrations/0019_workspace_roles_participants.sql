@@ -185,7 +185,7 @@ create table if not exists public.task_participants (
   -- workspace. (CLAUDE.md: every user table needs user_id, or client
   -- inserts are silently rejected by RLS.)
   user_id uuid not null references auth.users(id) on delete cascade,
-  task_id uuid not null references public.tasks(id) on delete cascade,
+  task_id text not null references public.tasks(id) on delete cascade,
   assignee_id uuid not null references public.assignees(id) on delete cascade,
   -- Only executors have to report (B1). Co-executors help, watchers watch;
   -- neither can hold the task open.
@@ -214,7 +214,7 @@ create index if not exists task_participants_assignee_idx on public.task_partici
 create table if not exists public.meeting_participants (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  meeting_id uuid not null references public.meetings(id) on delete cascade,
+  meeting_id text not null references public.meetings(id) on delete cascade,
   assignee_id uuid not null references public.assignees(id) on delete cascade,
   role text not null default 'participant'
     check (role in ('organizer', 'participant', 'watcher')),
@@ -240,12 +240,12 @@ create index if not exists meeting_participants_meeting_idx on public.meeting_pa
 create table if not exists public.idea_recipients (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  idea_id uuid not null references public.ideas(id) on delete cascade,
+  idea_id text not null references public.ideas(id) on delete cascade,
   assignee_id uuid not null references public.assignees(id) on delete cascade,
   seen_at timestamptz,
   -- What it became, if anything.
-  converted_task_id uuid references public.tasks(id) on delete set null,
-  converted_meeting_id uuid references public.meetings(id) on delete set null,
+  converted_task_id text references public.tasks(id) on delete set null,
+  converted_meeting_id text references public.meetings(id) on delete set null,
   created_at timestamptz not null default now(),
   unique (idea_id, assignee_id)
 );
@@ -306,7 +306,7 @@ create table if not exists public.item_comments (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   item_kind text not null check (item_kind in ('task', 'meeting', 'idea')),
-  item_id uuid not null,
+  item_id text not null,
   -- Who said it. A signed-in manager has both; a colleague answering from
   -- Telegram has only the assignee. Both are recorded so a name can always
   -- be shown, whichever door the message came through.
@@ -391,6 +391,40 @@ drop trigger if exists comment_reactions_workspace on public.comment_reactions;
 create trigger comment_reactions_workspace before insert on public.comment_reactions
   for each row execute function public.set_reaction_workspace();
 
+-- "Is the person signed in on this item?" — the question every visibility
+-- rule below has to ask.
+--
+-- It cannot be asked inline. A policy on `tasks` that reads
+-- `task_participants` sets off THAT table's own policy, which reads
+-- `task_participants` again to decide whether you may see the row: Postgres
+-- stops it with "infinite recursion detected in policy". Answering the
+-- question inside a SECURITY DEFINER function steps outside row-level
+-- security exactly once, deliberately, at the one point where the recursion
+-- would otherwise close. (Found by scripts/test-schema.mjs before this
+-- migration ever reached the real database.)
+create or replace function public.is_participant(p_owner uuid, p_kind text, p_item text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case p_kind
+    when 'task' then exists (
+      select 1 from public.task_participants p
+       where p.task_id = p_item and p.assignee_id = public.my_assignee(p_owner))
+    when 'meeting' then exists (
+      select 1 from public.meeting_participants p
+       where p.meeting_id = p_item and p.assignee_id = public.my_assignee(p_owner))
+    else exists (
+      select 1 from public.idea_recipients r
+       where r.idea_id = p_item and r.assignee_id = public.my_assignee(p_owner))
+  end
+$$;
+
+revoke all on function public.is_participant(uuid, text, text) from public;
+grant execute on function public.is_participant(uuid, text, text) to authenticated;
+
 -- ------------------------------------------------------------------- RLS
 
 alter table public.workspace_members enable row level security;
@@ -430,11 +464,7 @@ create policy "tasks_visible" on public.tasks for select using (
     user_id = public.workspace_of(auth.uid())
     and (
       created_by = auth.uid()
-      or exists (
-        select 1 from public.task_participants p
-         where p.task_id = tasks.id
-           and p.assignee_id = public.my_assignee(tasks.user_id)
-      )
+      or public.is_participant(tasks.user_id, 'task', tasks.id)
     )
   )
 );
@@ -473,11 +503,7 @@ create policy "meetings_visible" on public.meetings for select using (
     user_id = public.workspace_of(auth.uid())
     and (
       created_by = auth.uid()
-      or exists (
-        select 1 from public.meeting_participants p
-         where p.meeting_id = meetings.id
-           and p.assignee_id = public.my_assignee(meetings.user_id)
-      )
+      or public.is_participant(meetings.user_id, 'meeting', meetings.id)
     )
   )
 );
@@ -511,11 +537,7 @@ create policy "ideas_visible" on public.ideas for select using (
     user_id = public.workspace_of(auth.uid())
     and (
       created_by = auth.uid()
-      or exists (
-        select 1 from public.idea_recipients r
-         where r.idea_id = ideas.id
-           and r.assignee_id = public.my_assignee(ideas.user_id)
-      )
+      or public.is_participant(ideas.user_id, 'idea', ideas.id)
     )
   )
 );
@@ -558,11 +580,7 @@ create policy "task_participants_visible" on public.task_participants for select
   user_id = auth.uid()
   or (
     user_id = public.workspace_of(auth.uid())
-    and exists (
-      select 1 from public.task_participants mine
-       where mine.task_id = task_participants.task_id
-         and mine.assignee_id = public.my_assignee(task_participants.user_id)
-    )
+    and public.is_participant(task_participants.user_id, 'task', task_participants.task_id)
   )
 );
 
@@ -587,11 +605,7 @@ create policy "meeting_participants_visible" on public.meeting_participants for 
   user_id = auth.uid()
   or (
     user_id = public.workspace_of(auth.uid())
-    and exists (
-      select 1 from public.meeting_participants mine
-       where mine.meeting_id = meeting_participants.meeting_id
-         and mine.assignee_id = public.my_assignee(meeting_participants.user_id)
-    )
+    and public.is_participant(meeting_participants.user_id, 'meeting', meeting_participants.meeting_id)
   )
 );
 
@@ -645,18 +659,7 @@ create policy "item_comments_visible" on public.item_comments for select using (
   or (
     user_id = public.workspace_of(auth.uid())
     and (
-      (item_kind = 'task' and exists (
-        select 1 from public.task_participants p
-         where p.task_id = item_comments.item_id
-           and p.assignee_id = public.my_assignee(item_comments.user_id)))
-      or (item_kind = 'meeting' and exists (
-        select 1 from public.meeting_participants p
-         where p.meeting_id = item_comments.item_id
-           and p.assignee_id = public.my_assignee(item_comments.user_id)))
-      or (item_kind = 'idea' and exists (
-        select 1 from public.idea_recipients r
-         where r.idea_id = item_comments.item_id
-           and r.assignee_id = public.my_assignee(item_comments.user_id)))
+      public.is_participant(item_comments.user_id, item_comments.item_kind, item_comments.item_id)
     )
   )
 );

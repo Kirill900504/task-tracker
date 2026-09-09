@@ -1,0 +1,225 @@
+// Проверка схемы и прав доступа на копии базы, без боевой базы вообще.
+//
+// The problem this solves: a migration could only ever be tried on the real
+// database, and the real database belongs to the one person who cannot be
+// asked to run a script. So the migrations are applied here instead, in
+// order, to a throwaway Postgres, on top of just enough of Supabase for them
+// to behave identically (see schema-harness.sql) — and then the access rules
+// they declare are exercised as three different people.
+//
+// What it proves: that every migration applies cleanly from an empty
+// database, and that the rules decided in docs/multiuser.md actually hold —
+// the owner sees his whole workspace, a manager sees only what he is on, an
+// executor can report on himself and cannot move a deadline. What it cannot
+// prove: anything about Supabase's own auth, storage or realtime service.
+// For that there is still npm run test:rls against the real thing.
+//
+//   scripts/start-test-db.sh          # starts a local Postgres on 5433
+//   node scripts/test-schema.mjs
+//
+// SCHEMA_TEST_URL overrides the connection (default: the local one above).
+
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import pg from "pg";
+
+const ADMIN_URL = process.env.SCHEMA_TEST_URL || "postgres://postgres@localhost:5433/postgres";
+const TEST_DB = "rokas_schema_test";
+const MIGRATIONS = join(process.cwd(), "supabase/migrations");
+
+const OWNER = "11111111-1111-4111-8111-111111111111";
+const MANAGER_A = "22222222-2222-4222-8222-222222222222";
+const MANAGER_B = "33333333-3333-4333-8333-333333333333";
+
+let failures = 0;
+function check(label, condition) {
+  console.log((condition ? "  ok   " : "  FAIL ") + label);
+  if (!condition) failures++;
+}
+
+// Acting as a signed-in person: the role Supabase connects browsers with,
+// plus the JWT claim its auth.uid() reads. Wrapped in a transaction so the
+// role change cannot leak into the next assertion.
+async function as(client, userId, body) {
+  await client.query("begin");
+  try {
+    await client.query("set local role authenticated");
+    await client.query(`set local request.jwt.claim.sub = '${userId}'`);
+    return await body();
+  } finally {
+    await client.query("rollback");
+  }
+}
+
+async function main() {
+  const admin = new pg.Client({ connectionString: ADMIN_URL });
+  await admin.connect();
+  await admin.query(`drop database if exists ${TEST_DB}`);
+  await admin.query(`create database ${TEST_DB}`);
+  await admin.end();
+
+  const db = new pg.Client({ connectionString: ADMIN_URL.replace(/\/[^/]*$/, `/${TEST_DB}`) });
+  await db.connect();
+
+  console.log("\nСхема:");
+  await db.query(readFileSync(join(process.cwd(), "scripts/schema-harness.sql"), "utf8"));
+
+  const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort();
+
+  // Migration 0010 seeds the owner's default sections by his real user id.
+  // Any such literal has to exist in auth.users before the migration that
+  // references it runs, so they are collected from the files themselves
+  // rather than listed here and forgotten when the next one appears.
+  const literals = new Set();
+  for (const f of files) {
+    const sql = readFileSync(join(MIGRATIONS, f), "utf8");
+    for (const m of sql.matchAll(/'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'/g)) literals.add(m[1]);
+  }
+  for (const id of [...literals, OWNER, MANAGER_A, MANAGER_B]) {
+    await db.query("insert into auth.users (id, email) values ($1, $2) on conflict do nothing", [id, `${id}@example.invalid`]);
+  }
+
+  for (const f of files) {
+    try {
+      await db.query(readFileSync(join(MIGRATIONS, f), "utf8"));
+      check(f, true);
+    } catch (e) {
+      check(`${f} — ${e.message}`, false);
+      console.log("\nМиграция не применилась, дальше проверять нечего.");
+      await db.end();
+      process.exit(1);
+    }
+  }
+
+  // Supabase grants these to the browser roles when a table is created; a
+  // plain Postgres does not, and without them every policy below would be
+  // untestable for the dullest of reasons.
+  await db.query("grant all on all tables in schema public to authenticated, anon");
+  await db.query("grant all on all sequences in schema public to authenticated, anon");
+
+  console.log("\nЛюди и задача:");
+  const { rows: assignees } = await db.query(
+    `insert into public.assignees (user_id, name) values ($1,'Аня'), ($1,'Борис'), ($1,'Вера')
+     returning id, name`,
+    [OWNER],
+  );
+  const byName = Object.fromEntries(assignees.map((a) => [a.name, a.id]));
+
+  await db.query(
+    `insert into public.workspace_members (owner_id, member_id, assignee_id, role, status, direction)
+     values ($1,$2,$3,'manager','active','Розница'), ($1,$4,$5,'manager','active','ОПТ')`,
+    [OWNER, MANAGER_A, byName["Аня"], MANAGER_B, byName["Борис"]],
+  );
+  check("Аня и Борис — руководители в пространстве владельца", true);
+
+  // Ids are generated by the app, not by the database (migration 0002: the
+  // client makes short ids like "tmsmwo7clh8xjy" and the default was dropped),
+  // so the fixtures carry their own — exactly as the real app does.
+  const taskId = "tsk_test_shipment";
+  await db.query(
+    `insert into public.tasks (id, user_id, title, assignee, deadline) values ($1,$2,'Закрыть отгрузку','Аня','2026-09-30')`,
+    [taskId, OWNER],
+  );
+  await db.query(
+    `insert into public.task_participants (user_id, task_id, assignee_id, role)
+     values ($1,$2,$3,'executor'), ($1,$2,$4,'watcher')`,
+    [OWNER, taskId, byName["Аня"], byName["Вера"]],
+  );
+  check("на задаче исполнитель Аня и наблюдатель Вера", true);
+
+  console.log("\nКто что видит:");
+  await as(db, OWNER, async () => {
+    const { rows } = await db.query("select id from public.tasks where id = $1", [taskId]);
+    check("владелец видит свою задачу", rows.length === 1);
+  });
+
+  await as(db, MANAGER_A, async () => {
+    const { rows } = await db.query("select id from public.tasks where id = $1", [taskId]);
+    check("исполнитель видит задачу, на которой он стоит", rows.length === 1);
+  });
+
+  await as(db, MANAGER_B, async () => {
+    const { rows } = await db.query("select id from public.tasks where id = $1", [taskId]);
+    check("посторонний руководитель НЕ видит чужую задачу", rows.length === 0);
+  });
+
+  console.log("\nЧто исполнитель может и чего не может:");
+  await as(db, MANAGER_A, async () => {
+    const { rowCount } = await db.query("update public.tasks set deadline = '2026-12-31' where id = $1", [taskId]);
+    check("исполнитель НЕ может подвинуть срок", rowCount === 0);
+  });
+
+  await as(db, MANAGER_A, async () => {
+    const { rowCount } = await db.query(
+      "update public.task_participants set done_at = now(), done_comment = 'отгрузили' where task_id = $1 and assignee_id = $2",
+      [taskId, byName["Аня"]],
+    );
+    check("исполнитель отчитывается по себе", rowCount === 1);
+  });
+
+  await as(db, MANAGER_B, async () => {
+    const { rowCount } = await db.query(
+      "update public.task_participants set done_at = now() where task_id = $1 and assignee_id = $2",
+      [taskId, byName["Аня"]],
+    );
+    check("чужой не может отчитаться за исполнителя", rowCount === 0);
+  });
+
+  console.log("\nЗадача от руководителя владельцу:");
+  const { rowCount: managerInserted } = await as(db, MANAGER_A, async () =>
+    db.query(
+      `insert into public.tasks (id, user_id, title, assignee, created_by) values ('tsk_test_discount_try',$1,'Согласовать скидку','Кирилл (я)',$2)`,
+      [OWNER, MANAGER_A],
+    ),
+  );
+  check("руководитель может поставить задачу в пространстве владельца", managerInserted === 1);
+
+  // The insert above is rolled back with its transaction, so the row the
+  // next two assertions look at is created again outside one.
+  const keptId = "tsk_test_discount";
+  await db.query(
+    `insert into public.tasks (id, user_id, title, assignee, created_by) values ($1,$2,'Согласовать скидку','Кирилл (я)',$3)`,
+    [keptId, OWNER, MANAGER_A],
+  );
+  await as(db, OWNER, async () => {
+    const { rows } = await db.query("select id from public.tasks where id = $1", [keptId]);
+    check("владелец видит задачу, поставленную руководителем", rows.length === 1);
+  });
+  await as(db, MANAGER_B, async () => {
+    const { rows } = await db.query("select id from public.tasks where id = $1", [keptId]);
+    check("посторонний её не видит", rows.length === 0);
+  });
+
+  console.log("\nЧат в задаче:");
+  await db.query(
+    `insert into public.item_comments (user_id, item_kind, item_id, author_assignee_id, body)
+     values ($1,'task',$2,$3,'Машина будет в четверг')`,
+    [OWNER, taskId, byName["Аня"]],
+  );
+  await as(db, MANAGER_A, async () => {
+    const { rows } = await db.query("select id from public.item_comments where item_id = $1", [taskId]);
+    check("участник читает обсуждение задачи", rows.length === 1);
+  });
+  await as(db, MANAGER_B, async () => {
+    const { rows } = await db.query("select id from public.item_comments where item_id = $1", [taskId]);
+    check("посторонний обсуждение не читает", rows.length === 0);
+  });
+
+  console.log("\nОтключённый доступ:");
+  await db.query("update public.workspace_members set status = 'disabled' where member_id = $1", [MANAGER_A]);
+  await as(db, MANAGER_A, async () => {
+    const { rows } = await db.query("select id from public.tasks where id = $1", [taskId]);
+    check("уволенный больше ничего не видит", rows.length === 0);
+  });
+  const { rows: stillThere } = await db.query("select id from public.task_participants where task_id = $1", [taskId]);
+  check("но его участие в задачах сохранено", stillThere.length === 2);
+
+  await db.end();
+  console.log(failures ? `\n${failures} проверок не прошло` : "\nВсе проверки прошли");
+  process.exit(failures ? 1 : 0);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

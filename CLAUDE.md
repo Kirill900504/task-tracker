@@ -19,6 +19,15 @@ comments are English.
 
 ## How to work here
 
+- **He is not technical, and asking him to figure anything out is a failure
+  of the answer, not of him.** He has said this outright, more than once and
+  with feeling: always propose the most self-sufficient option, do it
+  yourself, and when something genuinely cannot be done from here, hand him
+  a direct clickable link to the exact page and the one thing to type — never
+  a path through menus, never "найди раздел…", never a terminal command as
+  the first suggestion. Two clicks and a password is the budget. If a step
+  costs more than that, it is the wrong step: find another way round, and
+  spend the effort here rather than on his side.
 - Do the whole task, then verify, then report. He does not want to be asked
   for permission — he has said so explicitly — but he does want to be told
   what was decided and what was left out.
@@ -41,6 +50,9 @@ npm run lint          # eslint (React compiler rules are ON — see below)
 npm run build         # next build; must pass before any deploy
 npm run test:e2e      # Playwright; defaults to PRODUCTION, E2E_BASE_URL=http://localhost:3100 for local
 npm run test:rls      # every table's row-level security, against the real database
+npm run test:schema   # applies every migration to a throwaway local Postgres and
+                      # exercises the multi-user access rules — no credentials,
+                      # no production. Run it BEFORE any migration goes anywhere.
 npm run test:bots     # drives both messenger webhooks end to end
 node --env-file=.env.local scripts/run-migration.mjs supabase/migrations/00NN_x.sql
 node --env-file=.env.local scripts/max-setup.mjs https://<deployment>   # subscribes the MAX webhook
