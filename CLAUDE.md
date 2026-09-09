@@ -134,13 +134,21 @@ by a running `next start` (and by OneDrive) — stop the server first.
 
 ## Open threads
 
-- **The tracker is becoming multi-user** — fourteen managers who sign in,
-  tasks with several executors, meetings that are voted on, a chat inside
-  the item. Every decision behind it is written down in `docs/multiuser.md`
-  (in Russian, because they are his words): read that before touching
-  anything about people, roles or participation, and do not re-litigate what
-  is settled there. The foundation — migration 0019, `taskProgress.ts`,
-  `meetingVotes.ts` — is written; the migration is NOT yet applied.
+- **The tracker is multi-user now.** Fourteen managers who sign in by
+  invitation, tasks with several executors who each report for themselves,
+  meetings that are voted on, a thread inside every item. Every decision
+  behind it is written down in `docs/multiuser.md` (in Russian, because they
+  are his words) along with what is done and what is not: read that before
+  touching anything about people, roles or participation, and do not
+  re-litigate what is settled there. Migration 0019 is applied.
+- **Participation lives outside the sync engine, on purpose.**
+  `useTaskParticipants`, `useMeetingVotes` and `useItemComments` read and
+  write their tables directly; `useTrackerData`'s optimistic diff owns only
+  the columns in `taskToRow`/`meetingToRow`, and anything else written to
+  those tables (approval_state, vote_round) must stay out of them. A task
+  saved locally does not exist in Postgres yet — anything attaching a row to
+  a fresh task or meeting has to wait for it, or the foreign key silently
+  eats the row.
 - **MAX** is written and deployed but inert: a bot token requires a verified
   organisation profile (ООО/ИП/самозанятый) on dev.max.ru, which he does not
   have yet. Set `MAX_BOT_TOKEN`, `MAX_WEBHOOK_SECRET`,
