@@ -453,12 +453,26 @@ export default function TasksPanel({
           onRemoveParticipant={(id) => void participants.remove(id)}
           onApproveWork={async (comment) => {
             if (!modalTask) return;
-            await participants.approve(modalTask.id, comment);
+            try {
+              await participants.approve(modalTask.id, comment);
+            } catch (e) {
+              // Молча проглоченная приёмка — это задача, которую все
+              // считают закрытой, и она не закрыта.
+              toasts.showToast(e instanceof Error ? e.message : "Не получилось принять работу");
+              return;
+            }
             // Статус — поле, которым владеет синхронизация, поэтому он
             // переключается обычным путём, а не записью в базу мимо неё.
             toggleDone({ ...modalTask, status: "in_progress" });
           }}
-          onReturnWork={(comment) => modalTask && void participants.returnForRework(modalTask.id, comment)}
+          onReturnWork={async (comment) => {
+            if (!modalTask) return;
+            try {
+              await participants.returnForRework(modalTask.id, comment);
+            } catch (e) {
+              toasts.showToast(e instanceof Error ? e.message : "Не получилось вернуть на доработку");
+            }
+          }}
           onAcceptReschedule={async (participantId, date) => {
             if (!modalTask) return;
             // Срок — колонка синхронизации, поэтому двигается обычным
@@ -469,7 +483,12 @@ export default function TasksPanel({
           onRejectReschedule={(participantId) => void participants.clearRescheduleRequest(participantId)}
           onForceCloseWork={async (reason) => {
             if (!modalTask) return;
-            await participants.forceClose(modalTask.id, reason);
+            try {
+              await participants.forceClose(modalTask.id, reason);
+            } catch (e) {
+              toasts.showToast(e instanceof Error ? e.message : "Не получилось закрыть задачу");
+              return;
+            }
             toggleDone({ ...modalTask, status: "in_progress" });
           }}
         />

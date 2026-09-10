@@ -240,54 +240,26 @@ export function useTaskParticipants() {
   // open tab silently reverts it. The caller flips the status through the
   // ordinary path and passes nothing back.
 
-  const approve = useCallback(
-    async (taskId: string, comment: string) => {
-      const db = createClient();
-      await db
-        .from("tasks")
-        .update({ approval_state: "accepted", approval_comment: comment || null, approved_at: new Date().toISOString() })
-        .eq("id", taskId);
-    },
-    [],
-  );
-
-  // Возврат на доработку: работа исполнителей обнуляется, иначе задача
-  // остаётся «все отчитались» и приёмка тут же предложится снова.
-  const returnForRework = useCallback(
-    async (taskId: string, comment: string) => {
-      const db = createClient();
-      await db
-        .from("tasks")
-        .update({ approval_state: "returned", approval_comment: comment || null, approved_at: null })
-        .eq("id", taskId);
-      await db
-        .from("task_participants")
-        .update({ done_at: null, done_comment: null })
-        .eq("task_id", taskId)
-        .eq("role", "executor");
+  // Решение постановщика уходит на сервер по той же причине, по которой
+  // туда ушли ответы исполнителя: правила должны жить в одном месте, и
+  // сказать людям о возврате может только тот, у кого есть доступ к боту.
+  const review = useCallback(
+    async (action: "approve" | "return" | "force", taskId: string, comment: string) => {
+      const res = await fetch("/api/workspace/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, taskId, comment }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.error) throw new Error(data?.error || "Не получилось");
       await load();
     },
     [load],
   );
 
-  // B2: закрыть волевым решением. The fact that it was forced is the part
-  // that must survive, so it is its own column rather than a status.
-  const forceClose = useCallback(
-    async (taskId: string, reason: string) => {
-      const db = createClient();
-      const { data } = await db.auth.getUser();
-      await db
-        .from("tasks")
-        .update({
-          approval_state: "accepted",
-          approved_at: new Date().toISOString(),
-          force_closed_by: data?.user?.id || null,
-          force_closed_reason: reason || null,
-        })
-        .eq("id", taskId);
-    },
-    [],
-  );
+  const approve = useCallback((taskId: string, comment: string) => review("approve", taskId, comment), [review]);
+  const returnForRework = useCallback((taskId: string, comment: string) => review("return", taskId, comment), [review]);
+  const forceClose = useCallback((taskId: string, reason: string) => review("force", taskId, reason), [review]);
 
   const forTask = useCallback((taskId: string) => byTask[taskId] || [], [byTask]);
 
