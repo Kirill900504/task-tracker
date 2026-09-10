@@ -46,6 +46,8 @@ export default function TaskParticipants({
   onApprove,
   onReturn,
   onForceClose,
+  onAcceptReschedule,
+  onRejectReschedule,
 }: {
   taskId: string;
   participants: Participant[];
@@ -58,6 +60,8 @@ export default function TaskParticipants({
   onApprove: (comment: string) => void;
   onReturn: (comment: string) => void;
   onForceClose: (reason: string) => void;
+  onAcceptReschedule: (participantId: string, date: string) => void;
+  onRejectReschedule: (participantId: string) => void;
 }) {
   const [addWho, setAddWho] = useState("");
   const [addRole, setAddRole] = useState<TaskParticipantRole>("executor");
@@ -118,6 +122,31 @@ export default function TaskParticipants({
           Никого нет. Добавьте исполнителя — тогда задача начнёт спрашивать с человека, а не лежать.
         </div>
       )}
+
+      {/* Просьбы о переносе — над списком: это единственное, что требует
+          решения прямо сейчас, и увидеть её в общем ряду мелким шрифтом
+          значит не увидеть вовсе. */}
+      {participants
+        .filter((p) => p.rescheduleTo || p.rescheduleReason)
+        .map((p) => (
+          <div className="tp-ask" key={"ask-" + p.id}>
+            <div className="tp-ask-text">
+              <b>{p.name}</b> просит перенести
+              {p.rescheduleTo ? ` на ${p.rescheduleTo.split("-").reverse().join(".")}` : ""}
+              {p.rescheduleReason ? `: ${p.rescheduleReason}` : ""}
+            </div>
+            <div className="tp-ask-actions">
+              {p.rescheduleTo && (
+                <button className="btn btn-small btn-primary" type="button" onClick={() => onAcceptReschedule(p.id, p.rescheduleTo!)}>
+                  Перенести
+                </button>
+              )}
+              <button className="btn btn-small" type="button" onClick={() => onRejectReschedule(p.id)}>
+                Оставить как есть
+              </button>
+            </div>
+          </div>
+        ))}
 
       {participants.map((p) => (
         <div className="tp-row" key={p.id}>

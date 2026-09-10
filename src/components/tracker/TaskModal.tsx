@@ -70,6 +70,8 @@ export default function TaskModal({
   onApproveWork,
   onReturnWork,
   onForceCloseWork,
+  onAcceptReschedule,
+  onRejectReschedule,
 }: {
   task: Task | null;
   prefill?: TaskPrefill;
@@ -90,6 +92,8 @@ export default function TaskModal({
   onApproveWork: (comment: string) => void;
   onReturnWork: (comment: string) => void;
   onForceCloseWork: (reason: string) => void;
+  onAcceptReschedule: (participantId: string, date: string) => void;
+  onRejectReschedule: (participantId: string) => void;
 }) {
   const { colleagues } = useColleagues();
   const [sendState, setSendState] = useState("");
@@ -253,6 +257,8 @@ export default function TaskModal({
             onApprove={onApproveWork}
             onReturn={onReturnWork}
             onForceClose={onForceCloseWork}
+            onAcceptReschedule={onAcceptReschedule}
+            onRejectReschedule={onRejectReschedule}
           />
         ) : (
           <div className="tp tp-later">

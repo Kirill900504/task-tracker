@@ -459,6 +459,14 @@ export default function TasksPanel({
             toggleDone({ ...modalTask, status: "in_progress" });
           }}
           onReturnWork={(comment) => modalTask && void participants.returnForRework(modalTask.id, comment)}
+          onAcceptReschedule={async (participantId, date) => {
+            if (!modalTask) return;
+            // Срок — колонка синхронизации, поэтому двигается обычным
+            // сохранением задачи, а не записью в базу мимо него.
+            actions.saveTask({ ...modalTask, deadline: date });
+            await participants.clearRescheduleRequest(participantId);
+          }}
+          onRejectReschedule={(participantId) => void participants.clearRescheduleRequest(participantId)}
           onForceCloseWork={async (reason) => {
             if (!modalTask) return;
             await participants.forceClose(modalTask.id, reason);

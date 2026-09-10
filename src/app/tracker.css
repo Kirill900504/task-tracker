@@ -1215,3 +1215,11 @@
   /* Мысль — не задача: ни срока, ни отчёта, поэтому и вида задачи у неё
      быть не должно. Пунктир вместо сплошной рамки. */
   .ms-idea{border-style:dashed; border-left-style:dashed;}
+  /* Просьба о переносе — то немногое в карточке, что ждёт решения. */
+  .tp-ask{
+    margin-bottom:10px; padding:9px 11px; border-radius:var(--radius-sm);
+    background:var(--med-bg); border:1px solid rgba(224,184,77,.4);
+  }
+  .tp-ask-text{font-size:12.5px; color:#F0D9A8; line-height:1.45; margin-bottom:8px;}
+  .tp-ask-text b{color:var(--ink);}
+  .tp-ask-actions{display:flex; gap:8px; flex-wrap:wrap;}

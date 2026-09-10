@@ -20,7 +20,14 @@ import type { TaskParticipant, TaskParticipantRole } from "@/lib/taskProgress";
 // written straight through and read back, with realtime keeping the screen
 // honest when somebody answers from Telegram.
 
-export type Participant = TaskParticipant & { id: string };
+export type Participant = TaskParticipant & {
+  id: string;
+  // Просьба о переносе: исполнитель может только попросить (B6), и до сих
+  // пор просьба уходила в базу и не показывалась никому — то есть
+  // человек просил в пустоту.
+  rescheduleTo: string | null;
+  rescheduleReason: string | null;
+};
 
 type Row = {
   id: string;
@@ -82,6 +89,8 @@ export function useTaskParticipants() {
         doneComment: raw.done_comment,
         declinedAt: raw.declined_at,
         declineReason: raw.decline_reason,
+        rescheduleTo: raw.reschedule_to,
+        rescheduleReason: raw.reschedule_reason,
       };
       (grouped[raw.task_id] ||= []).push(p);
     }
@@ -198,6 +207,21 @@ export function useTaskParticipants() {
     [load],
   );
 
+  // Просьбу либо удовлетворяют, либо отклоняют — в обоих случаях она
+  // перестаёт висеть. Сам срок меняет вызывающий: колонка deadline
+  // принадлежит движку синхронизации, и писать её отсюда нельзя.
+  const clearRescheduleRequest = useCallback(
+    async (participantId: string) => {
+      const db = createClient();
+      await db
+        .from("task_participants")
+        .update({ reschedule_requested_at: null, reschedule_to: null, reschedule_reason: null })
+        .eq("id", participantId);
+      await load();
+    },
+    [load],
+  );
+
   const remove = useCallback(
     async (participantId: string) => {
       const db = createClient();
@@ -278,7 +302,7 @@ export function useTaskParticipants() {
   );
 
   return useMemo(
-    () => ({ loading, people, forTask, availableFor, add, ensureExecutorByName, setRole, remove, approve, returnForRework, forceClose, reload: load }),
-    [loading, people, forTask, availableFor, add, ensureExecutorByName, setRole, remove, approve, returnForRework, forceClose, load],
+    () => ({ loading, people, forTask, availableFor, add, ensureExecutorByName, setRole, remove, clearRescheduleRequest, approve, returnForRework, forceClose, reload: load }),
+    [loading, people, forTask, availableFor, add, ensureExecutorByName, setRole, remove, clearRescheduleRequest, approve, returnForRework, forceClose, load],
   );
 }
