@@ -100,7 +100,29 @@ export async function GET(req: Request) {
       if (!briefTaken) {
         try {
           const facts = await buildBriefFacts(admin, userId);
-          if (!briefIsEmpty(facts)) await notifyOwner(admin, userId, await composeBrief(facts));
+          let text = briefIsEmpty(facts) ? "" : await composeBrief(facts);
+
+          // То, что ждёт решения самого владельца. Сводка до сих пор
+          // рассказывала только про чужую работу, а собственная очередь —
+          // задачи, где все отчитались и ждут приёмки — не попадала в неё
+          // вовсе. Дописывается кодом после модели: цифра и список имён
+          // не должны зависеть от того, как их перескажут.
+          const { data: waiting } = await admin
+            .from("tasks")
+            .select("title")
+            .eq("user_id", userId)
+            .eq("approval_state", "awaiting_review")
+            .is("deleted_at", null)
+            .limit(10);
+          const onReview = ((waiting || []) as { title: string }[]).map((t) => t.title);
+          if (onReview.length) {
+            text =
+              (text ? text + "\n\n" : "") +
+              `🔍 Ждут вашей приёмки (${onReview.length}):\n` +
+              onReview.slice(0, 5).map((t) => `• ${t}`).join("\n");
+          }
+
+          if (text) await notifyOwner(admin, userId, text);
         } catch (e) {
           console.error("daily brief failed:", e);
         }
