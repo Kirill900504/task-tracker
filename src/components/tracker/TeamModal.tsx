@@ -26,8 +26,8 @@ type InviteKind = ColleagueChannel | "tracker";
 
 const INVITE_LABEL: Record<InviteKind, string> = { telegram: "Telegram", max: "MAX", tracker: "трекер" };
 const INVITE_LIFETIME: Record<InviteKind, string> = {
-  telegram: "действует 15 минут",
-  max: "действует 15 минут",
+  telegram: "действует 3 дня",
+  max: "действует 3 дня",
   tracker: "действует 7 дней",
 };
 const INVITE_HINT: Record<InviteKind, string> = {

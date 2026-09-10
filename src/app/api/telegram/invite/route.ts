@@ -48,7 +48,22 @@ export async function POST(req: Request) {
 
   const code = randomCode();
   const admin = createAdminClient();
-  const { error } = await admin.from("telegram_link_codes").insert({ code, user_id: user.id, assignee_id: assignee.id, channel });
+  // Трое суток, а не пятнадцать минут.
+  //
+  // Пятнадцать минут — верный срок для собственной ссылки: её открывают в
+  // соседней вкладке сразу. Для чужой это неверный срок совсем: ссылку
+  // пересылают человеку, человек занят, открывает вечером — и получает
+  // мёртвый код, а отправитель узнаёт об этом от него же, через день.
+  // На четырнадцати руководителях такое случится не раз и не два.
+  //
+  // Цена — код живёт дольше: восемь символов из тридцати двух, и тот, кто
+  // его перехватит, привяжет свой чат к чужому имени и станет получать его
+  // задачи. Перехватывать надо именно ту переписку, в которой ссылку
+  // прислали, а подключение видно в «Команде» и отключается там же.
+  const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await admin
+    .from("telegram_link_codes")
+    .insert({ code, user_id: user.id, assignee_id: assignee.id, channel, expires_at: expiresAt });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

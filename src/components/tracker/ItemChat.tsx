@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { REACTIONS, useItemComments, type ItemKind } from "@/hooks/useItemComments";
 
 // Обсуждение задачи там же, где задача.
@@ -34,21 +34,47 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Выбранные, но ещё не отправленные файлы. Показываются списком до
+  // отправки: «покажи, что сделал» чаще всего означает две фотографии, и
+  // ошибиться файлом легко.
+  const [pending, setPending] = useState<File[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   async function handleSend() {
     const text = draft.trim();
-    if (!text) return;
+    if (!text && !pending.length) return;
     setBusy(true);
     setError("");
     try {
-      await send(text);
+      await send(text, pending);
       setDraft("");
-    } catch {
-      // Текст остаётся в поле: повторить — это одно нажатие, а набирать
-      // заново то, что уже написал, никто не станет.
-      setError("Не отправилось. Проверьте связь и нажмите ещё раз.");
+      setPending([]);
+    } catch (e) {
+      // Текст и файлы остаются на месте: повторить — это одно нажатие, а
+      // набирать и прикладывать заново никто не станет.
+      setError(e instanceof Error ? e.message : "Не отправилось. Проверьте связь и нажмите ещё раз.");
     }
     setBusy(false);
+  }
+
+  function pickFiles(list: FileList | null) {
+    if (!list?.length) return;
+    const chosen = Array.from(list);
+    // 20 МБ — предел корзины; сказать об этом здесь дешевле, чем дать
+    // человеку дождаться отказа после загрузки.
+    const tooBig = chosen.find((f) => f.size > 20 * 1024 * 1024);
+    if (tooBig) {
+      setError(`«${tooBig.name}» больше 20 МБ — такой файл не пройдёт.`);
+      return;
+    }
+    setError("");
+    setPending((prev) => [...prev, ...chosen]);
+  }
+
+  function sizeLabel(bytes: number): string {
+    if (bytes < 1024) return `${bytes} Б`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
   }
 
   function handleEdit(id: string, current: string) {
@@ -91,7 +117,32 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
               {SOURCE_MARK[c.source] || ""}
             </span>
           </div>
-          <div className="chat-body">{c.body}</div>
+          {c.body && <div className="chat-body">{c.body}</div>}
+
+          {c.attachments.length > 0 && (
+            <div className="chat-files">
+              {c.attachments.map((a) => (
+                <a
+                  key={a.path}
+                  className={"chat-file" + (a.type.startsWith("image/") ? " image" : "")}
+                  href={a.url || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={a.name}
+                >
+                  {/* Фотографию показываем, остальное называем: акт и
+                      выгрузку узнают по имени, а установленную кассу — нет.
+                      eslint-disable-next-line @next/next/no-img-element */}
+                  {a.type.startsWith("image/") && a.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={a.url} alt={a.name} />
+                  ) : (
+                    <span className="chat-file-name">📎 {a.name}</span>
+                  )}
+                </a>
+              ))}
+            </div>
+          )}
 
           <div className="chat-foot">
             {c.reactions.map((r) => (
@@ -148,6 +199,23 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
 
       {error && <div className="chat-error">{error}</div>}
 
+      {pending.length > 0 && (
+        <div className="chat-pending">
+          {pending.map((f, i) => (
+            <span className="chat-pending-item" key={f.name + i}>
+              📎 {f.name} <span className="chat-pending-size">{sizeLabel(f.size)}</span>
+              <button
+                type="button"
+                className="chat-mini"
+                onClick={() => setPending((prev) => prev.filter((_, j) => j !== i))}
+              >
+                убрать
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="chat-composer">
         <textarea
           value={draft}
@@ -163,8 +231,27 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
           }}
           rows={2}
         />
-        <button type="button" className="btn btn-small btn-primary" disabled={busy || !draft.trim()} onClick={() => void handleSend()}>
-          Отправить
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            pickFiles(e.target.files);
+            // Сброс, иначе один и тот же файл нельзя приложить второй раз.
+            e.target.value = "";
+          }}
+        />
+        <button type="button" className="btn btn-small chat-clip" title="Приложить файл" onClick={() => fileInput.current?.click()}>
+          📎
+        </button>
+        <button
+          type="button"
+          className="btn btn-small btn-primary"
+          disabled={busy || (!draft.trim() && !pending.length)}
+          onClick={() => void handleSend()}
+        >
+          {busy ? "Отправляю…" : "Отправить"}
         </button>
       </div>
     </div>
