@@ -448,7 +448,7 @@ export default function TasksPanel({
           onRemoveSection={removeSection}
           participants={modalTask ? participants.forTask(modalTask.id) : []}
           availablePeople={modalTask ? participants.availableFor(modalTask.id) : []}
-          onAddParticipant={(assigneeId, role) => modalTask && void participants.add(modalTask.id, assigneeId, role)}
+          onAddParticipant={(assigneeId, role) => (modalTask ? participants.add(modalTask.id, assigneeId, role) : undefined)}
           onSetParticipantRole={(id, role) => void participants.setRole(id, role)}
           onRemoveParticipant={(id) => void participants.remove(id)}
           onApproveWork={async (comment) => {

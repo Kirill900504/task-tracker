@@ -54,7 +54,7 @@ export default function TaskParticipants({
   available: PersonOption[];
   approvalState: ApprovalState;
   approvalComment?: string;
-  onAdd: (assigneeId: string, role: TaskParticipantRole) => void;
+  onAdd: (assigneeId: string, role: TaskParticipantRole) => void | Promise<string | void>;
   onSetRole: (participantId: string, role: TaskParticipantRole) => void;
   onRemove: (participantId: string) => void;
   onApprove: (comment: string) => void;
@@ -65,15 +65,19 @@ export default function TaskParticipants({
 }) {
   const [addWho, setAddWho] = useState("");
   const [addRole, setAddRole] = useState<TaskParticipantRole>("executor");
+  // «Добавил, а ему не ушло» — то, о чём постановщик обязан узнать сразу.
+  const [notice, setNotice] = useState("");
 
   const progress = taskProgress(participants);
   const stage = taskStage(participants, approvalState);
   const label = progressLabel(participants);
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!addWho) return;
-    onAdd(addWho, addRole);
+    setNotice("");
+    const result = await onAdd(addWho, addRole);
     setAddWho("");
+    if (typeof result === "string" && result) setNotice(result);
   }
 
   function handleApprove() {
@@ -199,11 +203,13 @@ export default function TaskParticipants({
               </option>
             ))}
           </select>
-          <button className="btn btn-small" type="button" onClick={handleAdd} disabled={!addWho}>
+          <button className="btn btn-small" type="button" onClick={() => void handleAdd()} disabled={!addWho}>
             Добавить
           </button>
         </div>
       )}
+
+      {notice && <div className="tp-notice">{notice}</div>}
 
       {/* B4: отчитались все — дальше слово за постановщиком. Это и есть
           «Кирилл проверит», ради чего всё затевалось. */}

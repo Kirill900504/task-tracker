@@ -135,7 +135,7 @@ export function useTaskParticipants() {
   }, [fetchAll]);
 
   const add = useCallback(
-    async (taskId: string, assigneeId: string, role: TaskParticipantRole) => {
+    async (taskId: string, assigneeId: string, role: TaskParticipantRole): Promise<string> => {
       const db = createClient();
       // user_id is filled by a trigger from the parent task — never from
       // here, so a row cannot land in the wrong workspace (migration 0019).
@@ -154,13 +154,26 @@ export function useTaskParticipants() {
       // ради задачи, к которой он всё равно приступит утром, — верный
       // способ научить его выключать уведомления совсем.
       const person = people.find((p) => p.id === assigneeId);
-      if (person && !isSelfAssignee(person.name) && !isQuietHour()) {
-        void fetch("/api/telegram/send", {
+      if (!person || isSelfAssignee(person.name)) return "";
+      if (isQuietHour()) return `Сейчас ночь — ${person.name} получит задачу утренней сводкой.`;
+
+      try {
+        const res = await fetch("/api/telegram/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ kind: "task", id: taskId, to: [person.name] }),
-        }).catch(() => {});
+        });
+        const data = await res.json().catch(() => null);
+        // Не отправилось — чаще всего человек просто не подключён к боту.
+        // Промолчать здесь значит оставить постановщика в уверенности, что
+        // задачу увидели: он ждёт ответа, а человек о задаче не знает.
+        if (!res.ok || !data || data.error || !(data.sentTo || []).length) {
+          return `${person.name} не подключён к мессенджеру — увидит задачу, только когда войдёт в трекер.`;
+        }
+      } catch {
+        return `Не удалось отправить ${person.name} — проверьте связь.`;
       }
+      return "";
     },
     [load, people],
   );

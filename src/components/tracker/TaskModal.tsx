@@ -86,7 +86,7 @@ export default function TaskModal({
   onRemoveSection: (id: string) => void;
   participants: Participant[];
   availablePeople: PersonOption[];
-  onAddParticipant: (assigneeId: string, role: TaskParticipantRole) => void;
+  onAddParticipant: (assigneeId: string, role: TaskParticipantRole) => void | Promise<string | void>;
   onSetParticipantRole: (participantId: string, role: TaskParticipantRole) => void;
   onRemoveParticipant: (participantId: string) => void;
   onApproveWork: (comment: string) => void;
