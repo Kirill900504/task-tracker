@@ -10,6 +10,7 @@ import MeetingModal from "./MeetingModal";
 import { useMeetingVotes } from "@/hooks/useMeetingVotes";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import { voteTally } from "@/lib/meetingVotes";
+import { isQuietHour } from "@/lib/quietHours";
 import type { useToasts } from "@/hooks/useToasts";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
@@ -84,7 +85,18 @@ export default function MeetingsPanel({
     actions.saveMeeting(m);
     // Строки голосования держатся за списком участников, а не редактируются
     // рядом с ним: два списка одних и тех же людей расходятся за неделю.
-    void votes.sync(m.id, m.participants);
+    void votes.sync(m.id, m.participants).then((added) => {
+      // Позвать тех, кого только что добавили. «Встреча» — из того
+      // минимума уведомлений, который нельзя отключить: человек, которого
+      // ждут и не позвали, не придёт, и виноват будет трекер. Ночью
+      // молчим — встреча всё равно попадёт в утреннюю сводку.
+      if (!added.length || isQuietHour()) return;
+      void fetch("/api/telegram/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "meeting", id: m.id, to: added }),
+      }).catch(() => {});
+    });
     if (before) void bumpVoteRoundIfMoved(m.id, before, m);
     // Runs before closeModal() (the modal saves, then closes), so the
     // request is still open here and this only fires for requested opens.

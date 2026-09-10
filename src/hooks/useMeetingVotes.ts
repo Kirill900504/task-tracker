@@ -98,8 +98,11 @@ export function useMeetingVotes() {
   // Привести строки голосования в соответствие со списком участников.
   // Вызывается после сохранения встречи: список имён — источник правды,
   // строки — то, что под ним.
+  // Возвращает имена тех, кого только что добавили: их надо позвать, а
+  // остальных — нет. Отправку делает вызывающий, потому что она идёт через
+  // серверный маршрут, а не из браузера напрямую.
   const sync = useCallback(
-    async (meetingId: string, names: string[]) => {
+    async (meetingId: string, names: string[]): Promise<string[]> => {
       const db = createClient();
       const wanted = names.filter((n) => n && !isSelfAssignee(n));
       const existing = byMeeting[meetingId] || [];
@@ -108,6 +111,7 @@ export function useMeetingVotes() {
       const haveIds = new Set(existing.map((r) => r.assigneeId));
 
       const toAdd = [...wantedIds].filter((id) => !haveIds.has(id));
+      const addedNames = wanted.filter((n) => toAdd.includes(peopleByName[n]));
       const toDrop = existing.filter((r) => !wantedIds.has(r.assigneeId));
 
       if (toAdd.length) {
@@ -121,14 +125,14 @@ export function useMeetingVotes() {
           if (data) exists = true;
           else await new Promise((resolve) => setTimeout(resolve, 500));
         }
-        if (exists) {
-          await db.from("meeting_participants").insert(
-            toAdd.map((assignee_id) => ({ meeting_id: meetingId, assignee_id, role: "participant" as const })),
-          );
-        }
+        if (!exists) return [];
+        await db.from("meeting_participants").insert(
+          toAdd.map((assignee_id) => ({ meeting_id: meetingId, assignee_id, role: "participant" as const })),
+        );
       }
       for (const row of toDrop) await db.from("meeting_participants").delete().eq("id", row.id);
       if (toAdd.length || toDrop.length) await reload();
+      return addedNames;
     },
     [byMeeting, peopleByName, reload],
   );
