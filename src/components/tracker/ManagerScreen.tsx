@@ -23,7 +23,7 @@ import { personStats } from "@/lib/peopleReview";
 // deadline — B6), and an interface offering something that will be refused
 // is worse than one that never offered it.
 
-export default function ManagerScreen({ assigneeId, name, ownerId }: { assigneeId: string; name: string; ownerId: string }) {
+export default function ManagerScreen({ assigneeId, name }: { assigneeId: string; name: string }) {
   const { tasks, meetings, ideas, loading, accept, report, decline, askReschedule, vote, takeIdea } = useAssignedWork(assigneeId);
   return (
     <ManagerScreenInner
@@ -37,7 +37,7 @@ export default function ManagerScreen({ assigneeId, name, ownerId }: { assigneeI
       decline={decline}
       askReschedule={askReschedule}
       vote={vote}
-      takeIdea={(recipientId, ideaId, text) => void takeIdea(recipientId, ideaId, text, ownerId)}
+      takeIdea={(recipientId) => void takeIdea(recipientId)}
     />
   );
 }
@@ -69,7 +69,7 @@ export function ManagerScreenInner({
   // Раунд не передаётся: его знает сервер, и он же единственный, кто
   // может знать его наверняка в момент нажатия.
   vote?: (participantId: string, response: "yes" | "no", reason: string) => void | Promise<void>;
-  takeIdea?: (recipientId: string, ideaId: string, text: string) => void | Promise<void>;
+  takeIdea?: (recipientId: string) => void | Promise<void>;
 }) {
   const router = useRouter();
   const [failed, setFailed] = useState("");
@@ -262,7 +262,7 @@ export function ManagerScreenInner({
             <div className="ms-card ms-idea" key={i.recipientId}>
               <div className="ms-card-desc" style={{ marginTop: 0 }}>{i.text}</div>
               <div className="ms-actions">
-                <button className="btn btn-small btn-primary" type="button" onClick={() => void run(() => takeIdea(i.recipientId, i.ideaId, i.text))}>
+                <button className="btn btn-small btn-primary" type="button" onClick={() => void run(() => takeIdea(i.recipientId))}>
                   ➕ Взять в работу
                 </button>
               </div>

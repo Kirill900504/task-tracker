@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
-import { uid } from "@/lib/uid";
 
 // Что назначено лично мне — глазами руководителя, а не владельца.
 //
@@ -269,36 +268,12 @@ export function useAssignedWork(assigneeId: string) {
     [answer],
   );
 
-  // «Взять в работу»: мысль становится задачей на этого же человека, без
-  // срока — срок ставит тот, кто спросит, а не тот, кто взялся. Задача
-  // сразу принята: нажатие и есть согласие.
+  // «Взять в работу» — через тот же серверный маршрут, что и все ответы:
+  // назначить себя исполнителем из браузера нельзя (и не должно быть
+  // можно), иначе задача появлялась бы без единого участника.
   const takeIdea = useCallback(
-    async (recipientId: string, ideaId: string, text: string, ownerId: string) => {
-      const db = createClient();
-      const { data: me } = await db.auth.getUser();
-      const taskId = uid();
-      const title = text.trim().slice(0, 200) || "Из мысли";
-      const { error } = await db.from("tasks").insert({
-        id: taskId,
-        user_id: ownerId,
-        title,
-        assignee: "",
-        created_by: me?.user?.id || null,
-      });
-      if (error) throw new Error(error.message);
-      await db.from("task_participants").insert({
-        task_id: taskId,
-        assignee_id: assigneeId,
-        role: "executor",
-        accepted_at: new Date().toISOString(),
-      });
-      await db
-        .from("idea_recipients")
-        .update({ converted_task_id: taskId, seen_at: new Date().toISOString() })
-        .eq("id", recipientId);
-      await reload();
-    },
-    [assigneeId, reload],
+    (recipientId: string) => answer({ action: "take_idea", recipientId }),
+    [answer],
   );
 
   return { tasks, meetings, ideas, loading, accept, report, decline, askReschedule, vote, takeIdea, reload };

@@ -6,6 +6,7 @@ import { closeIfEveryoneReported } from "@/lib/colleagueReplies";
 import { canDecline, canReportDone } from "@/lib/taskProgress";
 import { canVoteNo } from "@/lib/meetingVotes";
 import { fmtDate } from "@/lib/taskDisplay";
+import { uid } from "@/lib/uid";
 
 // Ответ руководителя: один путь для трекера и для мессенджера.
 //
@@ -21,8 +22,9 @@ import { fmtDate } from "@/lib/taskDisplay";
 // одном месте, а не в двух, и не могут разойтись.
 
 type Body = {
-  action: "accept" | "done" | "decline" | "reschedule" | "vote";
-  participantId: string;
+  action: "accept" | "done" | "decline" | "reschedule" | "vote" | "take_idea";
+  participantId?: string;
+  recipientId?: string;
   comment?: string;
   date?: string;
   response?: "yes" | "no";
@@ -37,7 +39,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as Body | null;
-  if (!body?.action || !body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+  if (!body?.action) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
 
   const admin = createAdminClient();
 
@@ -54,6 +56,52 @@ export async function POST(req: Request) {
   const m = member as { owner_id: string; assignee_id: string; assignees: { name: string } | { name: string }[] | null };
   const myName = (Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name) || "Коллега";
   const now = new Date().toISOString();
+
+  // «Взять в работу»: мысль становится задачей на этого же человека.
+  //
+  // Только через сервер. Завести задачу руководитель может сам, а вот
+  // назначить себя исполнителем — нет: писать в task_participants
+  // разрешено владельцу пространства, и это правильно (иначе любой мог бы
+  // вписать себя в чужую задачу). Из браузера получалась бы задача без
+  // единого исполнителя, которую не видно даже тому, кто её взял.
+  if (body.action === "take_idea") {
+    if (!body.recipientId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+    const { data: rec } = await admin
+      .from("idea_recipients")
+      .select("id, idea_id, assignee_id, converted_task_id, ideas(text)")
+      .eq("id", body.recipientId)
+      .maybeSingle();
+    const recipient = rec as {
+      id: string;
+      idea_id: string;
+      assignee_id: string;
+      converted_task_id: string | null;
+      ideas: { text: string } | { text: string }[] | null;
+    } | null;
+    if (!recipient || recipient.assignee_id !== m.assignee_id) {
+      return NextResponse.json({ error: "Эта мысль не ваша" }, { status: 403 });
+    }
+    if (recipient.converted_task_id) return NextResponse.json({ ok: true, taskId: recipient.converted_task_id });
+
+    const text = (Array.isArray(recipient.ideas) ? recipient.ideas[0]?.text : recipient.ideas?.text) || "";
+    const title = text.trim().slice(0, 200) || "Из мысли";
+    const taskId = uid();
+    // Без срока: срок ставит тот, кто спросит, а не тот, кто взялся.
+    const { error: taskError } = await admin
+      .from("tasks")
+      .insert({ id: taskId, user_id: m.owner_id, title, assignee: myName, created_by: user.id });
+    if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
+
+    await admin.from("task_participants").insert({
+      task_id: taskId,
+      assignee_id: m.assignee_id,
+      role: "executor",
+      accepted_at: now,
+    });
+    await admin.from("idea_recipients").update({ converted_task_id: taskId, seen_at: now }).eq("id", recipient.id);
+    await notifyOwner(admin, m.owner_id, `➕ ${myName} взял мысль в работу: «${title}»`);
+    return NextResponse.json({ ok: true, taskId });
+  }
 
   if (body.action === "vote") {
     const { data: row } = await admin
@@ -94,6 +142,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  if (!body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
   const { data: row } = await admin
     .from("task_participants")
     .select("id, assignee_id, task_id, tasks(title)")

@@ -336,6 +336,30 @@ async function main() {
     check("«взять в работу» отмечается получателем", rowCount === 1);
   });
 
+  console.log("\n«Взять в работу» руками руководителя:");
+  await as(db, MANAGER_A, async () => {
+    const { rowCount } = await db.query(
+      `insert into public.tasks (id, user_id, title, assignee, created_by) values ('tsk_from_idea',$1,'Из мысли','',$2)`,
+      [OWNER, MANAGER_A],
+    );
+    check("руководитель может завести себе задачу из мысли", rowCount === 1);
+    // А вот строку участия он себе добавить не может: писать в
+    // task_participants разрешено только владельцу пространства. Значит
+    // «взять в работу» обязано идти через сервер, иначе задача появится
+    // без единого исполнителя.
+    let denied = false;
+    try {
+      const res = await db.query(
+        `insert into public.task_participants (task_id, assignee_id, role) values ('tsk_from_idea',$1,'executor')`,
+        [byName["Аня"]],
+      );
+      denied = res.rowCount === 0;
+    } catch {
+      denied = true;
+    }
+    check("но исполнителем себя из браузера не назначит (нужен сервер)", denied);
+  });
+
   console.log("\nПеренос старых записей (0021):");
   // Задача и встреча «старого вида»: адресованы именем, строк участия нет.
   await db.query(

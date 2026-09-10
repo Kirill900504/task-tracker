@@ -122,6 +122,29 @@ export async function GET(req: Request) {
               onReview.slice(0, 5).map((t) => `• ${t}`).join("\n");
           }
 
+          // Обсуждения, в которых со вчера что-то писали. Каждое сообщение
+          // отдельным уведомлением превратило бы мессенджер в ленту, а
+          // одной строкой утром это ровно то, чем оно и является:
+          // «есть что почитать вот здесь».
+          const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+          const { data: fresh } = await admin
+            .from("item_comments")
+            .select("item_id, item_kind")
+            .eq("user_id", userId)
+            .eq("item_kind", "task")
+            .gt("created_at", since)
+            .is("deleted_at", null)
+            .is("author_user_id", null);
+          const discussed = [...new Set(((fresh || []) as { item_id: string }[]).map((c) => c.item_id))];
+          if (discussed.length) {
+            const { data: titles } = await admin.from("tasks").select("title").in("id", discussed.slice(0, 5));
+            const names = ((titles || []) as { title: string }[]).map((t) => `• ${t.title}`);
+            text =
+              (text ? text + "\n\n" : "") +
+              `💬 Писали в обсуждениях (${discussed.length}):\n` +
+              names.join("\n");
+          }
+
           if (text) await notifyOwner(admin, userId, text);
         } catch (e) {
           console.error("daily brief failed:", e);

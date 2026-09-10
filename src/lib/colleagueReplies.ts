@@ -394,6 +394,27 @@ async function handleChatMessage(
   const open = rows.find((r) => r.task && !r.task.deleted_at && r.task.status !== "done");
   if (!open || !open.task) return null;
 
+  // Первое сообщение в обсуждении уходит владельцу сразу, остальные —
+  // копятся и попадают в утреннюю сводку. Четырнадцать человек, каждый со
+  // своей перепиской по каждой задаче, иначе превращают мессенджер в
+  // ленту, которую перестают читать целиком — вместе со «сделал» и
+  // «не могу», ради которых всё и затевалось.
+  //
+  // «Первое» считается по паузе, а не по счётчику: разговор, возобновлённый
+  // через два часа, — это новый разговор, и о нём стоит знать.
+  const { data: previous } = await admin
+    .from("item_comments")
+    .select("created_at")
+    .eq("item_kind", "task")
+    .eq("item_id", open.taskId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const last = (previous as { created_at: string }[] | null)?.[0]?.created_at;
+  const QUIET_GAP_MS = 2 * 60 * 60 * 1000;
+  const isNewConversation = !last || Date.now() - Date.parse(last) > QUIET_GAP_MS;
+
   await admin.from("item_comments").insert({
     item_kind: "task",
     item_id: open.taskId,
@@ -404,6 +425,6 @@ async function handleChatMessage(
 
   return {
     reply: `Записал в обсуждение задачи «${open.task.title}».`,
-    notifyOwner: `💬 ${colleague.name} по задаче «${open.task.title}»: ${body}`,
+    notifyOwner: isNewConversation ? `💬 ${colleague.name} по задаче «${open.task.title}»: ${body}` : undefined,
   };
 }
