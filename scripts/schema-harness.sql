@@ -49,3 +49,39 @@ $$;
 
 grant usage on schema public, auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;
+
+-- Хранилище файлов Supabase. Здесь его нет, но миграция 0020 заводит в нём
+-- корзину и права, а значит проверка должна уметь их применить. Стоят
+-- ровно те три вещи, к которым обращается миграция: две таблицы и функция,
+-- разбирающая путь на папки.
+create schema if not exists storage;
+
+create table if not exists storage.buckets (
+  id text primary key,
+  name text not null,
+  public boolean not null default false,
+  file_size_limit bigint,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists storage.objects (
+  id uuid primary key default gen_random_uuid(),
+  bucket_id text references storage.buckets(id),
+  name text not null,
+  owner uuid,
+  created_at timestamptz not null default now()
+);
+alter table storage.objects enable row level security;
+
+-- Настоящая возвращает список папок пути; для проверки прав нужен только
+-- первый сегмент, но поведение то же.
+create or replace function storage.foldername(name text)
+returns text[]
+language sql
+immutable
+as $$
+  select string_to_array(regexp_replace(name, '/[^/]*$', ''), '/')
+$$;
+
+grant usage on schema storage to anon, authenticated, service_role;
+grant all on storage.objects, storage.buckets to anon, authenticated, service_role;
