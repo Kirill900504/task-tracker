@@ -416,7 +416,7 @@ export default function NewTracker() {
   // его загрузка руководителя не касается, и её ошибка не должна
   // показывать ему «не получилось загрузить данные».
   if (!identity.loading && identity.role === "manager") {
-    return <ManagerScreen assigneeId={identity.assigneeId} name={identity.name} />;
+    return <ManagerScreen assigneeId={identity.assigneeId} name={identity.name} ownerId={identity.ownerId} />;
   }
 
   if (loadError) {

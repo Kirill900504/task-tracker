@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rateLimit";
-import { chatsFor, ideaMessage, meetingButtons, meetingMessage, taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
+import { chatsFor, ideaButtons, ideaMessage, meetingButtons, meetingMessage, taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import type { BotChannelConfig } from "@/lib/botTransport";
 
@@ -106,9 +106,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: nobodyReachable(unlinked, "Выберите, кому отправить") }, { status: 400 });
     }
     for (const person of linked) {
-      const result = await sendToColleague(person.target, ideaMessage(idea.text as string, from));
-      if (result.ok) sentTo.push(person.name);
-      else failed.push(`${person.name} (${result.error})`);
+      const result = await sendToColleague(person.target, ideaMessage(idea.text as string, from), ideaButtons(idea.id as string));
+      if (result.ok) {
+        sentTo.push(person.name);
+        // Кому мысль ушла — теперь строка, а не только факт отправки:
+        // получатель увидит её у себя на экране, а не только в чате, и
+        // будет видно, во что она превратилась.
+        await admin
+          .from("idea_recipients")
+          .insert({ idea_id: idea.id, assignee_id: person.id, user_id: user.id })
+          .then(() => undefined, () => undefined);
+      } else failed.push(`${person.name} (${result.error})`);
     }
     if (sentTo.length) await admin.from("ideas").update({ sent_at: new Date().toISOString() }).eq("id", id);
   }

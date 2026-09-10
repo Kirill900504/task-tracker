@@ -312,6 +312,30 @@ async function main() {
     check("посторонний ответ не принимается", true);
   }
 
+  console.log("\nМысли, отправленные человеку:");
+  const ideaId = "idea_test_kassy";
+  await db.query(`insert into public.ideas (id, user_id, text) values ($1,$2,'Проверить кассы на рынке')`, [ideaId, OWNER]);
+  await db.query(`insert into public.idea_recipients (user_id, idea_id, assignee_id) values ($1,$2,$3)`, [
+    OWNER,
+    ideaId,
+    byName["Аня"],
+  ]);
+  await as(db, MANAGER_A, async () => {
+    const { rows } = await db.query("select id from public.ideas where id = $1", [ideaId]);
+    check("получатель видит присланную мысль", rows.length === 1);
+  });
+  await as(db, MANAGER_B, async () => {
+    const { rows } = await db.query("select id from public.ideas where id = $1", [ideaId]);
+    check("посторонний чужую мысль не видит", rows.length === 0);
+  });
+  await as(db, MANAGER_A, async () => {
+    const { rowCount } = await db.query(
+      "update public.idea_recipients set converted_task_id = $1, seen_at = now() where idea_id = $2 and assignee_id = $3",
+      [taskId, ideaId, byName["Аня"]],
+    );
+    check("«взять в работу» отмечается получателем", rowCount === 1);
+  });
+
   console.log("\nПриёмка:");
   try {
     await db.query("update public.tasks set approval_state = 'непонятно' where id = $1", [taskId]);

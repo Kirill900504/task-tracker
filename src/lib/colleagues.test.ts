@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { encodeCallback, decodeCallback, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, chatsFor } from "@/lib/colleagues";
+import { encodeCallback, decodeCallback, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, chatsFor } from "@/lib/colleagues";
 
 describe("callback data", () => {
   it("survives a round trip", () => {
@@ -62,6 +62,14 @@ describe("buttons", () => {
   it("offers accept and done on a task, both carrying its id", () => {
     const rows = taskButtons("t42");
     expect(rows[0].map((b) => b.data)).toEqual(["t:acc:t42", "t:done:t42"]);
+  });
+
+  it("даёт мысли единственное осмысленное действие", () => {
+    // Мысль ничего не требует; взять её в работу — это всё, что с ней
+    // можно сделать, и до сих пор нельзя было ничего.
+    const rows = ideaButtons("i9");
+    expect(rows[0][0].data).toBe("i:task:i9");
+    expect(rows[0][0].text).toContain("работу");
   });
 
   it("gives a третью дверь: не могу", () => {

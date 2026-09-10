@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { useAssignedWork, type AssignedMeeting, type AssignedTask } from "@/hooks/useAssignedWork";
+import { useAssignedWork, type AssignedIdea, type AssignedMeeting, type AssignedTask } from "@/hooks/useAssignedWork";
 import { fmtDate } from "@/lib/taskDisplay";
 import { canDecline, canReportDone } from "@/lib/taskProgress";
 import { canVoteNo, isCurrent } from "@/lib/meetingVotes";
@@ -23,19 +23,21 @@ import { personStats } from "@/lib/peopleReview";
 // deadline — B6), and an interface offering something that will be refused
 // is worse than one that never offered it.
 
-export default function ManagerScreen({ assigneeId, name }: { assigneeId: string; name: string }) {
-  const { tasks, meetings, loading, accept, report, decline, askReschedule, vote } = useAssignedWork(assigneeId);
+export default function ManagerScreen({ assigneeId, name, ownerId }: { assigneeId: string; name: string; ownerId: string }) {
+  const { tasks, meetings, ideas, loading, accept, report, decline, askReschedule, vote, takeIdea } = useAssignedWork(assigneeId);
   return (
     <ManagerScreenInner
       name={name}
       tasks={tasks}
       meetings={meetings}
+      ideas={ideas}
       loading={loading}
       accept={accept}
       report={report}
       decline={decline}
       askReschedule={askReschedule}
       vote={vote}
+      takeIdea={(recipientId, ideaId, text) => void takeIdea(recipientId, ideaId, text, ownerId)}
     />
   );
 }
@@ -46,22 +48,26 @@ export function ManagerScreenInner({
   name,
   tasks,
   meetings = [],
+  ideas = [],
   loading,
   accept,
   report,
   decline,
   askReschedule,
   vote,
+  takeIdea,
 }: {
   name: string;
   tasks: AssignedTask[];
   meetings?: AssignedMeeting[];
+  ideas?: AssignedIdea[];
   loading: boolean;
   accept: (participantId: string) => void;
   report: (participantId: string, comment: string) => void;
   decline: (participantId: string, reason: string) => void;
   askReschedule: (participantId: string, to: string, reason: string) => void;
   vote?: (participantId: string, response: "yes" | "no", reason: string, round: number) => void;
+  takeIdea?: (recipientId: string, ideaId: string, text: string) => void;
 }) {
   const router = useRouter();
 
@@ -220,10 +226,31 @@ export function ManagerScreenInner({
 
       {loading && <div className="empty">Загрузка…</div>}
 
-      {!loading && tasks.length === 0 && meetings.length === 0 && (
+      {!loading && tasks.length === 0 && meetings.length === 0 && ideas.length === 0 && (
         <div className="ms-empty">
           Пока ничего не назначено. Когда появится задача — она будет здесь, и придёт в мессенджер, если он подключён.
         </div>
+      )}
+
+      {/* Мысли — то, что прислали без обязательства. Единственное действие
+          здесь и есть всё, что с мыслью можно сделать: взять в работу,
+          после чего она перестанет быть мыслью и уйдёт наверх, к задачам. */}
+      {!loading && ideas.length > 0 && takeIdea && (
+        <section className="ms-group">
+          <div className="section-title">
+            Мысли от Кирилла <span className="count">{ideas.length}</span>
+          </div>
+          {ideas.map((i) => (
+            <div className="ms-card ms-idea" key={i.recipientId}>
+              <div className="ms-card-desc" style={{ marginTop: 0 }}>{i.text}</div>
+              <div className="ms-actions">
+                <button className="btn btn-small btn-primary" type="button" onClick={() => takeIdea(i.recipientId, i.ideaId, i.text)}>
+                  ➕ Взять в работу
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
       )}
 
       {!loading && meetings.length > 0 && (

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
 import { findColleagueByChat } from "@/lib/colleagues";
+import { uid } from "@/lib/uid";
 import type { BotChannelConfig } from "@/lib/botTransport";
 
 // What happens when a colleague presses a button under a task or a meeting.
@@ -194,6 +195,47 @@ export async function handleColleagueCallback(
       toast: "Передал",
       rewriteTo: `📅 ${meeting.title}\n${when}\n\n❌ Вы не сможете\nНапишите одним сообщением, почему — это увидит организатор.`,
       notifyOwner: `❌ ${colleague.name} не сможет быть на встрече «${meeting.title}» (${when})`,
+    };
+  }
+
+  if (action.kind === "idea" && action.action === "task") {
+    const { data: idea } = await admin
+      .from("ideas")
+      .select("id, text, user_id")
+      .eq("id", action.id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!idea || idea.user_id !== colleague.user_id) return { toast: "Эта мысль уже не ваша" };
+
+    // Мысль, взятая в работу, перестаёт быть мыслью. Задача заводится в
+    // том же пространстве, с этим человеком исполнителем и без срока:
+    // срок ставит тот, кто спросит, а не тот, кто взялся.
+    const title = String(idea.text || "").trim().slice(0, 200) || "Из мысли";
+    const taskId = uid();
+    const { error: taskError } = await admin.from("tasks").insert({
+      id: taskId,
+      user_id: idea.user_id,
+      title,
+      assignee: colleague.name,
+    });
+    if (taskError) return { toast: "Не получилось завести задачу" };
+
+    await admin.from("task_participants").insert({
+      task_id: taskId,
+      assignee_id: colleague.id,
+      role: "executor",
+      accepted_at: new Date().toISOString(),
+    });
+    await admin
+      .from("idea_recipients")
+      .update({ converted_task_id: taskId, seen_at: new Date().toISOString() })
+      .eq("idea_id", idea.id)
+      .eq("assignee_id", colleague.id);
+
+    return {
+      toast: "Завёл задачу",
+      rewriteTo: `💡 ${title}\n\n➕ Взято в работу — теперь это ваша задача`,
+      notifyOwner: `➕ ${colleague.name} взял мысль в работу: «${title}»`,
     };
   }
 

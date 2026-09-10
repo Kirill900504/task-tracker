@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
+import { uid } from "@/lib/uid";
 
 // Что назначено лично мне — глазами руководителя, а не владельца.
 //
@@ -94,16 +95,25 @@ export type AssignedMeeting = {
   meetingRound: number;
 };
 
+export type AssignedIdea = {
+  recipientId: string;
+  ideaId: string;
+  text: string;
+  seenAt: string | null;
+  convertedTaskId: string | null;
+};
+
 export function useAssignedWork(assigneeId: string) {
   const [tasks, setTasks] = useState<AssignedTask[]>([]);
   const [meetings, setMeetings] = useState<AssignedMeeting[]>([]);
+  const [ideas, setIdeas] = useState<AssignedIdea[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchAll = useCallback(async (): Promise<{ tasks: AssignedTask[]; meetings: AssignedMeeting[] }> => {
-    if (!assigneeId) return { tasks: [], meetings: [] };
+  const fetchAll = useCallback(async (): Promise<{ tasks: AssignedTask[]; meetings: AssignedMeeting[]; ideas: AssignedIdea[] }> => {
+    if (!assigneeId) return { tasks: [], meetings: [], ideas: [] };
     const db = createClient();
     const today = new Date().toISOString().slice(0, 10);
-    const [{ data }, { data: meetingRows }] = await Promise.all([
+    const [{ data }, { data: meetingRows }, { data: ideaRows }] = await Promise.all([
       db
         .from("task_participants")
         .select(
@@ -116,6 +126,10 @@ export function useAssignedWork(assigneeId: string) {
       db
         .from("meeting_participants")
         .select("id, meeting_id, response, reason, round, meetings(title, date, time, status, vote_round, deleted_at)")
+        .eq("assignee_id", assigneeId),
+      db
+        .from("idea_recipients")
+        .select("id, idea_id, seen_at, converted_task_id, ideas(text, deleted_at)")
         .eq("assignee_id", assigneeId),
     ]);
 
@@ -143,22 +157,44 @@ export function useAssignedWork(assigneeId: string) {
       }))
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
-    return { tasks: shape((data as unknown as Row[]) || []), meetings };
+    type IRow = {
+      id: string;
+      idea_id: string;
+      seen_at: string | null;
+      converted_task_id: string | null;
+      ideas: { text: string; deleted_at: string | null } | null;
+    };
+
+    // Мысль, уже взятую в работу, показывать незачем: она стала задачей и
+    // живёт выше, среди задач.
+    const ideas = ((ideaRows as unknown as IRow[]) || [])
+      .filter((r) => r.ideas && !r.ideas.deleted_at && !r.converted_task_id)
+      .map((r) => ({
+        recipientId: r.id,
+        ideaId: r.idea_id,
+        text: r.ideas!.text,
+        seenAt: r.seen_at,
+        convertedTaskId: r.converted_task_id,
+      }));
+
+    return { tasks: shape((data as unknown as Row[]) || []), meetings, ideas };
   }, [assigneeId]);
 
   const reload = useCallback(async () => {
-    const { tasks: t, meetings: m } = await fetchAll();
+    const { tasks: t, meetings: m, ideas: i } = await fetchAll();
     setTasks(t);
     setMeetings(m);
+    setIdeas(i);
     setLoading(false);
   }, [fetchAll]);
 
   useEffect(() => {
     let cancelled = false;
-    fetchAll().then(({ tasks: t, meetings: m }) => {
+    fetchAll().then(({ tasks: t, meetings: m, ideas: i }) => {
       if (cancelled) return;
       setTasks(t);
       setMeetings(m);
+      setIdeas(i);
       setLoading(false);
     });
 
@@ -174,6 +210,9 @@ export function useAssignedWork(assigneeId: string) {
         void reload();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "meeting_participants" }, () => {
+        void reload();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "idea_recipients" }, () => {
         void reload();
       })
       .subscribe();
@@ -248,5 +287,37 @@ export function useAssignedWork(assigneeId: string) {
     [reload],
   );
 
-  return { tasks, meetings, loading, accept, report, decline, askReschedule, vote, reload };
+  // «Взять в работу»: мысль становится задачей на этого же человека, без
+  // срока — срок ставит тот, кто спросит, а не тот, кто взялся. Задача
+  // сразу принята: нажатие и есть согласие.
+  const takeIdea = useCallback(
+    async (recipientId: string, ideaId: string, text: string, ownerId: string) => {
+      const db = createClient();
+      const { data: me } = await db.auth.getUser();
+      const taskId = uid();
+      const title = text.trim().slice(0, 200) || "Из мысли";
+      const { error } = await db.from("tasks").insert({
+        id: taskId,
+        user_id: ownerId,
+        title,
+        assignee: "",
+        created_by: me?.user?.id || null,
+      });
+      if (error) throw new Error(error.message);
+      await db.from("task_participants").insert({
+        task_id: taskId,
+        assignee_id: assigneeId,
+        role: "executor",
+        accepted_at: new Date().toISOString(),
+      });
+      await db
+        .from("idea_recipients")
+        .update({ converted_task_id: taskId, seen_at: new Date().toISOString() })
+        .eq("id", recipientId);
+      await reload();
+    },
+    [assigneeId, reload],
+  );
+
+  return { tasks, meetings, ideas, loading, accept, report, decline, askReschedule, vote, takeIdea, reload };
 }

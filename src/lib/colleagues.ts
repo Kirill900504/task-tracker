@@ -91,8 +91,12 @@ export function meetingButtons(meetingId: string): BotButton[][] {
 
 // An idea is not an instruction — there is nothing to accept or finish, so it
 // goes without buttons.
-export function ideaButtons(): BotButton[][] {
-  return [];
+// Мысль не обязывает — ни срока, ни отчёта. Единственное, что с ней можно
+// сделать, это взять её в работу: тогда она перестаёт быть мыслью и
+// становится задачей с исполнителем и сроком. Раньше кнопок не было вовсе,
+// и мысль оставалась сообщением, которое некуда деть.
+export function ideaButtons(ideaId: string): BotButton[][] {
+  return [[{ text: "➕ Взять в работу", data: encodeCallback("idea", "task", ideaId) }]];
 }
 
 export async function findColleagueByChat(
