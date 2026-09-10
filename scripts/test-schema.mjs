@@ -336,6 +336,38 @@ async function main() {
     check("«взять в работу» отмечается получателем", rowCount === 1);
   });
 
+  console.log("\nПеренос старых записей (0021):");
+  // Задача и встреча «старого вида»: адресованы именем, строк участия нет.
+  await db.query(
+    `insert into public.tasks (id, user_id, title, assignee, status) values ('tsk_legacy',$1,'Старая задача','Борис','in_progress')`,
+    [OWNER],
+  );
+  await db.query(
+    `insert into public.meetings (id, user_id, date, time, title, participants, confirmed_by, status)
+     values ('mtg_legacy',$1, current_date + 3, '11:00', 'Старая встреча', array['Борис','Вера'], array['Борис'], 'planned')`,
+    [OWNER],
+  );
+  await db.query(readFileSync(join(MIGRATIONS, "0021_backfill_participants.sql"), "utf8"));
+
+  const { rows: legacyTask } = await db.query(
+    "select role from public.task_participants where task_id = 'tsk_legacy'",
+  );
+  check("у старой задачи появился исполнитель", legacyTask.length === 1 && legacyTask[0].role === "executor");
+
+  const { rows: legacyMeeting } = await db.query(
+    "select response from public.meeting_participants where meeting_id = 'mtg_legacy' order by response",
+  );
+  check("у старой встречи появились участники", legacyMeeting.length === 2);
+  check(
+    "уже нажатое «буду» перенеслось, а не обнулилось",
+    legacyMeeting.some((r) => r.response === "yes") && legacyMeeting.some((r) => r.response === "none"),
+  );
+
+  // Второй прогон не должен ничего задвоить: миграцию могут применить дважды.
+  await db.query(readFileSync(join(MIGRATIONS, "0021_backfill_participants.sql"), "utf8"));
+  const { rows: again } = await db.query("select id from public.task_participants where task_id = 'tsk_legacy'");
+  check("повторный перенос ничего не задваивает", again.length === 1);
+
   console.log("\nПриёмка:");
   try {
     await db.query("update public.tasks set approval_state = 'непонятно' where id = $1", [taskId]);
