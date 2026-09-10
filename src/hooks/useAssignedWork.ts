@@ -223,68 +223,50 @@ export function useAssignedWork(assigneeId: string) {
     };
   }, [fetchAll, reload]);
 
-  const accept = useCallback(
-    async (participantId: string) => {
-      const db = createClient();
-      await db.from("task_participants").update({ accepted_at: new Date().toISOString() }).eq("id", participantId);
+  // Все ответы идут через один серверный маршрут: он проверяет, что
+  // строка действительно твоя, применяет правила (комментарий обязателен,
+  // причина обязательна), переводит задачу на приёмку, когда отчитались
+  // все, и пишет владельцу. Писать это же из браузера значило бы иметь
+  // две реализации одного действия — и они разошлись бы за неделю.
+  const answer = useCallback(
+    async (payload: Record<string, unknown>) => {
+      const res = await fetch("/api/workspace/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.error) throw new Error(data?.error || "Не получилось отправить ответ");
       await reload();
     },
     [reload],
   );
 
-  // Отчёт без слов отчётом не является (B5) — поэтому комментарий приходит
-  // вместе с отметкой, а не «когда-нибудь потом».
+  const accept = useCallback(
+    (participantId: string) => answer({ action: "accept", participantId }),
+    [answer],
+  );
+
   const report = useCallback(
-    async (participantId: string, comment: string) => {
-      const db = createClient();
-      await db
-        .from("task_participants")
-        .update({ done_at: new Date().toISOString(), done_comment: comment, declined_at: null, decline_reason: null })
-        .eq("id", participantId);
-      await reload();
-    },
-    [reload],
+    (participantId: string, comment: string) => answer({ action: "done", participantId, comment }),
+    [answer],
   );
 
   const decline = useCallback(
-    async (participantId: string, reason: string) => {
-      const db = createClient();
-      await db
-        .from("task_participants")
-        .update({ declined_at: new Date().toISOString(), decline_reason: reason, done_at: null, done_comment: null })
-        .eq("id", participantId);
-      await reload();
-    },
-    [reload],
+    (participantId: string, reason: string) => answer({ action: "decline", participantId, comment: reason }),
+    [answer],
   );
 
-  // B6: срок двигает постановщик. Отсюда можно только попросить — и это
-  // закрыто не вежливостью интерфейса, а правами доступа к таблице задач.
   const askReschedule = useCallback(
-    async (participantId: string, to: string, reason: string) => {
-      const db = createClient();
-      await db
-        .from("task_participants")
-        .update({ reschedule_requested_at: new Date().toISOString(), reschedule_to: to || null, reschedule_reason: reason })
-        .eq("id", participantId);
-      await reload();
-    },
-    [reload],
+    (participantId: string, to: string, reason: string) =>
+      answer({ action: "reschedule", participantId, date: to || null, comment: reason }),
+    [answer],
   );
 
-  // Голос по встрече: тот же ответ, что кнопкой в мессенджере, и в тот же
-  // круг — иначе после переноса он засчитался бы за подтверждение нового
-  // времени, о котором человека не спрашивали.
   const vote = useCallback(
-    async (participantId: string, response: "yes" | "no", reason: string, round: number) => {
-      const db = createClient();
-      await db
-        .from("meeting_participants")
-        .update({ response, reason: reason || null, responded_at: new Date().toISOString(), round })
-        .eq("id", participantId);
-      await reload();
-    },
-    [reload],
+    (participantId: string, response: "yes" | "no", reason: string) =>
+      answer({ action: "vote", participantId, response, comment: reason }),
+    [answer],
   );
 
   // «Взять в работу»: мысль становится задачей на этого же человека, без

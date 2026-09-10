@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAssignedWork, type AssignedIdea, type AssignedMeeting, type AssignedTask } from "@/hooks/useAssignedWork";
@@ -62,14 +62,30 @@ export function ManagerScreenInner({
   meetings?: AssignedMeeting[];
   ideas?: AssignedIdea[];
   loading: boolean;
-  accept: (participantId: string) => void;
-  report: (participantId: string, comment: string) => void;
-  decline: (participantId: string, reason: string) => void;
-  askReschedule: (participantId: string, to: string, reason: string) => void;
-  vote?: (participantId: string, response: "yes" | "no", reason: string, round: number) => void;
-  takeIdea?: (recipientId: string, ideaId: string, text: string) => void;
+  accept: (participantId: string) => void | Promise<void>;
+  report: (participantId: string, comment: string) => void | Promise<void>;
+  decline: (participantId: string, reason: string) => void | Promise<void>;
+  askReschedule: (participantId: string, to: string, reason: string) => void | Promise<void>;
+  // Раунд не передаётся: его знает сервер, и он же единственный, кто
+  // может знать его наверняка в момент нажатия.
+  vote?: (participantId: string, response: "yes" | "no", reason: string) => void | Promise<void>;
+  takeIdea?: (recipientId: string, ideaId: string, text: string) => void | Promise<void>;
 }) {
   const router = useRouter();
+  const [failed, setFailed] = useState("");
+
+  // Ответ может не уйти — сеть, или сервер отказал (комментарий пустой,
+  // строка не твоя). Промолчать здесь значит оставить человека в
+  // уверенности, что он отчитался, а постановщика — в уверенности, что он
+  // молчит. Худшее из возможных недоразумений в этом трекере.
+  async function run(action: () => void | Promise<void>) {
+    setFailed("");
+    try {
+      await action();
+    } catch (e) {
+      setFailed(e instanceof Error ? e.message : "Не получилось отправить ответ");
+    }
+  }
 
   async function signOut() {
     await createClient().auth.signOut();
@@ -92,7 +108,7 @@ export function ManagerScreenInner({
       alert("Отчёт без слов — не отчёт. Напишите хотя бы коротко, что сделано.");
       return;
     }
-    report(t.participantId, comment.trim());
+    void run(() => report(t.participantId, comment.trim()));
   }
 
   function handleDecline(t: AssignedTask) {
@@ -102,7 +118,7 @@ export function ManagerScreenInner({
       alert("Причина обязательна — именно она даёт постановщику шанс что-то поправить.");
       return;
     }
-    decline(t.participantId, reason.trim());
+    void run(() => decline(t.participantId, reason.trim()));
   }
 
   function handleReschedule(t: AssignedTask) {
@@ -114,7 +130,7 @@ export function ManagerScreenInner({
       alert("Без причины это не просьба, а просто новая дата — напишите, что мешает.");
       return;
     }
-    askReschedule(t.participantId, to.trim(), reason.trim());
+    void run(() => askReschedule(t.participantId, to.trim(), reason.trim()));
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -164,7 +180,7 @@ export function ManagerScreenInner({
         {canAnswer(t) && (
           <div className="ms-actions">
             {!t.acceptedAt && (
-              <button className="btn btn-small btn-primary" type="button" onClick={() => accept(t.participantId)}>
+              <button className="btn btn-small btn-primary" type="button" onClick={() => void run(() => accept(t.participantId))}>
                 ✅ Принял
               </button>
             )}
@@ -224,6 +240,8 @@ export function ManagerScreenInner({
         </div>
       )}
 
+      {failed && <div className="auth-error">{failed}</div>}
+
       {loading && <div className="empty">Загрузка…</div>}
 
       {!loading && tasks.length === 0 && meetings.length === 0 && ideas.length === 0 && (
@@ -244,7 +262,7 @@ export function ManagerScreenInner({
             <div className="ms-card ms-idea" key={i.recipientId}>
               <div className="ms-card-desc" style={{ marginTop: 0 }}>{i.text}</div>
               <div className="ms-actions">
-                <button className="btn btn-small btn-primary" type="button" onClick={() => takeIdea(i.recipientId, i.ideaId, i.text)}>
+                <button className="btn btn-small btn-primary" type="button" onClick={() => void run(() => takeIdea(i.recipientId, i.ideaId, i.text))}>
                   ➕ Взять в работу
                 </button>
               </div>
@@ -276,7 +294,7 @@ export function ManagerScreenInner({
                 {answered && m.response === "no" && m.reason && <div className="ms-declined">Причина: {m.reason}</div>}
                 {!answered && vote && (
                   <div className="ms-actions">
-                    <button className="btn btn-small btn-primary" type="button" onClick={() => vote(m.participantId, "yes", "", m.meetingRound)}>
+                    <button className="btn btn-small btn-primary" type="button" onClick={() => void run(() => vote(m.participantId, "yes", ""))}>
                       ✅ Буду
                     </button>
                     <button
@@ -289,7 +307,7 @@ export function ManagerScreenInner({
                           alert("Причина обязательна: организатору важно знать, переносить встречу или нет.");
                           return;
                         }
-                        vote(m.participantId, "no", reason.trim(), m.meetingRound);
+                        void run(() => vote(m.participantId, "no", reason.trim()));
                       }}
                     >
                       ❌ Не смогу
