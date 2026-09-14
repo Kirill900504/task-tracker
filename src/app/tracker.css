@@ -91,7 +91,20 @@
   .btn-ghost{border:none; background:none; color:var(--ink-soft); padding:4px 6px;}
   .btn-ghost:hover{color:var(--accent); box-shadow:none;}
   .btn-small{padding:5px 10px; font-size:12px;}
+  /* A flex row rather than inline-blocks separated by whitespace: with an
+     icon-only button in the row the baseline alignment left it a pixel off,
+     and the gap is the same whether the row wraps or not. */
+  .header-btns{display:flex; flex-wrap:wrap; align-items:center; gap:6px;}
   .header-btns .btn{padding:6px 10px; font-size:12px;}
+  /* Icon-only header buttons (search, notifications): a square the same
+     height as the text buttons next to them, so the row stays on one line.
+     The label is in title/aria-label, never on screen. */
+  .btn-icon{padding:0; width:32px; height:32px; font-size:15px; line-height:1; display:inline-flex; align-items:center; justify-content:center;}
+  /* 28px is the height the text buttons next to it come out at with
+     their 6px padding — the two sit on exactly the same line. */
+  .header-btns .btn-icon{padding:0; width:30px; height:28px; font-size:14px;}
+  .btn-icon:disabled{cursor:default;}
+  .btn-icon:disabled:hover{box-shadow:none;}
   .btn.active{border-color:var(--accent); color:var(--accent); background:var(--accent-soft);}
 
   .layout{

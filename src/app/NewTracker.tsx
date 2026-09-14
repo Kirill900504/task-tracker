@@ -71,12 +71,9 @@ export default function NewTracker() {
     return () => clearInterval(timer);
   }, []);
 
-  // Header toggles for the calendar/ideas panels — same as legacy's
-  // calOpen/ideasOpen: hiding a panel also collapses the layout column it
-  // was sitting in (see DashboardLayout's hiddenPanels prop).
-  const [calOpen, setCalOpen] = useState(true);
-  const [ideasOpen, setIdeasOpen] = useState(true);
-
+  // The calendar and the ideas panel used to have header toggles (legacy's
+  // calOpen/ideasOpen). They are always on now: he never hid them, and the
+  // two buttons were only taking room away from the header.
 
   // "Показывать завершённые" is one shared toggle for done tasks AND
   // resolved meetings — see TasksPanel's prop comment.
@@ -119,10 +116,9 @@ export default function NewTracker() {
         return;
       }
       if (e.code === "KeyM") {
-        // The ideas panel can be collapsed — open it first, then put the
-        // cursor in its input once it has actually rendered.
+        // The ideas panel is always on screen now; the timeout stays because
+        // focus has to wait for the panel that may still be mounting.
         e.preventDefault();
-        setIdeasOpen(true);
         setTimeout(() => document.getElementById("ideaInput")?.focus(), 60);
         return;
       }
@@ -257,9 +253,8 @@ export default function NewTracker() {
       setOpenExistingMeetingId(result.id);
       return;
     }
-    // An idea has no card of its own — show it where it lives, opening the
-    // panel (and the completed list, for one already ticked off) if needed.
-    setIdeasOpen(true);
+    // An idea has no card of its own — show it where it lives, unfolding the
+    // completed list first for one that is already ticked off.
     if (result.done) setShowDone(true);
     setHighlightIdeaId(result.id);
     setTimeout(() => {
@@ -556,18 +551,32 @@ export default function NewTracker() {
             </div>
           </div>
           <div className="header-btns">
-            <button className="btn" id="searchBtn" title="Поиск по трекеру (/)" onClick={() => setSearchOpen(true)}>
-              🔍 Поиск
-            </button>
-            <button className={"btn" + (ideasOpen ? " active" : "")} id="ideasToggleBtn" onClick={() => setIdeasOpen((v) => !v)}>
-              💡 Идеи
-            </button>
-            <button className={"btn" + (calOpen ? " active" : "")} id="calToggleBtn" onClick={() => setCalOpen((v) => !v)}>
-              📅 Календарь
+            {/* Search and notifications are icons only: the words were the
+                widest thing in the header and said nothing the 🔍 and the
+                bell don't. The label lives in title/aria-label, so the
+                hover tooltip and a screen reader still name the button. */}
+            <button className="btn btn-icon" id="searchBtn" title="Поиск по трекеру (/)" aria-label="Поиск по трекеру" onClick={() => setSearchOpen(true)}>
+              🔍
             </button>
             {notifications.permission !== "unsupported" && (
-              <button className="btn" id="notifPermBtn" onClick={notifications.requestPermission}>
-                {notifications.permission === "granted" ? "🔔 Уведомления включены" : "🔔 Включить уведомления"}
+              <button
+                className={"btn btn-icon" + (notifications.permission === "granted" ? " active" : "")}
+                id="notifPermBtn"
+                // Granted is a dead end — the browser ignores a second
+                // request — so the bell stops being a button and just
+                // reports that notifications are on.
+                disabled={notifications.permission === "granted"}
+                title={
+                  notifications.permission === "granted"
+                    ? "Уведомления включены"
+                    : notifications.permission === "denied"
+                      ? "Уведомления запрещены в настройках браузера для этого сайта"
+                      : "Включить уведомления"
+                }
+                aria-label={notifications.permission === "granted" ? "Уведомления включены" : "Включить уведомления"}
+                onClick={notifications.requestPermission}
+              >
+                {notifications.permission === "granted" ? "🔔" : "🔕"}
               </button>
             )}
             {installPrompt.visible && (
@@ -608,7 +617,6 @@ export default function NewTracker() {
       <DashboardLayout
         layout={panelLayout}
         onLayoutChange={actions.savePanelLayout}
-        hiddenPanels={[...(calOpen ? [] : ["calPanel"]), ...(ideasOpen ? [] : ["ideasPanel"])]}
         panels={panels}
       />
         </>
