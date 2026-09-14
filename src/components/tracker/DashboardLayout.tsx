@@ -20,16 +20,10 @@ export default function DashboardLayout({
   layout,
   onLayoutChange,
   panels,
-  hiddenPanels = [],
 }: {
   layout: PanelLayout;
   onLayoutChange: (next: PanelLayout) => void;
   panels: Record<string, ReactElement<PanelDragProps>>;
-  // Panels toggled off from the header (calendar/ideas). Port of legacy's
-  // updateLayoutColumns(): a hidden panel is not rendered, and a side zone
-  // left with nothing visible collapses to 0px so the middle column takes
-  // the freed width instead of leaving a blank gutter.
-  hiddenPanels?: string[];
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [indicator, setIndicator] = useState<{ zone: ZoneName; beforeId: string | null } | null>(null);
@@ -72,7 +66,10 @@ export default function DashboardLayout({
     onLayoutChange(next);
   }
 
-  const visibleIn = (zone: ZoneName) => layout[zone].filter((id) => !hiddenPanels.includes(id) && panels[id]);
+  // Port of legacy's updateLayoutColumns(): a side zone with nothing in it
+  // collapses to 0px so the middle column takes the freed width instead of
+  // leaving a blank gutter.
+  const visibleIn = (zone: ZoneName) => layout[zone].filter((id) => panels[id]);
   const gridTemplateColumns = [visibleIn("left").length ? "300px" : "0px", "1fr", visibleIn("right").length ? "320px" : "0px"].join(" ");
 
   return (
@@ -90,7 +87,7 @@ export default function DashboardLayout({
         >
           {layout[zone].map((panelId) => {
             const el = panels[panelId];
-            if (!el || !isValidElement(el) || hiddenPanels.includes(panelId)) return null;
+            if (!el || !isValidElement(el)) return null;
             const injectedProps: PanelDragProps = {
               dragHandleProps: {
                 onDragStart: (e: DragEvent) => {
