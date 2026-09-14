@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { maxBotInfo, subscribeMaxWebhook } from "@/lib/max";
 import { forgetMaxSettings } from "@/lib/botSettings";
+import { ensureBotSettingsTable, looksLikeMissingTable } from "@/lib/ensureBotSettings";
 
 // Подключение бота MAX — целиком, одним действием.
 //
@@ -53,27 +54,39 @@ async function requireOwner(): Promise<{ ok: true; userId: string } | { ok: fals
 
 type Public = { connected: boolean; username: string; name: string; connectedAt: string | null };
 
-async function currentState(): Promise<Public> {
+// Первое обращение к странице заводит таблицу, если её ещё нет: применять
+// миграцию отдельно — это ещё один экран для того, кому и одного много
+// (см. ensureBotSettings.ts). Дальше это обычное чтение.
+async function currentState(): Promise<{ state: Public } | { error: string }> {
   const admin = createAdminClient();
-  const { data } = await admin
-    .from("bot_settings")
-    .select("max_bot_token, max_bot_username, max_bot_name, max_connected_at")
-    .eq("id", true)
-    .maybeSingle();
+  const columns = "max_bot_token, max_bot_username, max_bot_name, max_connected_at";
+  let { data, error } = await admin.from("bot_settings").select(columns).eq("id", true).maybeSingle();
+
+  if (error && looksLikeMissingTable(error)) {
+    const created = await ensureBotSettingsTable();
+    if (!created.ok) return { error: created.error };
+    ({ data, error } = await admin.from("bot_settings").select(columns).eq("id", true).maybeSingle());
+  }
+  if (error) return { error: error.message };
+
   const row = data as Record<string, string | null> | null;
   return {
-    // Сам токен наружу не отдаётся никогда — ни целиком, ни куском.
-    connected: !!row?.max_bot_token,
-    username: row?.max_bot_username || "",
-    name: row?.max_bot_name || "",
-    connectedAt: row?.max_connected_at || null,
+    state: {
+      // Сам токен наружу не отдаётся никогда — ни целиком, ни куском.
+      connected: !!row?.max_bot_token,
+      username: row?.max_bot_username || "",
+      name: row?.max_bot_name || "",
+      connectedAt: row?.max_connected_at || null,
+    },
   };
 }
 
 export async function GET() {
   const auth = await requireOwner();
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
-  return NextResponse.json(await currentState());
+  const result = await currentState();
+  if ("error" in result) return NextResponse.json({ error: result.error }, { status: 500 });
+  return NextResponse.json(result.state);
 }
 
 export async function POST(req: Request) {
@@ -90,7 +103,8 @@ export async function POST(req: Request) {
       .eq("id", true);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     forgetMaxSettings();
-    return NextResponse.json(await currentState());
+    const after = await currentState();
+    return NextResponse.json("error" in after ? { error: after.error } : after.state);
   }
 
   // Токен переживает копирование из мессенджера: лишние пробелы и перевод
@@ -98,6 +112,11 @@ export async function POST(req: Request) {
   // человека искать несуществующую ошибку.
   const token = (body?.token || "").trim();
   if (!token) return NextResponse.json({ error: "Вставьте токен, который выдал MasterBot" }, { status: 400 });
+
+  // Таблица должна существовать ДО того, как мы пойдём в MAX: иначе бот
+  // окажется подписан на вебхук, а токен сохранить будет некуда.
+  const ready = await currentState();
+  if ("error" in ready) return NextResponse.json({ error: ready.error }, { status: 500 });
 
   const info = await maxBotInfo(token);
   if (!info.ok) {
@@ -134,5 +153,7 @@ export async function POST(req: Request) {
 
   // Иначе минуту после подключения всё ещё действует «бота нет».
   forgetMaxSettings();
-  return NextResponse.json({ ...(await currentState()), webhook: url });
+  const after = await currentState();
+  if ("error" in after) return NextResponse.json({ error: after.error }, { status: 500 });
+  return NextResponse.json({ ...after.state, webhook: url });
 }

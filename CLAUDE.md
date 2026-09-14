@@ -165,6 +165,12 @@ by a running `next start` (and by OneDrive) — stop the server first.
   learns the bot exists through `useMaxBot()`. The token is not merely
   policy-protected: column privileges on `bot_settings` mean PostgREST
   cannot select it at all, and `npm run test:schema` proves it.
+  Migration 0022 is the one migration that **applies itself**: the setup
+  route notices the table is missing and runs the same DDL over
+  `DATABASE_URL` (`ensureBotSettings.ts`, fixed and idempotent — never
+  arbitrary SQL, and a test keeps the embedded copy identical to the file).
+  Otherwise connecting a bot would have meant a trip to the SQL editor
+  first, which is the same wrong answer in a different panel.
   The reason it is not three Vercel environment variables is the rule at the
   top of this file: that is four screens of somebody else's control panel.
 - Colleagues are recipients, not users. Making them real users who exchange
