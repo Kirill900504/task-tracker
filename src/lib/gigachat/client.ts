@@ -1,19 +1,11 @@
 import https from "node:https";
-import tls from "node:tls";
-import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
+import { russianCaAgent as agent } from "@/lib/russianCa";
 
 // GigaChat's servers use a certificate chain issued by the Russian Ministry
 // of Digital Development's own root CA, which isn't in Node's default trust
-// store. We extend (not replace) Node's normal trusted CA list with that one
-// root cert, scoped to a dedicated Agent — every other HTTPS call in the app
-// keeps using the standard public CA list untouched.
-const RUSSIAN_ROOT_CA = fs.readFileSync(
-  path.join(process.cwd(), "certs", "russian-trusted-root-ca.pem"),
-  "utf-8",
-);
-const agent = new https.Agent({ ca: [...tls.rootCertificates, RUSSIAN_ROOT_CA] });
+// store. That agent carries the root; it moved to russianCa.ts when MAX
+// turned out to need exactly the same thing.
 
 function httpsRequest(
   url: string,

@@ -1,5 +1,6 @@
 import type { BotButton, BotSendResult, BotTransport } from "@/lib/botTransport";
 import { maxSettings } from "@/lib/botSettings";
+import { russianFetch } from "@/lib/russianCa";
 
 // MAX (max.ru) Bot API.
 //
@@ -11,7 +12,12 @@ import { maxSettings } from "@/lib/botSettings";
 //   * buttons are an `inline_keyboard` ATTACHMENT rather than a reply markup,
 //     and carry `payload` where Telegram carries callback_data;
 //   * a pressed button is answered with POST /answers?callback_id=..., which
-//     replaces the message rather than showing a toast.
+//     replaces the message rather than showing a toast;
+//   * and `*.max.ru` is signed by the Russian Ministry of Digital
+//     Development's root CA, which Node does not trust — hence russianFetch
+//     rather than fetch. Without it every call here dies as «fetch failed»
+//     on the server while working perfectly from a Russian laptop, which is
+//     the most misleading shape a bug can have.
 //
 // Everything is best-effort in the same way as the Telegram side: a failed
 // send is reported back (a colleague has to be told their message did not
@@ -68,7 +74,7 @@ export async function sendMaxMessage(userId: number, text: string, options?: { b
   const settings = await maxSettings();
   if (!settings) return { ok: false, error: "MAX не подключён" };
   try {
-    const res = await fetch(`${API}/messages?user_id=${userId}`, {
+    const res = await russianFetch(`${API}/messages?user_id=${userId}`, {
       method: "POST",
       headers: headers(settings.token),
       body: JSON.stringify({
@@ -88,7 +94,7 @@ export async function editMaxMessage(messageId: string, text: string): Promise<v
   const settings = await maxSettings();
   if (!settings) return;
   try {
-    await fetch(`${API}/messages?message_id=${encodeURIComponent(messageId)}`, {
+    await russianFetch(`${API}/messages?message_id=${encodeURIComponent(messageId)}`, {
       method: "PUT",
       headers: headers(settings.token),
       // An empty attachment list is what removes the buttons — the point of
@@ -107,7 +113,7 @@ export async function answerMaxCallback(callbackId: string, replacementText?: st
   const settings = await maxSettings();
   if (!settings) return;
   try {
-    await fetch(`${API}/answers?callback_id=${encodeURIComponent(callbackId)}`, {
+    await russianFetch(`${API}/answers?callback_id=${encodeURIComponent(callbackId)}`, {
       method: "POST",
       headers: headers(settings.token),
       body: JSON.stringify(replacementText ? { message: { text: clip(replacementText), attachments: [] } } : {}),
@@ -145,7 +151,7 @@ export function maxTransport(): BotTransport {
 // its own username is still not enough to connect anybody.
 export async function maxBotInfo(token: string): Promise<{ ok: true; username: string; name: string } | { ok: false; error: string }> {
   try {
-    const res = await fetch(`${API}/me`, { headers: headers(token) });
+    const res = await russianFetch(`${API}/me`, { headers: headers(token) });
     if (!res.ok) return { ok: false, error: await errorText(res) };
     const body = (await res.json().catch(() => null)) as Record<string, string> | null;
     if (!body) return { ok: false, error: "MAX ответил пустотой" };
@@ -164,7 +170,7 @@ export async function subscribeMaxWebhook(
 ): Promise<{ ok: boolean; error?: string }> {
   if (!token) return { ok: false, error: "Токен MAX не задан" };
   try {
-    const res = await fetch(`${API}/subscriptions`, {
+    const res = await russianFetch(`${API}/subscriptions`, {
       method: "POST",
       headers: headers(token),
       body: JSON.stringify({ url, update_types: updateTypes, secret }),
