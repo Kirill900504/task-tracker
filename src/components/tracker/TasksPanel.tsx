@@ -36,6 +36,7 @@ export default function TasksPanel({
   onOpenExistingHandled,
   onIdeaDropped,
   onTaskToMeeting,
+  onScheduleMeetingFor,
   justCreatedId,
   notifBanner,
   extraBanner,
@@ -76,6 +77,8 @@ export default function TasksPanel({
   // «Назначить встречу» from a card's menu — the phone's version of
   // dragging the task onto a calendar day.
   onTaskToMeeting?: (taskId: string) => void;
+  // То же самое из формы задачи, где известен и полный состав участников.
+  onScheduleMeetingFor?: (task: Task, participants: string[]) => void;
   justCreatedId?: string | null;
   notifBanner?: string | null;
   // Rendered under the notification banner, in the same slot legacy's
@@ -481,6 +484,7 @@ export default function TasksPanel({
             await participants.clearRescheduleRequest(participantId);
           }}
           onRejectReschedule={(participantId) => void participants.clearRescheduleRequest(participantId)}
+          onScheduleMeeting={onScheduleMeetingFor ? (t, people) => onScheduleMeetingFor(t, people) : undefined}
           onForceCloseWork={async (reason) => {
             if (!modalTask) return;
             try {

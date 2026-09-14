@@ -72,6 +72,7 @@ export default function TaskModal({
   onForceCloseWork,
   onAcceptReschedule,
   onRejectReschedule,
+  onScheduleMeeting,
 }: {
   task: Task | null;
   prefill?: TaskPrefill;
@@ -94,6 +95,9 @@ export default function TaskModal({
   onForceCloseWork: (reason: string) => void;
   onAcceptReschedule: (participantId: string, date: string) => void;
   onRejectReschedule: (participantId: string) => void;
+  // «Назначить встречу по задаче» (C5). Задача остаётся задачей: встреча —
+  // это то, где по ней соберутся, а не то, чем она станет.
+  onScheduleMeeting?: (task: Task, participants: string[]) => void;
 }) {
   const { colleagues } = useColleagues();
   const [sendState, setSendState] = useState("");
@@ -244,6 +248,23 @@ export default function TaskModal({
             это вообще», её читают бот, сводка и все прежние экраны. Список
             ниже — то, чего строкой не выразить: несколько исполнителей,
             каждый со своим отчётом, плюс соисполнители и наблюдатели. */}
+        {task && onScheduleMeeting && (
+          <button
+            type="button"
+            className="btn btn-small tp-meeting"
+            onClick={() =>
+              onScheduleMeeting(
+                task,
+                // Зовём тех, кто на задаче, а не одно имя из поля: собираются
+                // по задаче обычно всем составом.
+                [...new Set([form.assignee, ...participants.filter((p) => p.role !== "watcher").map((p) => p.name)])].filter(Boolean),
+              )
+            }
+          >
+            📅 Назначить встречу по задаче
+          </button>
+        )}
+
         {task ? (
           <TaskParticipants
             taskId={task.id}

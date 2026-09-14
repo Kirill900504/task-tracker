@@ -199,7 +199,14 @@ export default function NewTracker() {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
     setPendingIdeaConversion(null);
-    setOpenMeetingRequest({ title: task.title, date, time: "10:00", participants: task.assignee ? [task.assignee] : [] });
+    setOpenMeetingRequest({
+      title: task.title,
+      date,
+      time: "10:00",
+      participants: task.assignee ? [task.assignee] : [],
+      fromTaskId: task.id,
+      fromTaskTitle: task.title,
+    });
   }
 
   function requestedMeetingSaved(meeting: Meeting) {
@@ -385,6 +392,16 @@ export default function NewTracker() {
             onOpenTaskHandled={() => setOpenTaskRequest(null)}
             onIdeaDropped={convertIdeaToTask}
             onTaskToMeeting={(id) => taskDroppedOnDate(id, selectedDate ?? todayStr())}
+            onScheduleMeetingFor={(task, people) =>
+              setOpenMeetingRequest({
+                title: task.title,
+                date: selectedDate ?? todayStr(),
+                time: "10:00",
+                participants: people,
+                fromTaskId: task.id,
+                fromTaskTitle: task.title,
+              })
+            }
             justCreatedId={justCreatedTaskId}
             notifBanner={notifications.bannerText}
             extraBanner={

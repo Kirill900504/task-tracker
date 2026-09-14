@@ -100,6 +100,12 @@ export interface MeetingPrefill {
   date?: string;
   time?: string;
   participants?: string[];
+  // Из какой задачи выросла эта встреча. Задачу нельзя «превратить» во
+  // встречу — она никуда не девается; но по задаче собираются, и через
+  // месяц полезно помнить, когда именно (C5). Связь записывается строкой
+  // в обсуждение обоих — без новой колонки и сразу человеку видимая.
+  fromTaskId?: string;
+  fromTaskTitle?: string;
 }
 
 export interface PanelLayout {

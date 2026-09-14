@@ -11,6 +11,7 @@ import { useMeetingVotes } from "@/hooks/useMeetingVotes";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import { voteTally } from "@/lib/meetingVotes";
 import { isQuietHour } from "@/lib/quietHours";
+import { linkTaskAndMeeting } from "@/lib/itemLink";
 import type { useToasts } from "@/hooks/useToasts";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
@@ -98,6 +99,15 @@ export default function MeetingsPanel({
       }).catch(() => {});
     });
     if (before) void bumpVoteRoundIfMoved(m.id, before, m);
+
+    // Встреча, выросшая из задачи: отметка в обсуждении обеих. Строка в
+    // переписке, а не колонка в базе, — потому что читать это будет
+    // человек, а не запрос, и видно её там же, где всё остальное по делу.
+    const from = !before ? modalPrefill?.fromTaskId : undefined;
+    if (from) {
+      const when = `${m.date.split("-").reverse().join(".")}${m.time ? ", " + m.time : ""}`;
+      void linkTaskAndMeeting(from, modalPrefill?.fromTaskTitle || "", m.id, m.title, when);
+    }
     // Runs before closeModal() (the modal saves, then closes), so the
     // request is still open here and this only fires for requested opens.
     if (!modalState.open && openMeetingRequest !== null) onRequestedMeetingSaved?.(m);
