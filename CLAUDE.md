@@ -156,8 +156,9 @@ by a running `next start` (and by OneDrive) — stop the server first.
   a fresh task or meeting has to wait for it, or the foreign key silently
   eats the row.
 - **MAX is connected from inside the tracker, not from Vercel.** `/max` is a
-  page he can be handed as a link: he pastes the token MasterBot gave him in
-  the MAX app, and `/api/max/setup` checks it, reads the bot's @username,
+  page he can be handed as a link: he pastes the token the MAX for business
+  cabinet (business.max.ru) gave him — MasterBot stopped creating bots in
+  September 2026 — and `/api/max/setup` checks it, reads the bot's @username,
   invents the webhook secret, subscribes the webhook and stores all of it in
   `bot_settings` (migration 0022, one row per install). Everything
   server-side reads the token through `maxSettings()` — env vars still win,
