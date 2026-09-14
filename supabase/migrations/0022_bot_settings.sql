@@ -37,7 +37,7 @@ create table if not exists public.bot_settings (
 comment on table public.bot_settings is
   'Настройки ботов на всю установку. Ровно одна строка (id = true).';
 comment on column public.bot_settings.max_bot_token is
-  'Токен бота MAX. Читается только service-role клиентом; для authenticated права на эту колонку отозваны.';
+  'Токен бота MAX. Читается только service-role клиентом — для authenticated права на эту колонку отозваны.';
 
 alter table public.bot_settings enable row level security;
 
