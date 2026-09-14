@@ -192,15 +192,25 @@ by a running `next start` (and by OneDrive) — stop the server first.
   the way in and would bite again: Vercel has **no `DATABASE_URL`**, so the
   self-applying migration could not apply itself and 0022 went in with
   `scripts/run-migration.mjs` from here; and every call to MAX failed on the
-  root CA (see the rule above). Editing a published bot sends it back through
-  moderation, which is why the mini-app link is not set yet.
+  root CA (see the rule above).
+- **The mini-app link is deliberately empty.** It would be
+  `https://task-tracker-beta-ebon.vercel.app` with the «Открыть» button, and
+  the cabinet says plainly that editing a published bot requires moderation
+  again — the documentation nowhere says whether the bot keeps answering
+  while that runs, and neither does the platform. He was asked on 14.09.2026
+  and chose to live with the bot first and add the mini-app when a day of
+  silence would not hurt. Do not set it on your own initiative.
 - Colleagues are recipients, not users. Making them real users who exchange
   items with each other is his own next big idea, deliberately deferred.
 - Offered and not yet decided: sending a task to Telegram automatically when
   an assignee is set (today it is the ✈ button).
-- Known gaps: the nightly backup goes to Telegram only (MAX file upload not
-  implemented); voice notes in MAX are transcribed only if they arrive as
-  OGG/Opus.
+- Known gap, and it is smaller than it sounds: a voice note is transcribed
+  only if it arrives as OGG/Opus, in either messenger. That is what both
+  messengers' own recorders produce — the format that is refused is a
+  forwarded music file, and the bot says so rather than failing silently.
+  Closing it means shipping a second WASM decoder into the same serverless
+  function whose loading story already fills half of `speechToText.ts`; that
+  is a bad trade for forwarded MP3s, so it is a decision, not an oversight.
 
 Environment (Vercel + `.env.local`): `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`,
