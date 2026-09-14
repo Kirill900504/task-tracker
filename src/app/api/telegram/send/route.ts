@@ -74,8 +74,24 @@ export async function POST(req: Request) {
     if (!linked.length) {
       return NextResponse.json({ error: nobodyReachable(unlinked, "Некому отправлять") }, { status: 400 });
     }
+    // Роль каждого на этой задаче: наблюдателю уходит то же сообщение, но
+    // без кнопок ответа.
+    const { data: roleRows } = await admin
+      .from("task_participants")
+      .select("assignee_id, role")
+      .eq("task_id", task.id)
+      .in("assignee_id", linked.map((p) => p.id));
+    const roleOf = new Map<string, "executor" | "coexecutor" | "watcher">();
+    for (const r of ((roleRows || []) as { assignee_id: string; role: "executor" | "coexecutor" | "watcher" }[])) {
+      roleOf.set(r.assignee_id, r.role);
+    }
+
     for (const person of linked) {
-      const result = await sendToColleague(person.target, taskMessage(task, from), taskButtons(task.id as string));
+      const result = await sendToColleague(
+        person.target,
+        taskMessage(task, from),
+        taskButtons(task.id as string, roleOf.get(person.id) || "executor"),
+      );
       if (result.ok) sentTo.push(person.name);
       else failed.push(`${person.name} (${result.error})`);
     }

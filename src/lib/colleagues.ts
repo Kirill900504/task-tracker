@@ -67,7 +67,12 @@ export function ideaMessage(text: string, from: string): string {
 // когда всё идёт хорошо; человеку, который не может, раньше оставалось
 // молчать — а молчание и есть тот сбой, ради устранения которого всё это
 // затевалось. Причина спрашивается следом, отдельным сообщением.
-export function taskButtons(taskId: string): BotButton[][] {
+export function taskButtons(taskId: string, role: "executor" | "coexecutor" | "watcher" = "executor"): BotButton[][] {
+  // Наблюдателя не спрашивают — его поставили знать, а не отвечать. Кнопка
+  // «Сделал» у него означала бы отчёт, которого от него никто не ждёт, и
+  // постановщик получил бы сообщение, будто работу сделал человек, которого
+  // на неё не ставили.
+  if (role === "watcher") return [];
   return [
     [
       { text: "✅ Принял", data: encodeCallback("task", "acc", taskId) },

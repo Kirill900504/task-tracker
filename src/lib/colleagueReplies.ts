@@ -72,6 +72,13 @@ export async function handleColleagueCallback(
     const participant = part as { id: string; role: string; done_at: string | null } | null;
     if (!participant && task.assignee !== colleague.name) return { toast: "Эта задача уже не ваша" };
 
+    // Роль проверяется здесь, а не только при отправке: кнопка могла
+    // прийти раньше, чем человека перевели в наблюдатели, а нажатие живёт
+    // в сообщении сколько угодно.
+    if (participant && participant.role === "watcher") {
+      return { toast: "Вы на этой задаче наблюдатель — отвечать не нужно" };
+    }
+
     if (action.action === "acc") {
       if (participant) {
         await admin.from("task_participants").update({ accepted_at: new Date().toISOString() }).eq("id", participant.id);

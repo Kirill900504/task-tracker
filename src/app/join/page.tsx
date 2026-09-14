@@ -87,6 +87,17 @@ function JoinForm() {
       return;
     }
 
+    // Уже вошедшему входить второй раз нечем и незачем: приглашение
+    // привязалось к его текущей сессии, а пароль в поле — от другого
+    // аккаунта или пустой, и попытка входа выдала бы ошибку на ровном
+    // месте.
+    if (data.alreadySignedIn) {
+      setBusy(false);
+      router.push("/");
+      router.refresh();
+      return;
+    }
+
     // The account exists now; signing in is the ordinary path, so there is
     // no special "just registered" session to reason about anywhere else.
     const supabase = createClient();

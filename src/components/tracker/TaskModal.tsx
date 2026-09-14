@@ -378,7 +378,17 @@ export default function TaskModal({
 
         {sendState && <div className="send-result" id="taskSendResult">{sendState}</div>}
         {sendAt && task && (
-          <SendMenu kind="task" id={task.id} concerns={[form.assignee]} anchor={sendAt} onClose={() => setSendAt(null)} onResult={setSendState} />
+          <SendMenu
+            kind="task"
+            id={task.id}
+            /* Все, кто на задаче, а не только имя из поля: меню ставит
+               «кого это касается» вперёд, и после того как исполнителей
+               стало несколько, один из них перестал быть всем списком. */
+            concerns={[form.assignee, ...participants.map((p) => p.name)].filter(Boolean)}
+            anchor={sendAt}
+            onClose={() => setSendAt(null)}
+            onResult={setSendState}
+          />
         )}
 
         <div className="modal-actions">
