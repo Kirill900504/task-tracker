@@ -39,8 +39,10 @@ function systemPrompt(now: Date, assignees: string[]) {
     "В одной фразе может быть НЕСКОЛЬКО разных поручений сразу (например: задача + две мысли + встреча одним сообщением) — тогда верни несколько элементов массива, по одному на каждое отдельное поручение. Если поручение одно — в массиве всё равно один элемент.",
     "Каждый элемент массива — отдельный JSON-объект, поле type определяет его структуру — используй ровно одну из десяти:",
     "",
-    '1) {"type":"task","title":string,"description":string,"assignee":string,"priority":"high"|"med","term":"short"|"long","deadline":string}',
+    '1) {"type":"task","title":string,"description":string,"assignee":string,"executors":string[],"priority":"high"|"med","term":"short"|"long","deadline":string}',
     "   — что-то, что нужно сделать. assignee: СКОПИРУЙ имя буква-в-букву из списка исполнителей выше. Если точного совпадения нет — пустая строка. Категорически запрещено писать любое имя, которого нет в списке дословно.",
+    "   executors: ОСТАЛЬНЫЕ исполнители той же задачи, если их несколько, теми же именами из списка. Обычно пустой массив.",
+    "   ОДНА задача на нескольких человек — это ОДИН объект: первый исполнитель в assignee, остальные в executors. НИКОГДА не создавай несколько одинаковых задач, по одной на каждого человека.",
     "   priority: high — если явно важно/срочно, иначе med. term: long — если срок дальше месяца или явно долгосрочная задача, иначе short.",
     "   deadline: дата из таблицы выше в формате YYYY-MM-DD. Пустая строка, если дата не названа.",
     "",
@@ -86,7 +88,12 @@ function systemPrompt(now: Date, assignees: string[]) {
     "   Никогда не повторяй и не пересказывай его сообщение.",
     "",
     "Примеры формы ответа:",
-    'Одно поручение → [{"type":"task","title":"...","description":"","assignee":"","priority":"med","term":"short","deadline":""}]',
+    'Одно поручение → [{"type":"task","title":"...","description":"","assignee":"","executors":[],"priority":"med","term":"short","deadline":""}]',
+    // Два имени в одной задаче модель уверенно понимала как две задачи —
+    // и заводила два одинаковых поручения, по одному на человека. Пример
+    // с ответом нужнее любого запрета: он показывает форму.
+    '«сделайте вдвоём с Никитой» (одна задача, двое) → [{"type":"task","title":"...","description":"","assignee":"Игорь Витковский","executors":["Никита Козлов"],"priority":"med","term":"short","deadline":""}]',
+    '«Игорю — смету, Никите — остатки» (два разных дела) → [{"type":"task","title":"смета",...,"assignee":"Игорь Витковский","executors":[]}, {"type":"task","title":"остатки",...,"assignee":"Никита Козлов","executors":[]}]',
     'Несколько поручений одной фразой → [{"type":"task",...}, {"type":"idea",...}, {"type":"idea",...}, {"type":"meeting",...}]',
     // The question type needs its own example: without one the model kept
     // trying to *answer* counting questions ("сколько задач на Наталье?") in
@@ -179,15 +186,21 @@ export function sanitizeAgainstKnown(input: Record<string, unknown>, known: stri
     if (!resolved) dropped.push(input.assignee);
     input.assignee = resolved || "";
   }
-  if (Array.isArray(input.participants)) {
+  // Участники встречи и соисполнители задачи чистятся одинаково: и то и
+  // другое — список имён, которых в трекере может не оказаться.
+  for (const field of ["participants", "executors"]) {
+    const value = input[field];
+    if (!Array.isArray(value)) continue;
     const kept: string[] = [];
-    for (const n of input.participants) {
+    for (const n of value) {
       if (typeof n !== "string") continue;
       const resolved = resolveKnownName(n, known);
       if (resolved && !kept.includes(resolved)) kept.push(resolved);
       else if (!resolved) dropped.push(n);
     }
-    input.participants = kept;
+    // Тот, кто уже стоит исполнителем, не должен попасть в список второй
+    // раз: строка участия на человека одна, и вторая вставка — ошибка.
+    input[field] = field === "executors" ? kept.filter((n) => n !== input.assignee) : kept;
   }
   return dropped;
 }

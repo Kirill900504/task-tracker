@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig, BotTransport } from "@/lib/botTransport";
 import { colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
-import { findColleagueByChat } from "@/lib/colleagues";
-import { notifyOwner } from "@/lib/botDelivery";
+import { chatsFor, findColleagueByChat, taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
+import { notifyOwner, sendToColleague } from "@/lib/botDelivery";
+import { isSelfAssignee } from "@/lib/trackerRows";
+import { isQuietHour } from "@/lib/quietHours";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
@@ -57,6 +59,60 @@ async function remember(ctx: BotContext, patch: Record<string, unknown>) {
   await ctx.admin.from(ctx.channel.accountsTable).update(patch).eq(ctx.channel.chatColumn, ctx.chatId);
 }
 
+// Как зовут владельца в глазах исполнителя. Своя строка в списке людей
+// помечена «(я)» — из неё и берётся имя, потому что «Задача от трекера»
+// не говорит человеку ничего о том, кто с него спросит.
+async function ownerName(ctx: BotContext, userId: string): Promise<string> {
+  const { data } = await ctx.admin.from("assignees").select("name").eq("user_id", userId);
+  const self = ((data || []) as { name: string }[]).find((a) => isSelfAssignee(a.name));
+  return self ? self.name.replace(/\(я\)\s*$/, "").trim() || "трекера" : "трекера";
+}
+
+// Задача на нескольких человек — одна задача.
+//
+// До этого бот знал только поле assignee: фраза «поручи Игорю и Никите»
+// превращалась в две одинаковые задачи, по одной на каждого, и связь между
+// ними терялась вместе со смыслом («сделайте вдвоём»). Теперь имена
+// приходят списком (см. executors в quickAdd), и каждому заводится своя
+// строка участия — та же, что появляется при постановке задачи из трекера.
+//
+// Здесь же человек и узнаёт о задаче. «Назначена» — уведомление, которое
+// нельзя выключить: поставить задачу и не сказать — это ровно тот случай,
+// ради которого всё это затевалось. Ночью трекер молчит, задача придёт
+// утренней сводкой.
+async function attachAndNotifyExecutors(
+  ctx: BotContext,
+  userId: string,
+  task: { id: string; title: string; description: string; deadline: string | null; priority: string },
+  names: string[],
+): Promise<string[]> {
+  const wanted = [...new Set(names.filter(Boolean))];
+  if (!wanted.length) return [];
+
+  const { data } = await ctx.admin
+    .from("assignees")
+    .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username")
+    .eq("user_id", userId)
+    .in("name", wanted);
+  const people = (data || []) as ColleagueRow[];
+  if (!people.length) return [];
+
+  await ctx.admin
+    .from("task_participants")
+    .insert(people.map((person) => ({ task_id: task.id, assignee_id: person.id, role: "executor" })));
+
+  if (isQuietHour()) return people.map((p) => p.name);
+
+  const from = await ownerName(ctx, userId);
+  for (const person of people) {
+    if (isSelfAssignee(person.name)) continue;
+    const target = chatsFor(person)[0];
+    if (!target) continue;
+    await sendToColleague(target, taskMessage(task, from), taskButtons(task.id, "executor"));
+  }
+  return people.map((p) => p.name);
+}
+
 async function respondToTool(ctx: BotContext, userId: string, tool: string, input: Record<string, unknown>, droppedNames: string[]) {
   if (tool === "create_task") {
     const row = {
@@ -68,7 +124,7 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
       priority: input.priority === "high" ? "high" : "med",
       term: input.term === "long" ? "long" : "short",
       status: "in_progress",
-      deadline: input.deadline || null,
+      deadline: (input.deadline as string) || null,
       recur: "none",
     };
     const { error } = await ctx.admin.from("tasks").insert(row);
@@ -76,9 +132,17 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
       await say(ctx, "Не получилось сохранить задачу: " + error.message);
       return;
     }
+
+    const extra = Array.isArray(input.executors) ? (input.executors as unknown[]).filter((n): n is string => typeof n === "string") : [];
+    const attached = await attachAndNotifyExecutors(ctx, userId, row, [row.assignee, ...extra]);
+
     const lines = [`✓ Задача: «${row.title}»`];
     if (row.deadline) lines.push("Срок: " + fmtDate(row.deadline as string));
-    if (row.assignee) lines.push("Исполнитель: " + row.assignee);
+    // Множественное число не украшение: «Исполнитель: Игорь» под задачей,
+    // которая стоит на двоих, — это и есть «я думал, что поручил обоим».
+    const shown = attached.length ? attached : row.assignee ? [row.assignee] : [];
+    if (shown.length === 1) lines.push("Исполнитель: " + shown[0]);
+    if (shown.length > 1) lines.push("Исполнители: " + shown.join(", "));
     if (row.priority === "high") lines.push("Приоритет: высокий");
     await say(ctx, lines.join("\n") + droppedNote(droppedNames));
     return;

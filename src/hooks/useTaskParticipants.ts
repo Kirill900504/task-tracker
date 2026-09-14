@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
-import { isQuietHour } from "@/lib/quietHours";
+import { assignPerson, waitForTaskRow } from "@/lib/assignWork";
 import type { TaskParticipant, TaskParticipantRole } from "@/lib/taskProgress";
 
 // Кто на задаче: исполнители, соисполнители, наблюдатели.
@@ -52,6 +52,10 @@ function nameOf(row: Row): string {
 }
 
 export type PersonOption = { id: string; name: string };
+
+// Кого поставили на задачу ДО того, как она появилась в базе: выбор,
+// сделанный в окне создания и ждущий своей строки (см. attachOnCreate).
+export type PendingParticipant = { assigneeId: string; name: string; role: TaskParticipantRole };
 
 export function useTaskParticipants() {
   const [byTask, setByTask] = useState<Record<string, Participant[]>>({});
@@ -136,77 +140,46 @@ export function useTaskParticipants() {
 
   const add = useCallback(
     async (taskId: string, assigneeId: string, role: TaskParticipantRole): Promise<string> => {
-      const db = createClient();
-      // user_id is filled by a trigger from the parent task — never from
-      // here, so a row cannot land in the wrong workspace (migration 0019).
-      await db.from("task_participants").insert({ task_id: taskId, assignee_id: assigneeId, role });
-      await load();
-
-      // Назначить и не сказать — это и есть «дал задание, а он не в курсе».
-      // «Назначена» — один из трёх видов уведомлений, которые нельзя
-      // выключить, поэтому отправка не спрашивает разрешения и не зависит
-      // от кнопки ✈: та осталась для «покажи это ещё и Ане».
-      //
-      // Молча ничего не делает, если человек не подключён ни к одному
-      // мессенджеру — он всё равно увидит задачу, когда откроет трекер.
-      // Ночью трекер молчит (E2): задача не потеряется — она придёт в
-      // утренней сводке строкой «ждут вашего ответа». Разбудить человека
-      // ради задачи, к которой он всё равно приступит утром, — верный
-      // способ научить его выключать уведомления совсем.
       const person = people.find((p) => p.id === assigneeId);
-      if (!person || isSelfAssignee(person.name)) return "";
-      if (isQuietHour()) return `Сейчас ночь — ${person.name} получит задачу утренней сводкой.`;
-
-      try {
-        const res = await fetch("/api/telegram/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kind: "task", id: taskId, to: [person.name] }),
-        });
-        const data = await res.json().catch(() => null);
-        // Не отправилось — чаще всего человек просто не подключён к боту.
-        // Промолчать здесь значит оставить постановщика в уверенности, что
-        // задачу увидели: он ждёт ответа, а человек о задаче не знает.
-        if (!res.ok || !data || data.error || !(data.sentTo || []).length) {
-          return `${person.name} не подключён к мессенджеру — увидит задачу, только когда войдёт в трекер.`;
-        }
-      } catch {
-        return `Не удалось отправить ${person.name} — проверьте связь.`;
-      }
-      return "";
+      const notice = await assignPerson(taskId, assigneeId, person?.name || "", role);
+      await load();
+      return notice;
     },
     [load, people],
   );
 
+  // Всё, что выбрали в окне создания, — одной операцией, когда задача
+  // доехала до базы.
+  //
   // Поле «Исполнитель» и список участников — не два разных механизма, а
   // короткая и полная запись одного и того же. Поэтому сохранение задачи с
   // исполнителем заводит ему строку само: иначе человек, привыкший к полю,
   // получил бы задачу без единого участника и без единого отчёта, а список
   // выглядел бы необязательной добавкой, которую можно не заполнять.
-  const ensureExecutorByName = useCallback(
-    async (taskId: string, name: string) => {
-      const clean = (name || "").trim();
-      if (!clean || isSelfAssignee(clean)) return;
-      const person = people.find((p) => p.name === clean);
-      if (!person) return;
-      if ((byTask[taskId] || []).some((p) => p.assigneeId === person.id)) return;
+  const attachOnCreate = useCallback(
+    async (taskId: string, assigneeName: string, extra: PendingParticipant[] = []) => {
+      const wanted: { id: string; role: TaskParticipantRole }[] = [];
 
-      // Задача, которую только что создали, ещё не в базе: локальное
-      // состояние — истина, а запись в облако идёт своим ходом. Вставить
-      // участника раньше значит сослаться на несуществующую строку и
-      // потерять его молча, без единой ошибки на экране. Поэтому сначала
-      // ждём, пока задача появится, — обычно это доли секунды.
-      const db = createClient();
-      for (let attempt = 0; attempt < 12; attempt++) {
-        const { data } = await db.from("tasks").select("id").eq("id", taskId).maybeSingle();
-        if (data) {
-          await add(taskId, person.id, "executor");
-          return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      const clean = (assigneeName || "").trim();
+      if (clean && !isSelfAssignee(clean)) {
+        const primary = people.find((p) => p.name === clean);
+        if (primary) wanted.push({ id: primary.id, role: "executor" });
       }
+      for (const person of extra) {
+        if (!wanted.some((w) => w.id === person.assigneeId)) wanted.push({ id: person.assigneeId, role: person.role });
+      }
+
+      const already = new Set((byTask[taskId] || []).map((p) => p.assigneeId));
+      const todo = wanted.filter((w) => !already.has(w.id));
+      if (!todo.length) return;
+
       // Не дождались (нет связи, задача не ушла в облако) — молча выходим:
-      // исполнителя можно добавить руками, а падать здесь незачем.
+      // участников можно добавить руками, а падать здесь незачем.
+      if (!(await waitForTaskRow(taskId))) return;
+
+      // По одному, а не пачкой: каждая вставка ещё и пишет человеку в
+      // мессенджер, и «назначена» — то, о чём узнают порознь.
+      for (const w of todo) await add(taskId, w.id, w.role);
     },
     [people, byTask, add],
   );
@@ -287,7 +260,7 @@ export function useTaskParticipants() {
   );
 
   return useMemo(
-    () => ({ loading, people, forTask, availableFor, add, ensureExecutorByName, setRole, remove, clearRescheduleRequest, approve, returnForRework, forceClose, reload: load }),
-    [loading, people, forTask, availableFor, add, ensureExecutorByName, setRole, remove, clearRescheduleRequest, approve, returnForRework, forceClose, load],
+    () => ({ loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, clearRescheduleRequest, approve, returnForRework, forceClose, reload: load }),
+    [loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, clearRescheduleRequest, approve, returnForRework, forceClose, load],
   );
 }

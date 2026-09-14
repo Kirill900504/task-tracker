@@ -90,6 +90,9 @@ export interface TaskPrefill {
   title?: string;
   desc?: string;
   assignee?: string;
+  // Остальные исполнители, если фраза назвала нескольких: одна задача на
+  // двоих — это одна задача (см. executors в quickAdd.ts).
+  executors?: string[];
   priority?: Priority;
   term?: Term;
   deadline?: string;

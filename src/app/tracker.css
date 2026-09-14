@@ -1082,7 +1082,11 @@
     margin:0 0 14px; padding:12px 13px; border:1px solid var(--line);
     border-radius:var(--radius-md); background:var(--paper-soft);
   }
-  .tp-later{color:var(--ink-soft); font-size:12.5px;}
+  /* Роль человека из поля «Исполнитель» в ещё не сохранённой задаче: она
+     предопределена, поэтому показана словом, а не выпадашкой, которую всё
+     равно нечем заполнить. */
+  .tp-role-static{font-size:12px; color:var(--ink-soft); font-family:var(--mono);}
+  .tp-hint{margin-top:10px; font-size:12px; color:var(--ink-soft); line-height:1.5;}
   .tp-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;}
   .tp-title{font-size:12px; color:var(--ink-soft); font-family:var(--mono); text-transform:uppercase; letter-spacing:.04em;}
   .tp-stage{font-size:11.5px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--ink-soft);}

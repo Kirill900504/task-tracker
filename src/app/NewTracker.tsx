@@ -22,6 +22,7 @@ import ToastStack from "@/components/tracker/ToastStack";
 import DashboardLayout from "@/components/tracker/DashboardLayout";
 import { pad, todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
+import { assignExecutorsByName } from "@/lib/assignWork";
 import { DEFAULT_PANEL_LAYOUT, formatIdeaCreatedAt, sameLayout } from "@/lib/trackerRows";
 import type { Meeting, MeetingPrefill, Task, TaskPrefill } from "@/types/tracker";
 import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
@@ -270,11 +271,21 @@ export default function NewTracker() {
 
   const quickAddProvider: QuickAddProvider = {
     getAssignees: () => assignees,
-    prefillNewTask: (f) => setOpenTaskRequest({ title: f.title, desc: f.description, assignee: f.assignee, priority: f.priority, term: f.term, deadline: f.deadline }),
+    prefillNewTask: (f) =>
+      setOpenTaskRequest({
+        title: f.title,
+        desc: f.description,
+        assignee: f.assignee,
+        executors: f.executors || [],
+        priority: f.priority,
+        term: f.term,
+        deadline: f.deadline,
+      }),
     prefillNewMeeting: (f) => setOpenMeetingRequest({ title: f.title, date: f.date, time: f.time, participants: f.participants }),
     createTask: (f) => {
+      const id = uid();
       actions.saveTask({
-        id: uid(),
+        id,
         title: f.title,
         desc: f.description,
         assignee: f.assignee,
@@ -292,6 +303,10 @@ export default function NewTracker() {
         manualOrder: null,
         completedAt: "",
       });
+      // Задача, заведённая строкой быстрого ввода, минует карточку — но
+      // не правило: исполнители получают строку участия и сообщение так
+      // же, как если бы их вписали руками.
+      void assignExecutorsByName(id, [f.assignee, ...(f.executors || [])]);
     },
     createMeeting: (f) => {
       actions.saveMeeting({

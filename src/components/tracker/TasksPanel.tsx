@@ -437,11 +437,11 @@ export default function TasksPanel({
           prefill={modalPrefill}
           sections={sections}
           assignees={assignees}
-          onSave={(t) => {
+          onSave={(t, pending) => {
             actions.saveTask(t);
-            // Задача только что создана — строка исполнителя заводится по
-            // тому имени, которое человек уже выбрал в поле выше.
-            void participants.ensureExecutorByName(t.id, t.assignee);
+            // Задача только что создана — строки участия заводятся и по
+            // имени из поля «Исполнитель», и по всем, кого добавили рядом.
+            void participants.attachOnCreate(t.id, t.assignee, pending);
           }}
           onDelete={() => modalTask && deleteTask(modalTask)}
           onClose={closeModal}
@@ -450,7 +450,7 @@ export default function TasksPanel({
           onAddSection={actions.saveSection}
           onRemoveSection={removeSection}
           participants={modalTask ? participants.forTask(modalTask.id) : []}
-          availablePeople={modalTask ? participants.availableFor(modalTask.id) : []}
+          availablePeople={modalTask ? participants.availableFor(modalTask.id) : participants.people}
           onAddParticipant={(assigneeId, role) => (modalTask ? participants.add(modalTask.id, assigneeId, role) : undefined)}
           onSetParticipantRole={(id, role) => void participants.setRole(id, role)}
           onRemoveParticipant={(id) => void participants.remove(id)}

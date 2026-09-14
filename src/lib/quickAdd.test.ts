@@ -71,6 +71,19 @@ describe("sanitizeAgainstKnown", () => {
     expect(input.participants).toEqual(["Кирилл (я)"]);
     expect(dropped).toEqual(["Придуманное Имя"]);
   });
+
+  it("cleans the second executor of a shared task the same way as a participant", () => {
+    const input: Record<string, unknown> = { assignee: "Юрий Черкашин", executors: ["Кирилл (я)", "Кто-то Ещё"] };
+    const dropped = sanitizeAgainstKnown(input, known);
+    expect(input.executors).toEqual(["Кирилл (я)"]);
+    expect(dropped).toEqual(["Кто-то Ещё"]);
+  });
+
+  it("never lists the assignee twice — one person, one row of participation", () => {
+    const input: Record<string, unknown> = { assignee: "Юрий Черкашин", executors: ["Юрий Черкашин", "Кирилл (я)"] };
+    sanitizeAgainstKnown(input, known);
+    expect(input.executors).toEqual(["Кирилл (я)"]);
+  });
 });
 
 describe("resolveKnownName", () => {

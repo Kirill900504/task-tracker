@@ -15,7 +15,8 @@ import { openPickerOnClick } from "@/lib/pickerInput";
 import TaskParticipants from "./TaskParticipants";
 import ItemChat from "./ItemChat";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
-import type { Participant, PersonOption } from "@/hooks/useTaskParticipants";
+import type { Participant, PendingParticipant, PersonOption } from "@/hooks/useTaskParticipants";
+import PendingParticipants from "./PendingParticipants";
 import MicButton from "./MicButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 
@@ -78,7 +79,7 @@ export default function TaskModal({
   prefill?: TaskPrefill;
   sections: Section[];
   assignees: string[];
-  onSave: (task: Task) => void;
+  onSave: (task: Task, pendingParticipants: PendingParticipant[]) => void;
   onDelete: () => void;
   onClose: () => void;
   onAddAssignee: (name: string) => void;
@@ -103,6 +104,19 @@ export default function TaskModal({
   const [sendState, setSendState] = useState("");
   const [sendAt, setSendAt] = useState<DOMRect | null>(null);
   const [form, setForm] = useState(() => emptyForm(task, prefill));
+  // Состав новой задачи держится здесь до сохранения: строки участия
+  // ссылаются на задачу, а её ещё нет в базе (см. PendingParticipants).
+  //
+  // Начальное значение — то, что назвала разобранная фраза: «поручи Игорю
+  // и Никите» открывает карточку уже с двумя исполнителями, а не с одним и
+  // потерянным вторым. Список людей к этому моменту давно загружен (он
+  // читается при запуске приложения), поэтому имена находятся сразу.
+  const [pending, setPending] = useState<PendingParticipant[]>(() =>
+    (prefill?.executors || [])
+      .map((name) => availablePeople.find((person) => person.name === name))
+      .filter((person): person is PersonOption => !!person)
+      .map((person) => ({ assigneeId: person.id, name: person.name, role: "executor" as const })),
+  );
 
   // Esc closes the modal, same as legacy's global keydown handler.
   useEffect(() => {
@@ -148,7 +162,7 @@ export default function TaskModal({
       manualOrder: task?.manualOrder ?? null,
       completedAt: task?.completedAt ?? "",
     };
-    onSave(next);
+    onSave(next, task ? [] : pending);
     onClose();
   }
 
@@ -191,7 +205,7 @@ export default function TaskModal({
   function handleStopRecur() {
     if (!confirm("Прекратить повторение этой задачи? Она останется как обычная разовая задача с текущим статусом.")) return;
     setForm((f) => ({ ...f, recur: "none", recurWeekday: "1", recurMonthday: "", recurYearDay: "", recurYearMonth: "1" }));
-    if (task) onSave({ ...task, recur: "none", recurWeekday: "1", recurMonthday: "", recurYearDay: "", recurYearMonth: "1" });
+    if (task) onSave({ ...task, recur: "none", recurWeekday: "1", recurMonthday: "", recurYearDay: "", recurYearMonth: "1" }, []);
   }
 
   const showStopRecur = isEditing && form.recur !== "none";
@@ -282,9 +296,12 @@ export default function TaskModal({
             onRejectReschedule={onRejectReschedule}
           />
         ) : (
-          <div className="tp tp-later">
-            Исполнителей, соисполнителей и наблюдателей можно будет добавить сразу после сохранения.
-          </div>
+          <PendingParticipants
+            people={availablePeople}
+            primaryName={form.assignee}
+            chosen={pending}
+            onChange={setPending}
+          />
         )}
 
         {/* Обсуждение — там же, где задача. Только у сохранённой: у

@@ -8,6 +8,9 @@ export type TaskFields = {
   title: string;
   description: string;
   assignee: string;
+  // Остальные исполнители той же задачи. Фраза «поручи Игорю и Никите»
+  // раньше превращалась в две одинаковые задачи — по одной на каждого.
+  executors?: string[];
   priority: "high" | "med";
   term: "short" | "long";
   deadline: string;
