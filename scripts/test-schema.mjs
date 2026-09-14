@@ -79,6 +79,18 @@ async function main() {
     await db.query("insert into auth.users (id, email) values ($1, $2) on conflict do nothing", [id, `${id}@example.invalid`]);
   }
 
+  // Supabase grants the browser roles access to every table AT THE MOMENT
+  // IT IS CREATED (default privileges on the role the migrations run as); a
+  // plain Postgres does not, and without this every policy below would be
+  // untestable for the dullest of reasons.
+  //
+  // It has to be a default privilege and not a blanket grant afterwards.
+  // A blanket grant runs later than the migrations and therefore quietly
+  // undoes anything a migration revoked — which is how the column-level ban
+  // on reading the MAX token first appeared to fail.
+  await db.query("alter default privileges in schema public grant all on tables to authenticated, anon");
+  await db.query("alter default privileges in schema public grant all on sequences to authenticated, anon");
+
   for (const f of files) {
     try {
       await db.query(readFileSync(join(MIGRATIONS, f), "utf8"));
@@ -90,12 +102,6 @@ async function main() {
       process.exit(1);
     }
   }
-
-  // Supabase grants these to the browser roles when a table is created; a
-  // plain Postgres does not, and without them every policy below would be
-  // untestable for the dullest of reasons.
-  await db.query("grant all on all tables in schema public to authenticated, anon");
-  await db.query("grant all on all sequences in schema public to authenticated, anon");
 
   console.log("\nЛюди и задача:");
   const { rows: assignees } = await db.query(
@@ -402,6 +408,46 @@ async function main() {
   await db.query("update public.tasks set approval_state = 'awaiting_review' where id = $1", [taskId]);
   const { rows: approvalRows } = await db.query("select approval_state from public.tasks where id = $1", [taskId]);
   check("состояние приёмки сохраняется", approvalRows[0].approval_state === "awaiting_review");
+
+  console.log("\nНастройки бота (0022):");
+  await db.query(
+    `insert into public.bot_settings (id, max_bot_token, max_webhook_secret, max_bot_username)
+     values (true, 'secret-token', 'secret-secret', 'rokas_bot')`,
+  );
+  try {
+    await db.query("insert into public.bot_settings (id) values (false)");
+    check("строка настроек может быть только одна", false);
+  } catch {
+    check("строка настроек может быть только одна", true);
+  }
+
+  await as(db, OWNER, async () => {
+    const { rows } = await db.query("select max_bot_username from public.bot_settings where id");
+    check("имя бота из браузера видно", rows.length === 1 && rows[0].max_bot_username === "rokas_bot");
+  });
+
+  // Главная проверка этой миграции: токен не уезжает в браузер даже тому,
+  // кто имеет право читать строку. Это права на колонку, а не политика, —
+  // вторая, независимая граница.
+  await as(db, OWNER, async () => {
+    let denied = false;
+    try {
+      await db.query("select max_bot_token from public.bot_settings where id");
+    } catch {
+      denied = true;
+    }
+    check("токен бота из браузера не читается", denied);
+  });
+
+  await as(db, OWNER, async () => {
+    let denied = false;
+    try {
+      await db.query("update public.bot_settings set max_bot_username = 'подмена' where id");
+    } catch {
+      denied = true;
+    }
+    check("и переписать настройки из браузера нельзя", denied);
+  });
 
   await db.end();
   console.log(failures ? `\n${failures} проверок не прошло` : "\nВсе проверки прошли");

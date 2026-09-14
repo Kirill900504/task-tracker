@@ -1,16 +1,18 @@
-// Points the MAX bot at this deployment's webhook, and shows what it is
-// pointed at now.
+// Диагностика подписки бота MAX: куда сейчас ходят обновления и как это
+// переставить.
 //
-// Run once, after MAX_BOT_TOKEN and MAX_WEBHOOK_SECRET are set:
-//   node --env-file=.env.local scripts/max-setup.mjs https://task-tracker-beta-ebon.vercel.app
+// ЭТО ЗАПАСНОЙ ПУТЬ. Обычный — страница /max в самом трекере: там вставляют
+// токен от MasterBot, и подписка на вебхук оформляется сама. Скрипт нужен
+// там, где страницы нет под рукой: проверить, куда MAX доставляет
+// обновления, или перевести бота на другое развёртывание.
 //
-// Without arguments it only reports the current subscriptions, which is the
-// safe thing to run when something is not arriving.
+//   node --env-file=.env.local scripts/max-setup.mjs                      # показать
+//   node --env-file=.env.local scripts/max-setup.mjs https://<адрес>      # переставить
 //
-// The token is issued by MAX only to a verified organisation profile on
-// «MAX для партнёров» (dev.max.ru) — an individual cannot create a bot there,
-// so this script is useless until that profile exists. It says so plainly
-// rather than failing with an HTTP error.
+// Требует MAX_BOT_TOKEN и MAX_WEBHOOK_SECRET в .env.local. Если бот
+// подключён через /max, токен и секрет лежат в таблице bot_settings, а не в
+// переменных окружения — и тогда правильный ответ на «не приходит» тоже
+// там: открыть /max и подключить заново.
 
 const API = "https://platform-api2.max.ru";
 const token = process.env.MAX_BOT_TOKEN;
@@ -18,7 +20,7 @@ const secret = process.env.MAX_WEBHOOK_SECRET;
 const base = process.argv[2];
 
 if (!token) {
-  console.error("MAX_BOT_TOKEN не задан — бот в MAX ещё не создан (нужен профиль организации на dev.max.ru).");
+  console.error("MAX_BOT_TOKEN не задан. Если бот подключали через страницу /max, токен лежит в базе — управляйте им оттуда.");
   process.exit(1);
 }
 

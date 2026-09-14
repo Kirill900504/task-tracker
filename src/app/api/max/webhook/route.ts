@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { maxConfigured, maxTransport } from "@/lib/max";
+import { maxTransport } from "@/lib/max";
+import { maxSettings } from "@/lib/botSettings";
 import { decodeCallback } from "@/lib/colleagues";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
 import { handleLinkCode, handleText, type BotContext } from "@/lib/botPipeline";
@@ -59,14 +60,15 @@ async function oggVoiceBytes(attachments: unknown): Promise<ArrayBuffer | null> 
 }
 
 export async function POST(req: Request) {
-  // Without a token there is no bot: MAX issues one only to a verified
-  // organisation profile, so an install without that simply has no MAX, and
-  // this endpoint must not pretend otherwise.
-  if (!maxConfigured()) {
-    return NextResponse.json({ ok: true, skipped: "MAX_BOT_TOKEN не задан" });
+  // Without a token there is no bot, and this endpoint must not pretend
+  // otherwise. The token — and the secret MAX signs its deliveries with —
+  // are the ones the owner entered on /max (see botSettings.ts).
+  const settings = await maxSettings();
+  if (!settings) {
+    return NextResponse.json({ ok: true, skipped: "Бот MAX не подключён" });
   }
   const secret = req.headers.get("x-max-bot-api-secret");
-  if (secret !== process.env.MAX_WEBHOOK_SECRET) {
+  if (!settings.secret || secret !== settings.secret) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

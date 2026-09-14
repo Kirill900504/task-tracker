@@ -1023,6 +1023,27 @@
   }
   .auth-link:hover{text-decoration:underline;}
   .auth-hint{color:var(--ink-soft); font-size:12.5px; line-height:1.5; margin:16px 0 0;}
+
+  /* Страница подключения бота (/max) — тот же экран входа, но с
+     инструкцией: три шага, которые надо выполнить в другом приложении, в
+     390 пикселей не ложатся, а разводить ради них второй стиль карточки
+     значит получить две карточки, которые разойдутся. */
+  .auth-card-wide{max-width:520px;}
+  .setup-steps{
+    /* Явно: globals.css снимает маркеры со всех списков, а здесь номер —
+       это и есть смысл («шаг 2 из 3»), а не украшение. */
+    list-style:decimal outside;
+    margin:0 0 22px; padding:0 0 0 22px;
+    color:var(--ink-soft); font-size:13.5px; line-height:1.6;
+  }
+  .setup-steps li{margin-bottom:9px;}
+  .setup-steps li::marker{color:var(--accent); font-family:var(--mono); font-size:12px;}
+  .setup-steps b{color:var(--ink);}
+  .setup-steps code{
+    font-family:var(--mono); font-size:12.5px; color:var(--ink);
+    background:var(--paper-soft); border:1px solid var(--line);
+    border-radius:5px; padding:1px 5px;
+  }
   @media (max-width:420px){
     .auth-card{padding:24px 20px 20px; border-radius:var(--radius-md);}
     .auth-title{font-size:19px;}

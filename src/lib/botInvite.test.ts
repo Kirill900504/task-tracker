@@ -1,9 +1,11 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { botUsername, inviteChannel, inviteLink, randomCode } from "./botInvite";
+import { forgetMaxSettings } from "./botSettings";
 
 const original = { ...process.env };
 afterEach(() => {
   process.env = { ...original };
+  forgetMaxSettings();
 });
 
 describe("inviteChannel", () => {
@@ -19,26 +21,37 @@ describe("inviteChannel", () => {
 });
 
 describe("inviteLink", () => {
-  it("builds the link each messenger expects", () => {
+  // MAX's name is read through botSettings, which prefers the environment
+  // and only then asks the database — so setting MAX_BOT_TOKEN here is what
+  // keeps these tests away from a database they do not have.
+  beforeEach(() => {
+    process.env.MAX_BOT_TOKEN = "test-token";
+    forgetMaxSettings();
+  });
+
+  it("builds the link each messenger expects", async () => {
     process.env.TELEGRAM_BOT_USERNAME = "rokas_bot";
     process.env.MAX_BOT_USERNAME = "rokas_max_bot";
-    expect(inviteLink("telegram", "AB23CD45")).toBe("https://t.me/rokas_bot?start=AB23CD45");
-    expect(inviteLink("max", "AB23CD45")).toBe("https://max.ru/rokas_max_bot?start=AB23CD45");
+    expect(await inviteLink("telegram", "AB23CD45")).toBe("https://t.me/rokas_bot?start=AB23CD45");
+    expect(await inviteLink("max", "AB23CD45")).toBe("https://max.ru/rokas_max_bot?start=AB23CD45");
   });
 
-  it("returns nothing at all when that bot does not exist yet", () => {
+  it("returns nothing at all when that bot does not exist yet", async () => {
+    delete process.env.MAX_BOT_TOKEN;
     delete process.env.MAX_BOT_USERNAME;
     delete process.env.NEXT_PUBLIC_MAX_BOT_USERNAME;
-    // A MAX bot needs a verified organisation profile; until there is one,
-    // an invite link would point at max.ru/undefined.
-    expect(botUsername("max")).toBe("");
-    expect(inviteLink("max", "AB23CD45")).toBe("");
+    forgetMaxSettings();
+    // No token anywhere — neither in the environment nor (here) in a
+    // database — means there is no bot, and an invite link would otherwise
+    // point at max.ru/undefined.
+    expect(await botUsername("max")).toBe("");
+    expect(await inviteLink("max", "AB23CD45")).toBe("");
   });
 
-  it("accepts the public form of the MAX bot name, so one variable configures both sides", () => {
+  it("accepts the public form of the MAX bot name, so one variable configures both sides", async () => {
     delete process.env.MAX_BOT_USERNAME;
     process.env.NEXT_PUBLIC_MAX_BOT_USERNAME = "rokas_max_bot";
-    expect(inviteLink("max", "XY99ZZ88")).toBe("https://max.ru/rokas_max_bot?start=XY99ZZ88");
+    expect(await inviteLink("max", "XY99ZZ88")).toBe("https://max.ru/rokas_max_bot?start=XY99ZZ88");
   });
 });
 

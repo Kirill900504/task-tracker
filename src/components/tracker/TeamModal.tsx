@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { MAX_AVAILABLE, useColleagues, type ColleagueChannel } from "@/hooks/useColleagues";
+import { useColleagues, type ColleagueChannel } from "@/hooks/useColleagues";
+import { useMaxBot } from "@/hooks/useMaxBot";
 
 // «Команда»: who can be written to, and how to connect the rest.
 //
@@ -44,6 +45,7 @@ const MEMBER_LABEL: Record<string, string> = {
 
 export default function TeamModal({ onClose }: { onClose: () => void }) {
   const { colleagues, loading, reload, invite, inviteToTracker, setDirection, setTrackerAccess, unlink } = useColleagues();
+  const maxBot = useMaxBot();
   const [inviteFor, setInviteFor] = useState<{ name: string; link: string; kind: InviteKind } | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -113,7 +115,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                       </span>
                       {/* Приглашение во второй мессенджер — для тех, кто уже
                           на связи в одном: запасной канал, не дубль. */}
-                      {MAX_AVAILABLE && !person.max && (
+                      {maxBot.available && !person.max && (
                         <button className="btn btn-small" onClick={() => handleInvite(person.id, person.name, "max")}>
                           + MAX
                         </button>
@@ -133,7 +135,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                       <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "telegram")}>
                         Telegram
                       </button>
-                      {MAX_AVAILABLE && (
+                      {maxBot.available && (
                         <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "max")}>
                           MAX
                         </button>
@@ -214,6 +216,15 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
               </button>
             </div>
             <div className="team-hint">{INVITE_HINT[inviteFor.kind]}</div>
+          </div>
+        )}
+
+        {!maxBot.available && (
+          <div className="team-hint" style={{ marginTop: 12 }}>
+            Бот в MAX не подключён — кнопок «MAX» поэтому нет.{" "}
+            <a className="auth-link" style={{ padding: 0 }} href="/max">
+              Подключить
+            </a>
           </div>
         )}
 

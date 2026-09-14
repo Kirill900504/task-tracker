@@ -24,9 +24,10 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => null);
   const channel = inviteChannel(body?.channel);
-  if (!botUsername(channel)) {
+  const username = await botUsername(channel);
+  if (!username) {
     return NextResponse.json(
-      { error: channel === "max" ? "Бот в MAX ещё не подключён — нужен токен от MAX для партнёров" : "Бот в Telegram не настроен" },
+      { error: channel === "max" ? "Бот в MAX ещё не подключён — откройте /max и вставьте токен" : "Бот в Telegram не настроен" },
       { status: 400 },
     );
   }
@@ -38,5 +39,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ code, channel, botUsername: botUsername(channel), link: inviteLink(channel, code) });
+  return NextResponse.json({ code, channel, botUsername: username, link: await inviteLink(channel, code) });
 }

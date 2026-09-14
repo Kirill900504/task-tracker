@@ -15,18 +15,20 @@ export function transportFor(channel: BotChannelConfig): BotTransport {
   return channel.id === "max" ? maxTransport() : telegramTransport();
 }
 
-// Only the messengers that are actually set up — MAX needs a token, which
-// needs a verified organisation profile on their partner platform, so an
-// install without one simply has no MAX.
-export function activeChannels(): BotChannelConfig[] {
-  return BOT_CHANNELS.filter((c) => (c.id === "max" ? maxConfigured() : !!process.env.TELEGRAM_BOT_TOKEN));
+// Only the messengers that are actually set up. Telegram's token is an
+// environment variable; MAX's is a row in the database the owner filled in
+// himself (see botSettings.ts), which is why this has to be asked rather
+// than read.
+export async function activeChannels(): Promise<BotChannelConfig[]> {
+  const max = await maxConfigured();
+  return BOT_CHANNELS.filter((c) => (c.id === "max" ? max : !!process.env.TELEGRAM_BOT_TOKEN));
 }
 
 export type OwnerChat = { channel: BotChannelConfig; chatId: number };
 
 export async function ownerChats(admin: SupabaseClient, userId: string): Promise<OwnerChat[]> {
   const out: OwnerChat[] = [];
-  for (const channel of activeChannels()) {
+  for (const channel of await activeChannels()) {
     const { data } = await admin.from(channel.accountsTable).select(channel.chatColumn).eq("user_id", userId).limit(1).maybeSingle();
     const chatId = (data as Record<string, number> | null)?.[channel.chatColumn];
     if (chatId != null) out.push({ channel, chatId });

@@ -33,9 +33,10 @@ export async function POST(req: Request) {
   if (!assigneeId) {
     return NextResponse.json({ error: "Не указан исполнитель" }, { status: 400 });
   }
-  if (!botUsername(channel)) {
+  const username = await botUsername(channel);
+  if (!username) {
     return NextResponse.json(
-      { error: channel === "max" ? "Бот в MAX ещё не подключён — нужен токен от MAX для партнёров" : "Бот в Telegram не настроен" },
+      { error: channel === "max" ? "Бот в MAX ещё не подключён — откройте /max и вставьте токен" : "Бот в Telegram не настроен" },
       { status: 400 },
     );
   }
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
     code,
     channel,
     name: assignee.name,
-    botUsername: botUsername(channel),
-    link: inviteLink(channel, code),
+    botUsername: username,
+    link: await inviteLink(channel, code),
   });
 }

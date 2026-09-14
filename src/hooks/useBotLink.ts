@@ -5,13 +5,15 @@
 // not something worth a permanent place in the header.
 //
 // Two messengers now, asked about separately: Telegram is always offered,
-// MAX only where a MAX bot exists for this install (see MAX_AVAILABLE).
+// MAX only where a MAX bot has actually been connected (see useMaxBot).
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { MAX_AVAILABLE, type ColleagueChannel } from "@/hooks/useColleagues";
+import { useMaxBot } from "@/hooks/useMaxBot";
+import { type ColleagueChannel } from "@/hooks/useColleagues";
 
 export function useBotLink() {
-  const [needs, setNeeds] = useState<{ telegram: boolean; max: boolean }>({ telegram: false, max: false });
+  const [unlinked, setUnlinked] = useState<{ telegram: boolean; max: boolean }>({ telegram: false, max: false });
+  const maxBot = useMaxBot();
 
   useEffect(() => {
     let cancelled = false;
@@ -19,14 +21,14 @@ export function useBotLink() {
     async function check() {
       const [tg, max] = await Promise.all([
         db.from("telegram_accounts").select("telegram_chat_id").limit(1),
-        MAX_AVAILABLE ? db.from("max_accounts").select("max_user_id").limit(1) : Promise.resolve({ data: [{}], error: null }),
+        db.from("max_accounts").select("max_user_id").limit(1),
       ]);
       if (cancelled) return;
       // Only offer linking when we know for sure nothing is linked yet — on
       // a query error, stay quiet rather than nag with a pointless button.
-      setNeeds({
+      setUnlinked({
         telegram: !tg.error && (!tg.data || tg.data.length === 0),
-        max: MAX_AVAILABLE && !max.error && (!max.data || max.data.length === 0),
+        max: !max.error && (!max.data || max.data.length === 0),
       });
     }
     void check();
@@ -34,6 +36,10 @@ export function useBotLink() {
       cancelled = true;
     };
   }, []);
+
+  // Собирается при отрисовке, а не в эффекте: «бот есть» и «чат не
+  // привязан» приходят порознь и в разное время.
+  const needs = { telegram: unlinked.telegram, max: maxBot.available && unlinked.max };
 
   const link = useCallback(async (channel: ColleagueChannel) => {
     try {

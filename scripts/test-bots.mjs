@@ -106,15 +106,19 @@ try {
 
   // ---- MAX ----
   console.log("\nMAX webhook:");
-  const maxSecret = process.env.MAX_WEBHOOK_SECRET;
+  // Секрет вебхука теперь живёт в базе — его придумывает /api/max/setup в
+  // момент подключения бота (см. botSettings.ts). Переменная окружения
+  // остаётся старшей, поэтому сначала она.
+  const { data: botRow } = await admin.from("bot_settings").select("max_webhook_secret").eq("id", true).maybeSingle();
+  const maxSecret = process.env.MAX_WEBHOOK_SECRET || botRow?.max_webhook_secret || "";
   const maxCode = await makeCode("max");
   const started = await post(
     "/api/max/webhook",
     { update_type: "bot_started", timestamp: Date.now(), user: { user_id: maxUser, username: "checker" }, payload: maxCode },
     { "x-max-bot-api-secret": maxSecret },
   );
-  // Where no MAX bot exists (no token — creating one needs a verified
-  // organisation profile), the webhook says so and there is nothing to test.
+  // Where no MAX bot has been connected yet (see /max), the webhook says so
+  // and there is nothing to test.
   if (started.body?.skipped) {
     console.log("  --   MAX не настроен на этом сервере, проверка пропущена");
   } else {

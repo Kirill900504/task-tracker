@@ -55,7 +55,7 @@ npm run test:schema   # applies every migration to a throwaway local Postgres an
                       # no production. Run it BEFORE any migration goes anywhere.
 npm run test:bots     # drives both messenger webhooks end to end
 node --env-file=.env.local scripts/run-migration.mjs supabase/migrations/00NN_x.sql
-node --env-file=.env.local scripts/max-setup.mjs https://<deployment>   # subscribes the MAX webhook
+node --env-file=.env.local scripts/max-setup.mjs https://<deployment>   # MAX webhook, fallback for /max
 ```
 
 E2E runs against a throwaway Supabase user created in `e2e/global-setup.ts`
@@ -149,10 +149,18 @@ by a running `next start` (and by OneDrive) — stop the server first.
   saved locally does not exist in Postgres yet — anything attaching a row to
   a fresh task or meeting has to wait for it, or the foreign key silently
   eats the row.
-- **MAX** is written and deployed but inert: a bot token requires a verified
-  organisation profile (ООО/ИП/самозанятый) on dev.max.ru, which he does not
-  have yet. Set `MAX_BOT_TOKEN`, `MAX_WEBHOOK_SECRET`,
-  `NEXT_PUBLIC_MAX_BOT_USERNAME`, then run `scripts/max-setup.mjs`.
+- **MAX is connected from inside the tracker, not from Vercel.** `/max` is a
+  page he can be handed as a link: he pastes the token MasterBot gave him in
+  the MAX app, and `/api/max/setup` checks it, reads the bot's @username,
+  invents the webhook secret, subscribes the webhook and stores all of it in
+  `bot_settings` (migration 0022, one row per install). Everything
+  server-side reads the token through `maxSettings()` — env vars still win,
+  so a local run stays controllable from `.env.local` — and the browser
+  learns the bot exists through `useMaxBot()`. The token is not merely
+  policy-protected: column privileges on `bot_settings` mean PostgREST
+  cannot select it at all, and `npm run test:schema` proves it.
+  The reason it is not three Vercel environment variables is the rule at the
+  top of this file: that is four screens of somebody else's control panel.
 - Colleagues are recipients, not users. Making them real users who exchange
   items with each other is his own next big idea, deliberately deferred.
 - Offered and not yet decided: sending a task to Telegram automatically when
@@ -164,4 +172,6 @@ by a running `next start` (and by OneDrive) — stop the server first.
 Environment (Vercel + `.env.local`): `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`,
 `GIGACHAT_AUTH_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`,
-`TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`, and the three MAX ones above.
+`TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`. The three MAX ones
+(`MAX_BOT_TOKEN`, `MAX_WEBHOOK_SECRET`, `NEXT_PUBLIC_MAX_BOT_USERNAME`) are
+optional overrides now — normally MAX is connected on `/max` instead.

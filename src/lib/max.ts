@@ -1,4 +1,5 @@
 import type { BotButton, BotSendResult, BotTransport } from "@/lib/botTransport";
+import { maxSettings } from "@/lib/botSettings";
 
 // MAX (max.ru) Bot API.
 //
@@ -21,16 +22,15 @@ const API = "https://platform-api2.max.ru";
 // 4096, so a brief that fits there can still be too long here.
 const MAX_TEXT = 4000;
 
-function token(): string {
-  return process.env.MAX_BOT_TOKEN || "";
+// The token is not an environment variable any more — see botSettings.ts
+// for why it lives in the database. That makes every call here async in the
+// one place it was already async anyway.
+export async function maxConfigured(): Promise<boolean> {
+  return !!(await maxSettings());
 }
 
-export function maxConfigured(): boolean {
-  return !!token();
-}
-
-function headers(): Record<string, string> {
-  return { Authorization: token(), "Content-Type": "application/json" };
+function headers(token: string): Record<string, string> {
+  return { Authorization: token, "Content-Type": "application/json" };
 }
 
 function keyboardAttachment(buttons: BotButton[][]) {
@@ -52,11 +52,12 @@ async function errorText(res: Response): Promise<string> {
 }
 
 export async function sendMaxMessage(userId: number, text: string, options?: { buttons?: BotButton[][] }): Promise<BotSendResult> {
-  if (!maxConfigured()) return { ok: false, error: "MAX не подключён" };
+  const settings = await maxSettings();
+  if (!settings) return { ok: false, error: "MAX не подключён" };
   try {
     const res = await fetch(`${API}/messages?user_id=${userId}`, {
       method: "POST",
-      headers: headers(),
+      headers: headers(settings.token),
       body: JSON.stringify({
         text: clip(text),
         ...(options?.buttons?.length ? { attachments: [keyboardAttachment(options.buttons)] } : {}),
@@ -71,11 +72,12 @@ export async function sendMaxMessage(userId: number, text: string, options?: { b
 }
 
 export async function editMaxMessage(messageId: string, text: string): Promise<void> {
-  if (!maxConfigured()) return;
+  const settings = await maxSettings();
+  if (!settings) return;
   try {
     await fetch(`${API}/messages?message_id=${encodeURIComponent(messageId)}`, {
       method: "PUT",
-      headers: headers(),
+      headers: headers(settings.token),
       // An empty attachment list is what removes the buttons — the point of
       // the rewrite is that they stop being offered.
       body: JSON.stringify({ text: clip(text), attachments: [] }),
@@ -89,11 +91,12 @@ export async function editMaxMessage(messageId: string, text: string): Promise<v
 // message or does nothing visible. So the outcome is written into the
 // message where there is one to write, and sent as a plain reply otherwise.
 export async function answerMaxCallback(callbackId: string, replacementText?: string): Promise<void> {
-  if (!maxConfigured()) return;
+  const settings = await maxSettings();
+  if (!settings) return;
   try {
     await fetch(`${API}/answers?callback_id=${encodeURIComponent(callbackId)}`, {
       method: "POST",
-      headers: headers(),
+      headers: headers(settings.token),
       body: JSON.stringify(replacementText ? { message: { text: clip(replacementText), attachments: [] } } : {}),
     });
   } catch {
@@ -119,17 +122,43 @@ export function maxTransport(): BotTransport {
   };
 }
 
-// Used by scripts/max-setup.mjs equivalents and by the setup route: tells
-// MAX where to deliver updates, and with which secret header.
-export async function subscribeMaxWebhook(url: string, secret: string, updateTypes: string[]): Promise<{ ok: boolean; error?: string }> {
-  if (!maxConfigured()) return { ok: false, error: "MAX_BOT_TOKEN не задан" };
+// Both of these take the token explicitly, because the one caller that
+// matters — /api/max/setup — is checking a token that has not been stored
+// yet. Storing first and asking MAX afterwards would leave a wrong token
+// saved and the bot silently dead.
+
+// Who this token belongs to. The answer is what the invite links are built
+// from (max.ru/<username>?start=CODE), so a token that works but cannot say
+// its own username is still not enough to connect anybody.
+export async function maxBotInfo(token: string): Promise<{ ok: true; username: string; name: string } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${API}/me`, { headers: headers(token) });
+    if (!res.ok) return { ok: false, error: await errorText(res) };
+    const body = (await res.json().catch(() => null)) as Record<string, string> | null;
+    if (!body) return { ok: false, error: "MAX ответил пустотой" };
+    return { ok: true, username: body.username || "", name: body.name || body.first_name || "" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Tells MAX where to deliver updates, and with which secret header.
+export async function subscribeMaxWebhook(
+  token: string,
+  url: string,
+  secret: string,
+  updateTypes: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  if (!token) return { ok: false, error: "Токен MAX не задан" };
   try {
     const res = await fetch(`${API}/subscriptions`, {
       method: "POST",
-      headers: headers(),
+      headers: headers(token),
       body: JSON.stringify({ url, update_types: updateTypes, secret }),
     });
     if (!res.ok) return { ok: false, error: await errorText(res) };
+    const body = (await res.json().catch(() => null)) as { success?: boolean; message?: string } | null;
+    if (body?.success === false) return { ok: false, error: body.message || "MAX отклонил подписку" };
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };

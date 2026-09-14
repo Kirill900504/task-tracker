@@ -2,21 +2,29 @@
 // between the two messengers in the invite flow, kept in one place so the
 // routes stay about permissions rather than about URL formats.
 
+import { maxSettings } from "@/lib/botSettings";
+
 export type InviteChannel = "telegram" | "max";
 
 export function inviteChannel(value: unknown): InviteChannel {
   return value === "max" ? "max" : "telegram";
 }
 
-export function botUsername(channel: InviteChannel): string {
-  const max = process.env.MAX_BOT_USERNAME || process.env.NEXT_PUBLIC_MAX_BOT_USERNAME;
-  return (channel === "max" ? max : process.env.TELEGRAM_BOT_USERNAME) || "";
+// Async because of MAX alone: its bot is connected from inside the tracker
+// and its name is stored in the database (see botSettings.ts), so nothing
+// can answer this from process.env alone any more.
+export async function botUsername(channel: InviteChannel): Promise<string> {
+  if (channel === "max") {
+    const settings = await maxSettings();
+    return settings?.username || "";
+  }
+  return process.env.TELEGRAM_BOT_USERNAME || "";
 }
 
 // Both messengers carry the code the same way — as a `start` payload on a
 // link to the bot: https://t.me/bot?start=CODE, https://max.ru/bot?start=CODE.
-export function inviteLink(channel: InviteChannel, code: string): string {
-  const username = botUsername(channel);
+export async function inviteLink(channel: InviteChannel, code: string): Promise<string> {
+  const username = await botUsername(channel);
   if (!username) return "";
   const base = channel === "max" ? "https://max.ru/" : "https://t.me/";
   return `${base}${username}?start=${code}`;

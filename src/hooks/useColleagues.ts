@@ -35,12 +35,7 @@ export type Colleague = {
   member: MemberState;
 };
 
-// Set only when a MAX bot exists for this install — creating one needs a
-// verified organisation profile on MAX для партнёров, so many installs will
-// never have it, and offering an invite that cannot work is worse than not
-// offering one.
-export const MAX_BOT_USERNAME = process.env.NEXT_PUBLIC_MAX_BOT_USERNAME || "";
-export const MAX_AVAILABLE = !!MAX_BOT_USERNAME;
+// Есть ли бот MAX — теперь вопрос к базе, а не к сборке: см. useMaxBot.
 
 async function fetchColleagues(): Promise<Colleague[] | null> {
   const db = createClient();
