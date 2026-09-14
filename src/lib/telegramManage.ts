@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { attachExecutors, assignNote } from "@/lib/assignExecutors";
 import { applyBulkMove, type BulkMovePlan } from "@/lib/bulkActions";
 import { closeMeetingWithResult } from "@/lib/meetingLink";
 
@@ -196,8 +197,30 @@ export async function resolvePendingAction(
     }));
     const { error } = await admin.from("tasks").insert(rows);
     if (error) return [...lines, "Не получилось создать задачи: " + error.message].join("\n");
+
+    // Задачи после встречи назначаются так же, как все остальные. Раньше
+    // здесь не заводилось ни одной строки участия: список выглядел
+    // розданным — «• Обзвонить филиалы — Игорь», — а у Игоря не появлялось
+    // ничего, и спросить с него было не за что.
+    const assigned = new Map<string, string[]>();
+    const notes: string[] = [];
+    for (const row of rows) {
+      if (!row.assignee) continue;
+      const result = await attachExecutors(admin, pending.userId, row, [row.assignee]);
+      assigned.set(row.id, result.attached);
+      const note = assignNote(result).trim();
+      if (note) notes.push(`«${row.title}»: ${note}`);
+    }
+
     lines.push(`✓ Создано задач: ${rows.length}`);
-    return [...lines, ...rows.map((r) => `• ${r.title}${r.assignee ? " — " + r.assignee : ""}`)].join("\n");
+    return [
+      ...lines,
+      ...rows.map((r) => {
+        const who = assigned.get(r.id) || [];
+        return `• ${r.title}${who.length ? " — " + who.join(", ") : ""}`;
+      }),
+      ...notes,
+    ].join("\n");
   }
 
   if (!confirmed) {

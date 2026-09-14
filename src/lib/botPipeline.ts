@@ -1,10 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig, BotTransport } from "@/lib/botTransport";
 import { colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
-import { chatsFor, findColleagueByChat, taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
-import { notifyOwner, sendToColleague } from "@/lib/botDelivery";
-import { isSelfAssignee } from "@/lib/trackerRows";
-import { isQuietHour } from "@/lib/quietHours";
+import { findColleagueByChat } from "@/lib/colleagues";
+import { notifyOwner } from "@/lib/botDelivery";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
@@ -15,6 +13,7 @@ import { answerTrackerQuestion } from "@/lib/telegramAssistant";
 import { extractMeetingNotes } from "@/lib/meetingNotes";
 import { findMeetingForNotes } from "@/lib/meetingLink";
 import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
+import { attachExecutors, attachMeetingParticipants, assignNote } from "@/lib/assignExecutors";
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 
 // What the bot DOES with a message — the whole of it, and none of the
@@ -59,15 +58,6 @@ async function remember(ctx: BotContext, patch: Record<string, unknown>) {
   await ctx.admin.from(ctx.channel.accountsTable).update(patch).eq(ctx.channel.chatColumn, ctx.chatId);
 }
 
-// Как зовут владельца в глазах исполнителя. Своя строка в списке людей
-// помечена «(я)» — из неё и берётся имя, потому что «Задача от трекера»
-// не говорит человеку ничего о том, кто с него спросит.
-async function ownerName(ctx: BotContext, userId: string): Promise<string> {
-  const { data } = await ctx.admin.from("assignees").select("name").eq("user_id", userId);
-  const self = ((data || []) as { name: string }[]).find((a) => isSelfAssignee(a.name));
-  return self ? self.name.replace(/\(я\)\s*$/, "").trim() || "трекера" : "трекера";
-}
-
 // Задача на нескольких человек — одна задача.
 //
 // До этого бот знал только поле assignee: фраза «поручи Игорю и Никите»
@@ -80,38 +70,10 @@ async function ownerName(ctx: BotContext, userId: string): Promise<string> {
 // нельзя выключить: поставить задачу и не сказать — это ровно тот случай,
 // ради которого всё это затевалось. Ночью трекер молчит, задача придёт
 // утренней сводкой.
-async function attachAndNotifyExecutors(
-  ctx: BotContext,
-  userId: string,
-  task: { id: string; title: string; description: string; deadline: string | null; priority: string },
-  names: string[],
-): Promise<string[]> {
-  const wanted = [...new Set(names.filter(Boolean))];
-  if (!wanted.length) return [];
-
-  const { data } = await ctx.admin
-    .from("assignees")
-    .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username")
-    .eq("user_id", userId)
-    .in("name", wanted);
-  const people = (data || []) as ColleagueRow[];
-  if (!people.length) return [];
-
-  await ctx.admin
-    .from("task_participants")
-    .insert(people.map((person) => ({ task_id: task.id, assignee_id: person.id, role: "executor" })));
-
-  if (isQuietHour()) return people.map((p) => p.name);
-
-  const from = await ownerName(ctx, userId);
-  for (const person of people) {
-    if (isSelfAssignee(person.name)) continue;
-    const target = chatsFor(person)[0];
-    if (!target) continue;
-    await sendToColleague(target, taskMessage(task, from), taskButtons(task.id, "executor"));
-  }
-  return people.map((p) => p.name);
-}
+//
+// Само назначение переехало в assignExecutors.ts: тем же заняты задачи,
+// надиктованные списком после встречи, и раньше эти два места делали разное
+// (одно тихо теряло строку, второе не заводило её вовсе).
 
 async function respondToTool(ctx: BotContext, userId: string, tool: string, input: Record<string, unknown>, droppedNames: string[]) {
   if (tool === "create_task") {
@@ -134,17 +96,21 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     }
 
     const extra = Array.isArray(input.executors) ? (input.executors as unknown[]).filter((n): n is string => typeof n === "string") : [];
-    const attached = await attachAndNotifyExecutors(ctx, userId, row, [row.assignee, ...extra]);
+    const assigned = await attachExecutors(ctx.admin, userId, row, [row.assignee, ...extra]);
 
     const lines = [`✓ Задача: «${row.title}»`];
     if (row.deadline) lines.push("Срок: " + fmtDate(row.deadline as string));
     // Множественное число не украшение: «Исполнитель: Игорь» под задачей,
     // которая стоит на двоих, — это и есть «я думал, что поручил обоим».
-    const shown = attached.length ? attached : row.assignee ? [row.assignee] : [];
+    //
+    // И только те, кто действительно назначен. Раньше здесь стояло имя из
+    // поля даже тогда, когда строка участия не завелась: ответ подтверждал
+    // назначение, которого не было, а выяснялось это неделей позже.
+    const shown = assigned.attached;
     if (shown.length === 1) lines.push("Исполнитель: " + shown[0]);
     if (shown.length > 1) lines.push("Исполнители: " + shown.join(", "));
     if (row.priority === "high") lines.push("Приоритет: высокий");
-    await say(ctx, lines.join("\n") + droppedNote(droppedNames));
+    await say(ctx, lines.join("\n") + droppedNote(droppedNames) + assignNote(assigned));
     return;
   }
 
@@ -168,9 +134,19 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
       await say(ctx, "Не получилось сохранить встречу: " + error.message);
       return;
     }
+    // Строки голосования — не то же самое, что список имён на карточке:
+    // без них у людей нет кнопок «Буду / Не смогу», нет напоминаний и нет
+    // строки «не ответили». Раньше их заводило только окно карточки, и
+    // встреча, созданная голосом, оказывалась приглашением без адресатов.
+    const invited = await attachMeetingParticipants(
+      ctx.admin,
+      userId,
+      row.id,
+      (row.participants as unknown[]).filter((n): n is string => typeof n === "string"),
+    );
     const lines = [`✓ Встреча: «${row.title}»`, `${fmtDate(row.date)}${row.time ? ", " + row.time : ""}`];
-    if (row.participants.length) lines.push("Участники: " + row.participants.join(", "));
-    await say(ctx, lines.join("\n") + droppedNote(droppedNames));
+    if (invited.attached.length) lines.push("Участники: " + invited.attached.join(", "));
+    await say(ctx, lines.join("\n") + droppedNote(droppedNames) + assignNote(invited));
     return;
   }
 

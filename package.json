@@ -11,7 +11,8 @@
     "test:rls": "node --env-file=.env.local scripts/test-rls.mjs",
     "test:schema": "scripts/start-test-db.sh && node scripts/test-schema.mjs",
     "test:e2e": "node --env-file=.env.local node_modules/@playwright/test/cli.js test",
-    "test:bots": "node --env-file=.env.local scripts/test-bots.mjs"
+    "test:bots": "node --env-file=.env.local scripts/test-bots.mjs",
+    "test:workspace": "node --env-file=.env.local scripts/test-workspace.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

@@ -101,8 +101,15 @@ export default function TaskCard({
           {recurLabel(task) && <span className="pill pill-recur">{recurLabel(task)}</span>}
           {/* Pressed «Принял» in Telegram — the answer to «взял в работу?»,
               without having to ask. Dropped once the task is done, where it
-              would only be noise. */}
-          {task.acceptedAt && task.status !== "done" && <span className="pill pill-accepted">✅ принял</span>}
+              would only be noise.
+
+              Only where there is one person to speak for. tasks.accepted_at
+              is set by whoever pressed first, so on a task standing on four
+              people this pill read «принял» after one of them — the exact
+              misreading («значит, взяли») that the progress line below is
+              there to prevent. Where that line exists, it is the truth and
+              this pill is not. */}
+          {task.acceptedAt && !progress && task.status !== "done" && <span className="pill pill-accepted">✅ принял</span>}
           {/* Стадия важнее, чем «принял»: «на приёмке» — это очередь
               Кирилла, «кто-то не может» — остановка, о которой иначе
               узнаёшь последним. */}
