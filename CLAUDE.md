@@ -59,7 +59,19 @@ npm run test:rls      # every table's row-level security, against the real datab
 npm run test:schema   # applies every migration to a throwaway local Postgres and
                       # exercises the multi-user access rules — no credentials,
                       # no production. Run it BEFORE any migration goes anywhere.
+                      # NOTE: needs a local postgres and does NOT run on his
+                      # Windows machine — the one guard on the multi-user
+                      # access rules is the one he cannot run.
 npm run test:bots     # drives both messenger webhooks end to end
+npm run test:workspace  # owner + two throwaway managers against production:
+                      # invite, join, a task on two people, review, return,
+                      # refusal, meeting revote, idea→task, discussion,
+                      # access revoked. 60 checks. Written 15.09.2026 because
+                      # nothing covered any of this.
+node --env-file=.env.local scripts/check-assignments.mjs [--fix]
+                      # tasks and meetings that LOOK assigned and are not.
+                      # Worth running weekly: it is what caught the bot
+                      # assigning nobody while replying «Исполнитель: Игорь».
 node --env-file=.env.local scripts/run-migration.mjs supabase/migrations/00NN_x.sql
 node --env-file=.env.local scripts/max-setup.mjs https://<deployment>   # MAX webhook, fallback for /max
 ```
