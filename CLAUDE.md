@@ -31,6 +31,12 @@ comments are English.
 - Do the whole task, then verify, then report. He does not want to be asked
   for permission — he has said so explicitly — but he does want to be told
   what was decided and what was left out.
+- **Finished work goes straight to `main`, always.** He said it in those
+  words: «вливай всегда сразу все изменения». A session branch is a place
+  to work, not a place to leave things — merge it into `main` and push the
+  moment the checks are green, and never end a task with the change sitting
+  in a branch waiting for him to say "merge". The checks are what stands
+  between a merge and a broken production, so they are not optional.
 - Every change ends with: `npm test` (unit), `npm run lint`, `npm run build`,
   and the e2e suite where the change is visible. Nothing is "done" while a
   check is failing; say so instead.
