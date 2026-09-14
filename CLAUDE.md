@@ -124,6 +124,16 @@ a broken feature.
 The browser client probes the direct host once and falls back to the `/sb`
 rewrite on our own domain (`next.config.ts`), remembering the choice.
 
+**Russian hosts need a root CA the server does not have.** `*.max.ru` and
+GigaChat are signed by the Ministry of Digital Development's root, which a
+Russian Windows machine trusts and a Vercel function in fra1 does not. So
+these calls work from here and fail there — the most misleading shape a bug
+can have — and Node reports it as the two words «fetch failed», naming
+nothing. `russianCa.ts` holds the root (from `certs/`) and hands out both an
+`https.Agent` and a fetch-shaped `russianFetch`; anything talking to a
+Russian service goes through it, and its errors unwrap `cause` so the reason
+is legible. This cost an afternoon disguised as «MAX не принял этот токен».
+
 **React compiler lint is on.** No setState inside an effect (derive during
 render, or `useSyncExternalStore` for browser state); no mutating a value
 after a hook has captured it.
@@ -174,6 +184,16 @@ by a running `next start` (and by OneDrive) — stop the server first.
   first, which is the same wrong answer in a different panel.
   The reason it is not three Vercel environment variables is the rule at the
   top of this file: that is four screens of somebody else's control panel.
+  **Connected for real on 14.09.2026**: «РОКАС Трекер» `@id6168118162_4_bot`,
+  under ООО «РЕГИОН КАСС» at business.max.ru/self/chat-bots (dev.max.ru is
+  documentation only). A new bot sits «на модерации» for up to a day and its
+  Настройки tab — where the token is — stays disabled the whole time, so an
+  empty token there means «not approved yet», not «broken». Two things bit on
+  the way in and would bite again: Vercel has **no `DATABASE_URL`**, so the
+  self-applying migration could not apply itself and 0022 went in with
+  `scripts/run-migration.mjs` from here; and every call to MAX failed on the
+  root CA (see the rule above). Editing a published bot sends it back through
+  moderation, which is why the mini-app link is not set yet.
 - Colleagues are recipients, not users. Making them real users who exchange
   items with each other is his own next big idea, deliberately deferred.
 - Offered and not yet decided: sending a task to Telegram automatically when
