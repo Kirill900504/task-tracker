@@ -51,6 +51,19 @@ async function errorText(res: Response): Promise<string> {
   return body?.message || body?.error || `HTTP ${res.status}`;
 }
 
+// Node's fetch collapses every network failure into the same two words —
+// "fetch failed" — and hides the reason in `cause`. On the /max page those
+// two words are the whole answer the owner gets, and they cannot tell a
+// wrong token from a name that does not resolve, a refused connection or a
+// timeout. So unwrap the cause and put its code in the message.
+function networkError(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  const cause = (e as { cause?: unknown }).cause;
+  if (!(cause instanceof Error)) return e.message;
+  const code = (cause as { code?: string }).code;
+  return `${e.message} — ${code ? code + ": " : ""}${cause.message}`;
+}
+
 export async function sendMaxMessage(userId: number, text: string, options?: { buttons?: BotButton[][] }): Promise<BotSendResult> {
   const settings = await maxSettings();
   if (!settings) return { ok: false, error: "MAX не подключён" };
@@ -67,7 +80,7 @@ export async function sendMaxMessage(userId: number, text: string, options?: { b
     const body = await res.json().catch(() => null);
     return { ok: true, messageId: body?.message?.body?.mid };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: networkError(e) };
   }
 }
 
@@ -138,7 +151,7 @@ export async function maxBotInfo(token: string): Promise<{ ok: true; username: s
     if (!body) return { ok: false, error: "MAX ответил пустотой" };
     return { ok: true, username: body.username || "", name: body.name || body.first_name || "" };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: networkError(e) };
   }
 }
 
@@ -161,6 +174,6 @@ export async function subscribeMaxWebhook(
     if (body?.success === false) return { ok: false, error: body.message || "MAX отклонил подписку" };
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: networkError(e) };
   }
 }
