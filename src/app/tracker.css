@@ -233,8 +233,13 @@
   }
   .idea-item{
     border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:6px;
-    display:flex; justify-content:space-between; gap:10px; align-items:flex-start; background:var(--paper-soft);
+    display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px; align-items:flex-start; background:var(--paper-soft);
   }
+  /* «Отправляю Никита Козлов…» — четвёртый ребёнок этой же флекс-строки, и
+     без переноса он забирал ширину у текста мысли: текст сжимался до одной
+     буквы и вытягивался в вертикальный столбик. Своя строка, а не третья
+     колонка. */
+  .idea-item > .send-result{flex-basis:100%; margin-top:2px;}
   .idea-item:hover{border-color:var(--accent);}
   .idea-text{white-space:pre-wrap; word-break:break-word; font-size:13px;}
   .idea-meta{font-size:11px; color:var(--ink-soft); font-family:var(--mono); margin-top:3px;}
@@ -692,9 +697,14 @@
 
   /* Команда в Telegram */
   .team-list{display:flex; flex-direction:column; gap:2px; margin-bottom:14px;}
-  .team-row{display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--line);}
+  /* Строка переносится, а имя не сжимается меньше своего минимума. У
+     подключённого человека кнопок вчетверо больше, чем у остальных, и при
+     flex:1 без нижней границы имя ужималось в ноль — в списке оказывалась
+     строка вообще без имени, зато с кнопкой «Отключить вход». */
+  .team-row{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; padding:7px 0; border-bottom:1px solid var(--line);}
   .team-row:last-child{border-bottom:0;}
-  .team-name{flex:1; min-width:0; font-size:13px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .team-name{flex:1 1 150px; min-width:130px; font-size:13px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .team-row .btn{flex:none;}
   .team-status{font-family:var(--mono); font-size:11px; color:var(--ink-soft); flex:none;}
   .team-status.linked{color:var(--long-border);}
   .invite-link{
