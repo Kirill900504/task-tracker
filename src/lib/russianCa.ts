@@ -33,7 +33,10 @@ export function russianFetch(url: string, init?: RequestInit): Promise<Response>
       const chunks: Buffer[] = [];
       res.on("data", (chunk: Buffer) => chunks.push(chunk));
       res.on("end", () => {
-        const text = Buffer.concat(chunks).toString("utf-8");
+        // The bytes stay bytes. Decoding to a string here would still let
+        // .json() and .text() work and would quietly ruin .arrayBuffer(),
+        // which is how a voice note arrives.
+        const bytes = Buffer.concat(chunks);
         // A 204 or 304 must not carry a body, and Response throws if given
         // one — MAX answers some calls that way.
         const empty = res.statusCode === 204 || res.statusCode === 304;
@@ -43,7 +46,7 @@ export function russianFetch(url: string, init?: RequestInit): Promise<Response>
         // Response describe a body that no longer exists.
         const type = res.headers["content-type"];
         resolve(
-          new Response(empty ? null : text, {
+          new Response(empty ? null : bytes, {
             status: res.statusCode || 0,
             headers: type ? { "content-type": String(type) } : {},
           }),

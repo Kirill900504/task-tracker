@@ -90,6 +90,64 @@ export async function sendMaxMessage(userId: number, text: string, options?: { b
   }
 }
 
+// A file, the way MAX wants one: ask where to put it, put it there, then
+// send a message that points at what was put. Telegram takes all three in a
+// single multipart call, which is why sendTelegramDocument is four lines and
+// this is not.
+//
+// The three steps also live on three different hosts. Only the first and
+// last are platform-api2.max.ru; the bytes go to a CDN of MAX's choosing
+// (fu.oneme.ru for files), which has an ordinary public certificate — so
+// that one is a plain fetch with a FormData body, and the other two are
+// russianFetch. Getting this backwards fails in the one way this codebase
+// has already paid for: only in production.
+export async function sendMaxDocument(
+  userId: number,
+  filename: string,
+  content: string,
+  caption?: string,
+): Promise<BotSendResult> {
+  const settings = await maxSettings();
+  if (!settings) return { ok: false, error: "MAX не подключён" };
+  try {
+    const slotRes = await russianFetch(`${API}/uploads?type=file`, { method: "POST", headers: headers(settings.token) });
+    if (!slotRes.ok) return { ok: false, error: await errorText(slotRes) };
+    const slot = (await slotRes.json().catch(() => null)) as { url?: string } | null;
+    if (!slot?.url) return { ok: false, error: "MAX не выдал адрес для загрузки" };
+
+    const form = new FormData();
+    form.append("data", new Blob([content], { type: "application/json" }), filename);
+    const upRes = await fetch(slot.url, { method: "POST", body: form });
+    if (!upRes.ok) return { ok: false, error: `загрузка файла: HTTP ${upRes.status}` };
+    const uploaded = (await upRes.json().catch(() => null)) as { token?: string } | null;
+    if (!uploaded?.token) return { ok: false, error: "MAX не вернул токен файла" };
+
+    // The upload and the attachment become the same thing only once MAX has
+    // finished digesting the bytes, and it says so by refusing the send with
+    // `attachment.not.ready`. That is a wait, not a failure — a backup that
+    // silently did not arrive is exactly the kind of loss a backup exists to
+    // prevent, so give it a few seconds before believing it.
+    const attachment = { type: "file", payload: { token: uploaded.token } };
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await russianFetch(`${API}/messages?user_id=${userId}`, {
+        method: "POST",
+        headers: headers(settings.token),
+        body: JSON.stringify({ text: caption ? clip(caption) : undefined, attachments: [attachment] }),
+      });
+      if (res.ok) {
+        const body = await res.json().catch(() => null);
+        return { ok: true, messageId: body?.message?.body?.mid };
+      }
+      const error = await errorText(res);
+      if (!/not\.?ready/i.test(error)) return { ok: false, error };
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    return { ok: false, error: "MAX так и не принял файл (attachment.not.ready)" };
+  } catch (e) {
+    return { ok: false, error: networkError(e) };
+  }
+}
+
 export async function editMaxMessage(messageId: string, text: string): Promise<void> {
   const settings = await maxSettings();
   if (!settings) return;

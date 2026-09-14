@@ -74,12 +74,27 @@ export async function editTelegramMessage(
   }
 }
 
-export async function sendTelegramDocument(chatId: number, filename: string, content: string, caption?: string) {
+// Reports whether the file actually arrived. It used to swallow the answer,
+// which mattered once the backup started deciding what to purge on the
+// strength of it: «отправили и забыли» is not a copy.
+export async function sendTelegramDocument(
+  chatId: number,
+  filename: string,
+  content: string,
+  caption?: string,
+): Promise<{ ok: boolean; error?: string }> {
   const form = new FormData();
   form.append("chat_id", String(chatId));
   if (caption) form.append("caption", caption);
   form.append("document", new Blob([content], { type: "application/json" }), filename);
-  await fetch(`${API}/sendDocument`, { method: "POST", body: form });
+  try {
+    const res = await fetch(`${API}/sendDocument`, { method: "POST", body: form });
+    if (res.ok) return { ok: true };
+    const body = (await res.json().catch(() => null)) as { description?: string } | null;
+    return { ok: false, error: body?.description || `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 // Telegram only gives webhooks a file_id — the actual bytes live on

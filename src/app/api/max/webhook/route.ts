@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { maxTransport } from "@/lib/max";
+import { russianFetch } from "@/lib/russianCa";
 import { maxSettings } from "@/lib/botSettings";
 import { decodeCallback } from "@/lib/colleagues";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
@@ -48,7 +49,12 @@ async function oggVoiceBytes(attachments: unknown): Promise<ArrayBuffer | null> 
   const url = (audio as { payload?: { url?: string } } | undefined)?.payload?.url;
   if (!url) return null;
   try {
-    const res = await fetch(url);
+    // MAX hands out attachment URLs on hosts of its own choosing. Today they
+    // are oneme.ru with an ordinary certificate, but the host is theirs to
+    // change, and russianFetch trusts the public CAs as well — it only adds
+    // a root, it never replaces the list. So this cannot become the same
+    // production-only failure the API calls already were.
+    const res = await russianFetch(url);
     if (!res.ok) return null;
     const bytes = await res.arrayBuffer();
     const head = new Uint8Array(bytes.slice(0, 4));
