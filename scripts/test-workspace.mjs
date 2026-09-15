@@ -131,6 +131,12 @@ try {
   const reuse = await post(null, "/api/workspace/join", { code: inviteA.body.code, email: `x-${Date.now()}@example.invalid`, password: passA });
   check("использованное приглашение второй раз не работает", reuse.status === 400, reuse);
 
+  // Владелец, открывший ссылку не выйдя из аккаунта, стал бы участником
+  // собственного трекера — и увидел бы экран руководителя вместо своего.
+  const inviteC = await post(owner, "/api/workspace/invite", { assigneeId: personB.id });
+  const selfJoin = await post(owner, "/api/workspace/join", { code: inviteC.body?.code || "-" });
+  check("владелец не может принять приглашение в свой же трекер", selfJoin.status === 400, selfJoin);
+
   const mgrA = await signIn(emailA, passA);
   const mgrB = await signIn(emailB, passB);
   created.push(mgrA.id, mgrB.id);
