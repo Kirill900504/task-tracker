@@ -59,9 +59,12 @@ npm run test:rls      # every table's row-level security, against the real datab
 npm run test:schema   # applies every migration to a throwaway local Postgres and
                       # exercises the multi-user access rules — no credentials,
                       # no production. Run it BEFORE any migration goes anywhere.
-                      # NOTE: needs a local postgres and does NOT run on his
-                      # Windows machine — the one guard on the multi-user
-                      # access rules is the one he cannot run.
+                      # NOTE: needs a local postgres, so it does NOT run on
+                      # his Windows machine. It runs in CI on every push
+                      # instead (.github/workflows/ci.yml) — that is where
+                      # to look when it fails, and the failure is echoed
+                      # into the run's annotation because job logs are
+                      # invisible to anyone not signed in to GitHub.
 npm run test:bots     # drives both messenger webhooks end to end
 npm run test:workspace  # owner + two throwaway managers against production:
                       # invite, join, a task on two people, review, return,
@@ -145,6 +148,26 @@ nothing. `russianCa.ts` holds the root (from `certs/`) and hands out both an
 `https.Agent` and a fetch-shaped `russianFetch`; anything talking to a
 Russian service goes through it, and its errors unwrap `cause` so the reason
 is legible. This cost an afternoon disguised as «MAX не принял этот токен».
+
+**Two truths about one fact always drift apart.** The audit of 15.09.2026
+found the same shape three times: a name in `tasks.assignee` beside a row in
+`task_participants`, a list of names in `meetings.participants` beside
+`meeting_participants`, `tasks.accepted_at` beside the executors' own
+`accepted_at`. Each pair had diverged — two tasks assigned to nobody, 26
+meetings of 28 inviting nobody, a card reading «✅ принял» after one of four.
+Migration 0024 makes the first two structural: a name that matches a real
+person creates the row itself, only when there is none and only when the name
+actually changed. The trigger cannot send a message, so `assignExecutors.ts`
+still exists — it assigns AND tells the person, and the trigger is the net
+under it. Before adding a third way to say the same thing, don't.
+
+**An answer goes through the route, and only through it.** The rules that
+make a report a report — a mandatory comment, a mandatory reason, the move to
+приёмка, telling the person who asked — live in `/api/workspace/report`. The
+database used to allow a manager to write those same rows straight from the
+browser, which is the same as not having the rules. Migration 0023 removed
+that: reading stays, answering is the route's alone. Adding a new way to
+answer means adding it to that route, not beside it.
 
 **React compiler lint is on.** No setState inside an effect (derive during
 render, or `useSyncExternalStore` for browser state); no mutating a value
