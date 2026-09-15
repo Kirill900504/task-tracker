@@ -37,4 +37,14 @@ jobs:
       # postgres рядом, а там Windows. Здесь он есть из коробки, так что
       # проверка идёт на каждый push, а не когда о ней вспомнят. Ничего
       # боевого не трогает: миграции накатываются на пустую временную базу.
-      - run: npm run test:schema
+      #
+      # Падение выносится в аннотацию: логи задания видны только тому, кто
+      # вошёл в GitHub, а «Process completed with exit code 1» не говорит
+      # ничего и тому, кто вошёл.
+      - name: Права доступа на чистой копии схемы (test:schema)
+        run: |
+          set -o pipefail
+          npm run test:schema 2>&1 | tee schema.log || {
+            echo "::error::test:schema упал. Последние строки: $(tail -c 2500 schema.log | tr '\n' '¶')"
+            exit 1
+          }
