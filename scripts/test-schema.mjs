@@ -160,7 +160,12 @@ async function main() {
       "update public.task_participants set done_at = now(), done_comment = 'отгрузили' where task_id = $1 and assignee_id = $2",
       [taskId, byName["Аня"]],
     );
-    check("исполнитель отчитывается по себе", rowCount === 1);
+    // Отчёт пишется только маршрутом /api/workspace/report — там живут
+    // обязательный комментарий, переход на приёмку и письмо постановщику.
+    // База этого не повторяет и потому не разрешает обойти (миграция 0023):
+    // иначе отчёт без единого слова отделяла бы от боевых данных одна
+    // строчка в консоли браузера.
+    check("исполнитель не отчитывается мимо маршрута", rowCount === 0);
   });
 
   await as(db, MANAGER_B, async () => {
@@ -302,7 +307,9 @@ async function main() {
       "update public.meeting_participants set response = 'yes', responded_at = now(), round = 1 where meeting_id = $1 and assignee_id = $2",
       [meetingId, byName["Аня"]],
     );
-    check("участник голосует за себя", rowCount === 1);
+    // Голос — тоже маршрутом: «не смогу» без причины база проверить не
+    // может, а маршрут может и обязан.
+    check("участник не голосует мимо маршрута", rowCount === 0);
   });
   await as(db, MANAGER_A, async () => {
     const { rowCount } = await db.query(
@@ -339,7 +346,10 @@ async function main() {
       "update public.idea_recipients set converted_task_id = $1, seen_at = now() where idea_id = $2 and assignee_id = $3",
       [taskId, ideaId, byName["Аня"]],
     );
-    check("«взять в работу» отмечается получателем", rowCount === 1);
+    // И это тоже маршрутом: «взять в работу» заводит задачу, ставит
+    // получателя исполнителем и пишет отправителю — из браузера вышла бы
+    // помеченная мысль без задачи (миграция 0023).
+    check("мысль не отмечается мимо маршрута", rowCount === 0);
   });
 
   console.log("\n«Взять в работу» руками руководителя:");

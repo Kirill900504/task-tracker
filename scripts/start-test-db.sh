@@ -29,7 +29,13 @@ if [ "$(id -u)" = "0" ] && [ -z "${ROKAS_DB_REEXEC:-}" ]; then
 fi
 
 if [ ! -x "$PGBIN/initdb" ]; then
-  echo "Postgres не найден в $PGBIN — задайте PGBIN или установите postgresql" >&2
+  # Самый частый случай — Windows: postgres рядом не лежит, и поставить его
+  # ради одной проверки никто не станет. Это не повод, чтобы проверка не
+  # выполнялась вовсе: она идёт в CI на каждый push (см.
+  # .github/workflows/ci.yml), где ubuntu-runner приносит postgres с собой.
+  echo "Postgres не найден в $PGBIN." >&2
+  echo "Задайте PGBIN, если он стоит в другом месте." >&2
+  echo "На Windows эта проверка локально не запускается — она идёт в CI на каждый push." >&2
   exit 1
 fi
 
