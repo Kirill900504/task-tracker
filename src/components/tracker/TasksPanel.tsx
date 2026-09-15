@@ -441,7 +441,14 @@ export default function TasksPanel({
             actions.saveTask(t);
             // Задача только что создана — строки участия заводятся и по
             // имени из поля «Исполнитель», и по всем, кого добавили рядом.
-            void participants.attachOnCreate(t.id, t.assignee, pending);
+            //
+            // И если кому-то она не ушла, об этом говорится вслух. Раньше
+            // ответ отбрасывался, и «Никита не подключён» терялось на самом
+            // частом пути: вписал имя в поле, сохранил, считаешь, что
+            // поручил.
+            void participants.attachOnCreate(t.id, t.assignee, pending).then((notices) => {
+              for (const notice of notices || []) toasts.showToast(notice);
+            });
           }}
           onDelete={() => modalTask && deleteTask(modalTask)}
           onClose={closeModal}

@@ -42,13 +42,27 @@ type Row = {
   reschedule_requested_at: string | null;
   reschedule_to: string | null;
   reschedule_reason: string | null;
-  assignees: { name: string } | { name: string }[] | null;
+  assignees: Person | Person[] | null;
 };
 
-function nameOf(row: Row): string {
+type Person = { name: string; telegram_chat_id: number | null; max_user_id: number | null };
+
+function personOf(row: Row): Person | null {
   const a = row.assignees;
-  if (!a) return "";
-  return Array.isArray(a) ? a[0]?.name || "" : a.name || "";
+  if (!a) return null;
+  return Array.isArray(a) ? a[0] || null : a;
+}
+
+function nameOf(row: Row): string {
+  return personOf(row)?.name || "";
+}
+
+// Есть ли у человека куда получить задачу. Вход в трекер сюда не считается
+// намеренно: строка на карточке отвечает на вопрос «ушло ли сообщение», а
+// не «увидит ли он когда-нибудь».
+function reachableOf(row: Row): boolean {
+  const p = personOf(row);
+  return !!p && (p.telegram_chat_id != null || p.max_user_id != null);
 }
 
 export type PersonOption = { id: string; name: string };
@@ -73,7 +87,7 @@ export function useTaskParticipants() {
       db
         .from("task_participants")
         .select(
-          "id, task_id, assignee_id, role, accepted_at, done_at, done_comment, declined_at, decline_reason, reschedule_requested_at, reschedule_to, reschedule_reason, assignees(name)",
+          "id, task_id, assignee_id, role, accepted_at, done_at, done_comment, declined_at, decline_reason, reschedule_requested_at, reschedule_to, reschedule_reason, assignees(name, telegram_chat_id, max_user_id)",
         ),
       // The full list, the owner's own row included: work can be put on
       // yourself, and the send menu is the only place that has a reason to
@@ -93,6 +107,10 @@ export function useTaskParticipants() {
         doneComment: raw.done_comment,
         declinedAt: raw.declined_at,
         declineReason: raw.decline_reason,
+        // «Не подключён» видно всегда, а не только в секунду добавления:
+        // четверо из шести людей в боевом трекере не подключены, и задача
+        // до них не доходит молча.
+        reachable: reachableOf(raw),
         rescheduleTo: raw.reschedule_to,
         rescheduleReason: raw.reschedule_reason,
       };
@@ -171,15 +189,26 @@ export function useTaskParticipants() {
 
       const already = new Set((byTask[taskId] || []).map((p) => p.assigneeId));
       const todo = wanted.filter((w) => !already.has(w.id));
-      if (!todo.length) return;
+      if (!todo.length) return [];
 
       // Не дождались (нет связи, задача не ушла в облако) — молча выходим:
       // участников можно добавить руками, а падать здесь незачем.
-      if (!(await waitForTaskRow(taskId))) return;
+      if (!(await waitForTaskRow(taskId))) return [];
 
       // По одному, а не пачкой: каждая вставка ещё и пишет человеку в
       // мессенджер, и «назначена» — то, о чём узнают порознь.
-      for (const w of todo) await add(taskId, w.id, w.role);
+      //
+      // И то, что она сказала, возвращается наверх. Раньше здесь стояло
+      // `await add(...)` без присваивания, и «Никита не подключён — задача
+      // до него не дошла» терялось ровно на самом частом пути: поставить
+      // задачу, вписав имя в поле. Список участников это сообщение
+      // показывал, а сохранение карточки — нет.
+      const notices: string[] = [];
+      for (const w of todo) {
+        const said = await add(taskId, w.id, w.role);
+        if (said) notices.push(said);
+      }
+      return notices;
     },
     [people, byTask, add],
   );

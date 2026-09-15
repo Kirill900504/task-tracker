@@ -23,6 +23,9 @@ export type TaskParticipant = {
   doneComment: string | null;
   declinedAt: string | null;
   declineReason: string | null;
+  // Есть ли куда прислать ему задачу. Не участвует ни в одном подсчёте —
+  // это про доставку, а не про ход работы, — и потому необязательно.
+  reachable?: boolean;
 };
 
 // Where the task stands, in the order it normally travels:

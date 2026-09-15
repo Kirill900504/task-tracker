@@ -175,8 +175,18 @@ export default function TaskParticipants({
               <span className="tp-declined">⛔ не может{p.declineReason ? ": " + p.declineReason : ""}</span>
             )}
             {!p.doneAt && !hasDeclined(p) && p.acceptedAt && <span className="tp-accepted">✅ принял</span>}
-            {!p.doneAt && !hasDeclined(p) && !p.acceptedAt && p.role === "executor" && (
+            {/* «Ждём ответа» от человека без мессенджера — неправда: задача
+                до него не доехала, и ждать нечего. Поэтому одно вместо
+                другого, а не рядом. Видно это должно быть всегда, а не
+                только в секунду добавления: в боевом трекере четверо из
+                шести не подключены. */}
+            {!p.doneAt && !hasDeclined(p) && !p.acceptedAt && p.role === "executor" && p.reachable !== false && (
               <span className="tp-waiting">ждём ответа</span>
+            )}
+            {!p.doneAt && !hasDeclined(p) && p.reachable === false && (
+              <span className="tp-unreachable" title="Задача ему не отправлена: нет ни Telegram, ни MAX. Подключить можно в «Команде».">
+                📭 не подключён — задача не ушла
+              </span>
             )}
           </span>
 

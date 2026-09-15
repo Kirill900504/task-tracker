@@ -1347,6 +1347,9 @@
      быть не должно. Пунктир вместо сплошной рамки. */
   .ms-idea{border-style:dashed; border-left-style:dashed;}
   /* Просьба о переносе — то немногое в карточке, что ждёт решения. */
+  /* «Не подключён» — не про ход работы, а про то, что задача до человека
+     не доехала. Поэтому не красный: виноват не он. */
+  .tp-unreachable{font-size:11.5px; color:var(--ink-soft); white-space:nowrap;}
   .tp-ask{
     margin-bottom:10px; padding:9px 11px; border-radius:var(--radius-sm);
     background:var(--med-bg); border:1px solid rgba(224,184,77,.4);
