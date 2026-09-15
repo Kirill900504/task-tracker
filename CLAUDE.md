@@ -169,6 +169,29 @@ browser, which is the same as not having the rules. Migration 0023 removed
 that: reading stays, answering is the route's alone. Adding a new way to
 answer means adding it to that route, not beside it.
 
+**The history of an item lives in its own discussion.** Sending work back
+for rework clears the reports (`done_at`, `done_comment`) — it has to, or the
+task stays «отчитались все» forever. That erases the very thing people ask
+about afterwards: what was handed in the first time and what exactly was
+asked for. So every event that moves a task writes a line into its
+discussion, marked `system` (migration 0026): accepted, reported, refused,
+asked to move, approved, returned, force-closed. Not a new events table —
+that would be a third truth about one fact, and the discussion already has
+time, visibility and messenger delivery. System lines cannot be edited, take
+no reactions, are not counted as «в обсуждении писали», and the write policy
+refuses `system = true` from the browser outright. Write them in BOTH paths
+(`/api/workspace/report` and `colleagueReplies.ts`) or the two will drift.
+Text and deadline edits deliberately do NOT go there: they change often and
+through the sync engine, and a line per keystroke turns the history into a
+feed nobody reads.
+
+**PostgREST batch inserts do not fall back to column defaults.** Insert an
+array where one object omits a key another object has, and that row gets
+NULL rather than the default — so a `not null default false` column blows up
+the whole batch with 23502. Every row in one `.insert([...])` must carry the
+same keys. This cost half an hour of looking for a policy problem that was
+not there.
+
 **React compiler lint is on.** No setState inside an effect (derive during
 render, or `useSyncExternalStore` for browser state); no mutating a value
 after a hook has captured it.
