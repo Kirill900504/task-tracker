@@ -237,8 +237,19 @@ by a running `next start` (and by OneDrive) — stop the server first.
   silence would not hurt. Do not set it on your own initiative.
 - Colleagues are recipients, not users. Making them real users who exchange
   items with each other is his own next big idea, deliberately deferred.
-- Offered and not yet decided: sending a task to Telegram automatically when
-  an assignee is set (today it is the ✈ button).
+- **The morning brief is facts first, model second.** GigaChat writes the
+  prose part; everything with a name or a number in it is appended
+  afterwards in code — what is waiting for his приёмка, who has not answered
+  at all (`silence.ts`), what was discussed since yesterday, and on Mondays
+  what looks assigned but is not. That order is the rule, not the habit: the
+  model may reword, it may not count.
+- «Не ответили на задачу» and «задача не дошла» are two blocks on purpose. A
+  person with no messenger and no login has no button to press, and calling
+  that silence is both untrue and the fastest way to make the whole brief
+  unreadable. On 15.09.2026 all four «silent» people were exactly that.
+- Sending a task to the assignee at the moment of assignment is **done**, not
+  pending — `assignWork.ts` treats it as one of the three notifications that
+  cannot be switched off. The ✈ button stayed for «покажи это ещё и Ане».
 - Known gap, and it is smaller than it sounds: a voice note is transcribed
   only if it arrives as OGG/Opus, in either messenger. That is what both
   messengers' own recorders produce — the format that is refused is a
