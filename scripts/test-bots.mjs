@@ -143,7 +143,12 @@ try {
   check("answers a query command", maxQuery.status === 200, maxQuery);
 
   // The same update again: a redelivery must be dropped, not re-run.
-  const { data: seen } = await admin.from("max_processed_updates").select("update_key").eq("update_key", "msg:" + mid).maybeSingle();
+  const { data: seen } = await admin
+    .from("bot_processed_updates")
+    .select("update_key")
+    .eq("channel", "max")
+    .eq("update_key", "msg:" + mid)
+    .maybeSingle();
   check("remembers the update so a redelivery is ignored", !!seen, seen);
 
   // A wrong-messenger code: issued for Telegram, offered to MAX.

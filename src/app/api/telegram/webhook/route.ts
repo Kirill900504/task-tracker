@@ -69,7 +69,9 @@ export async function POST(req: Request) {
   // Insert-or-skip on update_id stops reprocessing a redelivered update
   // outright, regardless of what's causing the retry.
   if (updateId != null) {
-    const { error: dedupError } = await admin.from("telegram_processed_updates").insert({ update_id: updateId });
+    const { error: dedupError } = await admin
+      .from("bot_processed_updates")
+      .insert({ channel: "telegram", update_key: String(updateId) });
     // 23505 = unique_violation — already handled this exact update, skip
     // silently instead of sending another reply for the same message. Any
     // *other* error (e.g. the migration for this table not applied yet)

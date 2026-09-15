@@ -90,7 +90,7 @@ export async function POST(req: Request) {
   // task. Any error other than a duplicate fails open.
   const key = dedupeKey(update);
   if (key) {
-    const { error } = await admin.from("max_processed_updates").insert({ update_key: key });
+    const { error } = await admin.from("bot_processed_updates").insert({ channel: "max", update_key: key });
     if (error && error.code === "23505") return NextResponse.json({ ok: true });
   }
 
