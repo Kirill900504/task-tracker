@@ -126,10 +126,21 @@ async function main() {
     `insert into public.tasks (id, user_id, title, assignee, deadline) values ($1,$2,'Закрыть отгрузку','Аня','2026-09-30')`,
     [taskId, OWNER],
   );
+  // Строку исполнителя заводит не эта вставка, а само имя в поле (0024):
+  // имя на карточке и строка участия — одно и то же, и теперь это свойство
+  // базы, а не внимательность того, кто пишет очередной способ завести
+  // задачу. Наблюдателя добавляем отдельно — по имени он не выводится.
+  const { rows: autoRows } = await db.query(
+    "select assignee_id, role from public.task_participants where task_id = $1",
+    [taskId],
+  );
+  check(
+    "имя в поле само завело исполнителя",
+    autoRows.length === 1 && autoRows[0].role === "executor" && autoRows[0].assignee_id === byName["Аня"],
+  );
   await db.query(
-    `insert into public.task_participants (user_id, task_id, assignee_id, role)
-     values ($1,$2,$3,'executor'), ($1,$2,$4,'watcher')`,
-    [OWNER, taskId, byName["Аня"], byName["Вера"]],
+    `insert into public.task_participants (user_id, task_id, assignee_id, role) values ($1,$2,$3,'watcher')`,
+    [OWNER, taskId, byName["Вера"]],
   );
   check("на задаче исполнитель Аня и наблюдатель Вера", true);
 
@@ -298,10 +309,13 @@ async function main() {
     `insert into public.meetings (id, user_id, date, time, title, participants) values ($1,$2,'2026-09-20','10:00','Планёрка', array['Аня','Борис'])`,
     [meetingId, OWNER],
   );
-  await db.query(
-    `insert into public.meeting_participants (user_id, meeting_id, assignee_id, role) values ($1,$2,$3,'participant'), ($1,$2,$4,'participant')`,
-    [OWNER, meetingId, byName["Аня"], byName["Борис"]],
+  // Строки голосования заводит сам список имён (0024) — вставлять их руками
+  // больше не нужно и нельзя: упрёмся в уникальность.
+  const { rows: invited } = await db.query(
+    "select assignee_id from public.meeting_participants where meeting_id = $1",
+    [meetingId],
   );
+  check("имена во встрече сами завели голосование", invited.length === 2);
   await as(db, MANAGER_A, async () => {
     const { rowCount } = await db.query(
       "update public.meeting_participants set response = 'yes', responded_at = now(), round = 1 where meeting_id = $1 and assignee_id = $2",
@@ -387,6 +401,13 @@ async function main() {
      values ('mtg_legacy',$1, current_date + 3, '11:00', 'Старая встреча', array['Борис','Вера'], array['Борис'], 'planned')`,
     [OWNER],
   );
+  // «Старый вид» приходится воспроизводить нарочно: с 0024 имя заводит
+  // строку сразу, а 0021 переносила как раз те записи, у которых строк не
+  // было никогда. Убираем то, что успел завести триггер, — иначе проверялось
+  // бы, что перенос не ломает уже перенесённое, а это другой вопрос.
+  await db.query("delete from public.task_participants where task_id = 'tsk_legacy'");
+  await db.query("delete from public.meeting_participants where meeting_id = 'mtg_legacy'");
+
   await db.query(readFileSync(join(MIGRATIONS, "0021_backfill_participants.sql"), "utf8"));
 
   const { rows: legacyTask } = await db.query(

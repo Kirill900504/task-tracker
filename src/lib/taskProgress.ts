@@ -34,6 +34,22 @@ export type TaskParticipant = {
 //   done            — accepted by the person who set it, or force-closed
 export type TaskStage = "sent" | "accepted" | "blocked" | "awaiting_review" | "returned" | "done";
 
+// «Готово?» здесь спрашивают у двух разных колонок, и их легко перепутать —
+// один раз уже перепутали, и обе оказались записаны в одну строку.
+//
+//   tasks.status          — личная галочка владельца. Она была здесь, когда
+//                           трекер был на одного, и осталась ровно тем же:
+//                           «я считаю это сделанным». Ею владеет движок
+//                           синхронизации (см. taskToRow).
+//   tasks.approval_state  — приёмка работы, которую делали другие. Пишется
+//                           только сервером, в taskToRow её нет и быть не
+//                           должно: открытая вкладка откатит.
+//
+// Всё остальное про ход задачи не хранится вовсе, а выводится здесь из строк
+// участников — taskStage() ниже и есть единственный ответ на «а что с ней
+// сейчас». Записать то же самое ещё и в колонку значит завести вторую
+// правду, которая разойдётся с первой; в этом проекте так уже было с именем
+// исполнителя (миграция 0024).
 export type ApprovalState = "open" | "awaiting_review" | "accepted" | "returned";
 
 export function executors(participants: TaskParticipant[]): TaskParticipant[] {

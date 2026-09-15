@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { attachExecutors, assignNote } from "@/lib/assignExecutors";
 import { applyBulkMove, type BulkMovePlan } from "@/lib/bulkActions";
 import { closeMeetingWithResult } from "@/lib/meetingLink";
+import { newTaskRow } from "@/lib/newTask";
 
 // Editing/completing/deleting existing tasks and meetings from Telegram.
 // The model only ever supplies an action + a title fragment ("query") — it
@@ -183,18 +184,16 @@ export async function resolvePendingAction(
       return lines.length ? lines.join("\n") : "Нечего записывать.";
     }
 
-    const rows = pending.tasks.map((t) => ({
-      id: "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-      user_id: pending.userId,
-      title: t.title,
-      description: "",
-      assignee: t.assignee || "",
-      priority: t.priority,
-      term: "short",
-      status: "in_progress",
-      deadline: t.deadline || null,
-      recur: "none",
-    }));
+    const rows = pending.tasks.map((t) =>
+      newTaskRow({
+        id: "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        userId: pending.userId,
+        title: t.title,
+        assignee: t.assignee || "",
+        priority: t.priority,
+        deadline: t.deadline || null,
+      }),
+    );
     const { error } = await admin.from("tasks").insert(rows);
     if (error) return [...lines, "Не получилось создать задачи: " + error.message].join("\n");
 

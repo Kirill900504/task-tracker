@@ -7,6 +7,7 @@ import { canDecline, canReportDone } from "@/lib/taskProgress";
 import { canVoteNo } from "@/lib/meetingVotes";
 import { fmtDate } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
+import { newTaskRow } from "@/lib/newTask";
 
 // Ответ руководителя: один путь для трекера и для мессенджера.
 //
@@ -91,7 +92,7 @@ export async function POST(req: Request) {
     // Без срока: срок ставит тот, кто спросит, а не тот, кто взялся.
     const { error: taskError } = await admin
       .from("tasks")
-      .insert({ id: taskId, user_id: m.owner_id, title, assignee: myName, created_by: user.id });
+      .insert(newTaskRow({ id: taskId, userId: m.owner_id, title, assignee: myName, createdBy: user.id }));
     if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
 
     // upsert, а не insert: имя исполнителя стоит в самой задаче, и строку

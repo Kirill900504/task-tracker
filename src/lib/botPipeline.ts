@@ -15,6 +15,7 @@ import { findMeetingForNotes } from "@/lib/meetingLink";
 import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
 import { attachExecutors, attachMeetingParticipants, assignNote } from "@/lib/assignExecutors";
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
+import { newTaskRow } from "@/lib/newTask";
 
 // What the bot DOES with a message — the whole of it, and none of the
 // business of getting that message off the wire.
@@ -77,18 +78,16 @@ async function remember(ctx: BotContext, patch: Record<string, unknown>) {
 
 async function respondToTool(ctx: BotContext, userId: string, tool: string, input: Record<string, unknown>, droppedNames: string[]) {
   if (tool === "create_task") {
-    const row = {
+    const row = newTaskRow({
       id: uid(),
-      user_id: userId,
+      userId,
       title: String(input.title || ""),
       description: String(input.description || ""),
       assignee: String(input.assignee || ""),
-      priority: input.priority === "high" ? "high" : "med",
-      term: input.term === "long" ? "long" : "short",
-      status: "in_progress",
+      priority: String(input.priority || ""),
+      term: String(input.term || ""),
       deadline: (input.deadline as string) || null,
-      recur: "none",
-    };
+    });
     const { error } = await ctx.admin.from("tasks").insert(row);
     if (error) {
       await say(ctx, "Не получилось сохранить задачу: " + error.message);

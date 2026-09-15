@@ -12,6 +12,7 @@ import { sendToColleague } from "@/lib/botDelivery";
 import { buildManagerBrief, composeManagerBrief, managerBriefIsEmpty } from "@/lib/managerBrief";
 import { personStats, composePeopleReview, type ParticipationRow } from "@/lib/peopleReview";
 import { findAssignmentDrift } from "@/lib/assignmentDrift";
+import { onceOnly } from "@/lib/onceOnly";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -95,62 +96,55 @@ export async function GET(req: Request) {
     // arriving at 00:05 (whenever the pinger first ran after midnight) was
     // no use to anybody.
     if (workingDay && nowMin >= BRIEF_FROM_MINUTES) {
-      const { error: briefTaken } = await admin
-        .from("telegram_notifications")
-        .insert({ user_id: userId, kind: "daily_brief", ref_id: today, notif_date: today });
-      if (!briefTaken) {
-        try {
-          const facts = await buildBriefFacts(admin, userId);
-          let text = briefIsEmpty(facts) ? "" : await composeBrief(facts);
+      await onceOnly(admin, { userId, kind: "daily_brief", refId: today, date: today }, async () => {
+        const facts = await buildBriefFacts(admin, userId);
+        let text = briefIsEmpty(facts) ? "" : await composeBrief(facts);
 
-          // То, что ждёт решения самого владельца. Сводка до сих пор
-          // рассказывала только про чужую работу, а собственная очередь —
-          // задачи, где все отчитались и ждут приёмки — не попадала в неё
-          // вовсе. Дописывается кодом после модели: цифра и список имён
-          // не должны зависеть от того, как их перескажут.
-          const { data: waiting } = await admin
-            .from("tasks")
-            .select("title")
-            .eq("user_id", userId)
-            .eq("approval_state", "awaiting_review")
-            .is("deleted_at", null)
-            .limit(10);
-          const onReview = ((waiting || []) as { title: string }[]).map((t) => t.title);
-          if (onReview.length) {
-            text =
-              (text ? text + "\n\n" : "") +
-              `🔍 Ждут вашей приёмки (${onReview.length}):\n` +
-              onReview.slice(0, 5).map((t) => `• ${t}`).join("\n");
-          }
-
-          // Обсуждения, в которых со вчера что-то писали. Каждое сообщение
-          // отдельным уведомлением превратило бы мессенджер в ленту, а
-          // одной строкой утром это ровно то, чем оно и является:
-          // «есть что почитать вот здесь».
-          const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-          const { data: fresh } = await admin
-            .from("item_comments")
-            .select("item_id, item_kind")
-            .eq("user_id", userId)
-            .eq("item_kind", "task")
-            .gt("created_at", since)
-            .is("deleted_at", null)
-            .is("author_user_id", null);
-          const discussed = [...new Set(((fresh || []) as { item_id: string }[]).map((c) => c.item_id))];
-          if (discussed.length) {
-            const { data: titles } = await admin.from("tasks").select("title").in("id", discussed.slice(0, 5));
-            const names = ((titles || []) as { title: string }[]).map((t) => `• ${t.title}`);
-            text =
-              (text ? text + "\n\n" : "") +
-              `💬 Писали в обсуждениях (${discussed.length}):\n` +
-              names.join("\n");
-          }
-
-          if (text) await notifyOwner(admin, userId, text);
-        } catch (e) {
-          console.error("daily brief failed:", e);
+        // То, что ждёт решения самого владельца. Сводка до сих пор
+        // рассказывала только про чужую работу, а собственная очередь —
+        // задачи, где все отчитались и ждут приёмки — не попадала в неё
+        // вовсе. Дописывается кодом после модели: цифра и список имён
+        // не должны зависеть от того, как их перескажут.
+        const { data: waiting } = await admin
+          .from("tasks")
+          .select("title")
+          .eq("user_id", userId)
+          .eq("approval_state", "awaiting_review")
+          .is("deleted_at", null)
+          .limit(10);
+        const onReview = ((waiting || []) as { title: string }[]).map((t) => t.title);
+        if (onReview.length) {
+          text =
+            (text ? text + "\n\n" : "") +
+            `🔍 Ждут вашей приёмки (${onReview.length}):\n` +
+            onReview.slice(0, 5).map((t) => `• ${t}`).join("\n");
         }
-      }
+
+        // Обсуждения, в которых со вчера что-то писали. Каждое сообщение
+        // отдельным уведомлением превратило бы мессенджер в ленту, а
+        // одной строкой утром это ровно то, чем оно и является:
+        // «есть что почитать вот здесь».
+        const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+        const { data: fresh } = await admin
+          .from("item_comments")
+          .select("item_id, item_kind")
+          .eq("user_id", userId)
+          .eq("item_kind", "task")
+          .gt("created_at", since)
+          .is("deleted_at", null)
+          .is("author_user_id", null);
+        const discussed = [...new Set(((fresh || []) as { item_id: string }[]).map((c) => c.item_id))];
+        if (discussed.length) {
+          const { data: titles } = await admin.from("tasks").select("title").in("id", discussed.slice(0, 5));
+          const names = ((titles || []) as { title: string }[]).map((t) => `• ${t.title}`);
+          text =
+            (text ? text + "\n\n" : "") +
+            `💬 Писали в обсуждениях (${discussed.length}):\n` +
+            names.join("\n");
+        }
+
+        if (text) await notifyOwner(admin, userId, text);
+      });
     }
 
     // Утренняя сводка каждому руководителю — та же услуга, что владельцу,
@@ -166,16 +160,10 @@ export async function GET(req: Request) {
       for (const person of ((colleagues || []) as ColleagueRow[])) {
         const target = chatsFor(person)[0];
         if (!target) continue;
-        const { error: taken } = await admin
-          .from("telegram_notifications")
-          .insert({ user_id: userId, kind: "manager_brief", ref_id: `${today}:${person.id}`, notif_date: today });
-        if (taken) continue;
-        try {
+        await onceOnly(admin, { userId, kind: "manager_brief", refId: `${today}:${person.id}`, date: today }, async () => {
           const facts = await buildManagerBrief(admin, userId, person, today);
           if (!managerBriefIsEmpty(facts)) await sendToColleague(target, composeManagerBrief(facts));
-        } catch (e) {
-          console.error("manager brief failed:", e);
-        }
+        });
       }
     }
 
@@ -183,106 +171,92 @@ export async function GET(req: Request) {
     // «что просрочено», а «кто просрочил»: материал для разговора, а не для
     // ещё одного списка задач.
     if (workingDay && nowMin >= BRIEF_FROM_MINUTES && now.getUTCDay() === 1) {
-      const { error: peopleTaken } = await admin
-        .from("telegram_notifications")
-        .insert({ user_id: userId, kind: "people_review", ref_id: today, notif_date: today });
-      if (!peopleTaken) {
-        try {
-          const { data: rows } = await admin
-            .from("task_participants")
-            .select("created_at, accepted_at, done_at, declined_at, assignees(name), tasks(deadline, status, deleted_at)")
-            .eq("user_id", userId)
-            .eq("role", "executor");
+      await onceOnly(admin, { userId, kind: "people_review", refId: today, date: today }, async () => {
+        const { data: rows } = await admin
+          .from("task_participants")
+          .select("created_at, accepted_at, done_at, declined_at, assignees(name), tasks(deadline, status, deleted_at)")
+          .eq("user_id", userId)
+          .eq("role", "executor");
 
-          type Raw = {
-            created_at: string;
-            accepted_at: string | null;
-            done_at: string | null;
-            declined_at: string | null;
-            assignees: { name: string } | { name: string }[] | null;
-            tasks: { deadline: string | null; status: string | null; deleted_at: string | null } | null;
-          };
+        type Raw = {
+          created_at: string;
+          accepted_at: string | null;
+          done_at: string | null;
+          declined_at: string | null;
+          assignees: { name: string } | { name: string }[] | null;
+          tasks: { deadline: string | null; status: string | null; deleted_at: string | null } | null;
+        };
 
-          const { data: members } = await admin
-            .from("workspace_members")
-            .select("assignee_id, direction, assignees(name)")
-            .eq("owner_id", userId);
-          const directionOf = new Map<string, string>();
-          for (const m of ((members || []) as { direction: string; assignees: { name: string } | { name: string }[] | null }[])) {
-            const n = Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name;
-            if (n) directionOf.set(n, m.direction || "");
-          }
-
-          const participation: ParticipationRow[] = ((rows || []) as unknown as Raw[])
-            .filter((r) => r.tasks && !r.tasks.deleted_at)
-            .map((r) => {
-              const name = (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "";
-              return {
-                name,
-                direction: directionOf.get(name) || "",
-                createdAt: r.created_at,
-                acceptedAt: r.accepted_at,
-                doneAt: r.done_at,
-                declinedAt: r.declined_at,
-                deadline: r.tasks!.deadline || "",
-                status: r.tasks!.status || "in_progress",
-              };
-            });
-
-          let text = composePeopleReview(personStats(participation, now));
-
-          // Встречи, у которых так и не появилось итога. Спрашивать про
-          // каждую в третий раз бессмысленно — а одной строкой раз в неделю
-          // видно, что переговоры проходят, а решений после них не остаётся.
-          const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-          const { data: noRecap } = await admin
-            .from("meetings")
-            .select("title, date, result")
-            .eq("user_id", userId)
-            .eq("status", "planned")
-            .lt("date", dateStr(threeDaysAgo))
-            .is("deleted_at", null);
-          const forgotten = ((noRecap || []) as { title: string; date: string }[]).filter(
-            (m) => !(m as { result?: string }).result,
-          );
-          if (forgotten.length) {
-            const list = forgotten.slice(0, 5).map((m) => `• ${m.title} (${m.date.split("-").reverse().join(".")})`);
-            text = (text ? text + "\n\n" : "📊 Неделя по людям\n\n") + "Встречи без итога:\n" + list.join("\n");
-          }
-
-          // Задачи, которые выглядят назначенными и не назначены. Три места
-          // создавали задачи, и два из них строк участия не заводили —
-          // причины починены, но появится четвёртое, и узнать об этом лучше
-          // здесь, чем через неделю вопросом «почему он ничего не сделал».
-          const drift = await findAssignmentDrift(admin, userId);
-          if (drift.length) {
-            const list = drift.slice(0, 5).map((d) => `• ${d.title} — ${d.assignee}`);
-            text =
-              (text ? text + "\n\n" : "📊 Неделя по людям\n\n") +
-              `⚠ Стоит имя, но задача не назначена (${drift.length}) — человек её не видит:\n` +
-              list.join("\n");
-          }
-
-          if (text) await notifyOwner(admin, userId, text);
-        } catch (e) {
-          console.error("people review failed:", e);
+        const { data: members } = await admin
+          .from("workspace_members")
+          .select("assignee_id, direction, assignees(name)")
+          .eq("owner_id", userId);
+        const directionOf = new Map<string, string>();
+        for (const m of ((members || []) as { direction: string; assignees: { name: string } | { name: string }[] | null }[])) {
+          const n = Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name;
+          if (n) directionOf.set(n, m.direction || "");
         }
-      }
+
+        const participation: ParticipationRow[] = ((rows || []) as unknown as Raw[])
+          .filter((r) => r.tasks && !r.tasks.deleted_at)
+          .map((r) => {
+            const name = (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "";
+            return {
+              name,
+              direction: directionOf.get(name) || "",
+              createdAt: r.created_at,
+              acceptedAt: r.accepted_at,
+              doneAt: r.done_at,
+              declinedAt: r.declined_at,
+              deadline: r.tasks!.deadline || "",
+              status: r.tasks!.status || "in_progress",
+            };
+          });
+
+        let text = composePeopleReview(personStats(participation, now));
+
+        // Встречи, у которых так и не появилось итога. Спрашивать про
+        // каждую в третий раз бессмысленно — а одной строкой раз в неделю
+        // видно, что переговоры проходят, а решений после них не остаётся.
+        const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+        const { data: noRecap } = await admin
+          .from("meetings")
+          .select("title, date, result")
+          .eq("user_id", userId)
+          .eq("status", "planned")
+          .lt("date", dateStr(threeDaysAgo))
+          .is("deleted_at", null);
+        const forgotten = ((noRecap || []) as { title: string; date: string }[]).filter(
+          (m) => !(m as { result?: string }).result,
+        );
+        if (forgotten.length) {
+          const list = forgotten.slice(0, 5).map((m) => `• ${m.title} (${m.date.split("-").reverse().join(".")})`);
+          text = (text ? text + "\n\n" : "📊 Неделя по людям\n\n") + "Встречи без итога:\n" + list.join("\n");
+        }
+
+        // Задачи, которые выглядят назначенными и не назначены. Три места
+        // создавали задачи, и два из них строк участия не заводили —
+        // причины починены, но появится четвёртое, и узнать об этом лучше
+        // здесь, чем через неделю вопросом «почему он ничего не сделал».
+        const drift = await findAssignmentDrift(admin, userId);
+        if (drift.length) {
+          const list = drift.slice(0, 5).map((d) => `• ${d.title} — ${d.assignee}`);
+          text =
+            (text ? text + "\n\n" : "📊 Неделя по людям\n\n") +
+            `⚠ Стоит имя, но задача не назначена (${drift.length}) — человек её не видит:\n` +
+            list.join("\n");
+        }
+
+        if (text) await notifyOwner(admin, userId, text);
+      });
     }
 
     // Weekly review — Mondays, same time window, once a week.
     if (workingDay && nowMin >= BRIEF_FROM_MINUTES && now.getUTCDay() === 1) {
-      const { error: weeklyTaken } = await admin
-        .from("telegram_notifications")
-        .insert({ user_id: userId, kind: "weekly_review", ref_id: today, notif_date: today });
-      if (!weeklyTaken) {
-        try {
-          const facts = await buildWeeklyFacts(admin, userId);
-          if (!weeklyIsEmpty(facts)) await notifyOwner(admin, userId, await composeWeekly(facts));
-        } catch (e) {
-          console.error("weekly review failed:", e);
-        }
-      }
+      await onceOnly(admin, { userId, kind: "weekly_review", refId: today, date: today }, async () => {
+        const facts = await buildWeeklyFacts(admin, userId);
+        if (!weeklyIsEmpty(facts)) await notifyOwner(admin, userId, await composeWeekly(facts));
+      });
     }
 
     // Сегодняшние и завтрашние: за сутки напоминают именно накануне.

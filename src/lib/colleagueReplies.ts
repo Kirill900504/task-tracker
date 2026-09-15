@@ -3,6 +3,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
 import { findColleagueByChat } from "@/lib/colleagues";
 import { uid } from "@/lib/uid";
+import { newTaskRow } from "@/lib/newTask";
 import type { BotChannelConfig } from "@/lib/botTransport";
 
 // What happens when a colleague presses a button under a task or a meeting.
@@ -231,12 +232,9 @@ export async function handleColleagueCallback(
     // срок ставит тот, кто спросит, а не тот, кто взялся.
     const title = String(idea.text || "").trim().slice(0, 200) || "Из мысли";
     const taskId = uid();
-    const { error: taskError } = await admin.from("tasks").insert({
-      id: taskId,
-      user_id: idea.user_id,
-      title,
-      assignee: colleague.name,
-    });
+    const { error: taskError } = await admin
+      .from("tasks")
+      .insert(newTaskRow({ id: taskId, userId: idea.user_id, title, assignee: colleague.name }));
     if (taskError) return { toast: "Не получилось завести задачу" };
 
     // upsert, а не insert: имя исполнителя стоит в самой задаче, и строку
