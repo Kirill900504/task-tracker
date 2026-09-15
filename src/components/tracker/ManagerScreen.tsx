@@ -11,6 +11,8 @@ import { byDeadline, canAnswer, isOverdueFor, workGroup } from "@/lib/assignedWo
 import { personStats } from "@/lib/peopleReview";
 import { useMyMessenger, type MessengerState } from "@/hooks/useMyMessenger";
 import MessengerLink from "@/components/tracker/MessengerLink";
+import ManagerAnswer from "@/components/tracker/ManagerAnswer";
+import ItemChat from "@/components/tracker/ItemChat";
 
 // Что видит руководитель, когда войдёт по приглашению.
 //
@@ -109,36 +111,29 @@ export function ManagerScreenInner({
     return out;
   }, [tasks]);
 
-  function handleReport(t: AssignedTask) {
-    const comment = prompt(`Что сделано по задаче «${t.title}»? Это увидит постановщик:`, "");
-    if (comment === null) return;
-    if (!canReportDone(comment)) {
-      alert("Отчёт без слов — не отчёт. Напишите хотя бы коротко, что сделано.");
-      return;
-    }
-    void run(() => report(t.participantId, comment.trim()));
-  }
+  // Какой ответ сейчас пишут и по какой строке. Одна форма на экран: две
+  // открытые сразу — это два недописанных ответа и вопрос, который из них
+  // уйдёт.
+  const [asking, setAsking] = useState<{ kind: "done" | "decline" | "reschedule" | "vote"; id: string } | null>(null);
+  const [sending, setSending] = useState(false);
+  // Какое обсуждение раскрыто. Одно: два открытых — это две ленты, между
+  // которыми надо листать, на экране, который и так листают с телефона.
+  const [chatFor, setChatFor] = useState<string | null>(null);
 
-  function handleDecline(t: AssignedTask) {
-    const reason = prompt(`Почему не получится выполнить «${t.title}»?`, "");
-    if (reason === null) return;
-    if (!canDecline(reason)) {
-      alert("Причина обязательна — именно она даёт постановщику шанс что-то поправить.");
-      return;
+  // Форма закрывается только после того, как ответ ушёл. Закрыть её раньше
+  // значит потерять написанное ровно тогда, когда оно понадобится снова, —
+  // при отказе сервера.
+  async function send(action: () => void | Promise<void>) {
+    setSending(true);
+    setFailed("");
+    try {
+      await action();
+      setAsking(null);
+    } catch (e) {
+      setFailed(e instanceof Error ? e.message : "Не получилось отправить ответ");
+    } finally {
+      setSending(false);
     }
-    void run(() => decline(t.participantId, reason.trim()));
-  }
-
-  function handleReschedule(t: AssignedTask) {
-    const to = prompt("На какую дату перенести? В формате ГГГГ-ММ-ДД (можно оставить пустым):", t.deadline || "");
-    if (to === null) return;
-    const reason = prompt("Почему нужен перенос?", "");
-    if (reason === null) return;
-    if (!reason.trim()) {
-      alert("Без причины это не просьба, а просто новая дата — напишите, что мешает.");
-      return;
-    }
-    void run(() => askReschedule(t.participantId, to.trim(), reason.trim()));
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -185,23 +180,79 @@ export function ManagerScreenInner({
 
         {/* Наблюдателя и соисполнителя не спрашивают — они и не должны
             видеть кнопок, которые ничего не значат для их роли. */}
-        {canAnswer(t) && (
+        {canAnswer(t) && asking?.id !== t.participantId && (
           <div className="ms-actions">
             {!t.acceptedAt && (
               <button className="btn btn-small btn-primary" type="button" onClick={() => void run(() => accept(t.participantId))}>
                 ✅ Принял
               </button>
             )}
-            <button className="btn btn-small" type="button" onClick={() => handleReport(t)}>
+            <button className="btn btn-small" type="button" onClick={() => setAsking({ kind: "done", id: t.participantId })}>
               🏁 Сделал
             </button>
-            <button className="btn btn-small" type="button" onClick={() => handleDecline(t)}>
+            <button className="btn btn-small" type="button" onClick={() => setAsking({ kind: "decline", id: t.participantId })}>
               ⛔ Не могу
             </button>
-            <button className="btn btn-small" type="button" onClick={() => handleReschedule(t)}>
+            <button className="btn btn-small" type="button" onClick={() => setAsking({ kind: "reschedule", id: t.participantId })}>
               📅 Прошу перенос
             </button>
           </div>
+        )}
+
+        {asking?.id === t.participantId && asking.kind === "done" && (
+          <ManagerAnswer
+            id={"done-" + t.participantId}
+            question={`Что сделано по задаче «${t.title}»? Это увидит постановщик.`}
+            placeholder="Например: свёл цифры за август, таблица в общей папке"
+            emptyHint="Отчёт без слов — не отчёт. Напишите хотя бы коротко, что сделано."
+            submitLabel="🏁 Отчитаться"
+            busy={sending}
+            onCancel={() => setAsking(null)}
+            onSubmit={(text) => {
+              if (!canReportDone(text)) return;
+              void send(() => report(t.participantId, text));
+            }}
+          />
+        )}
+        {asking?.id === t.participantId && asking.kind === "decline" && (
+          <ManagerAnswer
+            id={"decline-" + t.participantId}
+            question={`Почему не получится выполнить «${t.title}»?`}
+            emptyHint="Причина обязательна — именно она даёт постановщику шанс что-то поправить."
+            submitLabel="⛔ Отправить"
+            busy={sending}
+            onCancel={() => setAsking(null)}
+            onSubmit={(text) => {
+              if (!canDecline(text)) return;
+              void send(() => decline(t.participantId, text));
+            }}
+          />
+        )}
+        {/* Обсуждение. По решениям проекта оно живёт внутри задачи и его
+            видят все участники — но на этом экране его не было вовсе, и
+            руководителю оставался мессенджер, где ответ попадал в «последнюю
+            открытую задачу». Свёрнуто по умолчанию: экран для того, чтобы
+            ответить, а не читать. */}
+        <button
+          className="btn btn-small ms-chat-toggle"
+          type="button"
+          onClick={() => setChatFor((cur) => (cur === t.taskId ? null : t.taskId))}
+        >
+          {chatFor === t.taskId ? "Свернуть обсуждение" : "💬 Обсуждение"}
+        </button>
+        {chatFor === t.taskId && <ItemChat kind="task" itemId={t.taskId} />}
+
+        {asking?.id === t.participantId && asking.kind === "reschedule" && (
+          <ManagerAnswer
+            id={"move-" + t.participantId}
+            question="Что мешает успеть к сроку?"
+            emptyHint="Без причины это не просьба, а просто новая дата — напишите, что мешает."
+            submitLabel="📅 Попросить"
+            date={{ label: "Перенести на", initial: t.deadline || "" }}
+            busy={sending}
+            onCancel={() => setAsking(null)}
+            onSubmit={(text, when) => void send(() => askReschedule(t.participantId, when, text))}
+          />
         )}
       </div>
     );
@@ -305,27 +356,38 @@ export function ManagerScreenInner({
                   {answered && m.response === "no" && <span className="pill pill-blocked">❌ не сможете</span>}
                 </div>
                 {answered && m.response === "no" && m.reason && <div className="ms-declined">Причина: {m.reason}</div>}
-                {!answered && vote && (
+                {!answered && vote && asking?.id !== m.participantId && (
                   <div className="ms-actions">
                     <button className="btn btn-small btn-primary" type="button" onClick={() => void run(() => vote(m.participantId, "yes", ""))}>
                       ✅ Буду
                     </button>
-                    <button
-                      className="btn btn-small"
-                      type="button"
-                      onClick={() => {
-                        const reason = prompt(`Почему не сможете быть на «${m.title}»?`, "");
-                        if (reason === null) return;
-                        if (!canVoteNo(reason)) {
-                          alert("Причина обязательна: организатору важно знать, переносить встречу или нет.");
-                          return;
-                        }
-                        void run(() => vote(m.participantId, "no", reason.trim()));
-                      }}
-                    >
+                    <button className="btn btn-small" type="button" onClick={() => setAsking({ kind: "vote", id: m.participantId })}>
                       ❌ Не смогу
                     </button>
                   </div>
+                )}
+                <button
+                  className="btn btn-small ms-chat-toggle"
+                  type="button"
+                  onClick={() => setChatFor((cur) => (cur === m.meetingId ? null : m.meetingId))}
+                >
+                  {chatFor === m.meetingId ? "Свернуть обсуждение" : "💬 Обсуждение"}
+                </button>
+                {chatFor === m.meetingId && <ItemChat kind="meeting" itemId={m.meetingId} />}
+
+                {vote && asking?.id === m.participantId && asking.kind === "vote" && (
+                  <ManagerAnswer
+                    id={"vote-" + m.participantId}
+                    question={`Почему не сможете быть на «${m.title}»?`}
+                    emptyHint="Причина обязательна: организатору важно знать, переносить встречу или нет."
+                    submitLabel="❌ Отправить"
+                    busy={sending}
+                    onCancel={() => setAsking(null)}
+                    onSubmit={(text) => {
+                      if (!canVoteNo(text)) return;
+                      void send(() => vote(m.participantId, "no", text));
+                    }}
+                  />
                 )}
               </div>
             );

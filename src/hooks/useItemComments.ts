@@ -175,12 +175,17 @@ export function useItemComments(kind: ItemKind, itemId: string) {
       // через какую дверь сообщение пришло.
       const { data: member } = await db
         .from("workspace_members")
-        .select("assignee_id")
+        .select("assignee_id, owner_id")
         .eq("member_id", me?.user?.id || "")
         .maybeSingle();
       // Путь начинается с пространства: по первому сегменту права и
       // решают, чей это файл (см. миграцию 0020). Владелец пишет в своё,
       // руководитель — в то, куда принят.
+      //
+      // owner_id здесь не запрашивался, и подстановка молча сваливалась на
+      // собственный id: файл руководителя уезжал в папку, которой по
+      // правилам корзины не существует. Ошибка была видна только тому, кто
+      // пробовал приложить фотографию с чужого входа.
       const workspace = (member as { owner_id?: string } | null)?.owner_id || me?.user?.id || "";
       const attachments: Attachment[] = [];
       for (const file of files) {
