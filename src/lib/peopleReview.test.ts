@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composePeopleReview, personStats, reviewIsEmpty, type ParticipationRow } from "./peopleReview";
+import { composeMyWeek, composePeopleReview, personStats, reviewIsEmpty, type ParticipationRow } from "./peopleReview";
 
 const NOW = new Date("2026-09-14T09:00:00Z"); // понедельник
 
@@ -106,5 +106,50 @@ describe("порядок и текст", () => {
   it("показывает направление, когда оно известно", () => {
     const stats = personStats([row({ name: "Аня", direction: "ОПТ", deadline: "2026-09-01" })], NOW);
     expect(composePeopleReview(stats)).toContain("(ОПТ)");
+  });
+});
+
+// G4: та же цифра, но человеку про него самого. Главное здесь — не текст, а
+// то, что арифметика одна: расхождение между «что видит начальник» и «что
+// видит человек» дороже всей затеи.
+describe("своя неделя", () => {
+  it("цифры совпадают с теми, что видит владелец", () => {
+    const rows = [
+      row({ deadline: "2026-09-10", doneAt: "2026-09-12T09:00:00Z" }),
+      row({ deadline: "2026-09-01" }),
+      row({ acceptedAt: "2026-09-10T12:00:00Z" }),
+    ];
+    const [stat] = personStats(rows, NOW);
+    const mine = composeMyWeek(stat);
+    const owner = composePeopleReview([stat]);
+
+    expect(mine).toContain(`в работе ${stat.open}`);
+    expect(owner).toContain(`в работе ${stat.open}`);
+    expect(mine).toContain(`просрочено ${stat.overdue}`);
+    expect(owner).toContain(`просрочено ${stat.overdue}`);
+    const share = `${Math.round(stat.onTimeShare! * 100)}%`;
+    expect(mine).toContain(share);
+    expect(owner).toContain(share);
+  });
+
+  it("обращается к человеку, а не рассказывает о нём", () => {
+    const [stat] = personStats([row({ acceptedAt: "2026-09-10T12:00:00Z" })], NOW);
+    const mine = composeMyWeek(stat);
+    expect(mine).toContain("Ваша неделя");
+    // Имя в собственной сводке — лишнее: человек знает, о ком речь.
+    expect(mine).not.toContain("Аня");
+  });
+
+  it("про молчание говорит прямо, что его видно постановщику", () => {
+    const [stat] = personStats([row({ createdAt: "2026-09-01T09:00:00Z" })], NOW);
+    expect(stat.silent).toBe(1);
+    const mine = composeMyWeek(stat);
+    expect(mine).toContain("Ещё не ответили: 1");
+    expect(mine).toContain("тому, кто поручил");
+  });
+
+  it("когда сказать нечего — молчит", () => {
+    const [stat] = personStats([row({ doneAt: "2026-08-01T09:00:00Z", status: "done" })], NOW);
+    expect(composeMyWeek(stat)).toBe("");
   });
 });

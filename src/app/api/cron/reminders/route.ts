@@ -10,8 +10,9 @@ import { voteTally, type MeetingVote } from "@/lib/meetingVotes";
 import { chatsFor, meetingButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { buildManagerBrief, composeManagerBrief, managerBriefIsEmpty } from "@/lib/managerBrief";
-import { personStats, composePeopleReview, type ParticipationRow } from "@/lib/peopleReview";
+import { personStats, composePeopleReview, composeMyWeek, buildParticipation } from "@/lib/peopleReview";
 import { findAssignmentDrift } from "@/lib/assignmentDrift";
+import { isSelfAssignee } from "@/lib/trackerRows";
 import { onceOnly } from "@/lib/onceOnly";
 import { findSilent, composeSilence } from "@/lib/silence";
 
@@ -181,49 +182,15 @@ export async function GET(req: Request) {
     // «что просрочено», а «кто просрочил»: материал для разговора, а не для
     // ещё одного списка задач.
     if (workingDay && nowMin >= BRIEF_FROM_MINUTES && now.getUTCDay() === 1) {
+      // Считается один раз на обе сводки — владельцу про людей и каждому
+      // про себя. Не ради экономии запроса: цифры обязаны сойтись, а две
+      // выборки в разные секунды уже могут разойтись, и первый же разговор
+      // «у меня написано другое» стоил бы дороже всей затеи.
+      const participation = await buildParticipation(admin, userId);
+      const stats = personStats(participation, now);
+
       await onceOnly(admin, { userId, kind: "people_review", refId: today, date: today }, async () => {
-        const { data: rows } = await admin
-          .from("task_participants")
-          .select("created_at, accepted_at, done_at, declined_at, assignees(name), tasks(deadline, status, deleted_at)")
-          .eq("user_id", userId)
-          .eq("role", "executor");
-
-        type Raw = {
-          created_at: string;
-          accepted_at: string | null;
-          done_at: string | null;
-          declined_at: string | null;
-          assignees: { name: string } | { name: string }[] | null;
-          tasks: { deadline: string | null; status: string | null; deleted_at: string | null } | null;
-        };
-
-        const { data: members } = await admin
-          .from("workspace_members")
-          .select("assignee_id, direction, assignees(name)")
-          .eq("owner_id", userId);
-        const directionOf = new Map<string, string>();
-        for (const m of ((members || []) as { direction: string; assignees: { name: string } | { name: string }[] | null }[])) {
-          const n = Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name;
-          if (n) directionOf.set(n, m.direction || "");
-        }
-
-        const participation: ParticipationRow[] = ((rows || []) as unknown as Raw[])
-          .filter((r) => r.tasks && !r.tasks.deleted_at)
-          .map((r) => {
-            const name = (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "";
-            return {
-              name,
-              direction: directionOf.get(name) || "",
-              createdAt: r.created_at,
-              acceptedAt: r.accepted_at,
-              doneAt: r.done_at,
-              declinedAt: r.declined_at,
-              deadline: r.tasks!.deadline || "",
-              status: r.tasks!.status || "in_progress",
-            };
-          });
-
-        let text = composePeopleReview(personStats(participation, now));
+        let text = composePeopleReview(stats);
 
         // Встречи, у которых так и не появилось итога. Спрашивать про
         // каждую в третий раз бессмысленно — а одной строкой раз в неделю
@@ -259,6 +226,25 @@ export async function GET(req: Request) {
 
         if (text) await notifyOwner(admin, userId, text);
       });
+
+      // G4: та же цифра, но человеку про него самого. Решение записано в
+      // docs/multiuser.md одной фразой — «цифра о себе меняет поведение
+      // дешевле любого разговора», — и считается она той же функцией, что
+      // сводка выше. Показывать человеку одно, а начальнику про него
+      // другое было бы началом недоверия.
+      const { data: forStats } = await admin
+        .from("assignees")
+        .select("id, name, telegram_chat_id, max_user_id")
+        .eq("user_id", userId);
+      for (const person of ((forStats || []) as ColleagueRow[])) {
+        const target = chatsFor(person)[0];
+        if (!target || isSelfAssignee(person.name)) continue;
+        await onceOnly(admin, { userId, kind: "my_week", refId: `${today}:${person.id}`, date: today }, async () => {
+          const mine = stats.find((s) => s.name === person.name);
+          const text = mine ? composeMyWeek(mine) : "";
+          if (text) await sendToColleague(target, text);
+        });
+      }
     }
 
     // Weekly review — Mondays, same time window, once a week.

@@ -1,3 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { isSelfAssignee } from "@/lib/trackerRows";
+
 // Понедельничная сводка по людям, а не по задачам.
 //
 // Владельцу уже приходит утренняя сводка и недельный обзор — оба про
@@ -10,6 +13,61 @@
 // (как в dailyBrief), но ни одна цифра не приходит от неё: человек, о
 // котором сказали «просрочил четыре», должен иметь возможность открыть
 // список и увидеть ровно четыре.
+
+// Данные для обеих сводок собираются один раз и одним запросом — не ради
+// экономии, а ради того же самого: владелец и руководитель должны видеть
+// цифры, посчитанные из одних и тех же строк в одну и ту же секунду.
+export async function buildParticipation(admin: SupabaseClient, userId: string): Promise<ParticipationRow[]> {
+  const { data: rows } = await admin
+    .from("task_participants")
+    .select("created_at, accepted_at, done_at, declined_at, assignees(name), tasks(deadline, status, deleted_at)")
+    .eq("user_id", userId)
+    .eq("role", "executor");
+
+  type Raw = {
+    created_at: string;
+    accepted_at: string | null;
+    done_at: string | null;
+    declined_at: string | null;
+    assignees: { name: string } | { name: string }[] | null;
+    tasks: { deadline: string | null; status: string | null; deleted_at: string | null } | null;
+  };
+
+  const { data: members } = await admin
+    .from("workspace_members")
+    .select("assignee_id, direction, assignees(name)")
+    .eq("owner_id", userId);
+  const directionOf = new Map<string, string>();
+  for (const m of ((members || []) as { direction: string; assignees: { name: string } | { name: string }[] | null }[])) {
+    const n = Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name;
+    if (n) directionOf.set(n, m.direction || "");
+  }
+
+  return ((rows || []) as unknown as Raw[])
+    .filter((r) => r.tasks && !r.tasks.deleted_at)
+    .map((r) => {
+      const name = (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "";
+      return { name, row: r };
+    })
+    // Себя в сводке по людям быть не должно. «Кирилл (я): не ответил на 4»
+    // — это не дисциплина, это его собственный список дел, и строка «стоит
+    // спросить лично: Кирилл (я)» предлагает поговорить с самим собой.
+    // Та же ошибка уже находилась в блоке молчания (silence.ts) — и найдена
+    // обе раза одинаково: предпросмотром на настоящих данных.
+    .filter(({ name }) => name && !isSelfAssignee(name))
+    .map(({ name, row: r }) => {
+      return {
+        name,
+        direction: directionOf.get(name) || "",
+        createdAt: r.created_at,
+        acceptedAt: r.accepted_at,
+        doneAt: r.done_at,
+        declinedAt: r.declined_at,
+        deadline: r.tasks!.deadline || "",
+        status: r.tasks!.status || "in_progress",
+      };
+    });
+}
 
 export type ParticipationRow = {
   name: string;
@@ -127,6 +185,46 @@ export function composePeopleReview(stats: PersonStats[]): string {
   const worry = stats.filter((s) => s.silent || s.overdue >= 3);
   if (worry.length) {
     lines.push("", "Стоит спросить лично: " + worry.map((s) => s.name).join(", "));
+  }
+  return lines.join("\n");
+}
+
+// То же самое, но человеку про него самого (G4 в docs/multiuser.md).
+//
+// Решение записано там одной фразой: «цифра о себе меняет поведение дешевле
+// любого разговора». Из неё следует и всё остальное здесь.
+//
+// Считается ровно той же функцией, что и сводка владельца, — не похожей, а
+// той же. Показывать человеку одно, а начальнику про него другое было бы
+// началом недоверия, и первый же разговор, где цифры не сошлись, стоил бы
+// дороже всей затеи.
+//
+// Тон — не обвинение. Это отчёт о себе, а не выговор: сначала сделанное,
+// потом висящее, и только потом то, о чём стоит помнить. И прямо сказано,
+// что молчание видно постановщику: человек имеет право знать, как это
+// выглядит с той стороны, — иначе цифра превращается в донос за спиной.
+export function composeMyWeek(s: PersonStats): string {
+  if (!s.open && !s.doneThisWeek && !s.declined) return "";
+
+  const lines = ["📈 Ваша неделя", ""];
+  const bits: string[] = [];
+  if (s.doneThisWeek) bits.push(`закрыто ${s.doneThisWeek}`);
+  if (s.open) bits.push(`в работе ${s.open}`);
+  if (s.overdue) bits.push(`просрочено ${s.overdue}`);
+  if (s.declined) bits.push(`отказались от ${s.declined}`);
+  lines.push(bits.join(", "));
+
+  const marks: string[] = [];
+  if (s.onTimeShare !== null) marks.push(`В срок: ${Math.round(s.onTimeShare * 100)}%`);
+  if (s.avgAcceptHours !== null) marks.push(`Отвечаете в среднем за ${hoursWord(s.avgAcceptHours)}`);
+  if (marks.length) lines.push("", marks.join(". ") + ".");
+
+  if (s.silent) {
+    lines.push(
+      "",
+      `Ещё не ответили: ${s.silent} — это видно и тому, кто поручил. ` +
+        "Одно нажатие «Принял» или «Не могу» снимает вопрос.",
+    );
   }
   return lines.join("\n");
 }
