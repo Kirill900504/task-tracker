@@ -47,5 +47,19 @@ fi
 rm -rf "$PGDATA"
 mkdir -p "$PGDATA"
 "$PGBIN/initdb" -D "$PGDATA" -U postgres --auth=trust >/dev/null
-"$PGBIN/pg_ctl" -D "$PGDATA" -o "-c listen_addresses=localhost -p $PORT" -l "$PGDATA/log" start
+
+# unix_socket_directories задаётся явно, и это не мелочь. Сборка Postgres в
+# Debian и Ubuntu по умолчанию кладёт сокет в /var/run/postgresql, которого
+# на чистой машине либо нет, либо в него нельзя писать непривилегированному
+# пользователю, — и сервер молча не стартует с «could not start server».
+# Именно на этом проверка упала при первом же запуске в CI. Каталог с
+# данными подходит: он временный и наш.
+if ! "$PGBIN/pg_ctl" -D "$PGDATA" \
+  -o "-c listen_addresses=localhost -p $PORT -c unix_socket_directories=$PGDATA" \
+  -l "$PGDATA/log" start; then
+  # Причина всегда в логе, и без неё «не запустился» — это не сообщение.
+  echo "--- журнал Postgres ---" >&2
+  cat "$PGDATA/log" >&2 || true
+  exit 1
+fi
 echo "Postgres поднят на порту $PORT"
