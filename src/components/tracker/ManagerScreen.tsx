@@ -9,6 +9,8 @@ import { canDecline, canReportDone } from "@/lib/taskProgress";
 import { canVoteNo, isCurrent } from "@/lib/meetingVotes";
 import { byDeadline, canAnswer, isOverdueFor, workGroup } from "@/lib/assignedWork";
 import { personStats } from "@/lib/peopleReview";
+import { useMyMessenger, type MessengerState } from "@/hooks/useMyMessenger";
+import MessengerLink from "@/components/tracker/MessengerLink";
 
 // Что видит руководитель, когда войдёт по приглашению.
 //
@@ -25,6 +27,7 @@ import { personStats } from "@/lib/peopleReview";
 
 export default function ManagerScreen({ assigneeId, name }: { assigneeId: string; name: string }) {
   const { tasks, meetings, ideas, loading, accept, report, decline, askReschedule, vote, takeIdea } = useAssignedWork(assigneeId);
+  const messenger = useMyMessenger(assigneeId);
   return (
     <ManagerScreenInner
       name={name}
@@ -38,6 +41,7 @@ export default function ManagerScreen({ assigneeId, name }: { assigneeId: string
       askReschedule={askReschedule}
       vote={vote}
       takeIdea={(recipientId) => void takeIdea(recipientId)}
+      messenger={messenger}
     />
   );
 }
@@ -56,6 +60,7 @@ export function ManagerScreenInner({
   askReschedule,
   vote,
   takeIdea,
+  messenger,
 }: {
   name: string;
   tasks: AssignedTask[];
@@ -70,6 +75,9 @@ export function ManagerScreenInner({
   // может знать его наверняка в момент нажатия.
   vote?: (participantId: string, response: "yes" | "no", reason: string) => void | Promise<void>;
   takeIdea?: (recipientId: string) => void | Promise<void>;
+  // Необязателен: половина с логикой проверяется без базы, а подключение
+  // мессенджера — это как раз база и сеть.
+  messenger?: MessengerState;
 }) {
   const router = useRouter();
   const [failed, setFailed] = useState("");
@@ -213,6 +221,11 @@ export function ManagerScreenInner({
           Выйти
         </button>
       </div>
+
+      {/* Выше задач, пока не подключено: без мессенджера этот экран —
+          единственное место, где человек узнает о задаче, а он сюда не
+          заходит. Подключил — строчка уходит в фон. */}
+      {messenger && <MessengerLink messenger={messenger} />}
 
       {/* G4: своя цифра меняет поведение дешевле любого разговора — и та
           же самая, что владелец видит в понедельник. Показывать человеку

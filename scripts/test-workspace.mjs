@@ -245,6 +245,31 @@ try {
   const { data: ownerPeek } = await owner.db.from("tasks").select("id").eq("id", privateId).maybeSingle();
   check("но владелец видит всё", ownerPeek?.id === privateId, ownerPeek);
 
+  // ── Свой мессенджер ────────────────────────────────────────────────────
+  section("Руководитель подключает себе мессенджер");
+  const mine = await post(mgrA, "/api/telegram/invite", { assigneeId: personA.id, channel: "telegram" });
+  check("руководитель получает код на свой чат", mine.status === 200 && !!mine.body?.code, mine);
+  check("и ссылку на бота вместе с ним", typeof mine.body?.link === "string" && mine.body.link.includes(mine.body.code), mine.body);
+
+  const { data: codeRow } = await admin
+    .from("telegram_link_codes")
+    .select("assignee_id, user_id, channel")
+    .eq("code", mine.body?.code || "-")
+    .maybeSingle();
+  check("код привязан к его строке человека", codeRow?.assignee_id === personA.id, codeRow);
+  // Не к нему самому: строка человека живёт в пространстве владельца, и код
+  // должен лежать там же — иначе он потеряется для всех, кроме автора.
+  check("и к пространству владельца, а не к нему самому", codeRow?.user_id === owner.id, codeRow);
+
+  // Главное ограничение. Правила доступа позволяют руководителю ВИДЕТЬ всех
+  // коллег пространства — если бы маршрут этим и ограничился, любой из них
+  // выписал бы код на чужое имя и стал получать чужие задачи.
+  const notMineChat = await post(mgrA, "/api/telegram/invite", { assigneeId: personB.id, channel: "telegram" });
+  check("но не может выписать код на чужое имя", notMineChat.status === 403, notMineChat);
+
+  const ownerIssues = await post(owner, "/api/telegram/invite", { assigneeId: personB.id, channel: "telegram" });
+  check("владелец по-прежнему подключает кого угодно", ownerIssues.status === 200 && !!ownerIssues.body?.code, ownerIssues);
+
   // ── Встреча ────────────────────────────────────────────────────────────
   section("Встреча: голоса и переголосование");
   const meetingId = randomUUID();

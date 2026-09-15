@@ -12,6 +12,14 @@ import { botUsername, inviteChannel, inviteLink, randomCode } from "@/lib/botInv
 // The code is bound to the assignee row AND to the messenger it was issued
 // for, so pressing Start attaches that chat to that person, and a code shown
 // with the Telegram link cannot be used to connect a MAX chat.
+//
+// Two people may ask for one: the owner, for anybody in his list, and a
+// manager — for himself and nobody else. The second case used to be missing
+// entirely, and it showed: a manager who changed his phone had no way back
+// in except asking Кирилл to re-issue the link. The restriction matters,
+// because reading the list is not the same as being on it — RLS lets a
+// manager SEE every colleague in the workspace, so without the check below
+// he could mint a code for somebody else's name and receive their tasks.
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -42,13 +50,31 @@ export async function POST(req: Request) {
   }
 
   // Read through the USER's client, not the admin one: RLS is what proves
-  // this assignee belongs to whoever is asking.
-  const { data: assignee, error: readError } = await supabase.from("assignees").select("id, name").eq("id", assigneeId).maybeSingle();
+  // this row is in a workspace the asker belongs to at all.
+  const { data: row, error: readError } = await supabase.from("assignees").select("id, name, user_id").eq("id", assigneeId).maybeSingle();
   if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
-  if (!assignee) return NextResponse.json({ error: "Исполнитель не найден" }, { status: 404 });
+  if (!row) return NextResponse.json({ error: "Исполнитель не найден" }, { status: 404 });
+  const assignee = row as { id: string; name: string; user_id: string };
+
+  const admin = createAdminClient();
+
+  // Чей это чат. Владелец подключает кого угодно из своего списка;
+  // руководитель — только собственную строку, и никакую другую.
+  const ownerId = assignee.user_id;
+  if (ownerId !== user.id) {
+    const { data: member } = await admin
+      .from("workspace_members")
+      .select("assignee_id")
+      .eq("member_id", user.id)
+      .eq("owner_id", ownerId)
+      .eq("status", "active")
+      .maybeSingle();
+    if ((member as { assignee_id?: string } | null)?.assignee_id !== assignee.id) {
+      return NextResponse.json({ error: "Подключить можно только свой чат" }, { status: 403 });
+    }
+  }
 
   const code = randomCode();
-  const admin = createAdminClient();
   // Трое суток, а не пятнадцать минут.
   //
   // Пятнадцать минут — верный срок для собственной ссылки: её открывают в
@@ -62,9 +88,12 @@ export async function POST(req: Request) {
   // задачи. Перехватывать надо именно ту переписку, в которой ссылку
   // прислали, а подключение видно в «Команде» и отключается там же.
   const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+  // user_id — это пространство, а не тот, кто нажал: код, выписанный
+  // руководителем самому себе, принадлежит трекеру владельца, как и строка
+  // человека, к которой он привяжется.
   const { error } = await admin
     .from("telegram_link_codes")
-    .insert({ code, user_id: user.id, assignee_id: assignee.id, channel, expires_at: expiresAt });
+    .insert({ code, user_id: ownerId, assignee_id: assignee.id, channel, expires_at: expiresAt });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
