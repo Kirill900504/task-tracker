@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig, BotTransport } from "@/lib/botTransport";
 import { colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
 import { findColleagueByChat } from "@/lib/colleagues";
-import { notifyOwner } from "@/lib/botDelivery";
+import { notifyAuthor } from "@/lib/botDelivery";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
@@ -388,7 +388,7 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       const answered = await handleColleagueText(ctx.admin, colleague, trimmed, ctx.channel.id);
       if (answered) {
         await say(ctx, answered.reply);
-        if (answered.notifyOwner) await notifyOwner(ctx.admin, colleague.user_id, answered.notifyOwner);
+        if (answered.notifyOwner) await notifyAuthor(ctx.admin, colleague.user_id, answered.notifyTo ?? null, answered.notifyOwner);
         return;
       }
       await say(ctx, colleagueHelp(colleague.name));

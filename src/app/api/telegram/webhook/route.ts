@@ -4,7 +4,7 @@ import { downloadTelegramFile, telegramTransport } from "@/lib/telegram";
 import { decodeCallback } from "@/lib/colleagues";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
 import { handleLinkCode, handleText, type BotContext } from "@/lib/botPipeline";
-import { notifyOwner } from "@/lib/botDelivery";
+import { notifyAuthor } from "@/lib/botDelivery";
 import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
 
 // Telegram's side of the bot: the update format, voice files, and Telegram's
@@ -51,7 +51,8 @@ export async function POST(req: Request) {
     });
     if (outcome.notifyOwner) {
       const colleagueOwner = await admin.from("assignees").select("user_id").eq("telegram_chat_id", pressedChatId).limit(1).maybeSingle();
-      if (colleagueOwner.data?.user_id) await notifyOwner(admin, colleagueOwner.data.user_id as string, outcome.notifyOwner);
+      if (colleagueOwner.data?.user_id)
+        await notifyAuthor(admin, colleagueOwner.data.user_id as string, outcome.notifyTo ?? null, outcome.notifyOwner);
     }
     return NextResponse.json({ ok: true });
   }

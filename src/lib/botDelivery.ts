@@ -3,6 +3,7 @@ import type { BotButton, BotChannelConfig, BotSendResult, BotTransport } from "@
 import { BOT_CHANNELS, MAX_CHANNEL, TELEGRAM_CHANNEL } from "@/lib/botTransport";
 import { telegramTransport } from "@/lib/telegram";
 import { maxTransport, maxConfigured } from "@/lib/max";
+import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
 
 // Where a message actually goes.
 //
@@ -44,6 +45,53 @@ export async function notifyOwner(admin: SupabaseClient, userId: string, text: s
     await transportFor(chat.channel).send(chat.chatId, text);
   }
   return chats.length;
+}
+
+// Тому, кто поручил, — а не всегда владельцу.
+//
+// Правило записано в docs/multiuser.md как «петля должна замыкаться»:
+// отчитался — постановщик должен узнать. До сих пор каждый ответ уходил
+// владельцу пространства независимо от того, кто задачу поставил. Пока
+// ставил только Кирилл, разницы не было; как только руководитель поставит
+// задачу другому, автор не узнает об отчёте вовсе — а Кирилл получит
+// четырнадцать чужих переписок и выключит уведомления.
+//
+// Владелец остаётся получателем всего, что поставил сам, и по-прежнему
+// видит всё в трекере и в понедельничной сводке.
+export async function notifyAuthor(
+  admin: SupabaseClient,
+  ownerId: string,
+  createdBy: string | null,
+  text: string,
+): Promise<void> {
+  if (!createdBy || createdBy === ownerId) {
+    await notifyOwner(admin, ownerId, text);
+    return;
+  }
+
+  // Автор — руководитель: писать ему надо в тот чат, куда ходят его задачи,
+  // то есть в строку человека, а не в аккаунт владельца.
+  const { data: member } = await admin
+    .from("workspace_members")
+    .select("assignee_id")
+    .eq("member_id", createdBy)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+  const assigneeId = (member as { assignee_id?: string } | null)?.assignee_id;
+  if (!assigneeId) {
+    // Автора не нашли — молчать хуже, чем сказать не тому: владелец всё
+    // равно отвечает за пространство.
+    await notifyOwner(admin, ownerId, text);
+    return;
+  }
+
+  const { data: person } = await admin
+    .from("assignees")
+    .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username")
+    .eq("id", assigneeId)
+    .maybeSingle();
+  const target = person ? chatsFor(person as ColleagueRow)[0] : undefined;
+  if (target) await sendToColleague(target, text);
 }
 
 // Writing to a colleague: one message, through the messenger they connected

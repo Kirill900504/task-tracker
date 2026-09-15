@@ -6,7 +6,7 @@ import { maxSettings } from "@/lib/botSettings";
 import { decodeCallback } from "@/lib/colleagues";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
 import { handleLinkCode, handleText, type BotContext } from "@/lib/botPipeline";
-import { notifyOwner } from "@/lib/botDelivery";
+import { notifyAuthor } from "@/lib/botDelivery";
 import { MAX_CHANNEL } from "@/lib/botTransport";
 
 // MAX's side of the bot. Everything past "what did this person say" is the
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
     });
     if (outcome.notifyOwner) {
       const owner = await admin.from("assignees").select("user_id").eq("max_user_id", chatId).limit(1).maybeSingle();
-      if (owner.data?.user_id) await notifyOwner(admin, owner.data.user_id as string, outcome.notifyOwner);
+      if (owner.data?.user_id) await notifyAuthor(admin, owner.data.user_id as string, outcome.notifyTo ?? null, outcome.notifyOwner);
     }
     return NextResponse.json({ ok: true });
   }

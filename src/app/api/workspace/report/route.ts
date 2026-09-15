@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { notifyOwner } from "@/lib/botDelivery";
+import { notifyAuthor } from "@/lib/botDelivery";
 import { closeIfEveryoneReported } from "@/lib/colleagueReplies";
 import { canDecline, canReportDone } from "@/lib/taskProgress";
 import { canVoteNo } from "@/lib/meetingVotes";
@@ -68,22 +68,24 @@ export async function POST(req: Request) {
     if (!body.recipientId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
     const { data: rec } = await admin
       .from("idea_recipients")
-      .select("id, idea_id, assignee_id, converted_task_id, ideas(text)")
+      .select("id, idea_id, assignee_id, converted_task_id, ideas(text, created_by)")
       .eq("id", body.recipientId)
       .maybeSingle();
+    type IdeaRef = { text: string; created_by: string | null };
     const recipient = rec as {
       id: string;
       idea_id: string;
       assignee_id: string;
       converted_task_id: string | null;
-      ideas: { text: string } | { text: string }[] | null;
+      ideas: IdeaRef | IdeaRef[] | null;
     } | null;
     if (!recipient || recipient.assignee_id !== m.assignee_id) {
       return NextResponse.json({ error: "Эта мысль не ваша" }, { status: 403 });
     }
     if (recipient.converted_task_id) return NextResponse.json({ ok: true, taskId: recipient.converted_task_id });
 
-    const text = (Array.isArray(recipient.ideas) ? recipient.ideas[0]?.text : recipient.ideas?.text) || "";
+    const idea = Array.isArray(recipient.ideas) ? recipient.ideas[0] : recipient.ideas;
+    const text = idea?.text || "";
     const title = text.trim().slice(0, 200) || "Из мысли";
     const taskId = uid();
     // Без срока: срок ставит тот, кто спросит, а не тот, кто взялся.
@@ -99,20 +101,22 @@ export async function POST(req: Request) {
       accepted_at: now,
     });
     await admin.from("idea_recipients").update({ converted_task_id: taskId, seen_at: now }).eq("id", recipient.id);
-    await notifyOwner(admin, m.owner_id, `➕ ${myName} взял мысль в работу: «${title}»`);
+    // Мысль тоже кто-то отправил — ему и знать, что её взяли.
+    await notifyAuthor(admin, m.owner_id, idea?.created_by || null, `➕ ${myName} взял мысль в работу: «${title}»`);
     return NextResponse.json({ ok: true, taskId });
   }
 
   if (body.action === "vote") {
     const { data: row } = await admin
       .from("meeting_participants")
-      .select("id, assignee_id, meeting_id, meetings(title, date, time, vote_round)")
+      .select("id, assignee_id, meeting_id, meetings(title, date, time, vote_round, created_by)")
       .eq("id", body.participantId)
       .maybeSingle();
+    type MeetingRef = { title: string; date: string; time: string | null; vote_round: number | null; created_by: string | null };
     const vote = row as {
       assignee_id: string;
       meeting_id: string;
-      meetings: { title: string; date: string; time: string | null; vote_round: number | null } | { title: string; date: string; time: string | null; vote_round: number | null }[] | null;
+      meetings: MeetingRef | MeetingRef[] | null;
     } | null;
     if (!vote || vote.assignee_id !== m.assignee_id) return NextResponse.json({ error: "Это не ваша встреча" }, { status: 403 });
 
@@ -132,9 +136,12 @@ export async function POST(req: Request) {
       .eq("id", body.participantId);
 
     const when = meeting ? fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "") : "";
-    await notifyOwner(
+    // Организатору, а не владельцу: планёрку собирает тот, кому и важно,
+    // кто на неё придёт.
+    await notifyAuthor(
       admin,
       m.owner_id,
+      meeting?.created_by || null,
       coming
         ? `✅ ${myName} будет на встрече «${meeting?.title || ""}» (${when})`
         : `❌ ${myName} не сможет быть на «${meeting?.title || ""}» (${when}): ${reason}`,
@@ -145,22 +152,27 @@ export async function POST(req: Request) {
   if (!body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
   const { data: row } = await admin
     .from("task_participants")
-    .select("id, assignee_id, task_id, tasks(title)")
+    .select("id, assignee_id, task_id, tasks(title, created_by)")
     .eq("id", body.participantId)
     .maybeSingle();
+  type TaskRef = { title: string; created_by: string | null };
   const part = row as {
     id: string;
     assignee_id: string;
     task_id: string;
-    tasks: { title: string } | { title: string }[] | null;
+    tasks: TaskRef | TaskRef[] | null;
   } | null;
   if (!part || part.assignee_id !== m.assignee_id) return NextResponse.json({ error: "Это не ваша задача" }, { status: 403 });
-  const title = (Array.isArray(part.tasks) ? part.tasks[0]?.title : part.tasks?.title) || "";
+  const taskRef = Array.isArray(part.tasks) ? part.tasks[0] : part.tasks;
+  const title = taskRef?.title || "";
+  // Ответ адресован тому, кто поручил. Пока поручает только владелец, это
+  // он и есть; как только поручит руководитель — узнает он, а не Кирилл.
+  const tell = (text: string) => notifyAuthor(admin, m.owner_id, taskRef?.created_by || null, text);
 
   if (body.action === "accept") {
     await admin.from("task_participants").update({ accepted_at: now }).eq("id", part.id);
     await admin.from("tasks").update({ accepted_at: now }).eq("id", part.task_id);
-    await notifyOwner(admin, m.owner_id, `✅ ${myName} принял в работу: «${title}»`);
+    await tell(`✅ ${myName} принял в работу: «${title}»`);
     return NextResponse.json({ ok: true });
   }
 
@@ -175,9 +187,7 @@ export async function POST(req: Request) {
     // функция, потому что «отчитались все» не должно значить разное в
     // зависимости от того, откуда пришёл последний отчёт.
     const everyone = await closeIfEveryoneReported(admin, part.task_id);
-    await notifyOwner(
-      admin,
-      m.owner_id,
+    await tell(
       everyone
         ? `🏁 ${myName} по задаче «${title}»: ${comment}\n\nОтчитались все — задача ждёт вашей приёмки.`
         : `🏁 ${myName} по задаче «${title}»: ${comment}`,
@@ -192,7 +202,7 @@ export async function POST(req: Request) {
       .from("task_participants")
       .update({ declined_at: now, decline_reason: reason, done_at: null, done_comment: null })
       .eq("id", part.id);
-    await notifyOwner(admin, m.owner_id, `⛔ ${myName} не может «${title}»: ${reason}`);
+    await tell(`⛔ ${myName} не может «${title}»: ${reason}`);
     return NextResponse.json({ ok: true });
   }
 
@@ -204,7 +214,7 @@ export async function POST(req: Request) {
       .update({ reschedule_requested_at: now, reschedule_to: body.date || null, reschedule_reason: reason })
       .eq("id", part.id);
     const to = body.date ? ` на ${fmtDate(body.date)}` : "";
-    await notifyOwner(admin, m.owner_id, `📅 ${myName} просит перенести «${title}»${to}: ${reason}`);
+    await tell(`📅 ${myName} просит перенести «${title}»${to}: ${reason}`);
     return NextResponse.json({ ok: true });
   }
 

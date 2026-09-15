@@ -26,6 +26,11 @@ export type CallbackOutcome = {
   // The owner hears about it — in every messenger he is connected to, which
   // the caller resolves (see botDelivery.notifyOwner).
   notifyOwner?: string;
+  // Кому именно. Пусто — владельцу; иначе тому, кто поручил (его id из
+  // created_by). Кнопка в мессенджере и кнопка на экране руководителя
+  // обязаны делать одно и то же, а /api/workspace/report уже адресует
+  // ответ постановщику.
+  notifyTo?: string | null;
 };
 
 export function colleagueHelp(name: string): string {
@@ -50,7 +55,7 @@ export async function handleColleagueCallback(
   if (action.kind === "task") {
     const { data: task } = await admin
       .from("tasks")
-      .select("id, title, assignee, user_id, status")
+      .select("id, title, assignee, user_id, status, created_by")
       .eq("id", action.id)
       .is("deleted_at", null)
       .maybeSingle();
@@ -90,6 +95,7 @@ export async function handleColleagueCallback(
       return {
         toast: "Принято",
         rewriteTo: `📋 ${task.title}\n\n✅ Принято в работу`,
+        notifyTo: task.created_by,
         notifyOwner: `✅ ${colleague.name} принял в работу: «${task.title}»`,
       };
     }
@@ -108,6 +114,7 @@ export async function handleColleagueCallback(
         return {
           toast: "Отмечено",
           rewriteTo: `📋 ${task.title}\n\n🏁 Отмечено выполненным.\nНапишите одним сообщением, что именно сделано — это увидит постановщик.`,
+          notifyTo: task.created_by,
           notifyOwner: closed
             ? `🏁 ${colleague.name} выполнил: «${task.title}» — отчитались все, задача ждёт вашей приёмки`
             : `🏁 ${colleague.name} выполнил свою часть: «${task.title}»`,
@@ -122,6 +129,7 @@ export async function handleColleagueCallback(
       return {
         toast: "Отмечено выполненным",
         rewriteTo: `📋 ${task.title}\n\n🏁 Выполнено`,
+        notifyTo: task.created_by,
         notifyOwner: `🏁 ${colleague.name} выполнил: «${task.title}»`,
       };
     }
@@ -134,6 +142,7 @@ export async function handleColleagueCallback(
         return {
           toast: "Передал",
           rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
+          notifyTo: task.created_by,
           notifyOwner: `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
         };
       }
@@ -144,6 +153,7 @@ export async function handleColleagueCallback(
       return {
         toast: "Передал",
         rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
+        notifyTo: task.created_by,
         notifyOwner: `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
       };
     }
@@ -152,7 +162,7 @@ export async function handleColleagueCallback(
   if (action.kind === "meeting" && (action.action === "yes" || action.action === "no")) {
     const { data: meeting } = await admin
       .from("meetings")
-      .select("id, title, date, time, participants, confirmed_by, user_id, vote_round")
+      .select("id, title, date, time, participants, confirmed_by, user_id, vote_round, created_by")
       .eq("id", action.id)
       .is("deleted_at", null)
       .maybeSingle();
@@ -195,12 +205,14 @@ export async function handleColleagueCallback(
       return {
         toast: "Отметил, что будете",
         rewriteTo: `📅 ${meeting.title}\n${when}\n\n✅ Вы подтвердили участие`,
+        notifyTo: meeting.created_by,
         notifyOwner: `✅ ${colleague.name} будет на встрече «${meeting.title}» (${when})`,
       };
     }
     return {
       toast: "Передал",
       rewriteTo: `📅 ${meeting.title}\n${when}\n\n❌ Вы не сможете\nНапишите одним сообщением, почему — это увидит организатор.`,
+      notifyTo: meeting.created_by,
       notifyOwner: `❌ ${colleague.name} не сможет быть на встрече «${meeting.title}» (${when})`,
     };
   }
@@ -208,7 +220,7 @@ export async function handleColleagueCallback(
   if (action.kind === "idea" && action.action === "task") {
     const { data: idea } = await admin
       .from("ideas")
-      .select("id, text, user_id")
+      .select("id, text, user_id, created_by")
       .eq("id", action.id)
       .is("deleted_at", null)
       .maybeSingle();
@@ -242,6 +254,7 @@ export async function handleColleagueCallback(
     return {
       toast: "Завёл задачу",
       rewriteTo: `💡 ${title}\n\n➕ Взято в работу — теперь это ваша задача`,
+      notifyTo: idea.created_by,
       notifyOwner: `➕ ${colleague.name} взял мысль в работу: «${title}»`,
     };
   }
@@ -278,13 +291,13 @@ export async function handleColleagueText(
   // Из какого мессенджера пришло: в обсуждении это видно строкой «из
   // Telegram», и подменять её на другую значит врать в записи.
   source: "telegram" | "max" = "telegram",
-): Promise<{ reply: string; notifyOwner?: string } | null> {
+): Promise<{ reply: string; notifyOwner?: string; notifyTo?: string | null } | null> {
   const body = text.trim();
   if (!body) return null;
 
   const { data } = await admin
     .from("task_participants")
-    .select("id, task_id, done_at, done_comment, declined_at, decline_reason, tasks(title)")
+    .select("id, task_id, done_at, done_comment, declined_at, decline_reason, tasks(title, created_by)")
     .eq("assignee_id", colleague.id)
     .eq("user_id", colleague.user_id);
 
@@ -295,7 +308,7 @@ export async function handleColleagueText(
     done_comment: string | null;
     declined_at: string | null;
     decline_reason: string | null;
-    tasks: { title: string } | { title: string }[] | null;
+    tasks: { title: string; created_by: string | null } | { title: string; created_by: string | null }[] | null;
   };
 
   const rows = ((data as Row[]) || []).filter(
@@ -309,12 +322,14 @@ export async function handleColleagueText(
   // Самая свежая: человек отвечает на то, что нажал только что.
   rows.sort((a, b) => Date.parse(b.done_at || b.declined_at || "") - Date.parse(a.done_at || a.declined_at || ""));
   const row = rows[0];
-  const title = Array.isArray(row.tasks) ? row.tasks[0]?.title || "" : row.tasks?.title || "";
+  const taskRef = Array.isArray(row.tasks) ? row.tasks[0] : row.tasks;
+  const title = taskRef?.title || "";
 
   if (row.done_at && !row.done_comment) {
     await admin.from("task_participants").update({ done_comment: body }).eq("id", row.id);
     return {
       reply: `Записал по задаче «${title}»: ${body}`,
+      notifyTo: taskRef?.created_by ?? null,
       notifyOwner: `🏁 ${colleague.name} по задаче «${title}»: ${body}`,
     };
   }
@@ -322,6 +337,7 @@ export async function handleColleagueText(
   await admin.from("task_participants").update({ decline_reason: body }).eq("id", row.id);
   return {
     reply: `Записал: не сможете «${title}» — ${body}`,
+    notifyTo: taskRef?.created_by ?? null,
     notifyOwner: `⛔ ${colleague.name} не может «${title}»: ${body}`,
   };
 }
@@ -336,7 +352,7 @@ async function handleMeetingReason(
   admin: SupabaseClient,
   colleague: { id: string; name: string; user_id: string },
   body: string,
-): Promise<{ reply: string; notifyOwner?: string } | null> {
+): Promise<{ reply: string; notifyOwner?: string; notifyTo?: string | null } | null> {
   const { data } = await admin
     .from("meeting_participants")
     .select("id, response, reason, responded_at, meetings(title, date, time)")
@@ -379,7 +395,7 @@ async function handleChatMessage(
   colleague: { id: string; name: string; user_id: string },
   body: string,
   source: "telegram" | "max",
-): Promise<{ reply: string; notifyOwner?: string } | null> {
+): Promise<{ reply: string; notifyOwner?: string; notifyTo?: string | null } | null> {
   const { data } = await admin
     .from("task_participants")
     .select("task_id, created_at, tasks(title, status, deleted_at)")
