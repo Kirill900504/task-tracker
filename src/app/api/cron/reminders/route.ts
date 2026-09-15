@@ -13,6 +13,7 @@ import { buildManagerBrief, composeManagerBrief, managerBriefIsEmpty } from "@/l
 import { personStats, composePeopleReview, type ParticipationRow } from "@/lib/peopleReview";
 import { findAssignmentDrift } from "@/lib/assignmentDrift";
 import { onceOnly } from "@/lib/onceOnly";
+import { findSilent, composeSilence } from "@/lib/silence";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -119,6 +120,14 @@ export async function GET(req: Request) {
             `🔍 Ждут вашей приёмки (${onReview.length}):\n` +
             onReview.slice(0, 5).map((t) => `• ${t}`).join("\n");
         }
+
+        // Кто молчит. Просроченное сводка показывает давно, но просрочка —
+        // это про дату, а здесь про человека: задачу выдали, и по ней не
+        // нажали ничего. Такая задача выглядит живой ровно до срока, а
+        // потом оказывается, что её никто и не начинал. Считается кодом:
+        // имена и сроки модели не отдаются.
+        const silent = await findSilent(admin, userId, now);
+        if (silent.length) text = (text ? text + "\n\n" : "") + composeSilence(silent);
 
         // Обсуждения, в которых со вчера что-то писали. Каждое сообщение
         // отдельным уведомлением превратило бы мессенджер в ленту, а
