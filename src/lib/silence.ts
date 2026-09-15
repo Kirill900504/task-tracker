@@ -32,9 +32,12 @@ export type SilentRow = {
   title: string;
   // Когда задачу выдали — по этой дате и считается, сколько человек молчит.
   since: string;
+  // Есть ли у человека вообще способ ответить: чат в мессенджере или вход в
+  // трекер. Без этого «молчит» — неправда: ему нечем нажать.
+  reachable: boolean;
 };
 
-export type SilentPerson = { name: string; count: number; oldest: string; days: number };
+export type SilentPerson = { name: string; count: number; oldest: string; days: number; reachable: boolean };
 
 const SILENT_AFTER_HOURS = 48;
 
@@ -53,26 +56,46 @@ export function groupSilent(rows: SilentRow[], now: Date): SilentPerson[] {
     const sorted = [...list].sort((a, b) => Date.parse(a.since) - Date.parse(b.since));
     const oldest = sorted[0];
     const days = Math.floor((now.getTime() - Date.parse(oldest.since)) / (24 * 60 * 60 * 1000));
-    out.push({ name, count: list.length, oldest: oldest.title, days });
+    out.push({ name, count: list.length, oldest: oldest.title, days, reachable: list.some((r) => r.reachable) });
   }
   // Дольше всех молчащий — первым: разговор начинают с него.
   return out.sort((a, b) => b.days - a.days || b.count - a.count);
 }
 
+// Два разных сообщения, а не одно.
+//
+// «Молчит» и «не дошло» требуют разного: с первым надо поговорить, второго
+// надо подключить. Свалить их в одну строку значит написать неправду про
+// человека, у которого просто нет кнопки, — а на боевых данных 15.09.2026
+// такими оказались ВСЕ четверо. Строка, обвиняющая невиновных, перестаёт
+// читаться целиком, вместе с теми, к кому она относится по делу.
 export function composeSilence(people: SilentPerson[]): string {
-  if (!people.length) return "";
-  const lines = people.slice(0, 5).map((p) => {
+  const line = (p: SilentPerson) => {
     const extra = p.count > 1 ? `, задач: ${p.count}` : "";
-    return `• ${p.name} — ${p.days} дн. молчит по «${p.oldest}»${extra}`;
-  });
-  return `🔇 Не ответили на задачу (${people.length}):\n` + lines.join("\n");
+    return `• ${p.name} — ${p.days} дн. по «${p.oldest}»${extra}`;
+  };
+
+  const blocks: string[] = [];
+  const silent = people.filter((p) => p.reachable);
+  if (silent.length) {
+    blocks.push(`🔇 Не ответили на задачу (${silent.length}):\n` + silent.slice(0, 5).map(line).join("\n"));
+  }
+  const unreachable = people.filter((p) => !p.reachable);
+  if (unreachable.length) {
+    blocks.push(
+      `📭 Задача не дошла — человек не подключён (${unreachable.length}):\n` +
+        unreachable.slice(0, 5).map(line).join("\n") +
+        "\nПодключить можно в «Команде».",
+    );
+  }
+  return blocks.join("\n\n");
 }
 
 export async function findSilent(admin: SupabaseClient, userId: string, now: Date): Promise<SilentPerson[]> {
   const cutoff = new Date(now.getTime() - SILENT_AFTER_HOURS * 60 * 60 * 1000).toISOString();
   const { data } = await admin
     .from("task_participants")
-    .select("created_at, assignees(name), tasks(title, status, deleted_at)")
+    .select("created_at, assignee_id, assignees(name, telegram_chat_id, max_user_id), tasks(title, status, deleted_at)")
     .eq("user_id", userId)
     .eq("role", "executor")
     .is("accepted_at", null)
@@ -80,19 +103,40 @@ export async function findSilent(admin: SupabaseClient, userId: string, now: Dat
     .is("declined_at", null)
     .lt("created_at", cutoff);
 
+  type Person = { name: string; telegram_chat_id: number | null; max_user_id: number | null };
   type Raw = {
     created_at: string;
-    assignees: { name: string } | { name: string }[] | null;
+    assignee_id: string;
+    assignees: Person | Person[] | null;
     tasks: { title: string; status: string | null; deleted_at: string | null } | null;
   };
 
-  const rows: SilentRow[] = ((data || []) as unknown as Raw[])
-    .filter((r) => r.tasks && !r.tasks.deleted_at && r.tasks.status !== "done")
-    .map((r) => ({
-      name: (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "",
-      title: r.tasks!.title,
-      since: r.created_at,
-    }))
+  const raw = ((data || []) as unknown as Raw[]).filter(
+    (r) => r.tasks && !r.tasks.deleted_at && r.tasks.status !== "done",
+  );
+
+  // Вход в трекер — второй способ ответить: человек без мессенджера, но с
+  // логином, кнопки видит у себя на экране.
+  const { data: members } = await admin
+    .from("workspace_members")
+    .select("assignee_id, member_id, status")
+    .eq("owner_id", userId);
+  const hasLogin = new Set(
+    ((members || []) as { assignee_id: string; member_id: string | null; status: string }[])
+      .filter((m) => m.member_id && m.status === "active")
+      .map((m) => m.assignee_id),
+  );
+
+  const rows: SilentRow[] = raw
+    .map((r) => {
+      const person = Array.isArray(r.assignees) ? r.assignees[0] : r.assignees;
+      return {
+        name: person?.name || "",
+        title: r.tasks!.title,
+        since: r.created_at,
+        reachable: !!person?.telegram_chat_id || !!person?.max_user_id || hasLogin.has(r.assignee_id),
+      };
+    })
     .filter((r) => r.name && !isSelfAssignee(r.name));
 
   return groupSilent(rows, now);

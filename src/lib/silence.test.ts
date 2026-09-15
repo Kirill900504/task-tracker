@@ -4,8 +4,8 @@ import { composeSilence, groupSilent, type SilentRow } from "./silence";
 const now = new Date("2026-09-15T09:00:00Z");
 const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000).toISOString();
 
-function row(name: string, title: string, days: number): SilentRow {
-  return { name, title, since: daysAgo(days) };
+function row(name: string, title: string, days: number, reachable = true): SilentRow {
+  return { name, title, since: daysAgo(days), reachable };
 }
 
 describe("кто молчит", () => {
@@ -44,6 +44,25 @@ describe("кто молчит", () => {
 
   it("молчащих нет — нет и строки", () => {
     expect(composeSilence(groupSilent([], now))).toBe("");
+  });
+
+  // Главное различие: «молчит» и «не дошло» требуют разного — с одним
+  // поговорить, второго подключить. На боевых данных все четверо «молчащих»
+  // оказались людьми без единого способа нажать кнопку.
+  it("неподключённого не обвиняют в молчании", () => {
+    const text = composeSilence(groupSilent([row("Котов Михаил", "База знаний", 5, false)], now));
+    expect(text).toContain("не дошла");
+    expect(text).toContain("не подключён");
+    expect(text).not.toContain("Не ответили");
+  });
+
+  it("подключённый и неподключённый идут разными блоками", () => {
+    const text = composeSilence(
+      groupSilent([row("Игорь", "Смета", 4), row("Котов Михаил", "База знаний", 5, false)], now),
+    );
+    expect(text).toContain("🔇 Не ответили на задачу (1)");
+    expect(text).toContain("📭 Задача не дошла");
+    expect(text.indexOf("Игорь")).toBeLessThan(text.indexOf("Котов"));
   });
 
   it("длинный список обрезается, но счётчик говорит правду", () => {
