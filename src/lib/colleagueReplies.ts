@@ -3,6 +3,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
 import { findColleagueByChat } from "@/lib/colleagues";
 import { uid } from "@/lib/uid";
+import { recordEvent } from "@/lib/itemHistory";
 import { newTaskRow } from "@/lib/newTask";
 import type { BotChannelConfig } from "@/lib/botTransport";
 
@@ -93,6 +94,12 @@ export async function handleColleagueCallback(
       // own accepted_at, and rewriting only one of the two would make the
       // screen and the messenger disagree about the same fact.
       await admin.from("tasks").update({ accepted_at: new Date().toISOString() }).eq("id", task.id);
+      await recordEvent(admin, {
+        userId: task.user_id,
+        kind: "task",
+        itemId: task.id,
+        text: `✅ ${colleague.name} принял в работу`,
+      });
       return {
         toast: "Принято",
         rewriteTo: `📋 ${task.title}\n\n✅ Принято в работу`,
@@ -127,6 +134,12 @@ export async function handleColleagueCallback(
         .from("tasks")
         .update({ status: "done", completed_at: new Date().toISOString() })
         .eq("id", task.id);
+      await recordEvent(admin, {
+        userId: task.user_id,
+        kind: "task",
+        itemId: task.id,
+        text: `🏁 ${colleague.name} отметил выполненной`,
+      });
       return {
         toast: "Отмечено выполненным",
         rewriteTo: `📋 ${task.title}\n\n🏁 Выполнено`,
@@ -194,6 +207,13 @@ export async function handleColleagueCallback(
     };
     if (existing) await admin.from("meeting_participants").update(patch).eq("id", (existing as { id: string }).id);
     else await admin.from("meeting_participants").insert({ meeting_id: meeting.id, assignee_id: colleague.id, role: "participant", ...patch });
+
+    await recordEvent(admin, {
+      userId: meeting.user_id,
+      kind: "meeting",
+      itemId: meeting.id,
+      text: coming ? `✅ ${colleague.name} будет` : `❌ ${colleague.name} не сможет`,
+    });
 
     // confirmed_by остаётся в согласии со строками, пока его кто-то читает.
     const confirmed = ((meeting.confirmed_by as string[]) || []).filter((n) => n !== colleague.name);
@@ -332,6 +352,14 @@ export async function handleColleagueText(
 
   if (row.done_at && !row.done_comment) {
     await admin.from("task_participants").update({ done_comment: body }).eq("id", row.id);
+    // Отчёт словами — самое ценное в хронике: именно его стирает возврат на
+    // доработку, и именно его потом ищут.
+    await recordEvent(admin, {
+      userId: colleague.user_id,
+      kind: "task",
+      itemId: row.task_id,
+      text: `🏁 ${colleague.name} отчитался: ${body}`,
+    });
     return {
       reply: `Записал по задаче «${title}»: ${body}`,
       notifyTo: taskRef?.created_by ?? null,
@@ -340,6 +368,12 @@ export async function handleColleagueText(
   }
 
   await admin.from("task_participants").update({ decline_reason: body }).eq("id", row.id);
+  await recordEvent(admin, {
+    userId: colleague.user_id,
+    kind: "task",
+    itemId: row.task_id,
+    text: `⛔ ${colleague.name} не может: ${body}`,
+  });
   return {
     reply: `Записал: не сможете «${title}» — ${body}`,
     notifyTo: taskRef?.created_by ?? null,

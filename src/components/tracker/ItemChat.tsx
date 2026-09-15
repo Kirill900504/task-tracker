@@ -107,7 +107,18 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
         </div>
       )}
 
-      {comments.map((c) => (
+      {comments.map((c) =>
+        // Хроника — не реплика. Её никто не писал, её нельзя править, на неё
+        // не ставят реакции, и выглядеть она должна как отметка на полях, а
+        // не как чьё-то сообщение. Именно она отвечает на вопрос «а что
+        // просили доделать» после второго возврата: состояние задачи этого
+        // уже не помнит (см. itemHistory.ts).
+        c.system ? (
+          <div className="chat-event" key={c.id}>
+            <span className="chat-event-text">{c.body}</span>
+            <span className="chat-event-time">{timeLabel(c.createdAt)}</span>
+          </div>
+        ) : (
         <div className={"chat-msg" + (c.mine ? " mine" : "")} key={c.id}>
           <div className="chat-msg-head">
             <span className="chat-author">{c.authorName}</span>
@@ -195,7 +206,8 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
             </div>
           )}
         </div>
-      ))}
+        ),
+      )}
 
       {error && <div className="chat-error">{error}</div>}
 

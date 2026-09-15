@@ -228,6 +228,47 @@ try {
   const { data: afterApprove } = await admin.from("tasks").select("approval_state, approved_at").eq("id", taskId).maybeSingle();
   check("approval_state = accepted", afterApprove?.approval_state === "accepted", afterApprove);
 
+  // ── Хроника ───────────────────────────────────────────────────────────
+  section("История задачи");
+  // Ради этого всё и делалось: возврат на доработку обнуляет отчёты, и без
+  // хроники после второго круга уже не видно, что человек сдавал в первый
+  // раз и что именно его просили доделать.
+  const { data: history } = await admin
+    .from("item_comments")
+    .select("body, system, author_user_id")
+    .eq("item_id", taskId)
+    .eq("system", true)
+    .order("created_at");
+  const lines = (history || []).map((h) => h.body);
+  check(
+    "первый отчёт сохранился, хотя строка отчёта обнулена возвратом",
+    lines.some((l) => l.includes("Свёл цифры за август")),
+    lines,
+  );
+  check(
+    "возврат на доработку записан вместе с причиной",
+    lines.some((l) => l.includes("вернул на доработку") && l.includes("филиалам")),
+    lines,
+  );
+  check("отказ и его причина записаны", lines.some((l) => l.includes("не может") && l.includes("1С")), lines);
+  check("приёмка записана", lines.some((l) => l.includes("принял работу")), lines);
+  check("у хроники нет автора — её никто не писал", (history || []).every((h) => !h.author_user_id), history);
+
+  const { data: forged } = await mgrA.db
+    .from("item_comments")
+    .insert({
+      user_id: owner.id,
+      item_kind: "task",
+      item_id: taskId,
+      author_user_id: mgrA.id,
+      author_assignee_id: personA.id,
+      body: "подделка хроники",
+      source: "app",
+      system: true,
+    })
+    .select("id");
+  check("подделать хронику из браузера нельзя", !forged?.length, forged);
+
   // ── Права ──────────────────────────────────────────────────────────────
   section("Границы прав");
   const { error: dueError, count: dueCount } = await mgrA.db
@@ -383,10 +424,10 @@ try {
   });
   check("участник пишет в обсуждение", !commentError, commentError?.message);
 
-  const { data: seenByB } = await mgrB.db.from("item_comments").select("body").eq("item_id", taskId);
+  const { data: seenByB } = await mgrB.db.from("item_comments").select("body").eq("item_id", taskId).eq("system", false);
   check("второй участник его видит", (seenByB || []).length === 1, seenByB);
 
-  const { data: seenByOwner } = await owner.db.from("item_comments").select("body").eq("item_id", taskId);
+  const { data: seenByOwner } = await owner.db.from("item_comments").select("body").eq("item_id", taskId).eq("system", false);
   check("владелец видит обсуждение", (seenByOwner || []).length === 1, seenByOwner);
 
   const { error: forgeError } = await mgrB.db.from("item_comments").insert({

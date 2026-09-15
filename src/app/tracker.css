@@ -1254,6 +1254,16 @@
     border:1px solid var(--line); border-radius:var(--radius-sm);
   }
   .chat-composer textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
+  /* Хроника задачи: кто что сделал и когда. Отметка на полях, а не
+     сообщение — её никто не писал, и выглядеть как чья-то реплика она не
+     должна, иначе обсуждение перестанет читаться. */
+  .chat-event{
+    display:flex; gap:10px; align-items:baseline; justify-content:space-between;
+    padding:6px 2px; margin:2px 0;
+    border-left:2px solid var(--line); padding-left:10px;
+  }
+  .chat-event-text{font-size:12.5px; line-height:1.45; color:var(--ink-soft);}
+  .chat-event-time{font-size:11px; color:var(--ink-faint, var(--ink-soft)); white-space:nowrap; opacity:.75;}
   .chat-error{
     margin-top:8px; padding:8px 10px; border-radius:var(--radius-sm);
     background:var(--high-bg); border:1px solid rgba(224,122,95,.4);

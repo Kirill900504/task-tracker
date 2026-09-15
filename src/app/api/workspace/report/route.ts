@@ -8,6 +8,7 @@ import { canVoteNo } from "@/lib/meetingVotes";
 import { fmtDate } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import { newTaskRow } from "@/lib/newTask";
+import { recordEvent } from "@/lib/itemHistory";
 
 // Ответ руководителя: один путь для трекера и для мессенджера.
 //
@@ -108,6 +109,7 @@ export async function POST(req: Request) {
       { onConflict: "task_id,assignee_id" },
     );
     await admin.from("idea_recipients").update({ converted_task_id: taskId, seen_at: now }).eq("id", recipient.id);
+    await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: taskId, text: `➕ ${myName} взял мысль в работу` });
     // Мысль тоже кто-то отправил — ему и знать, что её взяли.
     await notifyAuthor(admin, m.owner_id, idea?.created_by || null, `➕ ${myName} взял мысль в работу: «${title}»`);
     return NextResponse.json({ ok: true, taskId });
@@ -143,6 +145,12 @@ export async function POST(req: Request) {
       .eq("id", body.participantId);
 
     const when = meeting ? fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "") : "";
+    await recordEvent(admin, {
+      userId: m.owner_id,
+      kind: "meeting",
+      itemId: vote.meeting_id,
+      text: coming ? `✅ ${myName} будет` : `❌ ${myName} не сможет: ${reason}`,
+    });
     // Организатору, а не владельцу: планёрку собирает тот, кому и важно,
     // кто на неё придёт.
     await notifyAuthor(
@@ -179,6 +187,7 @@ export async function POST(req: Request) {
   if (body.action === "accept") {
     await admin.from("task_participants").update({ accepted_at: now }).eq("id", part.id);
     await admin.from("tasks").update({ accepted_at: now }).eq("id", part.task_id);
+    await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `✅ ${myName} принял в работу` });
     await tell(`✅ ${myName} принял в работу: «${title}»`);
     return NextResponse.json({ ok: true });
   }
@@ -193,6 +202,7 @@ export async function POST(req: Request) {
     // Та же проверка, что и у кнопки в мессенджере — буквально та же
     // функция, потому что «отчитались все» не должно значить разное в
     // зависимости от того, откуда пришёл последний отчёт.
+    await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `🏁 ${myName} отчитался: ${comment}` });
     const everyone = await closeIfEveryoneReported(admin, part.task_id);
     await tell(
       everyone
@@ -209,6 +219,7 @@ export async function POST(req: Request) {
       .from("task_participants")
       .update({ declined_at: now, decline_reason: reason, done_at: null, done_comment: null })
       .eq("id", part.id);
+    await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `⛔ ${myName} не может: ${reason}` });
     await tell(`⛔ ${myName} не может «${title}»: ${reason}`);
     return NextResponse.json({ ok: true });
   }
@@ -221,6 +232,7 @@ export async function POST(req: Request) {
       .update({ reschedule_requested_at: now, reschedule_to: body.date || null, reschedule_reason: reason })
       .eq("id", part.id);
     const to = body.date ? ` на ${fmtDate(body.date)}` : "";
+    await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `📅 ${myName} просит перенос${to}: ${reason}` });
     await tell(`📅 ${myName} просит перенести «${title}»${to}: ${reason}`);
     return NextResponse.json({ ok: true });
   }

@@ -141,7 +141,8 @@ export async function GET(req: Request) {
           .eq("item_kind", "task")
           .gt("created_at", since)
           .is("deleted_at", null)
-          .is("author_user_id", null);
+          .is("author_user_id", null)
+          .eq("system", false);
         const discussed = [...new Set(((fresh || []) as { item_id: string }[]).map((c) => c.item_id))];
         if (discussed.length) {
           const { data: titles } = await admin.from("tasks").select("title").in("id", discussed.slice(0, 5));

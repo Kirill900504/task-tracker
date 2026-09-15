@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
+import { recordEvent } from "@/lib/itemHistory";
 
 // Решение постановщика по отчёту: принять, вернуть, закрыть волевым.
 //
@@ -71,6 +72,22 @@ export async function POST(req: Request) {
       .update({ approval_state: "accepted", approved_at: now, force_closed_by: user.id, force_closed_reason: comment })
       .eq("id", task.id);
   }
+
+  // Хроника пишется до рассылки: сообщение может не уйти (нет чата, нет
+  // связи), а запись о решении остаться должна в любом случае — именно её
+  // потом и ищут, когда спрашивают «а что просили доделать».
+  const byWhom = isOwner ? "Владелец" : "Постановщик";
+  await recordEvent(admin, {
+    userId: task.user_id,
+    kind: "task",
+    itemId: task.id,
+    text:
+      body.action === "return"
+        ? `↩ ${byWhom} вернул на доработку: ${comment}`
+        : body.action === "approve"
+          ? `✅ ${byWhom} принял работу${comment ? ": " + comment : ""}`
+          : `🔒 ${byWhom} закрыл задачу волевым решением: ${comment}`,
+  });
 
   // Сказать людям. Молчание после возврата на доработку — самый дорогой
   // вид молчания здесь: работа стоит, и никто не знает, что она стоит.

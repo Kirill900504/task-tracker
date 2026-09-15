@@ -42,6 +42,9 @@ export type Comment = {
   authorName: string;
   mine: boolean;
   source: "app" | "telegram" | "max";
+  // Запись хроники, а не реплика: её не правят, на неё не ставят реакции и
+  // выглядит она строкой, а не сообщением (миграция 0026).
+  system: boolean;
   // Эмодзи → кто его поставил (именами, чтобы можно было показать в
   // подсказке), плюс отметка «я среди них».
   reactions: { emoji: string; count: number; mine: boolean }[];
@@ -54,6 +57,7 @@ type CommentRow = {
   created_at: string;
   edited_at: string | null;
   source: "app" | "telegram" | "max";
+  system: boolean;
   author_user_id: string | null;
   author_assignee_id: string | null;
   assignees: { name: string } | { name: string }[] | null;
@@ -86,7 +90,7 @@ export function useItemComments(kind: ItemKind, itemId: string) {
     const [{ data: rows }, { data: reactions }] = await Promise.all([
       db
         .from("item_comments")
-        .select("id, body, attachments, created_at, edited_at, source, author_user_id, author_assignee_id, assignees(name)")
+        .select("id, body, attachments, created_at, edited_at, source, system, author_user_id, author_assignee_id, assignees(name)")
         .eq("item_kind", kind)
         .eq("item_id", itemId)
         .is("deleted_at", null)
@@ -128,6 +132,7 @@ export function useItemComments(kind: ItemKind, itemId: string) {
         authorName: nameOf(row, meId, "Кирилл"),
         mine,
         source: row.source,
+        system: !!row.system,
         reactions: [...grouped.entries()].map(([emoji, v]) => ({ emoji, count: v.count, mine: v.mine })),
       };
     });
