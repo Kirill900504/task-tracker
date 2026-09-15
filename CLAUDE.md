@@ -273,6 +273,11 @@ by a running `next start` (and by OneDrive) — stop the server first.
 - Sending a task to the assignee at the moment of assignment is **done**, not
   pending — `assignWork.ts` treats it as one of the three notifications that
   cannot be switched off. The ✈ button stayed for «покажи это ещё и Ане».
+  What that send SAYS («не подключён», «получит утром») has to reach the
+  screen: `assignPerson` returns it, `attachOnCreate` collects it, and the
+  card shows «📭 не подключён — задача не ушла» in place of «ждём ответа»
+  for good. Four of his six people have no messenger, so this is not an edge
+  case — it is the normal state of most rows.
 - Known gap, and it is smaller than it sounds: a voice note is transcribed
   only if it arrives as OGG/Opus, in either messenger. That is what both
   messengers' own recorders produce — the format that is refused is a
