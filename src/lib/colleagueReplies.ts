@@ -239,12 +239,19 @@ export async function handleColleagueCallback(
     });
     if (taskError) return { toast: "Не получилось завести задачу" };
 
-    await admin.from("task_participants").insert({
-      task_id: taskId,
-      assignee_id: colleague.id,
-      role: "executor",
-      accepted_at: new Date().toISOString(),
-    });
+    // upsert, а не insert: имя исполнителя стоит в самой задаче, и строку
+    // по нему успевает завести триггер (миграция 0024) — простая вставка
+    // тут же упёрлась бы в уникальность и оставила задачу без отметки
+    // «принял», хотя человек её именно что взял.
+    await admin.from("task_participants").upsert(
+      {
+        task_id: taskId,
+        assignee_id: colleague.id,
+        role: "executor",
+        accepted_at: new Date().toISOString(),
+      },
+      { onConflict: "task_id,assignee_id" },
+    );
     await admin
       .from("idea_recipients")
       .update({ converted_task_id: taskId, seen_at: new Date().toISOString() })

@@ -94,12 +94,18 @@ export async function POST(req: Request) {
       .insert({ id: taskId, user_id: m.owner_id, title, assignee: myName, created_by: user.id });
     if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
 
-    await admin.from("task_participants").insert({
-      task_id: taskId,
-      assignee_id: m.assignee_id,
-      role: "executor",
-      accepted_at: now,
-    });
+    // upsert, а не insert: имя исполнителя стоит в самой задаче, и строку
+    // по нему успевает завести триггер (миграция 0024) — простая вставка
+    // упёрлась бы в уникальность и оставила задачу без отметки «принял».
+    await admin.from("task_participants").upsert(
+      {
+        task_id: taskId,
+        assignee_id: m.assignee_id,
+        role: "executor",
+        accepted_at: now,
+      },
+      { onConflict: "task_id,assignee_id" },
+    );
     await admin.from("idea_recipients").update({ converted_task_id: taskId, seen_at: now }).eq("id", recipient.id);
     // Мысль тоже кто-то отправил — ему и знать, что её взяли.
     await notifyAuthor(admin, m.owner_id, idea?.created_by || null, `➕ ${myName} взял мысль в работу: «${title}»`);

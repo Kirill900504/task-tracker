@@ -65,22 +65,29 @@ export async function attachExecutors(
   const { data: existing } = await admin.from("task_participants").select("assignee_id").eq("task_id", task.id);
   const already = new Set(((existing || []) as { assignee_id: string }[]).map((r) => r.assignee_id));
   const fresh = people.filter((p) => !already.has(p.id));
-  if (!fresh.length) return { attached: people.map((p) => p.name), missing };
 
   // user_id проставляет триггер от родительской задачи (миграция 0019) —
   // отсюда его писать нельзя, строка может уехать в чужое пространство.
-  const { error } = await admin
-    .from("task_participants")
-    .insert(fresh.map((person) => ({ task_id: task.id, assignee_id: person.id, role: "executor" })));
-  if (error) return { attached: [], missing, error: error.message };
+  if (fresh.length) {
+    const { error } = await admin
+      .from("task_participants")
+      .insert(fresh.map((person) => ({ task_id: task.id, assignee_id: person.id, role: "executor" })));
+    if (error) return { attached: [], missing, error: error.message };
+  }
 
   const attached = people.map((p) => p.name);
   // Ночью трекер молчит (E2): задача придёт утренней сводкой. Строки уже
   // стоят, и человек увидит задачу, как только откроет трекер.
   if (isQuietHour()) return { attached, missing };
 
+  // Пишем всем, кого назначали, а не только тем, чью строку завели мы.
+  // С миграции 0024 строку основного исполнителя успевает создать триггер —
+  // по имени в поле, ещё до этого вызова, — и если ориентироваться на
+  // «кого вставили», человек получит задачу в трекер и ни слова в
+  // мессенджер. Вызывают это только при создании, так что повторить
+  // уведомление здесь нечем.
   const from = await ownerDisplayName(admin, userId);
-  for (const person of fresh) {
+  for (const person of people) {
     if (isSelfAssignee(person.name)) continue;
     const target = chatsFor(person)[0];
     if (!target) continue;

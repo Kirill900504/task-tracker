@@ -154,14 +154,19 @@ try {
   });
   check("владелец создаёт задачу", !taskError, taskError?.message);
 
-  const { data: parts, error: partsError } = await owner.db
+  // Первого назначает само имя в поле «Исполнитель» — с миграции 0024 это
+  // свойство базы, а не внимательность того, кто писал очередной способ
+  // завести задачу. Второго добавляем списком, как это делает карточка.
+  const { data: auto } = await owner.db.from("task_participants").select("id, assignee_id").eq("task_id", taskId);
+  check("имя в поле само завело исполнителя", (auto || []).length === 1 && auto[0].assignee_id === personA.id, auto);
+
+  const { error: partsError } = await owner.db
     .from("task_participants")
-    .insert([
-      { user_id: owner.id, task_id: taskId, assignee_id: personA.id, role: "executor" },
-      { user_id: owner.id, task_id: taskId, assignee_id: personB.id, role: "executor" },
-    ])
-    .select("id, assignee_id");
-  check("оба назначены исполнителями", !partsError && parts?.length === 2, partsError?.message);
+    .insert([{ user_id: owner.id, task_id: taskId, assignee_id: personB.id, role: "executor" }]);
+  check("второй добавлен списком участников", !partsError, partsError?.message);
+
+  const { data: parts } = await owner.db.from("task_participants").select("id, assignee_id").eq("task_id", taskId);
+  check("оба назначены исполнителями", (parts || []).length === 2, parts);
   const partA = parts.find((p) => p.assignee_id === personA.id);
   const partB = parts.find((p) => p.assignee_id === personB.id);
 
