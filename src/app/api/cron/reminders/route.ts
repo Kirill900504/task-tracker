@@ -11,6 +11,7 @@ import { chatsFor, meetingButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { buildManagerBrief, composeManagerBrief, managerBriefIsEmpty } from "@/lib/managerBrief";
 import { personStats, composePeopleReview, type ParticipationRow } from "@/lib/peopleReview";
+import { findAssignmentDrift } from "@/lib/assignmentDrift";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -247,6 +248,19 @@ export async function GET(req: Request) {
           if (forgotten.length) {
             const list = forgotten.slice(0, 5).map((m) => `• ${m.title} (${m.date.split("-").reverse().join(".")})`);
             text = (text ? text + "\n\n" : "📊 Неделя по людям\n\n") + "Встречи без итога:\n" + list.join("\n");
+          }
+
+          // Задачи, которые выглядят назначенными и не назначены. Три места
+          // создавали задачи, и два из них строк участия не заводили —
+          // причины починены, но появится четвёртое, и узнать об этом лучше
+          // здесь, чем через неделю вопросом «почему он ничего не сделал».
+          const drift = await findAssignmentDrift(admin, userId);
+          if (drift.length) {
+            const list = drift.slice(0, 5).map((d) => `• ${d.title} — ${d.assignee}`);
+            text =
+              (text ? text + "\n\n" : "📊 Неделя по людям\n\n") +
+              `⚠ Стоит имя, но задача не назначена (${drift.length}) — человек её не видит:\n` +
+              list.join("\n");
           }
 
           if (text) await notifyOwner(admin, userId, text);

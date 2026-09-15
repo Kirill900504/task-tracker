@@ -236,6 +236,22 @@ try {
   const { data: askRow } = await admin.from("task_participants").select("reschedule_reason, reschedule_to").eq("id", partA.id).maybeSingle();
   check("просьба о переносе видна постановщику", askRow?.reschedule_reason === "Жду данные" && askRow?.reschedule_to === later, askRow);
 
+  // Правила в маршруте и правила в базе должны совпадать. Пока база
+  // разрешала руководителю писать в свою строку напрямую, отчёт без единого
+  // слова, отказ без причины и задача, не ушедшая на приёмку, отделялись от
+  // боевых данных одной строчкой в консоли браузера (миграция 0023).
+  const { count: sneak } = await mgrA.db
+    .from("task_participants")
+    .update({ done_at: new Date().toISOString(), done_comment: null }, { count: "exact" })
+    .eq("id", partA.id);
+  check("отчитаться мимо маршрута нельзя", sneak === 0, { sneak });
+
+  const { count: sneakVote } = await mgrA.db
+    .from("meeting_participants")
+    .update({ response: "no", reason: null }, { count: "exact" })
+    .eq("user_id", owner.id);
+  check("проголосовать мимо маршрута тоже нельзя", sneakVote === 0, { sneakVote });
+
   // Чужая задача: заведена вторым руководителем на себя, первый её не видит.
   const privateId = randomUUID();
   await admin.from("tasks").insert({ id: privateId, user_id: owner.id, title: "Своё дело Витковского", created_by: mgrB.id, status: "in_progress" });
