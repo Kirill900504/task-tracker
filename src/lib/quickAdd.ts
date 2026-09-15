@@ -1,4 +1,5 @@
 import { gigaChatComplete } from "@/lib/gigachat/client";
+import { cleanTitle } from "@/lib/itemTitle";
 import { sharesPrefix } from "@/lib/stem";
 
 // Shared natural-language parsing used by both the web quick-add bar
@@ -45,9 +46,11 @@ function systemPrompt(now: Date, assignees: string[]) {
     "   ОДНА задача на нескольких человек — это ОДИН объект: первый исполнитель в assignee, остальные в executors. НИКОГДА не создавай несколько одинаковых задач, по одной на каждого человека.",
     "   priority: high — если явно важно/срочно, иначе med. term: long — если срок дальше месяца или явно долгосрочная задача, иначе short.",
     "   deadline: дата из таблицы выше в формате YYYY-MM-DD. Пустая строка, если дата не названа.",
+    "   title: КОРОТКО, что сделать — 2–7 слов, без обращения к тебе («создай», «поставь») и без имени исполнителя, оно уже в assignee. Подробности, если они были сказаны, положи в description, а не в название.",
     "",
     '2) {"type":"meeting","title":string,"date":string,"time":string,"participants":string[]}',
     "   — явно названы дата/время встречи. date: YYYY-MM-DD из таблицы выше. time: HH:MM (24ч) или пустая строка. participants: имена буква-в-букву из списка выше, без придуманных.",
+    "   title: КОРОТКАЯ ТЕМА, 2–6 слов, как строка в календаре. Не повторяй сказанную фразу и не начинай со слов «создай», «поставь», «запиши». Дата, время и имена участников уже разобраны в отдельные поля — в названии они не нужны. «Создай встречу на среду с Черкашиным по маркировке остатков обуви» → title: «Маркировка остатков обуви».",
     "",
     '3) {"type":"idea","text":string,"important":boolean}',
     "   — просто мысль/наблюдение без срока и исполнителя. important: true только если пользователь явно подчеркнул важность.",
@@ -181,6 +184,12 @@ export function resolveKnownName(candidate: string, known: string[]): string | n
 
 export function sanitizeAgainstKnown(input: Record<string, unknown>, known: string[]): string[] {
   const dropped: string[] = [];
+  // Название приводится в порядок здесь же, рядом с именами, и по той же
+  // причине: модель просили о коротком названии, но проверить это может
+  // только код. Без этого в календарь попадает сказанная фраза целиком,
+  // вместе со словом «Создай» в начале, — так там и оказались строки на
+  // двести символов.
+  if (typeof input.title === "string") input.title = cleanTitle(input.title);
   if (typeof input.assignee === "string" && input.assignee) {
     const resolved = resolveKnownName(input.assignee, known);
     if (!resolved) dropped.push(input.assignee);
