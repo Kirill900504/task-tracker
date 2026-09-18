@@ -417,6 +417,7 @@ export default function NewTracker() {
         mainCol: (
           <TasksPanel
             isAdmin={isAdmin}
+            myUserId={identity.userId}
             filterAssignee={filterAssignee}
             onFilterAssigneeChange={setFilterAssignee}
             tasks={tasks}

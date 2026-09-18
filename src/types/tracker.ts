@@ -42,6 +42,11 @@ export interface Task {
   // taskToRow, which lists the columns it owns and this is not one).
   approvalState?: ApprovalState;
   approvalComment?: string;
+  // Кто поставил задачу. Пусто — владелец пространства (так у всего, что
+  // заведено до того, как трекер стал многопользовательским). Только для
+  // чтения: синхронизация эту колонку не пишет, а интерфейс по ней решает,
+  // чью задачу руководителю можно править, а чью только читать.
+  createdBy?: string;
 }
 
 export interface Meeting {

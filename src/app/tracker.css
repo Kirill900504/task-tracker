@@ -1174,6 +1174,14 @@
      говорит «человек взял задачу». */
   .pill-accepted{color:var(--success); background:rgba(63,169,104,.14); border:1px solid rgba(63,169,104,.5);}
 
+  /* Чужая задача: почему кнопок нет. Без этой строки карточка выглядит
+     сломанной — открылась, а делать в ней нечего. */
+  .task-card-note{
+    margin:-6px 0 16px; padding:9px 11px; font-size:12.5px; line-height:1.5;
+    color:var(--ink-soft); background:var(--paper-soft);
+    border-left:3px solid var(--line); border-radius:0 6px 6px 0;
+  }
+
   /* Панель «Люди»: строка на человека, вся строка — кнопка-фильтр.
      Цифры справа в одну колонку и табличными цифрами, чтобы четырнадцать
      строк читались столбиком, а не лесенкой. */

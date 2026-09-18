@@ -93,6 +93,7 @@ export default function TaskModal({
   onAcceptReschedule,
   onRejectReschedule,
   onPersonAdded,
+  canEdit = true,
 }: {
   task: Task | null;
   prefill?: TaskPrefill;
@@ -116,6 +117,19 @@ export default function TaskModal({
   // Дождаться, пока только что заведённый человек доедет до базы, и
   // перечитать список: без id его нельзя поставить на задачу.
   onPersonAdded?: (name: string) => void | Promise<void>;
+  // Чужая задача, которую видно.
+  //
+  // Руководитель видит задачи, где он исполнитель, — и до сих пор ему
+  // показывались все кнопки: срок, состав, приёмка, «Удалить». База на
+  // каждую из них ответила бы отказом (миграция 0019: участие в задаче не
+  // даёт права её править), но отказала бы МОЛЧА — задача исчезла бы из
+  // списка до перезагрузки и вернулась после неё. Кнопка, ведущая к отказу,
+  // хуже отсутствующей; здесь она ещё и обманывает.
+  //
+  // Что остаётся у чужой задачи: прочитать и написать в обсуждение.
+  // Ответить по ней он может там, где это его дело, — в разделе «Что от
+  // вас ждут».
+  canEdit?: boolean;
 }) {
   const { colleagues } = useColleagues();
   const ask = useAsk();
@@ -404,6 +418,12 @@ export default function TaskModal({
 
         {isEditing && form.desc && <div className="task-card-desc">{form.desc}</div>}
 
+        {isEditing && !canEdit && (
+          <div className="task-card-note">
+            Эту задачу поставил не вы — менять её может только постановщик. Написать в обсуждение можно.
+          </div>
+        )}
+
         {!isEditing && (
           <div className="field">
             <label>Название задачи</label>
@@ -441,7 +461,7 @@ export default function TaskModal({
 
         {/* У заведённой задачи срок идёт первым: перенести его — одно из
             четырёх действий, ради которых её открывают. */}
-        {isEditing && deadlineField}
+        {isEditing && canEdit && deadlineField}
 
         {/* Одно поле людей вместо двух. «Исполнитель» списком и «Кто на
             задаче» с выбором роли спрашивали об одном и том же в двух
@@ -449,19 +469,21 @@ export default function TaskModal({
             меню у самой кнопки (см. PeoplePicker). Имя первого исполнителя
             по-прежнему попадает в tasks.assignee: это короткая запись «для
             кого это вообще», её читают бот, сводки и карточки. */}
-        <PeoplePicker
-          people={availablePeople}
-          picked={picked}
-          onPick={pickPerson}
-          onRemove={removePerson}
-          onAddPerson={() => void handleAddAssignee()}
-        />
+        {canEdit && (
+          <PeoplePicker
+            people={availablePeople}
+            picked={picked}
+            onPick={pickPerson}
+            onRemove={removePerson}
+            onAddPerson={() => void handleAddAssignee()}
+          />
+        )}
 
 
         {/* Состав выбирается полем выше; здесь — то, чего в кнопках не
             выразить: кто принял, кто отчитался и какими словами, кто просит
             перенос, и сама приёмка. У новой задачи ничего этого ещё нет. */}
-        {task && (
+        {task && canEdit && (
           <TaskParticipants
             taskId={task.id}
             participants={participants}
@@ -632,7 +654,7 @@ export default function TaskModal({
 
         <div className="modal-actions">
           <div className="left">
-            {isEditing && (
+            {isEditing && canEdit && (
               <button
                 className="btn btn-danger-ghost"
                 id="deleteTaskBtn"
@@ -667,11 +689,13 @@ export default function TaskModal({
               </button>
             )}
             <button className="btn" id="cancelBtn" onClick={onClose}>
-              Отмена
+              {canEdit ? "Отмена" : "Закрыть"}
             </button>
-            <button className="btn btn-primary" id="saveTaskBtn" onClick={save}>
-              Сохранить
-            </button>
+            {canEdit && (
+              <button className="btn btn-primary" id="saveTaskBtn" onClick={save}>
+                Сохранить
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -29,6 +29,8 @@ export type TaskRow = {
   accepted_at?: string | null;
   approval_state?: string | null;
   approval_comment?: string | null;
+  // Кто завёл. Как и accepted_at, приходит из базы и не пишется отсюда.
+  created_by?: string | null;
 };
 
 export type MeetingRow = {
@@ -131,6 +133,7 @@ export function taskFromRow(r: TaskRow): Task {
     acceptedAt: r.accepted_at || "",
     approvalState: (r.approval_state as Task["approvalState"]) || "open",
     approvalComment: r.approval_comment || "",
+    createdBy: r.created_by || "",
   };
 }
 

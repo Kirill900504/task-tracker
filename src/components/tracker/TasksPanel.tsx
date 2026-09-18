@@ -70,6 +70,7 @@ export default function TasksPanel({
   onTaskToMeeting,
   onScheduleMeetingFor,
   isAdmin = true,
+  myUserId = "",
   filterAssignee,
   onFilterAssigneeChange,
   justCreatedId,
@@ -116,6 +117,9 @@ export default function TasksPanel({
   // Разделы и принудительное закрытие — админское: их держит владелец
   // пространства, и база откажет остальным (миграция 0031).
   isAdmin?: boolean;
+  // Свой auth-id: по нему отличается «моя задача» от «чужой, которую мне
+  // видно». У владельца пусто — ему принадлежит всё в его пространстве.
+  myUserId?: string;
   // Фильтр по исполнителю живёт снаружи: тот же выбор делает панель
   // «Люди», и две копии одного состояния разошлись бы в первый же день.
   filterAssignee: string;
@@ -669,6 +673,9 @@ export default function TasksPanel({
       {modalOpen && (
         <TaskModal
           key={modalTask?.id ?? "new"}
+          // Своя задача — та, которую поставил сам. У владельца свои все:
+          // пространство его, и колонка created_by у старых задач пуста.
+          canEdit={!myUserId || !modalTask || (modalTask.createdBy || "") === myUserId}
           task={modalTask}
           prefill={modalPrefill}
           sections={sections}
