@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { useColleagues, type ColleagueChannel } from "@/hooks/useColleagues";
 import { useMaxBot } from "@/hooks/useMaxBot";
@@ -20,6 +20,11 @@ import { useMaxBot } from "@/hooks/useMaxBot";
 // computer wants the tracker itself; one who is always on the road wants
 // Telegram; most want both. They are offered side by side because that is
 // how the choice is actually made — per person, not per company.
+//
+// The link and the error appear UNDER THE ROW that was pressed, not at the
+// bottom of the modal. With fourteen people the bottom of this list is a
+// screen and a half below the button, so a link put there was produced,
+// shown, and never seen: «не даёт ссылку ещё раз» was this and nothing else.
 
 const CHANNEL_LABEL: Record<ColleagueChannel, string> = { telegram: "Telegram", max: "MAX" };
 
@@ -46,34 +51,46 @@ const MEMBER_LABEL: Record<string, string> = {
 export default function TeamModal({ onClose }: { onClose: () => void }) {
   const { colleagues, loading, reload, invite, inviteToTracker, setDirection, setTrackerAccess, unlink } = useColleagues();
   const maxBot = useMaxBot();
-  const [inviteFor, setInviteFor] = useState<{ name: string; link: string; kind: InviteKind } | null>(null);
-  const [error, setError] = useState("");
+  const [inviteFor, setInviteFor] = useState<{ id: string; name: string; link: string; kind: InviteKind } | null>(null);
+  // Ошибка тоже привязана к человеку: «слишком много приглашений подряд»
+  // внизу общего списка читается как поломка всего экрана, а не как ответ
+  // на кнопку, которую только что нажали.
+  const [error, setError] = useState<{ id: string; text: string } | null>(null);
+
   const [copied, setCopied] = useState(false);
 
+  // Ссылка стоит прямо под строкой, но сама строка может оказаться у нижнего
+  // края окна — тогда её всё равно не видно. Ref стабилен, поэтому прокрутка
+  // случается ровно при появлении блока у нового человека, а не на каждой
+  // перерисовке («Скопировать» ничего не дёргает).
+  const revealInvite = useCallback((el: HTMLDivElement | null) => {
+    el?.scrollIntoView({ block: "nearest" });
+  }, []);
+
   async function handleInvite(id: string, name: string, channel: ColleagueChannel) {
-    setError("");
+    setError(null);
     const result = await invite(id, channel);
     if ("error" in result) {
-      setError(result.error);
+      setError({ id, text: result.error });
       return;
     }
     setCopied(false);
-    setInviteFor({ name, link: result.link, kind: channel });
+    setInviteFor({ id, name, link: result.link, kind: channel });
   }
 
   async function handleTrackerInvite(id: string, name: string, currentDirection = "") {
-    setError("");
+    setError(null);
     // Направление спрашивается здесь, а не отдельным экраном: это
     // единственный момент, когда о человеке и так думают, и без него
     // понедельничная сводка по направлениям остаётся пустой колонкой.
     const direction = prompt(`Какое направление ведёт ${name}? (можно оставить пустым)`, currentDirection) ?? "";
     const result = await inviteToTracker(id, direction.trim());
     if ("error" in result) {
-      setError(result.error);
+      setError({ id, text: result.error });
       return;
     }
     setCopied(false);
-    setInviteFor({ name, link: result.link, kind: "tracker" });
+    setInviteFor({ id, name, link: result.link, kind: "tracker" });
   }
 
   async function copyLink() {
@@ -82,7 +99,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
       await navigator.clipboard.writeText(inviteFor.link);
       setCopied(true);
     } catch {
-      setError("Скопируйте ссылку вручную — браузер не дал доступ к буферу обмена");
+      setError({ id: inviteFor.id, text: "Скопируйте ссылку вручную — браузер не дал доступ к буферу обмена" });
     }
   }
 
@@ -105,117 +122,127 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
             {colleagues.map((person) => {
               const where = [person.telegram ? "Telegram" : "", person.max ? "MAX" : ""].filter(Boolean).join(" · ");
               return (
-                <div className="team-row" key={person.id}>
-                  <span className="team-name">{person.name}</span>
-                  {person.linked ? (
-                    <>
-                      <span className="team-status linked">
-                        {where}
-                        {person.username ? ` · @${person.username}` : ""}
-                      </span>
-                      {/* Приглашение во второй мессенджер — для тех, кто уже
-                          на связи в одном: запасной канал, не дубль. */}
-                      {maxBot.available && !person.max && (
-                        <button className="btn btn-small" onClick={() => handleInvite(person.id, person.name, "max")}>
-                          + MAX
+                <Fragment key={person.id}>
+                  <div className="team-row">
+                    <span className="team-name">{person.name}</span>
+                    {person.linked ? (
+                      <>
+                        <span className="team-status linked">
+                          {where}
+                          {person.username ? ` · @${person.username}` : ""}
+                        </span>
+                        {/* Приглашение во второй мессенджер — для тех, кто уже
+                            на связи в одном: запасной канал, не дубль. */}
+                        {maxBot.available && !person.max && (
+                          <button className="btn btn-small" onClick={() => handleInvite(person.id, person.name, "max")}>
+                            + MAX
+                          </button>
+                        )}
+                        {!person.telegram && (
+                          <button className="btn btn-small" onClick={() => handleInvite(person.id, person.name, "telegram")}>
+                            + Telegram
+                          </button>
+                        )}
+                        <button
+                          className="btn btn-small"
+                          onClick={() => handleUnlink(person.id, person.name, person.telegram ? "telegram" : "max")}
+                        >
+                          Отключить
                         </button>
-                      )}
-                      {!person.telegram && (
-                        <button className="btn btn-small" onClick={() => handleInvite(person.id, person.name, "telegram")}>
-                          + Telegram
+                      </>
+                    ) : (
+                      <>
+                        <span className="team-status">не подключён</span>
+                        <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "telegram")}>
+                          Telegram
                         </button>
-                      )}
-                      <button className="btn btn-small" onClick={() => handleUnlink(person.id, person.name, person.telegram ? "telegram" : "max")}>
-                        Отключить
+                        {maxBot.available && (
+                          <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "max")}>
+                            MAX
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {/* Приглашение в сам трекер — отдельно от мессенджеров:
+                        это логин, а не чат, и одно другого не заменяет. */}
+                    {person.member === "none" && (
+                      <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name)}>
+                        + В трекер
                       </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="team-status">не подключён</span>
-                      <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "telegram")}>
-                        Telegram
-                      </button>
-                      {maxBot.available && (
-                        <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "max")}>
-                          MAX
+                    )}
+                    {person.member === "invited" && (
+                      <>
+                        <span className="team-status">{MEMBER_LABEL.invited}</span>
+                        <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name, person.direction)}>
+                          Ссылка ещё раз
                         </button>
-                      )}
-                    </>
+                      </>
+                    )}
+                    {(person.member === "active" || person.member === "disabled") && (
+                      <>
+                        <span className={person.member === "active" ? "team-status linked" : "team-status"}>
+                          {MEMBER_LABEL[person.member]}
+                          {person.direction ? ` · ${person.direction}` : ""}
+                        </span>
+                        <button
+                          className="btn btn-small"
+                          type="button"
+                          title="Направление"
+                          onClick={() => {
+                            const next = prompt(`Какое направление ведёт ${person.name}?`, person.direction);
+                            if (next === null) return;
+                            void setDirection(person.id, next.trim());
+                          }}
+                        >
+                          Направление
+                        </button>
+                        <button
+                          className="btn btn-small"
+                          type="button"
+                          onClick={() => {
+                            const turnOff = person.member === "active";
+                            if (
+                              turnOff &&
+                              !confirm(
+                                `Отключить доступ ${person.name} в трекер? Задачи и его отчёты останутся на месте — исчезнет только вход.`,
+                              )
+                            )
+                              return;
+                            void setTrackerAccess(person.id, !turnOff);
+                          }}
+                        >
+                          {person.member === "active" ? "Отключить вход" : "Вернуть вход"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {inviteFor?.id === person.id && (
+                    <div className="team-invite" id="inviteBlock" ref={revealInvite}>
+                      <label>
+                        Ссылка в {INVITE_LABEL[inviteFor.kind]} для {inviteFor.name} — {INVITE_LIFETIME[inviteFor.kind]}
+                      </label>
+                      <div className="invite-link">{inviteFor.link}</div>
+                      <div className="outcome-actions">
+                        <button className="btn btn-small btn-primary" onClick={copyLink}>
+                          {copied ? "Скопировано" : "Скопировать"}
+                        </button>
+                        <button className="btn btn-small" onClick={() => void reload()}>
+                          Проверить, подключился ли
+                        </button>
+                        <button className="btn btn-small" onClick={() => setInviteFor(null)}>
+                          Скрыть
+                        </button>
+                      </div>
+                      <div className="team-hint">{INVITE_HINT[inviteFor.kind]}</div>
+                    </div>
                   )}
 
-                  {/* Приглашение в сам трекер — отдельно от мессенджеров:
-                      это логин, а не чат, и одно другого не заменяет. */}
-                  {person.member === "none" && (
-                    <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name)}>
-                      + В трекер
-                    </button>
-                  )}
-                  {person.member === "invited" && (
-                    <>
-                      <span className="team-status">{MEMBER_LABEL.invited}</span>
-                      <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name, person.direction)}>
-                        Ссылка ещё раз
-                      </button>
-                    </>
-                  )}
-                  {(person.member === "active" || person.member === "disabled") && (
-                    <>
-                      <span className={person.member === "active" ? "team-status linked" : "team-status"}>
-                        {MEMBER_LABEL[person.member]}
-                        {person.direction ? ` · ${person.direction}` : ""}
-                      </span>
-                      <button
-                        className="btn btn-small"
-                        type="button"
-                        title="Направление"
-                        onClick={() => {
-                          const next = prompt(`Какое направление ведёт ${person.name}?`, person.direction);
-                          if (next === null) return;
-                          void setDirection(person.id, next.trim());
-                        }}
-                      >
-                        Направление
-                      </button>
-                      <button
-                        className="btn btn-small"
-                        type="button"
-                        onClick={() => {
-                          const turnOff = person.member === "active";
-                          if (
-                            turnOff &&
-                            !confirm(
-                              `Отключить доступ ${person.name} в трекер? Задачи и его отчёты останутся на месте — исчезнет только вход.`,
-                            )
-                          )
-                            return;
-                          void setTrackerAccess(person.id, !turnOff);
-                        }}
-                      >
-                        {person.member === "active" ? "Отключить вход" : "Вернуть вход"}
-                      </button>
-                    </>
-                  )}
-                </div>
+                  {error?.id === person.id && <div className="team-error team-error-row">{error.text}</div>}
+                </Fragment>
               );
             })}
-          </div>
-        )}
-
-        {inviteFor && (
-          <div className="field" id="inviteBlock">
-            <label>
-              Ссылка в {INVITE_LABEL[inviteFor.kind]} для {inviteFor.name} — {INVITE_LIFETIME[inviteFor.kind]}
-            </label>
-            <div className="invite-link">{inviteFor.link}</div>
-            <div className="outcome-actions">
-              <button className="btn btn-small btn-primary" onClick={copyLink}>
-                {copied ? "Скопировано" : "Скопировать"}
-              </button>
-              <button className="btn btn-small" onClick={() => void reload()}>
-                Проверить, подключился ли
-              </button>
-            </div>
-            <div className="team-hint">{INVITE_HINT[inviteFor.kind]}</div>
           </div>
         )}
 
@@ -227,8 +254,6 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
             </a>
           </div>
         )}
-
-        {error && <div className="team-error">{error}</div>}
 
         <div className="modal-actions">
           <button className="btn" id="teamCloseBtn" onClick={onClose}>

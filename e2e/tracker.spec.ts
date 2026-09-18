@@ -535,3 +535,41 @@ test("a task can be sent to any connected colleague, not only its assignee", asy
   await expect(menu).toHaveCount(0);
   await expect(page.locator("#taskSendResult")).toHaveCount(0);
 });
+
+// «Не даёт ссылку ещё раз». Ссылка выдавалась исправно — её просто печатали
+// под всем списком: у четырнадцати человек это экран с лишним ниже кнопки,
+// которую нажали, и с точки зрения нажавшего не происходило ничего. Теперь
+// блок стоит сразу за строкой человека и сам подтягивается в видимую часть.
+test("an invite link appears under the person it was asked for", async ({ page }) => {
+  await login(page);
+  // The assignee list reaches the database on the first sync; the team
+  // screen reads it from there.
+  await waitForSaved(page);
+
+  await page.click("#teamBtn");
+  await expect(page.locator("#teamList")).toBeVisible();
+
+  // Самый нижний человек: именно там старый общий блок уезжал за край.
+  const row = page.locator(".team-row").last();
+  const name = (await row.locator(".team-name").innerText()).trim();
+  await row.getByRole("button", { name: "Telegram", exact: true }).click();
+
+  // Щедрый таймаут: первое обращение к маршруту — это ещё и его холодный
+  // старт, а тест здесь про то, ГДЕ появляется ссылка, а не как быстро.
+  const invite = page.locator("#inviteBlock");
+  await expect(invite).toBeVisible({ timeout: 20_000 });
+  await expect(invite).toContainText(name);
+  await expect(invite.locator(".invite-link")).toContainText("t.me/");
+
+  // Стоит непосредственно за строкой этого человека…
+  expect(await row.evaluate((el) => el.nextElementSibling?.id === "inviteBlock")).toBe(true);
+  // …и видна без прокрутки — в этом весь смысл.
+  const inView = await invite.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= window.innerHeight;
+  });
+  expect(inView).toBe(true);
+
+  await page.click("#teamCloseBtn");
+  await expect(page.locator("#teamOverlay")).toHaveCount(0);
+});
