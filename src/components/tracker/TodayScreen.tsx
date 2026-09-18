@@ -28,7 +28,9 @@ export default function TodayScreen({
   onToggleTask: (task: Task) => void;
   onOpenTask: (task: Task) => void;
   onOpenMeeting: (meeting: Meeting) => void;
-  onGoToTasks: () => void;
+  // Необязателен: на телефоне это переход на вкладку «Задачи», а на
+  // компьютере панель задач и так стоит рядом — вести из неё некуда.
+  onGoToTasks?: () => void;
   // How the outcome of a send is said out loud here — the same toast stack
   // the rest of the tracker answers with.
   showToast: (message: string) => void;
@@ -50,7 +52,7 @@ export default function TodayScreen({
           <div className="today-empty-sub">
             {data.undatedCount > 0 ? `Без срока лежит ${data.undatedCount} — можно разобрать` : "Ни просроченного, ни встреч"}
           </div>
-          {data.undatedCount > 0 && (
+          {data.undatedCount > 0 && onGoToTasks && (
             <button className="btn btn-small" onClick={onGoToTasks}>
               Открыть задачи
             </button>
@@ -126,7 +128,7 @@ export default function TodayScreen({
         />
       )}
 
-      {!nothing && data.undatedCount > 0 && (
+      {!nothing && data.undatedCount > 0 && onGoToTasks && (
         <button className="today-undated" onClick={onGoToTasks}>
           Без срока: {data.undatedCount} — посмотреть
         </button>

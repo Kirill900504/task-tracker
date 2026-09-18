@@ -69,7 +69,15 @@ export default function DashboardLayout({
   // Port of legacy's updateLayoutColumns(): a side zone with nothing in it
   // collapses to 0px so the middle column takes the freed width instead of
   // leaving a blank gutter.
-  const visibleIn = (zone: ZoneName) => layout[zone].filter((id) => panels[id]);
+  // Панель, которой нет в сохранённой раскладке, всё равно должна
+  // показаться: раскладка лежит в настройках пользователя с прошлого года,
+  // и новая панель иначе не появится ни у кого, кроме нового человека.
+  // Добавляется в правый столбец — туда, где стоят панели-спутники.
+  const placed = new Set([...layout.left, ...layout.center, ...layout.right]);
+  const unplaced = Object.keys(panels).filter((id) => !placed.has(id));
+  const zoneList = (zone: ZoneName) => (zone === "right" ? [...layout.right, ...unplaced] : layout[zone]);
+
+  const visibleIn = (zone: ZoneName) => zoneList(zone).filter((id) => panels[id]);
   const gridTemplateColumns = [visibleIn("left").length ? "300px" : "0px", "1fr", visibleIn("right").length ? "320px" : "0px"].join(" ");
 
   return (
@@ -85,7 +93,7 @@ export default function DashboardLayout({
           onDragLeave={(e) => handleDragLeave(e, zone)}
           onDrop={(e) => handleDrop(e, zone)}
         >
-          {layout[zone].map((panelId) => {
+          {zoneList(zone).map((panelId) => {
             const el = panels[panelId];
             if (!el || !isValidElement(el)) return null;
             const injectedProps: PanelDragProps = {

@@ -12,7 +12,7 @@ describe("sameLayout", () => {
     // расположение" button never went away.
     const fromDatabase = {
       left: ["calPanel", "meetingsPanel"],
-      right: ["ideasPanel"],
+      right: ["peoplePanel", "ideasPanel"],
       center: ["mainCol"],
     } as PanelLayout;
     expect(JSON.stringify(fromDatabase)).not.toBe(JSON.stringify(DEFAULT_PANEL_LAYOUT));
@@ -20,12 +20,12 @@ describe("sameLayout", () => {
   });
 
   it("spots a panel moved to another zone", () => {
-    const moved: PanelLayout = { left: ["calPanel"], center: ["mainCol", "meetingsPanel"], right: ["ideasPanel"] };
+    const moved: PanelLayout = { left: ["calPanel"], center: ["mainCol", "meetingsPanel"], right: ["peoplePanel", "ideasPanel"] };
     expect(sameLayout(moved, DEFAULT_PANEL_LAYOUT)).toBe(false);
   });
 
   it("spots panels reordered within a zone", () => {
-    const reordered: PanelLayout = { left: ["meetingsPanel", "calPanel"], center: ["mainCol"], right: ["ideasPanel"] };
+    const reordered: PanelLayout = { left: ["meetingsPanel", "calPanel"], center: ["mainCol"], right: ["peoplePanel", "ideasPanel"] };
     expect(sameLayout(reordered, DEFAULT_PANEL_LAYOUT)).toBe(false);
   });
 

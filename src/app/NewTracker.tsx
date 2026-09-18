@@ -35,6 +35,8 @@ import MobileShell, { type MobileTab } from "@/components/tracker/MobileShell";
 import MobileHeader from "@/components/tracker/MobileHeader";
 import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
+import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
+import PeoplePanel from "@/components/tracker/PeoplePanel";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
@@ -105,6 +107,9 @@ export default function NewTracker() {
   const [openExistingTaskId, setOpenExistingTaskId] = useState<string | null>(null);
   const [openExistingMeetingId, setOpenExistingMeetingId] = useState<string | null>(null);
   const [highlightIdeaId, setHighlightIdeaId] = useState<string | null>(null);
+  // Один фильтр на панель задач и панель «Люди»: нажатие на человека и
+  // выбор в списке — это один и тот же вопрос, заданный двумя способами.
+  const [filterAssignee, setFilterAssignee] = useState("all");
 
   // Список команды спрашивается заранее, а не в момент нажатия. «Команда» и
   // любое ✈ открываются из уже открытого трекера, то есть время на запрос
@@ -412,6 +417,8 @@ export default function NewTracker() {
         mainCol: (
           <TasksPanel
             isAdmin={isAdmin}
+            filterAssignee={filterAssignee}
+            onFilterAssigneeChange={setFilterAssignee}
             tasks={tasks}
             sections={sections}
             assignees={assignees}
@@ -449,6 +456,33 @@ export default function NewTracker() {
               </>
             }
           />
+        ),
+        // «Сегодня» был только на телефоне. Утром на компьютере первый
+        // взгляд упирался в три столбца, и сегодняшнее приходилось искать
+        // глазами — при том что экран, отвечающий на этот вопрос, уже
+        // написан. Панель, а не отдельная страница: её можно переставить
+        // или убрать, как любую другую.
+        todayPanel: (
+          <div className="panel dash-panel" data-panel-id="todayPanel">
+            <TodayScreen
+              tasks={tasks}
+              meetings={meetings}
+              sections={sections}
+              onToggleTask={(task) =>
+                actions.saveTask({
+                  ...task,
+                  status: task.status === "done" ? "in_progress" : "done",
+                  completedAt: task.status === "done" ? "" : new Date().toISOString(),
+                })
+              }
+              onOpenTask={(task) => setOpenExistingTaskId(task.id)}
+              onOpenMeeting={(meeting) => setOpenExistingMeetingId(meeting.id)}
+              showToast={toasts.showToast}
+            />
+          </div>
+        ),
+        peoplePanel: (
+          <PeoplePanel tasks={tasks} assignees={assignees} selected={filterAssignee} onSelect={setFilterAssignee} />
         ),
         ideasPanel: (
           <IdeasPanel
@@ -551,6 +585,7 @@ export default function NewTracker() {
               today: todayCount(buildToday(tasks, meetings)),
               meetings: meetings.filter((m) => !m.status || m.status === "planned").length,
               ideas: ideas.filter((i) => !i.done).length,
+              review: awaitingReview(tasks).length,
             }}
           >
             {/* Every section stays mounted and is merely hidden: switching tabs
@@ -573,9 +608,16 @@ export default function NewTracker() {
               />
             </div>
             <div hidden={mobileTab !== "tasks"}>{panels.mainCol}</div>
-            <div hidden={mobileTab !== "meetings"}>{panels.meetingsPanel}</div>
+            {/* Календарь месяца переехал сюда из пятой вкладки: его
+                открывают вместе со встречами, а не вместо них. */}
+            <div hidden={mobileTab !== "meetings"}>
+              {panels.calPanel}
+              {panels.meetingsPanel}
+            </div>
             <div hidden={mobileTab !== "ideas"}>{panels.ideasPanel}</div>
-            <div hidden={mobileTab !== "calendar"}>{panels.calPanel}</div>
+            <div hidden={mobileTab !== "review"}>
+              <ReviewScreen tasks={tasks} onOpen={(t) => setOpenExistingTaskId(t.id)} />
+            </div>
           </MobileShell>
         </>
       ) : (

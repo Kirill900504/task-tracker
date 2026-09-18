@@ -174,7 +174,7 @@
     width:100%; margin:0 auto; padding:20px clamp(16px,3vw,40px);
     display:grid; grid-template-columns:300px 1fr 320px; gap:20px; align-items:start;
   }
-  @media (max-width:1150px){
+  @media (max-width:1000px){
     .layout{grid-template-columns:1fr !important;}
     /* Zone order is fixed on mobile (tasks first) regardless of how panels
        were rearranged on desktop — a narrow screen has no "left/right" for
@@ -220,7 +220,7 @@
   /* Mobile quick-add: a floating thumb-reachable button + bottom sheet
      replaces the toolbar bar (which needs scrolling up to reach), so hide
      the now-empty toolbar slot rather than leave a blank gap. */
-  @media (max-width:768px){
+  @media (max-width:1000px){
     #quickAddSlot{display:none;}
   }
   .quick-add-fab{
@@ -1174,6 +1174,39 @@
      говорит «человек взял задачу». */
   .pill-accepted{color:var(--success); background:rgba(63,169,104,.14); border:1px solid rgba(63,169,104,.5);}
 
+  /* Панель «Люди»: строка на человека, вся строка — кнопка-фильтр.
+     Цифры справа в одну колонку и табличными цифрами, чтобы четырнадцать
+     строк читались столбиком, а не лесенкой. */
+  .people-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    width:100%; padding:8px 10px; margin-bottom:4px; text-align:left;
+    border:1px solid transparent; border-radius:var(--radius-sm);
+    background:none; cursor:pointer; font-family:var(--sans); color:var(--ink);
+  }
+  .people-row:hover{background:var(--paper-soft); border-color:var(--line-soft);}
+  .people-row.selected{background:var(--accent-soft); border-color:var(--accent);}
+  .people-name{font-size:13px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .people-nums{display:flex; align-items:center; gap:8px; flex:none; font-variant-numeric:tabular-nums lining-nums;}
+  .people-num{font-size:12px; color:var(--ink-soft);}
+  .people-num.bad{color:var(--high);}
+  .people-num.warn{color:var(--ink-soft);}
+  .people-num.ok{color:var(--accent);}
+
+  /* Очередь приёмки на телефоне: строка на задачу, вся строка — кнопка.
+     Мелкая стрелка или значок справа промахивается пальцем, а задачу
+     открывают именно затем, чтобы принять или вернуть. */
+  .review-screen{padding:4px 0 12px;}
+  .review-row{
+    display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+    width:100%; text-align:left; margin-bottom:8px; padding:12px 13px;
+    border:1px solid var(--line-soft); border-left:3px solid var(--accent);
+    border-radius:var(--radius-sm); background:var(--paper); cursor:pointer;
+    font-family:var(--sans); color:var(--ink);
+  }
+  .review-row:hover{border-color:var(--accent);}
+  .review-row-title{font-size:14.5px; font-weight:600; line-height:1.35;}
+  .review-row-meta{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+
   /* Экран «данные не загрузились»: сообщение и выход из положения,
      а не тупик с одной строчкой текста. */
   .boot-error{max-width:420px; margin:0 auto; padding:64px 20px; text-align:center;}
@@ -1184,8 +1217,10 @@
   .boot-error-actions .btn{min-height:42px; padding:0 18px;}
 
   /* ============ Мобильная версия ============
-     Всё внутри одного медиазапроса: десктоп этого не видит вообще. */
-  @media (max-width:768px){
+     Всё внутри одного медиазапроса: десктоп этого не видит вообще.
+     Порог обязан совпадать с MOBILE_QUERY в useIsMobile — см. комментарий
+     там о дыре между 768 и 1150. */
+  @media (max-width:1000px){
     body{ padding:0; }
 
     /* Шапка — одна строка вместо трёх */

@@ -2,10 +2,19 @@
 
 import { useSyncExternalStore } from "react";
 
-// One definition of "this is a phone", shared by everything that has to
-// behave differently there. 768px matches the breakpoint the stylesheet and
-// QuickAdd already use.
-export const MOBILE_QUERY = "(max-width: 768px)";
+// Одно определение «это телефон или планшет» на весь трекер.
+//
+// Порог был 768px — и ровно между ним и 1150px, где трёхколоночная
+// раскладка схлопывается в одну, лежала дыра: на планшете и узком ноутбуке
+// не было ни вкладок внизу, ни колонок — одна длинная лента, где до встреч
+// надо пролистать все задачи. То есть ровно то, от чего мобильную оболочку
+// и заводили. 1000px закрывает эту дыру: шире — колонки, уже — вкладки.
+//
+// Значение обязано совпадать с медиазапросом мобильного блока в
+// tracker.css: разметка оболочки и её стили должны включаться вместе, иначе
+// в полосе между порогами получится вкладочная разметка с десктопными
+// отступами.
+export const MOBILE_QUERY = "(max-width: 1000px)";
 
 function subscribe(onChange: () => void): () => void {
   const mq = window.matchMedia(MOBILE_QUERY);

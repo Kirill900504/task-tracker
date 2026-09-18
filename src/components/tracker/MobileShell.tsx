@@ -11,14 +11,18 @@ import type { ReactNode } from "react";
 // difference is the navigation around them, not a second implementation of
 // the tracker.
 
-export type MobileTab = "today" | "tasks" | "meetings" | "ideas" | "calendar";
+export type MobileTab = "today" | "tasks" | "meetings" | "ideas" | "review";
 
 const TABS: { id: MobileTab; label: string; icon: string }[] = [
   { id: "today", label: "Сегодня", icon: "◎" },
   { id: "tasks", label: "Задачи", icon: "☑" },
   { id: "meetings", label: "Встречи", icon: "📅" },
   { id: "ideas", label: "Мысли", icon: "💡" },
-  { id: "calendar", label: "Месяц", icon: "▦" },
+  // Пятая вкладка была «Месяц» — календарь, который с телефона открывают
+  // раз в неделю. Приёмка нужна каждый день: это единственное в трекере,
+  // что ждёт лично Кирилла. Календарь никуда не делся — он открывается
+  // внутри «Встреч», где ему и место.
+  { id: "review", label: "Приёмка", icon: "◍" },
 ];
 
 export default function MobileShell({

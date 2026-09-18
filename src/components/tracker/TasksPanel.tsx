@@ -70,6 +70,8 @@ export default function TasksPanel({
   onTaskToMeeting,
   onScheduleMeetingFor,
   isAdmin = true,
+  filterAssignee,
+  onFilterAssigneeChange,
   justCreatedId,
   notifBanner,
   extraBanner,
@@ -114,13 +116,16 @@ export default function TasksPanel({
   // Разделы и принудительное закрытие — админское: их держит владелец
   // пространства, и база откажет остальным (миграция 0031).
   isAdmin?: boolean;
+  // Фильтр по исполнителю живёт снаружи: тот же выбор делает панель
+  // «Люди», и две копии одного состояния разошлись бы в первый же день.
+  filterAssignee: string;
+  onFilterAssigneeChange: (name: string) => void;
   justCreatedId?: string | null;
   notifBanner?: string | null;
   // Rendered under the notification banner, in the same slot legacy's
   // #syncErrorBanner occupied (see SyncErrorBanner).
   extraBanner?: ReactNode;
 } & PanelDragProps) {
-  const [filterAssignee, setFilterAssignee] = useState("all");
   // «Просрочено» — не сортировка и не раздел, а вопрос «что горит»: он
   // задаётся чаще всех прочих фильтров вместе взятых.
   const [onlyOverdue, setOnlyOverdue] = useState(false);
@@ -560,7 +565,7 @@ export default function TasksPanel({
               className="toolbar-dd"
               title="Фильтр по исполнителю"
               value={filterAssignee}
-              onChange={setFilterAssignee}
+              onChange={onFilterAssigneeChange}
               options={[
                 { value: "all", label: "Все исполнители" },
                 ...sortNames(assignees).map((a) => ({ value: a, label: a })),
