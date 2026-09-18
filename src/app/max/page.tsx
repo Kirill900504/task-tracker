@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useAsk } from "@/components/Ask";
 
 // Подключение бота MAX — одна страница, на которую можно дать ссылку.
 //
@@ -42,6 +43,7 @@ export default function MaxSetupPage() {
   const [loadError, setLoadError] = useState("");
   const [token, setToken] = useState("");
   const [error, setError] = useState("");
+  const ask = useAsk();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -81,7 +83,13 @@ export default function MaxSetupPage() {
   }
 
   async function disconnect() {
-    if (!confirm("Отключить бота MAX? Задачи и встречи перестанут туда приходить, Telegram продолжит работать.")) return;
+    const yes = await ask.confirm({
+      question: "Отключить бота MAX?",
+      note: "Задачи и встречи перестанут туда приходить. Telegram продолжит работать.",
+      okText: "Отключить",
+      danger: true,
+    });
+    if (!yes) return;
     setBusy(true);
     try {
       const res = await fetch("/api/max/setup", {

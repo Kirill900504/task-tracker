@@ -4,6 +4,7 @@ import { Fragment, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { useColleagues, type ColleagueChannel } from "@/hooks/useColleagues";
 import { useMaxBot } from "@/hooks/useMaxBot";
+import { useAsk } from "@/components/Ask";
 
 // «Команда»: who can be written to, and how to connect the rest.
 //
@@ -51,6 +52,7 @@ const MEMBER_LABEL: Record<string, string> = {
 export default function TeamModal({ onClose }: { onClose: () => void }) {
   const { colleagues, loading, reload, invite, inviteToTracker, setDirection, setTrackerAccess, unlink } = useColleagues();
   const maxBot = useMaxBot();
+  const ask = useAsk();
   const [inviteFor, setInviteFor] = useState<{ id: string; name: string; link: string; kind: InviteKind } | null>(null);
   // Ошибка тоже привязана к человеку: «слишком много приглашений подряд»
   // внизу общего списка читается как поломка всего экрана, а не как ответ
@@ -83,7 +85,15 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     // Направление спрашивается здесь, а не отдельным экраном: это
     // единственный момент, когда о человеке и так думают, и без него
     // понедельничная сводка по направлениям остаётся пустой колонкой.
-    const direction = prompt(`Какое направление ведёт ${name}? (можно оставить пустым)`, currentDirection) ?? "";
+    const direction =
+      (await ask.ask({
+        title: "Приглашение в трекер",
+        question: `Какое направление ведёт ${name}?`,
+        note: "Можно оставить пустым. По направлениям собирается понедельничная сводка.",
+        value: currentDirection,
+        placeholder: "Например: Продажи",
+        okText: "Дать ссылку",
+      })) ?? "";
     const result = await inviteToTracker(id, direction.trim());
     if ("error" in result) {
       setError({ id, text: result.error });
@@ -104,7 +114,13 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
   }
 
   async function handleUnlink(id: string, name: string, channel: ColleagueChannel) {
-    if (!confirm(`Отключить ${name} от ${CHANNEL_LABEL[channel]}? Задачи и встречи перестанут приходить туда.`)) return;
+    const yes = await ask.confirm({
+      question: `Отключить ${name} от ${CHANNEL_LABEL[channel]}?`,
+      note: "Задачи и встречи перестанут приходить туда.",
+      okText: "Отключить",
+      danger: true,
+    });
+    if (!yes) return;
     await unlink(id, channel);
   }
 
@@ -189,28 +205,41 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                           className="btn btn-small"
                           type="button"
                           title="Направление"
-                          onClick={() => {
-                            const next = prompt(`Какое направление ведёт ${person.name}?`, person.direction);
-                            if (next === null) return;
-                            void setDirection(person.id, next.trim());
-                          }}
+                          onClick={() =>
+                            void (async () => {
+                              const next = await ask.ask({
+                                title: "Направление",
+                                question: `Какое направление ведёт ${person.name}?`,
+                                note: "По направлениям собирается понедельничная сводка.",
+                                value: person.direction,
+                                placeholder: "Например: Продажи",
+                                okText: "Сохранить",
+                              });
+                              if (next === null) return;
+                              await setDirection(person.id, next.trim());
+                            })()
+                          }
                         >
                           Направление
                         </button>
                         <button
                           className="btn btn-small"
                           type="button"
-                          onClick={() => {
-                            const turnOff = person.member === "active";
-                            if (
-                              turnOff &&
-                              !confirm(
-                                `Отключить доступ ${person.name} в трекер? Задачи и его отчёты останутся на месте — исчезнет только вход.`,
-                              )
-                            )
-                              return;
-                            void setTrackerAccess(person.id, !turnOff);
-                          }}
+                          onClick={() =>
+                            void (async () => {
+                              const turnOff = person.member === "active";
+                              if (turnOff) {
+                                const yes = await ask.confirm({
+                                  question: `Отключить доступ ${person.name} в трекер?`,
+                                  note: "Задачи и его отчёты останутся на месте — исчезнет только вход.",
+                                  okText: "Отключить вход",
+                                  danger: true,
+                                });
+                                if (!yes) return;
+                              }
+                              await setTrackerAccess(person.id, !turnOff);
+                            })()
+                          }
                         >
                           {person.member === "active" ? "Отключить вход" : "Вернуть вход"}
                         </button>

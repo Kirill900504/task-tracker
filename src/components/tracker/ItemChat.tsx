@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { REACTIONS, useItemComments, type ItemKind } from "@/hooks/useItemComments";
+import { useAsk } from "@/components/Ask";
 
 // Обсуждение задачи там же, где задача.
 //
@@ -30,6 +31,7 @@ const SOURCE_MARK: Record<string, string> = { telegram: " · из Telegram", max
 
 export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: string }) {
   const { comments, loading, send, edit, remove, react } = useItemComments(kind, itemId);
+  const ask = useAsk();
   const [draft, setDraft] = useState("");
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -77,18 +79,26 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
     return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
   }
 
-  function handleEdit(id: string, current: string) {
-    const next = prompt("Изменить сообщение:", current);
+  async function handleEdit(id: string, current: string) {
+    const next = await ask.ask({
+      title: "Изменить сообщение",
+      question: "Как должно быть написано?",
+      value: current,
+      multiline: true,
+      okText: "Сохранить",
+      required: "Пустое сообщение — это удаление; закройте окно и нажмите «убрать».",
+    });
     if (next === null) return;
-    if (!next.trim()) {
-      alert("Пустое сообщение — это удаление; нажмите «убрать».");
-      return;
-    }
     void edit(id, next);
   }
 
-  function handleRemove(id: string) {
-    if (!confirm("Убрать это сообщение из обсуждения?")) return;
+  async function handleRemove(id: string) {
+    const yes = await ask.confirm({
+      question: "Убрать это сообщение из обсуждения?",
+      okText: "Убрать",
+      danger: true,
+    });
+    if (!yes) return;
     void remove(id);
   }
 
@@ -177,10 +187,10 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
             </button>
             {c.mine && (
               <>
-                <button type="button" className="chat-mini" onClick={() => handleEdit(c.id, c.body)}>
+                <button type="button" className="chat-mini" onClick={() => void handleEdit(c.id, c.body)}>
                   изменить
                 </button>
-                <button type="button" className="chat-mini" onClick={() => handleRemove(c.id)}>
+                <button type="button" className="chat-mini" onClick={() => void handleRemove(c.id)}>
                   убрать
                 </button>
               </>

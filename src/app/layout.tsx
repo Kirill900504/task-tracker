@@ -3,6 +3,7 @@ import { Manrope } from "next/font/google";
 import "./globals.css";
 import "./tracker.css";
 import RegisterSW from "./registerSW";
+import AskProvider from "@/components/Ask";
 
 // Self-hosted at build time by next/font (no runtime request, no layout
 // shift) — Manrope's Cyrillic subset covers Russian, so it works as the
@@ -33,7 +34,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="ru" className={manrope.variable} suppressHydrationWarning>
       <body suppressHydrationWarning>
         <RegisterSW />
-        {children}
+        {/* Вопросы задаёт трекер, а не браузер: окно живёт здесь, чтобы
+            быть доступным на любой странице и рисоваться поверх всего. */}
+        <AskProvider>{children}</AskProvider>
       </body>
     </html>
   );

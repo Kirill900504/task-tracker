@@ -201,10 +201,12 @@ test("deleting a task survives an immediate sign-out", async ({ page }) => {
 
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
 
-  // Open it, delete it, then sign out immediately.
-  page.once("dialog", (d) => d.accept());
+  // Open it, delete it, then sign out immediately. Подтверждение — своё окно
+  // трекера, а не системное окно браузера (см. components/Ask.tsx).
   await page.locator(".task", { hasText: title }).click();
   await page.click("#deleteTaskBtn");
+  await expect(page.locator(".ask-modal")).toBeVisible();
+  await page.click("#askOkBtn");
   await page.click("#signOutBtn");
   await expect(page).toHaveURL(/\/login/);
 
@@ -549,8 +551,13 @@ test("an invite link appears under the person it was asked for", async ({ page }
   await page.click("#teamBtn");
   await expect(page.locator("#teamList")).toBeVisible();
 
-  // Самый нижний человек: именно там старый общий блок уезжал за край.
-  const row = page.locator(".team-row").last();
+  // Самый нижний из неподключённых: именно там старый общий блок уезжал за
+  // край. Не просто последняя строка — соседний тест может подключить
+  // кого-нибудь к мессенджеру, и у подключённого кнопки другие.
+  const row = page
+    .locator(".team-row")
+    .filter({ has: page.getByRole("button", { name: "Telegram", exact: true }) })
+    .last();
   const name = (await row.locator(".team-name").innerText()).trim();
   await row.getByRole("button", { name: "Telegram", exact: true }).click();
 
@@ -572,4 +579,63 @@ test("an invite link appears under the person it was asked for", async ({ page }
 
   await page.click("#teamCloseBtn");
   await expect(page.locator("#teamOverlay")).toHaveCount(0);
+});
+
+// Вопросы задаёт трекер, а не браузер.
+//
+// Системное окно («Подтвердите действие на task-tracker-beta-ebon.vercel.app»
+// с кнопками ОК/Отмена) — это чужой интерфейс поверх своего, в нём нельзя ни
+// объяснить вопрос, ни проверить ответ, а на телефоне во встроенном браузере
+// мессенджера оно может не показаться вовсе. Тест ловит две вещи разом:
+// что окно своё (page.on("dialog") не срабатывает ни разу) и что оно умеет
+// то, чего системное не умело, — отказываться от пустого обязательного
+// ответа, не закрываясь.
+test("вопросы задаются окном трекера, а не браузера", async ({ page }) => {
+  const title = `E2E окно ${Date.now()}`;
+  let nativeDialogs = 0;
+  page.on("dialog", (d) => {
+    nativeDialogs++;
+    void d.dismiss();
+  });
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+
+  // Новый раздел: сначала имя, потом выбор из двух названных возможностей —
+  // вместо «ОК — личный, Отмена — рабочий», где ответ был спрятан в чужих
+  // кнопках и отменить вопрос было нельзя вовсе.
+  await page.click("#addSectionBtn");
+  const ask = page.locator(".ask-modal");
+  await expect(ask).toBeVisible();
+  // Пустой обязательный ответ окно не принимает и не закрывается.
+  await page.click("#askOkBtn");
+  await expect(ask.locator(".ask-problem")).toBeVisible();
+  await expect(ask).toBeVisible();
+
+  await page.fill("#askInput", `Раздел ${Date.now()}`);
+  await page.click("#askOkBtn");
+  await expect(ask).toBeVisible();
+  await ask.getByRole("button", { name: "Рабочий" }).click();
+  await expect(page.locator(".ask-modal")).toHaveCount(0);
+
+  await page.click("#saveTaskBtn");
+  await expect(page.locator(".task", { hasText: title })).toBeVisible();
+
+  // Отмена в окне подтверждения означает «ничего не делать».
+  await page.locator(".task", { hasText: title }).click();
+  await page.click("#deleteTaskBtn");
+  await expect(page.locator(".ask-modal")).toBeVisible();
+  await page.click("#askCancelBtn");
+  await expect(page.locator(".ask-modal")).toHaveCount(0);
+  await page.click("#cancelBtn");
+  await expect(page.locator(".task", { hasText: title })).toBeVisible();
+
+  // …а подтверждение — удаляет.
+  await page.locator(".task", { hasText: title }).click();
+  await page.click("#deleteTaskBtn");
+  await page.click("#askOkBtn");
+  await expect(page.locator(".task", { hasText: title })).toHaveCount(0);
+
+  expect(nativeDialogs).toBe(0);
 });

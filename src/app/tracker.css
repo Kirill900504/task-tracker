@@ -280,14 +280,46 @@
   .column.collapsed .section-title .collapse-arrow{transform:rotate(-90deg);}
   .column.collapsed > div:not(.section-title){display:none;}
 
-  .columns{display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start;}
+  /* Три столбца: срок, срок и состояние. Третий — «На приёмку»; он уже
+     двух первых, потому что задача там долго не задерживается, а место
+     нужна тем, где работа идёт. */
+  .columns{display:grid; grid-template-columns:1fr 1fr .8fr; gap:18px; align-items:start;}
+  /* Когда трём столбцам тесно, приёмка уходит вниз во всю ширину, а не
+     жмётся третьей узкой колонкой под «Краткосрочные»: полоса во всю ширину
+     читается как отдельный раздел, а четверть ширины — как обрезанный. */
+  @media (max-width:1150px){ .columns{grid-template-columns:1fr 1fr;} .column-review{grid-column:1 / -1;} }
   @media (max-width:640px){ .columns{grid-template-columns:1fr;} }
   /* Safety net for the panel constructor: if the Tasks panel is dragged
      into a narrow zone, fall back to one column based on the PANEL's own
      width rather than the viewport's — a container query, not a media
      query, is what makes that distinction possible. */
   @container (max-width:480px){ .columns{grid-template-columns:1fr;} }
+  @container (max-width:760px){ .columns{grid-template-columns:1fr 1fr;} .column-review{grid-column:1 / -1;} }
   .column{min-width:0;}
+  /* На приёмке ждут решения — столбец помечен тем же цветом, что и сама
+     пометка на карточке, чтобы взгляд находил его без чтения заголовка. */
+  .column-review .section-title{color:var(--accent);}
+
+  /* Разделы — кнопками под панелью задач. Перенос из выпадающего списка:
+     раздел переключают по многу раз подряд, и каждый раз это было открыть,
+     прочитать весь список, выбрать. */
+  .section-tabs{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px;}
+  .section-tab{
+    padding:5px 11px; border:1px solid var(--line); border-radius:999px;
+    background:var(--paper-soft); color:var(--ink-soft); cursor:pointer;
+    font-family:var(--display); font-weight:600; font-size:12px; white-space:nowrap;
+    transition:color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .section-tab:hover{color:var(--ink); border-color:var(--ink-soft);}
+  .section-tab.active{background:var(--accent); border-color:var(--accent); color:#F3F8FA;}
+  /* Личное отличается от рабочего и здесь — тем же способом, что и на
+     карточке: цветом, а не подписью. */
+  .section-tab.personal{color:var(--med);}
+  .section-tab.personal.active{background:var(--med); border-color:var(--med); color:#251C05;}
+  @media (max-width:768px){
+    .section-tabs{overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; -webkit-overflow-scrolling:touch;}
+    .section-tab{min-height:32px;}
+  }
 
   .done-wrap{margin-top:26px;}
 
@@ -420,6 +452,45 @@
   .select-with-add select{flex:1;}
   .modal-actions{display:flex; justify-content:space-between; margin-top:18px; gap:8px;}
   .modal-actions .left{display:flex; gap:8px;}
+
+  /* Окно вопроса (Ask.tsx) — то, что раньше рисовал сам браузер.
+     Узкое, по центру экрана и поверх любого другого окна, включая карточку
+     задачи, из которой вопрос и задают. На телефоне НЕ разворачивается во
+     весь экран, как остальные окна: «Удалить встречу?» на весь экран — это
+     та же несоразмерность, только своя. */
+  .overlay.ask-overlay{z-index:600; align-items:center;}
+  .modal.ask-modal{max-width:420px; margin:auto;}
+  .ask-question{margin:0 0 10px; font-size:14px; line-height:1.5; color:var(--ink); white-space:pre-line;}
+  .ask-note{margin:0 0 12px; font-size:12.5px; line-height:1.5; color:var(--ink-soft);}
+  .ask-modal .field{margin-bottom:0;}
+  .ask-modal textarea{min-height:88px;}
+  .ask-problem{
+    margin-top:10px; padding:8px 10px; border-radius:var(--radius-sm);
+    background:var(--high-bg); border:1px solid rgba(224,122,95,.4); color:#F2C9BC; font-size:12.5px;
+  }
+  .ask-actions{justify-content:flex-end; flex-wrap:wrap;}
+  .ask-link{display:inline-block; text-decoration:none; margin-bottom:10px;}
+  /* Код переписывают в другое приложение с чужого экрана — те же правила,
+     что и в блоке подключения у руководителя (.ms-link-value). */
+  .ask-code{
+    font-family:var(--mono); font-size:20px; font-weight:600; letter-spacing:.14em;
+    color:var(--ink); user-select:all; padding:8px 10px; margin-bottom:4px;
+    background:var(--paper-soft); border:1px solid var(--line); border-radius:var(--radius-sm);
+    text-align:center; word-break:break-all;
+  }
+  /* Сплошная красная — для того, что не отменяется обратно. Призрачный
+     вариант (.btn-danger-ghost) остаётся для кнопок внутри карточек, где
+     сплошной цвет кричал бы на весь экран. */
+  .btn-danger{background:var(--high); border-color:var(--high); color:#2A1A15; box-shadow:var(--shadow-1);}
+  .btn-danger:hover{opacity:.92; box-shadow:0 0 0 3px var(--high-bg), var(--shadow-1);}
+  @media (max-width:768px){
+    .overlay.ask-overlay{padding:16px; align-items:center; z-index:600;}
+    .modal.ask-modal{
+      width:100%; max-width:420px; min-height:0; margin:auto;
+      border:1px solid var(--line); border-radius:var(--radius-lg); padding:16px 16px 14px;
+    }
+    .ask-modal .modal-actions{position:static; border-top:0; background:none; padding-top:12px;}
+  }
   .recur-config{background:var(--bg); border-radius:6px; padding:10px; margin-top:8px; display:none;}
   .recur-config.open{display:block;}
   .stop-recur-row{margin-top:8px; display:none;}
@@ -565,12 +636,21 @@
   .people-tooltip .prow{padding:2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .meeting-del{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; flex:none;}
   .meeting-del:hover{color:var(--high);}
-  .meeting-quick-actions{display:flex; gap:1px; flex:none; align-items:center;}
+  .meeting-quick-actions{display:flex; gap:4px; flex:none; align-items:center;}
+  /* Одна форма на все три ответа: квадрат в размер строки, одноцветный знак,
+     цвет — только под курсором и под пальцем. 26px — минимум, по которому
+     на телефоне попадают не глядя (см. правило про размер целей касания). */
   .meeting-icon-btn{
-    background:none; border:none; cursor:pointer; font-size:13px; line-height:1;
-    padding:3px 4px; border-radius:4px; opacity:.55;
+    width:26px; height:26px; flex:none; display:inline-flex; align-items:center; justify-content:center;
+    background:var(--paper-soft); border:1px solid var(--line); border-radius:var(--radius-sm);
+    color:var(--ink-soft); cursor:pointer; font-size:13px; line-height:1; padding:0;
+    transition:color .15s ease, border-color .15s ease, background .15s ease;
   }
-  .meeting-icon-btn:hover{opacity:1; background:var(--paper);}
+  .meeting-icon-btn:hover{background:var(--paper); color:var(--ink); border-color:var(--ink-soft);}
+  .meeting-icon-btn.success:hover{color:var(--success); border-color:var(--success);}
+  .meeting-icon-btn.noresult:hover{color:var(--high); border-color:var(--high);}
+  .meeting-icon-btn.reschedule:hover{color:var(--accent); border-color:var(--accent);}
+  .meeting-icon-btn:active{transform:scale(.94);}
 
   /* Popover: create a task/meeting on a clicked calendar date */
   .date-popover{
@@ -1316,6 +1396,13 @@
     background:var(--paper-soft); border:1px solid var(--line);
   }
   .ms-link-hint{font-size:12.5px; line-height:1.5; color:var(--ink-soft);}
+  /* «Проверил — пока не вижу». Не ошибка (человек ничего не сделал
+     неправильно), но и не оттенок фона: это ответ на нажатие, и он должен
+     быть заметен ровно настолько, чтобы его прочли. */
+  .ms-link-notyet{
+    padding:7px 10px; border-radius:var(--radius-sm);
+    background:var(--med-bg); border:1px solid rgba(224,184,77,.4); color:var(--ink);
+  }
   /* Код читают с чужого экрана и набирают в другом приложении — поэтому
      крупно, моноширинно и с разрядкой: 0 и O здесь не встречаются, но
      остальное надо различать без усилий. */

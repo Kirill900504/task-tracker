@@ -16,6 +16,7 @@ import { uid } from "@/lib/uid";
 import { openPickerOnClick } from "@/lib/pickerInput";
 import MicButton from "./MicButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
+import { useAsk } from "@/components/Ask";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS: string[] = (() => {
@@ -57,6 +58,7 @@ export default function MeetingModal({
   const [time, setTime] = useState(meeting?.time || prefill?.time || "10:00");
   const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? prefill?.participants ?? []));
   const { colleagues } = useColleagues();
+  const ask = useAsk();
   const [sendState, setSendState] = useState("");
   const [sendAt, setSendAt] = useState<DOMRect | null>(null);
   const [result, setResult] = useState(meeting?.result ?? "");
@@ -89,11 +91,11 @@ export default function MeetingModal({
   function save() {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
-      alert("Укажите название встречи");
+      void ask.say({ title: "Название не заполнено", question: "Укажите название встречи." });
       return;
     }
     if (!date) {
-      alert("Укажите дату встречи");
+      void ask.say({ title: "Дата не заполнена", question: "Укажите дату встречи." });
       return;
     }
     onSave({
@@ -119,7 +121,7 @@ export default function MeetingModal({
   function reschedule() {
     if (!meeting) return;
     if (!rescheduleDate) {
-      alert("Укажите дату следующего этапа");
+      void ask.say({ title: "Дата не заполнена", question: "Укажите дату следующего этапа." });
       return;
     }
     onReschedule(meeting, rescheduleDate, rescheduleTime || meeting.time || "10:00", result);
@@ -256,12 +258,14 @@ export default function MeetingModal({
               <button
                 className="btn btn-danger-ghost"
                 id="deleteMeetingBtn"
-                onClick={() => {
-                  if (confirm("Удалить эту встречу?")) {
+                onClick={() =>
+                  void (async () => {
+                    const yes = await ask.confirm({ question: "Удалить эту встречу?", okText: "Удалить", danger: true });
+                    if (!yes) return;
                     onDelete();
                     onClose();
-                  }
-                }}
+                  })()
+                }
               >
                 Удалить
               </button>

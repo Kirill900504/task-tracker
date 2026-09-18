@@ -5,6 +5,7 @@ import type { ApprovalState } from "@/types/tracker";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import { hasDeclined, progressLabel, taskProgress, taskStage } from "@/lib/taskProgress";
 import type { Participant, PersonOption } from "@/hooks/useTaskParticipants";
+import { useAsk } from "@/components/Ask";
 
 // «Кто на задаче» — и в каком состоянии каждый из них.
 //
@@ -63,6 +64,7 @@ export default function TaskParticipants({
   onAcceptReschedule: (participantId: string, date: string) => void;
   onRejectReschedule: (participantId: string) => void;
 }) {
+  const ask = useAsk();
   const [addWho, setAddWho] = useState("");
   const [addRole, setAddRole] = useState<TaskParticipantRole>("executor");
   // «Добавил, а ему не ушло» — то, о чём постановщик обязан узнать сразу.
@@ -80,31 +82,43 @@ export default function TaskParticipants({
     if (typeof result === "string" && result) setNotice(result);
   }
 
-  function handleApprove() {
+  async function handleApprove() {
     // Приёмка без слов — обычное дело («принял, спасибо»), поэтому пусто
     // здесь допустимо, в отличие от отчёта исполнителя.
-    const comment = prompt("Комментарий к приёмке (можно оставить пустым):", "") ?? null;
+    const comment = await ask.ask({
+      title: "Приёмка работы",
+      question: "Комментарий к приёмке",
+      note: "Можно оставить пустым — его увидят исполнители.",
+      multiline: true,
+      okText: "Принять",
+    });
     if (comment === null) return;
     onApprove(comment.trim());
   }
 
-  function handleReturn() {
-    const comment = prompt("Что доделать? Это увидят исполнители:", "");
+  async function handleReturn() {
+    const comment = await ask.ask({
+      title: "Вернуть на доработку",
+      question: "Что доделать?",
+      note: "Это увидят исполнители — и это единственное, что объясняет возврат.",
+      multiline: true,
+      okText: "Вернуть",
+      required: "Возврат без объяснения бессмысленен — напишите, что не так.",
+    });
     if (comment === null) return;
-    if (!comment.trim()) {
-      alert("Возврат без объяснения бессмысленен — напишите, что не так.");
-      return;
-    }
     onReturn(comment.trim());
   }
 
-  function handleForceClose() {
-    const reason = prompt("Закрыть волевым решением. Почему? Это останется в задаче:", "");
+  async function handleForceClose() {
+    const reason = await ask.ask({
+      title: "Закрыть волевым решением",
+      question: "Почему закрываем?",
+      note: "Причина останется в задаче: именно она объясняет, почему задача закрыта не как обычно.",
+      multiline: true,
+      okText: "Закрыть задачу",
+      required: "Причина обязательна: именно она объясняет, почему задача закрыта не как обычно.",
+    });
     if (reason === null) return;
-    if (!reason.trim()) {
-      alert("Причина обязательна: именно она объясняет, почему задача закрыта не как обычно.");
-      return;
-    }
     onForceClose(reason.trim());
   }
 
@@ -227,10 +241,10 @@ export default function TaskParticipants({
         <div className="tp-review">
           <div className="tp-review-text">Все исполнители отчитались. Принимаете работу?</div>
           <div className="tp-review-actions">
-            <button className="btn btn-small btn-primary" type="button" onClick={handleApprove}>
+            <button className="btn btn-small btn-primary" type="button" onClick={() => void handleApprove()}>
               Принять
             </button>
-            <button className="btn btn-small" type="button" onClick={handleReturn}>
+            <button className="btn btn-small" type="button" onClick={() => void handleReturn()}>
               Вернуть на доработку
             </button>
           </div>
@@ -239,7 +253,7 @@ export default function TaskParticipants({
 
       {/* B2: одна ничья задача иначе висит вечно. */}
       {progress.total > 0 && stage !== "done" && stage !== "awaiting_review" && (
-        <button className="btn btn-small tp-force" type="button" onClick={handleForceClose}>
+        <button className="btn btn-small tp-force" type="button" onClick={() => void handleForceClose()}>
           Закрыть волевым решением
         </button>
       )}

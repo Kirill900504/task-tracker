@@ -19,6 +19,7 @@ import type { Participant, PendingParticipant, PersonOption } from "@/hooks/useT
 import PendingParticipants from "./PendingParticipants";
 import MicButton from "./MicButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
+import { useAsk } from "@/components/Ask";
 
 const WEEKDAY_OPTIONS = [
   { value: "1", label: "Понедельник" },
@@ -101,6 +102,7 @@ export default function TaskModal({
   onScheduleMeeting?: (task: Task, participants: string[]) => void;
 }) {
   const { colleagues } = useColleagues();
+  const ask = useAsk();
   const [sendState, setSendState] = useState("");
   const [sendAt, setSendAt] = useState<DOMRect | null>(null);
   const [form, setForm] = useState(() => emptyForm(task, prefill));
@@ -140,7 +142,7 @@ export default function TaskModal({
   function save() {
     const title = form.title.trim();
     if (!title) {
-      alert("Укажите название задачи");
+      void ask.say({ title: "Название не заполнено", question: "Укажите название задачи." });
       return;
     }
     const next: Task = {
@@ -166,8 +168,14 @@ export default function TaskModal({
     onClose();
   }
 
-  function handleAddAssignee() {
-    const v = prompt("Имя нового исполнителя:");
+  async function handleAddAssignee() {
+    const v = await ask.ask({
+      title: "Новый исполнитель",
+      question: "Как его зовут?",
+      placeholder: "Имя и фамилия",
+      okText: "Добавить",
+      required: "Без имени исполнителя не бывает.",
+    });
     if (!v) return;
     const name = v.trim();
     if (!name) return;
@@ -175,35 +183,68 @@ export default function TaskModal({
     setForm((f) => ({ ...f, assignee: name }));
   }
 
-  function handleRemoveAssignee() {
+  async function handleRemoveAssignee() {
     if (!form.assignee) return;
-    if (confirm(`Удалить исполнителя «${form.assignee}» из списка? Уже созданные задачи сохранят его имя, но выбрать его для новых задач будет нельзя.`)) {
-      onRemoveAssignee(form.assignee);
-    }
+    const yes = await ask.confirm({
+      question: `Удалить исполнителя «${form.assignee}» из списка?`,
+      note: "Уже созданные задачи сохранят его имя, но выбрать его для новых задач будет нельзя.",
+      okText: "Удалить",
+      danger: true,
+    });
+    if (yes) onRemoveAssignee(form.assignee);
   }
 
-  function handleAddSection() {
-    const v = prompt("Название нового раздела:");
+  async function handleAddSection() {
+    const v = await ask.ask({
+      title: "Новый раздел",
+      question: "Как назовём раздел?",
+      placeholder: "Например: Сервис",
+      okText: "Дальше",
+      required: "У раздела должно быть название.",
+    });
     if (!v) return;
     const name = v.trim();
     if (!name) return;
-    const isPersonal = confirm("Это личный раздел (не рабочий)? ОК — личный, Отмена — рабочий.");
-    const section: Section = { id: uid(), name, kind: isPersonal ? "personal" : "work", sortOrder: sections.length };
+    // Раньше это спрашивалось как «ОК — личный, Отмена — рабочий»: вопрос, в
+    // котором ответ спрятан в названиях чужих кнопок, и отменить его было
+    // нельзя вовсе. Теперь обе возможности названы своими словами.
+    const kind = await ask.choose({
+      title: "Какой это раздел",
+      question: `«${name}» — рабочий или личный?`,
+      note: "Личные разделы не попадают в сводки и отчёты по работе.",
+      options: [
+        { value: "work", label: "Рабочий" },
+        { value: "personal", label: "Личный" },
+      ],
+    });
+    if (kind === null) return;
+    const section: Section = { id: uid(), name, kind: kind === "personal" ? "personal" : "work", sortOrder: sections.length };
     onAddSection(section);
     setForm((f) => ({ ...f, sectionId: section.id }));
   }
 
-  function handleRemoveSection() {
+  async function handleRemoveSection() {
     const section = sections.find((s) => s.id === form.sectionId);
     if (!section) return;
-    if (confirm(`Удалить раздел «${section.name}»? Задачи в нём останутся, но без раздела.`)) {
+    const yes = await ask.confirm({
+      question: `Удалить раздел «${section.name}»?`,
+      note: "Задачи в нём останутся, но без раздела.",
+      okText: "Удалить",
+      danger: true,
+    });
+    if (yes) {
       onRemoveSection(section.id);
       setForm((f) => (f.sectionId === section.id ? { ...f, sectionId: "" } : f));
     }
   }
 
-  function handleStopRecur() {
-    if (!confirm("Прекратить повторение этой задачи? Она останется как обычная разовая задача с текущим статусом.")) return;
+  async function handleStopRecur() {
+    const yes = await ask.confirm({
+      question: "Прекратить повторение этой задачи?",
+      note: "Она останется как обычная разовая задача с текущим статусом.",
+      okText: "Прекратить",
+    });
+    if (!yes) return;
     setForm((f) => ({ ...f, recur: "none", recurWeekday: "1", recurMonthday: "", recurYearDay: "", recurYearMonth: "1" }));
     if (task) onSave({ ...task, recur: "none", recurWeekday: "1", recurMonthday: "", recurYearDay: "", recurYearMonth: "1" }, []);
   }
@@ -249,10 +290,10 @@ export default function TaskModal({
                 </option>
               ))}
             </select>
-            <button className="btn" id="addAssigneeBtn" type="button" title="Добавить исполнителя" onClick={handleAddAssignee}>
+            <button className="btn" id="addAssigneeBtn" type="button" title="Добавить исполнителя" onClick={() => void handleAddAssignee()}>
               +
             </button>
-            <button className="btn btn-danger-ghost" id="removeAssigneeBtn" type="button" title="Удалить выбранного исполнителя" onClick={handleRemoveAssignee}>
+            <button className="btn btn-danger-ghost" id="removeAssigneeBtn" type="button" title="Удалить выбранного исполнителя" onClick={() => void handleRemoveAssignee()}>
               −
             </button>
           </div>
@@ -319,10 +360,10 @@ export default function TaskModal({
                 </option>
               ))}
             </select>
-            <button className="btn" id="addSectionBtn" type="button" title="Добавить раздел" onClick={handleAddSection}>
+            <button className="btn" id="addSectionBtn" type="button" title="Добавить раздел" onClick={() => void handleAddSection()}>
               +
             </button>
-            <button className="btn btn-danger-ghost" id="removeSectionBtn" type="button" title="Удалить выбранный раздел" onClick={handleRemoveSection}>
+            <button className="btn btn-danger-ghost" id="removeSectionBtn" type="button" title="Удалить выбранный раздел" onClick={() => void handleRemoveSection()}>
               −
             </button>
           </div>
@@ -408,7 +449,7 @@ export default function TaskModal({
           </div>
 
           <div className={"stop-recur-row" + (showStopRecur ? " show" : "")} id="stopRecurRow">
-            <button className="btn btn-danger-ghost btn-small" id="stopRecurBtn" type="button" onClick={handleStopRecur}>
+            <button className="btn btn-danger-ghost btn-small" id="stopRecurBtn" type="button" onClick={() => void handleStopRecur()}>
               ⏹ Прекратить повторение
             </button>
           </div>
@@ -435,12 +476,19 @@ export default function TaskModal({
               <button
                 className="btn btn-danger-ghost"
                 id="deleteTaskBtn"
-                onClick={() => {
-                  if (confirm("Удалить эту задачу?")) {
+                onClick={() =>
+                  void (async () => {
+                    const yes = await ask.confirm({
+                      question: "Удалить эту задачу?",
+                      note: "Сразу после удаления её можно вернуть из уведомления — потом уже нет.",
+                      okText: "Удалить",
+                      danger: true,
+                    });
+                    if (!yes) return;
                     onDelete();
                     onClose();
-                  }
-                }}
+                  })()
+                }
               >
                 Удалить
               </button>

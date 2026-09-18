@@ -2,6 +2,7 @@
 
 import { useState, useEffect, type FormEvent, type ReactNode } from "react";
 import { useSpeechInput } from "@/hooks/useSpeechInput";
+import { useAsk } from "@/components/Ask";
 import { createPortal } from "react-dom";
 
 export type TaskFields = {
@@ -62,6 +63,7 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
   // fall back to a window.trackerAPI global, which was how the old vanilla-JS
   // UI handed its state over; that UI is gone.)
   const api = provider;
+  const ask = useAsk();
 
   // The desktop portal target is normally already in the DOM by the time
   // this mounts (it's part of the static markup rendered alongside it), so
@@ -128,7 +130,11 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
 
   function noteDropped(droppedNames: string[]) {
     if (droppedNames.length) {
-      alert("Не нашёл в списке исполнителей, пропустил: " + droppedNames.join(", "));
+      void ask.say({
+        title: "Не все имена нашлись",
+        question: "Не нашёл в списке исполнителей, пропустил: " + droppedNames.join(", "),
+        note: "Добавить человека можно в карточке задачи — кнопкой «+» рядом с исполнителем.",
+      });
     }
   }
 
@@ -205,9 +211,11 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
       }
       dropped.push(...it.droppedNames);
     }
-    let msg = "Создано:\n" + created.join("\n");
-    if (dropped.length) msg += "\n\n⚠ Не нашёл в списке исполнителей: " + dropped.join(", ");
-    alert(msg);
+    void ask.say({
+      title: "Создано",
+      question: created.join("\n"),
+      note: dropped.length ? "Не нашёл в списке исполнителей: " + dropped.join(", ") : undefined,
+    });
     reset();
   }
 
