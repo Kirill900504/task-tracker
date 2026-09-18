@@ -219,13 +219,29 @@ export function useTaskParticipants() {
     [people, byTask, add],
   );
 
+  // Роль, снятая просьба о переносе и удаление участника меняются на экране
+  // сразу, а перечитывается таблица только если запись не прошла. Раньше
+  // каждое из трёх нажатий тянуло ВСЕ строки участия по всем задачам разом —
+  // и до ответа на это карточка показывала прежнее состояние, то есть ровно
+  // то, что выглядит как «кнопка не сработала».
+  const patchParticipant = useCallback((participantId: string, change: (p: Participant) => Participant) => {
+    setByTask((prev) => {
+      const next: Record<string, Participant[]> = {};
+      for (const [taskId, list] of Object.entries(prev)) {
+        next[taskId] = list.map((p) => (p.id === participantId ? change(p) : p));
+      }
+      return next;
+    });
+  }, []);
+
   const setRole = useCallback(
     async (participantId: string, role: TaskParticipantRole) => {
+      patchParticipant(participantId, (p) => ({ ...p, role }));
       const db = createClient();
-      await db.from("task_participants").update({ role }).eq("id", participantId);
-      await load();
+      const { error } = await db.from("task_participants").update({ role }).eq("id", participantId);
+      if (error) await load();
     },
-    [load],
+    [load, patchParticipant],
   );
 
   // Просьбу либо удовлетворяют, либо отклоняют — в обоих случаях она
@@ -233,21 +249,27 @@ export function useTaskParticipants() {
   // принадлежит движку синхронизации, и писать её отсюда нельзя.
   const clearRescheduleRequest = useCallback(
     async (participantId: string) => {
+      patchParticipant(participantId, (p) => ({ ...p, rescheduleTo: null, rescheduleReason: null }));
       const db = createClient();
-      await db
+      const { error } = await db
         .from("task_participants")
         .update({ reschedule_requested_at: null, reschedule_to: null, reschedule_reason: null })
         .eq("id", participantId);
-      await load();
+      if (error) await load();
     },
-    [load],
+    [load, patchParticipant],
   );
 
   const remove = useCallback(
     async (participantId: string) => {
+      setByTask((prev) => {
+        const next: Record<string, Participant[]> = {};
+        for (const [taskId, list] of Object.entries(prev)) next[taskId] = list.filter((p) => p.id !== participantId);
+        return next;
+      });
       const db = createClient();
-      await db.from("task_participants").delete().eq("id", participantId);
-      await load();
+      const { error } = await db.from("task_participants").delete().eq("id", participantId);
+      if (error) await load();
     },
     [load],
   );

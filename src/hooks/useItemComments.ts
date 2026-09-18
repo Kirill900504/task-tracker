@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { me } from "@/lib/me";
 
 // Обсуждение внутри задачи или встречи.
 //
@@ -48,6 +49,10 @@ export type Comment = {
   // Эмодзи → кто его поставил (именами, чтобы можно было показать в
   // подсказке), плюс отметка «я среди них».
   reactions: { emoji: string; count: number; mine: boolean }[];
+  // Написано, показано, но ещё не подтверждено базой. Такое сообщение живёт
+  // только в этой вкладке: его нельзя ни править, ни убрать — у него ещё нет
+  // адреса, по которому это делают.
+  sending?: boolean;
 };
 
 type CommentRow = {
@@ -77,15 +82,37 @@ function nameOf(row: CommentRow, meId: string, ownerLabel: string): string {
   return name || ownerLabel;
 }
 
+// Сообщение, которое уже на экране, но ещё не в базе. Пока серверная строка
+// не приехала, показывается местная копия; как только приехала — местная
+// исчезает, и подмены не видно, потому что текст один и тот же.
+type Outgoing = { local: Comment; serverId: string | null };
+
+// Реакция ставится на экран до того, как о ней узнает база: нажатие — уже
+// ответ, и полсекунды неизменившейся кнопки читаются как «не сработало».
+function toggleReaction(list: Comment["reactions"], emoji: string, on: boolean): Comment["reactions"] {
+  const current = list.find((r) => r.emoji === emoji);
+  if (on) {
+    if (!current) return [...list, { emoji, count: 1, mine: true }];
+    return list.map((r) => (r.emoji === emoji ? { ...r, count: r.count + 1, mine: true } : r));
+  }
+  if (!current) return list;
+  if (current.count <= 1) return list.filter((r) => r.emoji !== emoji);
+  return list.map((r) => (r.emoji === emoji ? { ...r, count: r.count - 1, mine: false } : r));
+}
+
 export function useItemComments(kind: ItemKind, itemId: string) {
   const [comments, setComments] = useState<Comment[]>([]);
+  // Отдельным списком, а не вперемешку с пришедшими: лента перечитывается
+  // целиком на каждое движение в базе — в том числе на чужое сообщение,
+  // пришедшее ровно тогда, когда отправляется своё. Своё, лежи оно в общем
+  // списке, такой перечиткой стёрло бы.
+  const [outbox, setOutbox] = useState<Outgoing[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async (): Promise<Comment[]> => {
     if (!itemId) return [];
     const db = createClient();
-    const { data: me } = await db.auth.getUser();
-    const meId = me?.user?.id || "";
+    const { userId: meId } = await me();
 
     const [{ data: rows }, { data: reactions }] = await Promise.all([
       db
@@ -149,7 +176,10 @@ export function useItemComments(kind: ItemKind, itemId: string) {
     const db = createClient();
     const channel = db
       .channel(`comments-${kind}-${itemId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "item_comments" }, () => {
+      // Фильтр по своей задаче — не украшение: без него каждое сообщение в
+      // ЛЮБОМ обсуждении трекера заставляло открытую карточку перечитывать
+      // всю свою ленту вместе с подписанными ссылками на файлы.
+      .on("postgres_changes", { event: "*", schema: "public", table: "item_comments", filter: `item_id=eq.${itemId}` }, () => {
         fetchAll().then((list) => {
           if (!cancelled) setComments(list);
         });
@@ -169,20 +199,13 @@ export function useItemComments(kind: ItemKind, itemId: string) {
 
   const reload = useCallback(async () => setComments(await fetchAll()), [fetchAll]);
 
-  const send = useCallback(
-    async (body: string, files: File[] = []) => {
-      const text = body.trim();
-      if ((!text && !files.length) || !itemId) return;
+  // Дорога сообщения в облако: файлы в корзину, строка в таблицу, рассылка
+  // остальным. Всё это происходит уже ПОСЛЕ того, как человек увидел свой
+  // текст в ленте, — см. `send` ниже.
+  const sendToCloud = useCallback(
+    async (text: string, files: File[], localId: string) => {
       const db = createClient();
-      const { data: me } = await db.auth.getUser();
-      // Оба поля пишутся сразу: у вошедшего в трекер есть и логин, и строка
-      // в списке людей, а имя потом нужно показать независимо от того,
-      // через какую дверь сообщение пришло.
-      const { data: member } = await db
-        .from("workspace_members")
-        .select("assignee_id, owner_id")
-        .eq("member_id", me?.user?.id || "")
-        .maybeSingle();
+      const { userId, assigneeId, workspaceId } = await me();
       // Путь начинается с пространства: по первому сегменту права и
       // решают, чей это файл (см. миграцию 0020). Владелец пишет в своё,
       // руководитель — в то, куда принят.
@@ -191,7 +214,7 @@ export function useItemComments(kind: ItemKind, itemId: string) {
       // собственный id: файл руководителя уезжал в папку, которой по
       // правилам корзины не существует. Ошибка была видна только тому, кто
       // пробовал приложить фотографию с чужого входа.
-      const workspace = (member as { owner_id?: string } | null)?.owner_id || me?.user?.id || "";
+      const workspace = workspaceId;
       const attachments: Attachment[] = [];
       for (const file of files) {
         const safe = file.name.replace(/[^\w.\-]+/g, "_").slice(-80);
@@ -206,11 +229,17 @@ export function useItemComments(kind: ItemKind, itemId: string) {
         item_id: itemId,
         body: text,
         attachments,
-        author_user_id: me?.user?.id || null,
-        author_assignee_id: (member as { assignee_id?: string } | null)?.assignee_id || null,
+        // Оба поля пишутся сразу: у вошедшего в трекер есть и логин, и строка
+        // в списке людей, а имя потом нужно показать независимо от того,
+        // через какую дверь сообщение пришло.
+        author_user_id: userId || null,
+        author_assignee_id: assigneeId,
         source: "app",
       };
-      let { error } = await db.from("item_comments").insert(row);
+      // id возвращается ради рассылки: сказать остальным участникам — часть
+      // отправки, а не побочное дело. Раньше сообщение просто ложилось в
+      // базу, и тот, кому оно написано, не узнавал о нём никогда.
+      let { data: saved, error } = await db.from("item_comments").insert(row).select("id").maybeSingle();
 
       // «comment references an item that does not exist» — это не поломка, а
       // гонка, и до сих пор она вылезала на экран как есть: по-английски и
@@ -227,39 +256,122 @@ export function useItemComments(kind: ItemKind, itemId: string) {
           if (parent) break;
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
-        ({ error } = await db.from("item_comments").insert(row));
+        ({ data: saved, error } = await db.from("item_comments").insert(row).select("id").maybeSingle());
         if (error && /does not exist/i.test(error.message)) {
-          await reload();
           throw new Error("Задача ещё не сохранилась в облаке — проверьте связь и отправьте сообщение ещё раз.");
         }
       }
-
-      await reload();
       // Сообщение, которое не сохранилось, не должно исчезнуть молча: чаще
       // всего это задача, ещё не доехавшая до облака, и человеку надо дать
-      // повторить, а не гадать, куда делся его текст.
+      // повторить, а не гадать, куда делся его текст. Бросаем здесь, до
+      // рассылки: рассылать нечего.
       if (error) throw new Error(error.message);
+
+      // Рассылка — отдельным вызовом и молча: сообщение уже сохранено, и
+      // уронить отправку из-за того, что не ушло уведомление, было бы
+      // обменом наоборот. Не дошло — о сообщении скажет утренняя сводка.
+      //
+      // И её НЕ ЖДУТ: это ещё одна очередь в сеть, а на экране всё уже
+      // случилось. Раньше ожидание здесь стоило человеку той же секунды,
+      // ради которой всё это и переписано.
+      const savedId = (saved as { id: string } | null)?.id;
+      if (savedId) {
+        void fetch("/api/workspace/comment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ commentId: savedId }),
+        }).catch(() => {
+          // Связь. Сводка догонит.
+        });
+      }
+
+      // Серверная строка приехала — местную копию можно убирать, но только
+      // если в перечитанной ленте она действительно есть. Иначе (реплика
+      // отстала) копия остаётся и исчезнет сама, когда её id появится в
+      // ленте: пропасть и появиться заново сообщение не должно.
+      const fresh = await fetchAll();
+      setComments(fresh);
+      setOutbox((prev) =>
+        savedId && fresh.some((c) => c.id === savedId)
+          ? prev.filter((o) => o.local.id !== localId)
+          : prev.map((o) => (o.local.id === localId ? { ...o, serverId: savedId || null } : o)),
+      );
     },
-    [kind, itemId, reload],
+    [kind, itemId, fetchAll],
+  );
+
+  // Отправка начинается с экрана, а не с облака.
+  //
+  // Раньше она начиналась с облака: спросить, кто я (запрос в сеть), спросить
+  // мою строку в списке людей (ещё запрос), вставить сообщение (третий),
+  // дождаться рассылки (четвёртый) и перечитать ленту целиком (пятый, а с ним
+  // ещё и подписанные ссылки на все файлы обсуждения). Только после этого
+  // текст появлялся на экране. Вот эти пять очередей подряд и были «чат
+  // отправляет с секундной задержкой»: ничего не тормозило, просто человеку
+  // показывали результат последним.
+  //
+  // Теперь наоборот: сообщение появляется в ту же долю секунды, а сеть
+  // догоняет. Кто я — уже известно (см. lib/me.ts), рассылки не ждём, лента
+  // перечитывается потом и незаметно. Не ушло — местная копия исчезает,
+  // текст возвращается в поле, и человек видит, почему.
+  const send = useCallback(
+    (body: string, files: File[] = []): Promise<void> => {
+      const text = body.trim();
+      if ((!text && !files.length) || !itemId) return Promise.resolve();
+
+      const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const local: Comment = {
+        id: localId,
+        body: text,
+        // Файл называется, но не показывается: он физически едет в корзину, и
+        // нарисовать картинку раньше, чем она туда доехала, значит соврать.
+        // Имя файла — правда, доступная сразу.
+        attachments: files.map((f) => ({ path: `${localId}-${f.name}`, name: f.name, size: f.size, type: f.type })),
+        createdAt: new Date().toISOString(),
+        editedAt: null,
+        authorName: "Вы",
+        mine: true,
+        source: "app",
+        system: false,
+        reactions: [],
+        sending: true,
+      };
+      setOutbox((prev) => [...prev, { local, serverId: null }]);
+
+      return sendToCloud(text, files, localId).catch((err) => {
+        setOutbox((prev) => prev.filter((o) => o.local.id !== localId));
+        throw err;
+      });
+    },
+    [itemId, sendToCloud],
   );
 
   // Своё сообщение можно поправить или убрать; чужое — нет. Удаление мягкое:
   // переписку, которую можно незаметно переписать задним числом, незачем
   // было и заводить.
+  //
+  // Правка и удаление, как и отправка, показываются до того, как о них узнает
+  // база: человек уже нажал «Сохранить», и лента, полсекунды показывающая
+  // старый текст, читается как «не сохранилось». Перечитываем только если
+  // запись не прошла — тогда экран возвращается к правде.
   const edit = useCallback(
     async (commentId: string, body: string) => {
+      const text = body.trim();
+      const editedAt = new Date().toISOString();
+      setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, body: text, editedAt } : c)));
       const db = createClient();
-      await db.from("item_comments").update({ body: body.trim(), edited_at: new Date().toISOString() }).eq("id", commentId);
-      await reload();
+      const { error } = await db.from("item_comments").update({ body: text, edited_at: editedAt }).eq("id", commentId);
+      if (error) await reload();
     },
     [reload],
   );
 
   const remove = useCallback(
     async (commentId: string) => {
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
       const db = createClient();
-      await db.from("item_comments").update({ deleted_at: new Date().toISOString() }).eq("id", commentId);
-      await reload();
+      const { error } = await db.from("item_comments").update({ deleted_at: new Date().toISOString() }).eq("id", commentId);
+      if (error) await reload();
     },
     [reload],
   );
@@ -268,28 +380,33 @@ export function useItemComments(kind: ItemKind, itemId: string) {
   // способ передумать это попросить кого-то другого.
   const react = useCallback(
     async (commentId: string, emoji: string, on: boolean) => {
+      setComments((prev) =>
+        prev.map((c) => (c.id === commentId ? { ...c, reactions: toggleReaction(c.reactions, emoji, on) } : c)),
+      );
       const db = createClient();
-      const { data: me } = await db.auth.getUser();
-      const meId = me?.user?.id || "";
-      if (!on) {
-        await db.from("comment_reactions").delete().eq("comment_id", commentId).eq("emoji", emoji).eq("actor_user_id", meId);
-      } else {
-        const { data: member } = await db
-          .from("workspace_members")
-          .select("assignee_id")
-          .eq("member_id", meId)
-          .maybeSingle();
-        await db.from("comment_reactions").insert({
-          comment_id: commentId,
-          emoji,
-          actor_user_id: meId,
-          actor_assignee_id: (member as { assignee_id?: string } | null)?.assignee_id || null,
-        });
-      }
-      await reload();
+      const { userId: meId, assigneeId } = await me();
+      const { error } = !on
+        ? await db.from("comment_reactions").delete().eq("comment_id", commentId).eq("emoji", emoji).eq("actor_user_id", meId)
+        : await db.from("comment_reactions").insert({
+            comment_id: commentId,
+            emoji,
+            actor_user_id: meId,
+            actor_assignee_id: assigneeId,
+          });
+      if (error) await reload();
     },
     [reload],
   );
 
-  return { comments, loading, send, edit, remove, react };
+  // Лента — это пришедшее из базы плюс то, что ещё едет. Местная копия
+  // исчезает ровно тогда, когда её серверная строка появляется в ленте, и
+  // подмены не видно: текст один и тот же, на том же месте.
+  const visible = useMemo(() => {
+    if (!outbox.length) return comments;
+    const arrived = new Set(comments.map((c) => c.id));
+    const waiting = outbox.filter((o) => !(o.serverId && arrived.has(o.serverId)));
+    return waiting.length ? [...comments, ...waiting.map((o) => o.local)] : comments;
+  }, [comments, outbox]);
+
+  return { comments: visible, loading, send, edit, remove, react };
 }

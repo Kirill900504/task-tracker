@@ -43,7 +43,6 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
   // Долгое нажатие — правая кнопка телефона. Таймер один на весь список:
   // одновременно жать два сообщения нельзя.
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // Выбранные, но ещё не отправленные файлы. Показываются списком до
   // отправки: «покажи, что сделал» чаще всего означает две фотографии, и
@@ -73,21 +72,29 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
     };
   }
 
-  async function handleSend() {
+  // Поле пустеет сразу, а не после ответа облака.
+  //
+  // Раньше здесь стояло `await send(...)`, и всё окно на секунду замирало:
+  // кнопка «Отправляю…», текст всё ещё в поле, ленты не изменилось. Человек
+  // в этот момент видит ровно то же, что видел бы при поломке, — и жмёт
+  // второй раз. Сообщение теперь появляется в ленте мгновенно (см.
+  // useItemComments), поэтому и поле должно освободиться мгновенно: набрать
+  // следующее можно, не дожидаясь ничего.
+  function handleSend() {
     const text = draft.trim();
     if (!text && !pending.length) return;
-    setBusy(true);
+    const files = pending;
+    setDraft("");
+    setPending([]);
     setError("");
-    try {
-      await send(text, pending);
-      setDraft("");
-      setPending([]);
-    } catch (e) {
-      // Текст и файлы остаются на месте: повторить — это одно нажатие, а
-      // набирать и прикладывать заново никто не станет.
+    void send(text, files).catch((e) => {
+      // Не ушло — текст и файлы возвращаются на место: повторить это одно
+      // нажатие, а набирать и прикладывать заново никто не станет. Если
+      // человек успел начать следующее сообщение, его не трогаем.
+      setDraft((current) => current || text);
+      setPending((current) => (current.length ? current : files));
       setError(e instanceof Error ? e.message : "Не отправилось. Проверьте связь и нажмите ещё раз.");
-    }
-    setBusy(false);
+    });
   }
 
   function pickFiles(list: FileList | null) {
@@ -167,14 +174,23 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
             <span className="chat-event-time">{timeLabel(c.createdAt)}</span>
           </div>
         ) : (
+        // Сообщение, которое ещё едет в облако, меню не открывает: править и
+        // убирать нечего — строки, к которой это относится, пока нет. Видно
+        // это по бледности, и длится обычно меньше мига.
         <div
-          className={"chat-msg" + (c.mine ? " mine" : "") + (menuFor?.id === c.id ? " menu-open" : "")}
+          className={
+            "chat-msg" +
+            (c.mine ? " mine" : "") +
+            (c.sending ? " sending" : "") +
+            (menuFor?.id === c.id ? " menu-open" : "")
+          }
           key={c.id}
           onContextMenu={(e) => {
             e.preventDefault();
+            if (c.sending) return;
             setMenuFor({ id: c.id, at: { x: e.clientX, y: e.clientY } });
           }}
-          {...longPressProps(c.id)}
+          {...(c.sending ? {} : longPressProps(c.id))}
         >
           <div className="chat-msg-head">
             <span className="chat-author">{c.authorName}</span>
@@ -327,10 +343,14 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
         <button
           type="button"
           className="btn btn-small btn-primary"
-          disabled={busy || (!draft.trim() && !pending.length)}
-          onClick={() => void handleSend()}
+          disabled={!draft.trim() && !pending.length}
+          onClick={handleSend}
         >
-          <Icon name="send" size={15} /> {busy ? "Отправляю…" : "Отправить"}
+          {/* «Отправляю…» на кнопке больше нет, и не потому, что стало
+              некогда: теперь это видно на самом сообщении — оно уже в ленте и
+              бледнеет, пока не подтвердится. Подпись, повторяющая то, что и
+              так на экране, — это та самая надпись ни о чём. */}
+          <Icon name="send" size={15} /> Отправить
         </button>
       </div>
     </div>

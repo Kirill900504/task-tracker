@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
+import { createSharedStore } from "@/lib/sharedStore";
 
 // Who on the team is reachable in a messenger.
 //
@@ -77,26 +78,30 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
     }));
 }
 
-export function useColleagues() {
-  const [colleagues, setColleagues] = useState<Colleague[]>([]);
-  const [loading, setLoading] = useState(true);
+// Один список на весь трекер. Его спрашивают карточка задачи, встреча,
+// каждая мысль в панели, меню ✈ и окно «Команда» — и раньше каждый из них
+// спрашивал его сам, с нуля и с собственным «Загрузка…». Именно это и было
+// видно как «нажал „Команда“ — окно секунду думает»: ответ уже лежал в
+// соседнем компоненте, но новое окно начинало с пустого места.
+const team = createSharedStore<Colleague[]>([], fetchColleagues);
 
-  const reload = useCallback(async () => {
-    const rows = await fetchColleagues();
-    if (rows) setColleagues(rows);
-    setLoading(false);
-  }, []);
+// Прогрев из корня трекера. Список нужен в ту же секунду, когда нажали ✈ или
+// «Команда», а нажимают их из уже открытого экрана — значит спросить можно
+// заранее и бесплатно. Подписки здесь намеренно нет: корню незачем
+// перерисовываться из-за списка, который он сам не показывает.
+export function prefetchTeam() {
+  team.ensure();
+}
+
+export function useColleagues() {
+  const { data: colleagues, loaded } = useSyncExternalStore(team.subscribe, team.snapshot, team.serverSnapshot);
+
+  const reload = useCallback(() => team.refresh(), []);
 
   useEffect(() => {
-    let cancelled = false;
-    fetchColleagues().then((rows) => {
-      if (cancelled) return;
-      if (rows) setColleagues(rows);
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
+    // Загрузит один раз на всех; открытое позже окно получит уже готовый
+    // список и молча освежит его фоном.
+    team.ensure();
   }, []);
 
   // Returns the invite link to hand to the person — the code inside it is
@@ -127,7 +132,14 @@ export function useColleagues() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.error) return { error: data?.error || "Не получилось создать приглашение" };
-      await reload();
+      // Ссылка отдаётся сразу — она и есть ответ на нажатие. Строка «приглашён
+      // в трекер» проставляется здесь же, а не после ещё одного запроса:
+      // приглашение уже создано, и ждать подтверждения того, что и так
+      // известно, значит держать человека перед неменяющимся экраном.
+      team.update((list) =>
+        list.map((p) => (p.id === assigneeId ? { ...p, member: "invited" as MemberState, direction: direction || p.direction } : p)),
+      );
+      void reload();
       return { link: data.link as string, code: data.code as string };
     },
     [reload],
@@ -137,8 +149,13 @@ export function useColleagues() {
   // участия в задачах никуда не девается — иначе вместе с человеком из
   // трекера исчезло бы и то, что он делал, и задачи стали бы ничьими
   // задним числом.
+  // Эти три пишут на экран раньше, чем в базу: нажатие кнопки — уже решение,
+  // и строка, которая полсекунды показывает прежнее состояние, читается как
+  // «не сработало». Правда догоняет фоновым перечитыванием, и если запись не
+  // прошла, оно вернёт строку как было.
   const setDirection = useCallback(
     async (assigneeId: string, direction: string) => {
+      team.update((list) => list.map((p) => (p.id === assigneeId ? { ...p, direction } : p)));
       const db = createClient();
       await db.from("workspace_members").update({ direction }).eq("assignee_id", assigneeId);
       await reload();
@@ -148,6 +165,9 @@ export function useColleagues() {
 
   const setTrackerAccess = useCallback(
     async (assigneeId: string, active: boolean) => {
+      team.update((list) =>
+        list.map((p) => (p.id === assigneeId ? { ...p, member: (active ? "active" : "disabled") as MemberState } : p)),
+      );
       const db = createClient();
       await db
         .from("workspace_members")
@@ -164,6 +184,14 @@ export function useColleagues() {
 
   const unlink = useCallback(
     async (assigneeId: string, channel: ColleagueChannel) => {
+      team.update((list) =>
+        list.map((p) => {
+          if (p.id !== assigneeId) return p;
+          const telegram = channel === "telegram" ? false : p.telegram;
+          const max = channel === "max" ? false : p.max;
+          return { ...p, telegram, max, linked: telegram || max, username: telegram || max ? p.username : null };
+        }),
+      );
       const db = createClient();
       const patch =
         channel === "max"
@@ -175,7 +203,7 @@ export function useColleagues() {
     [reload],
   );
 
-  return { colleagues, loading, reload, invite, inviteToTracker, setDirection, setTrackerAccess, unlink };
+  return { colleagues, loading: !loaded, reload, invite, inviteToTracker, setDirection, setTrackerAccess, unlink };
 }
 
 export type SendResult = { sentTo: string[]; failed: string[] } | { error: string };

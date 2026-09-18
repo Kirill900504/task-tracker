@@ -12,6 +12,7 @@ import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 import { useBotLink } from "@/hooks/useBotLink";
+import { prefetchTeam } from "@/hooks/useColleagues";
 import SyncErrorBanner from "@/components/tracker/SyncErrorBanner";
 import SyncStatusPill from "@/components/tracker/SyncStatusPill";
 import TasksPanel from "@/components/tracker/TasksPanel";
@@ -32,6 +33,7 @@ import ExportMenu from "@/components/tracker/ExportMenu";
 import TeamModal from "@/components/tracker/TeamModal";
 import MobileShell, { type MobileTab } from "@/components/tracker/MobileShell";
 import MobileHeader from "@/components/tracker/MobileHeader";
+import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
@@ -91,6 +93,14 @@ export default function NewTracker() {
   const [openExistingTaskId, setOpenExistingTaskId] = useState<string | null>(null);
   const [openExistingMeetingId, setOpenExistingMeetingId] = useState<string | null>(null);
   const [highlightIdeaId, setHighlightIdeaId] = useState<string | null>(null);
+
+  // Список команды спрашивается заранее, а не в момент нажатия. «Команда» и
+  // любое ✈ открываются из уже открытого трекера, то есть время на запрос
+  // есть — и тратить его надо здесь, а не после нажатия, когда человек
+  // смотрит на «Загрузка…».
+  useEffect(() => {
+    prefetchTeam();
+  }, []);
 
   // Hotkeys: N — task, B — meeting, M — idea, "/" — search. Keyed off the
   // physical key (e.code) so they work on a Russian layout too, and ignored
@@ -561,11 +571,10 @@ export default function NewTracker() {
               </div>
             </div>
           </div>
-          <div className="header-quote">
-            <div className="hqline">
-              Есть десятилетия, за которые ничего не случается, <b>и есть недели, за которые случаются десятилетия.</b>
-            </div>
-          </div>
+          {/* Одна строка на любом мониторе — кегль цитата подбирает себе
+              сама, замером. На телефоне её нет вовсе: там своя шапка
+              (MobileHeader), и эта ветка не отрисовывается. */}
+          <HeaderQuote />
           <div className="header-btns">
             {/* Search and notifications are icons only: the words were the
                 widest thing in the header and said nothing the magnifier and
