@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { sortByPeopleOrder } from "@/lib/peopleOrder";
 
 // Who on the team is reachable in a messenger.
 //
@@ -60,7 +61,9 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
   // The owner's own row is dropped here rather than in the team screen: a
   // bot cannot write to the person running it, so «пригласить самого себя»
   // is an offer that could never work, wherever it appeared.
-  return data
+  // Порядок тот же, что и везде (peopleOrder.ts): «Команда» — это список
+  // тех же людей, и читать его в другом порядке значит искать в нём заново.
+  return sortByPeopleOrder(data, (r) => (r.name as string) || "")
     .filter((r) => !isSelfAssignee((r.name as string) || ""))
     .map((r) => ({
       id: r.id as string,

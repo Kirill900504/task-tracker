@@ -1,4 +1,5 @@
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { sortNames } from "@/lib/peopleOrder";
 
 // Who an item can be sent to, and how the answer reads afterwards.
 //
@@ -14,8 +15,11 @@ export type SendTarget = { name: string; suggested: boolean };
 // `concerns` is the assignee of a task or the participants of a meeting —
 // a thought concerns nobody in particular and simply passes an empty list.
 export function sendTargets(linked: string[], concerns?: string[]): SendTarget[] {
-  const reachable = linked.filter((name) => name && !isSelfAssignee(name));
-  const suggested = (concerns || []).filter((name) => reachable.includes(name));
+  // Внутри каждой половины — общий порядок людей (peopleOrder.ts): «кого
+  // это касается» остаётся наверху, но и там, и ниже имена идут так же, как
+  // во всех остальных списках трекера.
+  const reachable = sortNames(linked.filter((name) => name && !isSelfAssignee(name)));
+  const suggested = sortNames((concerns || []).filter((name) => reachable.includes(name)));
   return [
     ...suggested.map((name) => ({ name, suggested: true })),
     ...reachable.filter((name) => !suggested.includes(name)).map((name) => ({ name, suggested: false })),

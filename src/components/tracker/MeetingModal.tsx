@@ -17,6 +17,7 @@ import { openPickerOnClick } from "@/lib/pickerInput";
 import MicButton from "./MicButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
+import { sortNames } from "@/lib/peopleOrder";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS: string[] = (() => {
@@ -76,7 +77,7 @@ export default function MeetingModal({
 
   // The account owner is the one scheduling, so he is not offered as
   // someone to add to his own meeting.
-  const selectableAssignees = assignees.filter((a) => !isSelfAssignee(a));
+  const selectableAssignees = sortNames(assignees.filter((a) => !isSelfAssignee(a)));
 
   function toggleParticipant(name: string) {
     setParticipants((prev) => (prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name]));

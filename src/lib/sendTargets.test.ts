@@ -18,8 +18,12 @@ describe("sendTargets", () => {
     expect(sendTargets(["Кирилл (я)", "Аня"], ["Кирилл (я)"])).toEqual([{ name: "Аня", suggested: false }]);
   });
 
-  it("keeps every participant of a meeting suggested, in the meeting's order", () => {
-    expect(sendTargets(["Аня", "Борис"], ["Борис", "Аня"]).map((t) => t.name)).toEqual(["Борис", "Аня"]);
+  // Раньше эта половина списка шла в том порядке, в каком люди записаны во
+  // встрече. Теперь — в общем порядке людей (peopleOrder.ts): Кирилл
+  // попросил один порядок на все списки трекера, и «кого это касается»
+  // остаётся наверху, но читается так же, как везде.
+  it("keeps every participant of a meeting suggested, in the tracker's own order", () => {
+    expect(sendTargets(["Аня", "Борис"], ["Борис", "Аня"]).map((t) => t.name)).toEqual(["Аня", "Борис"]);
   });
 
   it("has nothing to offer when nobody is connected", () => {
