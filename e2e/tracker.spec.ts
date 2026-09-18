@@ -31,7 +31,7 @@ test("full loop: login, task, meeting, idea, calendar, logout", async ({ page })
 
   // Keep completed items visible for the rest of the run, so the "complete
   // a task" assertion below doesn't need to know where done tasks move to.
-  await page.check("#showDoneCheckbox");
+  await showDoneOn(page);
 
   // ---- Create task ----
   await page.click("#newTaskBtn");
@@ -64,6 +64,14 @@ test("full loop: login, task, meeting, idea, calendar, logout", async ({ page })
   await expect(page).toHaveURL(/\/login/);
 });
 
+// «Показывать завершённые» — теперь кнопка, а не галочка: включается
+// нажатием и помечается aria-pressed.
+async function showDoneOn(page: import("@playwright/test").Page) {
+  const btn = page.locator("#showDoneCheckbox");
+  if ((await btn.getAttribute("aria-pressed")) !== "true") await btn.click();
+  await expect(btn).toHaveAttribute("aria-pressed", "true");
+}
+
 async function login(page: import("@playwright/test").Page) {
   await page.goto("/login");
   await page.fill("#email", email);
@@ -71,7 +79,7 @@ async function login(page: import("@playwright/test").Page) {
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator("#newTaskBtn")).toBeVisible();
-  await page.check("#showDoneCheckbox");
+  await showDoneOn(page);
 }
 
 // Two regression tests for "I closed things, signed out, signed back in, and
@@ -261,7 +269,7 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   // resolved meetings are hidden by default.
   await page.reload();
   await expect(page.locator("#newTaskBtn")).toBeVisible();
-  await page.check("#showDoneCheckbox");
+  await showDoneOn(page);
   await expect(page.locator(".meeting-chip", { hasText: title })).toHaveClass(/resolved/);
   await page.locator(".meeting-chip", { hasText: title }).click();
   await expect(page.locator("#mResult")).toHaveValue("Договорились по срокам");
@@ -676,4 +684,34 @@ test("закрытие встречи из списка спрашивает и�
   // Итог сохранён там же, где его потом читают, — в самой встрече.
   await chip.click();
   await expect(page.locator("#mResult")).toHaveValue("Договорились по срокам");
+});
+
+// Люди в задаче: нажал — выбрал роль, нажал второй раз — снял.
+//
+// Так же, как у участников встречи, где кнопка просто включает и выключает
+// человека. Отдельной проверки требует именно второе нажатие: раньше оно
+// открывало меню, и «снять с задачи» был спрятан в нём.
+test("человека ставят на задачу с ролью и снимают вторым нажатием", async ({ page }) => {
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", `E2E люди ${Date.now()}`);
+
+  // Список людей читается своим запросом и может приехать чуть позже формы.
+  const chip = page.locator("#fPeople .participant-chip", { hasText: "Игорь Витковский" });
+  await expect(chip).toBeVisible({ timeout: 20_000 });
+
+  // Первое нажатие спрашивает роль — и ничего не выбирает, пока не ответишь.
+  await chip.click();
+  const menu = page.locator(".export-menu, .action-sheet").first();
+  await expect(menu).toBeVisible();
+  await expect(chip).not.toHaveClass(/selected/);
+
+  await menu.locator(".export-item", { hasText: "Соисполнитель" }).click();
+  await expect(chip).toHaveClass(/role-coexecutor/);
+  await expect(chip).toContainText("соисполнитель");
+
+  // Второе нажатие снимает с задачи — без меню и без вопросов.
+  await chip.click();
+  await expect(chip).not.toHaveClass(/selected/);
+  await expect(page.locator(".export-menu, .action-sheet")).toHaveCount(0);
 });

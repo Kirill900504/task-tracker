@@ -316,6 +316,36 @@
      карточке: цветом, а не подписью. */
   .section-tab.personal{color:var(--med);}
   .section-tab.personal.active{background:var(--med); border-color:var(--med); color:#251C05;}
+  /* «+» в конце строки: завести раздел там же, где их читают. Пунктиром —
+     это приглашение, а не ещё один раздел. */
+  .section-tab-add{border-style:dashed; min-width:30px;}
+  /* Разделы переставляют, зажав и потянув (SectionTabs). touch-action:
+     браузер иначе забирает движение себе под прокрутку и перетаскивание на
+     телефоне не начинается вовсе. */
+  .section-tabs .section-tab{touch-action:none; user-select:none;}
+  .section-tab.dragging{opacity:.6; transform:scale(1.04); cursor:grabbing;}
+
+  /* Две кнопки вместо фильтра по приоритету и галочки «показывать
+     завершённые»: «что горит» и «что сделано» — вопросы, которые к списку
+     задают чаще всего, и оба теперь в одно нажатие. */
+  .filter-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 13px; border:1px solid var(--line); border-radius:999px;
+    background:var(--paper-soft); color:var(--ink-soft); cursor:pointer;
+    font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
+    transition:color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+  }
+  .filter-pill:hover{color:var(--ink); border-color:var(--ink-soft);}
+  .filter-pill-count{
+    font-family:var(--mono); font-size:11px; font-weight:700; line-height:1;
+    padding:2px 6px; border-radius:999px; background:var(--high-bg); color:var(--high);
+  }
+  .filter-pill.overdue:hover{color:var(--high); border-color:var(--high);}
+  .filter-pill.overdue.active{background:var(--high); border-color:var(--high); color:#2A1A15; box-shadow:var(--shadow-1);}
+  .filter-pill.overdue.active .filter-pill-count{background:rgba(0,0,0,.18); color:#2A1A15;}
+  .filter-pill.done:hover{color:var(--success); border-color:var(--success);}
+  .filter-pill.done.active{background:var(--success); border-color:var(--success); color:#0B2116; box-shadow:var(--shadow-1);}
+  @media (max-width:768px){ .filter-pill{min-height:34px;} }
   @media (max-width:768px){
     .section-tabs{overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; -webkit-overflow-scrolling:touch;}
     .section-tab{min-height:32px;}
@@ -687,6 +717,20 @@
   .mini-cal-day.today{border-color:var(--ink-soft);}
   .mini-cal-day.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:700;}
   @media (max-width:768px){ .mini-cal{max-width:none;} .mini-cal-day{min-height:34px;} }
+  /* Всплывающий вариант (в карточке задачи): строка с датой, календарь — по
+     нажатию. Разворачивать его там всегда значило растянуть форму на
+     полтора экрана ради поля, которое заполняют не каждый раз. */
+  .mini-cal-wrap{position:relative; display:inline-block;}
+  .mini-cal-trigger{
+    padding:7px 12px; border:1px solid var(--line); border-radius:var(--radius-sm);
+    background:var(--paper-soft); color:var(--ink); cursor:pointer;
+    font-family:var(--mono); font-size:12.5px; white-space:nowrap;
+  }
+  .mini-cal-trigger:hover, .mini-cal-trigger.open{border-color:var(--accent); color:var(--accent);}
+  .mini-cal-backdrop{position:fixed; inset:0; z-index:120;}
+  .mini-cal-pop{position:absolute; top:calc(100% + 6px); left:0; z-index:121; box-shadow:var(--shadow-2); border-radius:var(--radius-sm);}
+  .mini-cal-pop .mini-cal{background:var(--paper);}
+  @media (max-width:768px){ .mini-cal-pop{left:0; right:0;} }
 
   /* Working-hours time picker: one tap per slot, wrapping over a few rows. */
   .time-grid{display:flex; flex-wrap:wrap; gap:5px;}

@@ -7,7 +7,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { DragEvent, ReactNode, RefObject } from "react";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
-import { isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
+import { isOverdue, isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
 import { getDragAfterElement } from "@/lib/dndDom";
 import TaskCard from "./TaskCard";
 import type { ActionMenuItem } from "./ActionMenu";
@@ -18,6 +18,9 @@ import { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { progressLabel, taskStage } from "@/lib/taskProgress";
 import type { useToasts } from "@/hooks/useToasts";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
+import SectionTabs from "./SectionTabs";
+import { useAsk } from "@/components/Ask";
+import { uid } from "@/lib/uid";
 import { sortNames } from "@/lib/peopleOrder";
 
 type Term = "short" | "long";
@@ -55,7 +58,6 @@ export default function TasksPanel({
     saveSection: (section: Section) => void;
     deleteSection: (id: string) => void;
     addAssignee: (name: string) => void;
-    removeAssignee: (name: string) => void;
   };
   toasts: ReturnType<typeof useToasts>;
   // "Показывать завершённые" is one shared toggle for both done tasks and
@@ -87,13 +89,16 @@ export default function TasksPanel({
   extraBanner?: ReactNode;
 } & PanelDragProps) {
   const [filterAssignee, setFilterAssignee] = useState("all");
-  const [filterPriority, setFilterPriority] = useState("all");
+  // «Просрочено» — не сортировка и не раздел, а вопрос «что горит»: он
+  // задаётся чаще всех прочих фильтров вместе взятых.
+  const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [filterSection, setFilterSection] = useState("all");
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
   const isMobile = useIsMobile();
   // Кто на задаче — один слой на всю панель: и карточки, и форма
   // читают отсюда, чтобы не заводить по подписке на каждую карточку.
   const participants = useTaskParticipants();
+  const ask = useAsk();
   // On a phone the four filter controls cost a third of the screen before
   // a single task is visible, and most days none of them is touched — so
   // they fold away, with a dot on the button when any is actually set.
@@ -148,11 +153,15 @@ export default function TasksPanel({
     if (openExistingTaskId) onOpenExistingHandled?.();
   }
 
+  // Цифра на кнопке считается по всем задачам, а не по отфильтрованным:
+  // иначе, включив фильтр, она показывала бы сама себя.
+  const overdueCount = tasks.filter((t) => isOverdue(t)).length;
+
   const sectionById = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections]);
 
   const filtered = tasks.filter((t) => {
     if (filterAssignee !== "all" && t.assignee !== filterAssignee) return false;
-    if (filterPriority !== "all" && t.priority !== filterPriority) return false;
+    if (onlyOverdue && !isOverdue(t)) return false;
     if (filterSection !== "all" && (t.sectionId || "") !== filterSection) return false;
     if (calendarFilterDate && !isTaskDueOnDate(t, new Date(calendarFilterDate + "T00:00:00"))) return false;
     return true;
@@ -182,6 +191,30 @@ export default function TasksPanel({
       const bd = b.deadline || "";
       return ad < bd ? 1 : ad > bd ? -1 : 0;
     });
+
+  // Новый раздел прямо из строки разделов — тот же вопрос, что и в карточке
+  // задачи: сначала название, потом рабочий он или личный.
+  async function addSection() {
+    const name = await ask.ask({
+      title: "Новый раздел",
+      question: "Как назовём раздел?",
+      placeholder: "Например: Сервис",
+      okText: "Дальше",
+      required: "У раздела должно быть название.",
+    });
+    if (!name?.trim()) return;
+    const kind = await ask.choose({
+      title: "Какой это раздел",
+      question: `«${name.trim()}» — рабочий или личный?`,
+      note: "Личные разделы не попадают в сводки и отчёты по работе.",
+      options: [
+        { value: "work", label: "Рабочий" },
+        { value: "personal", label: "Личный" },
+      ],
+    });
+    if (kind === null) return;
+    actions.saveSection({ id: uid(), name: name.trim(), kind: kind === "personal" ? "personal" : "work", sortOrder: sections.length });
+  }
 
   function toggleDone(t: Task) {
     if (t.status === "done") {
@@ -387,7 +420,7 @@ export default function TasksPanel({
       )}
       {extraBanner}
       {(() => {
-        const filtersActive = filterSection !== "all" || filterAssignee !== "all" || filterPriority !== "all";
+        const filtersActive = filterSection !== "all" || filterAssignee !== "all" || onlyOverdue;
         const collapsed = isMobile && !filtersOpen;
         return (
           <div className={"toolbar" + (collapsed ? " collapsed" : "")}>
@@ -413,14 +446,31 @@ export default function TasksPanel({
                 </option>
               ))}
             </select>
-            <select id="filterPriority" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-              <option value="all">Любой приоритет</option>
-              <option value="high">Высокий</option>
-              <option value="med">Средний</option>
-            </select>
-            <label className="check-wrap">
-              <input type="checkbox" id="showDoneCheckbox" checked={showDone} onChange={(e) => onShowDoneChange(e.target.checked)} /> Показывать завершённые
-            </label>
+            {/* Две кнопки вместо списка приоритетов и галочки.
+                Фильтр «Любой приоритет» открывали, чтобы найти «Высокий», —
+                но высокий приоритет и так виден на карточке цветом, а
+                настоящие вопросы к списку другие: «что горит» и «что уже
+                сделано». Поэтому просроченное и завершённые — двумя
+                нажатиями, и видно, что включено, не открывая ничего. */}
+            <button
+              type="button"
+              className={"filter-pill overdue" + (onlyOverdue ? " active" : "")}
+              id="filterOverdueBtn"
+              aria-pressed={onlyOverdue}
+              onClick={() => setOnlyOverdue((v) => !v)}
+            >
+              ⚠ Просрочено
+              {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
+            </button>
+            <button
+              type="button"
+              className={"filter-pill done" + (showDone ? " active" : "")}
+              id="showDoneCheckbox"
+              aria-pressed={showDone}
+              onClick={() => onShowDoneChange(!showDone)}
+            >
+              ✓ Завершённые
+            </button>
           </div>
         );
       })()}
@@ -431,29 +481,20 @@ export default function TasksPanel({
           перечня, а здесь видно сразу, что вообще есть и что выбрано. Стоят
           они между кнопкой «Новая задача» и столбцами — там, куда смотрят
           перед тем, как читать сами задачи. */}
-      {sections.length > 0 && (
-        <div className="section-tabs" id="sectionTabs">
-          <button
-            type="button"
-            className={"section-tab" + (filterSection === "all" ? " active" : "")}
-            onClick={() => setFilterSection("all")}
-          >
-            Все
-          </button>
-          {sections.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={
-                "section-tab" + (s.kind === "personal" ? " personal" : "") + (filterSection === s.id ? " active" : "")
-              }
-              onClick={() => setFilterSection(filterSection === s.id ? "all" : s.id)}
-            >
-              {s.name}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Разделы — кнопками под панелью задач: выбрать, завести новый («+»)
+          и переставить, зажав и потянув (см. SectionTabs). */}
+      <SectionTabs
+        sections={sections}
+        value={filterSection}
+        onSelect={setFilterSection}
+        onAdd={() => void addSection()}
+        onReorder={(ids) =>
+          ids.forEach((id, i) => {
+            const s = sections.find((x) => x.id === id);
+            if (s && s.sortOrder !== i) actions.saveSection({ ...s, sortOrder: i });
+          })
+        }
+      />
 
       <div className="columns">
         {renderColumn(shortOpen, "Нет краткосрочных задач по текущим фильтрам", "Краткосрочные", "short", shortColRef)}
@@ -519,7 +560,6 @@ export default function TasksPanel({
           onDelete={() => modalTask && deleteTask(modalTask)}
           onClose={closeModal}
           onAddAssignee={actions.addAssignee}
-          onRemoveAssignee={actions.removeAssignee}
           onAddSection={actions.saveSection}
           onRemoveSection={removeSection}
           participants={modalTask ? participants.forTask(modalTask.id) : []}
