@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import type { ApprovalState } from "@/types/tracker";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import { hasDeclined, progressLabel, taskProgress, taskStage } from "@/lib/taskProgress";
-import type { Participant, PersonOption } from "@/hooks/useTaskParticipants";
+import type { Participant } from "@/hooks/useTaskParticipants";
 import { useAsk } from "@/components/Ask";
 
 // «Кто на задаче» — и в каком состоянии каждый из них.
@@ -38,10 +37,8 @@ const STAGE_LABEL: Record<string, string> = {
 export default function TaskParticipants({
   taskId,
   participants,
-  available,
   approvalState,
   approvalComment,
-  onAdd,
   onSetRole,
   onRemove,
   onApprove,
@@ -52,10 +49,8 @@ export default function TaskParticipants({
 }: {
   taskId: string;
   participants: Participant[];
-  available: PersonOption[];
   approvalState: ApprovalState;
   approvalComment?: string;
-  onAdd: (assigneeId: string, role: TaskParticipantRole) => void | Promise<string | void>;
   onSetRole: (participantId: string, role: TaskParticipantRole) => void;
   onRemove: (participantId: string) => void;
   onApprove: (comment: string) => void;
@@ -65,22 +60,10 @@ export default function TaskParticipants({
   onRejectReschedule: (participantId: string) => void;
 }) {
   const ask = useAsk();
-  const [addWho, setAddWho] = useState("");
-  const [addRole, setAddRole] = useState<TaskParticipantRole>("executor");
-  // «Добавил, а ему не ушло» — то, о чём постановщик обязан узнать сразу.
-  const [notice, setNotice] = useState("");
 
   const progress = taskProgress(participants);
   const stage = taskStage(participants, approvalState);
   const label = progressLabel(participants);
-
-  async function handleAdd() {
-    if (!addWho) return;
-    setNotice("");
-    const result = await onAdd(addWho, addRole);
-    setAddWho("");
-    if (typeof result === "string" && result) setNotice(result);
-  }
 
   async function handleApprove() {
     // Приёмка без слов — обычное дело («принял, спасибо»), поэтому пусто
@@ -209,31 +192,6 @@ export default function TaskParticipants({
           </button>
         </div>
       ))}
-
-      {available.length > 0 && (
-        <div className="tp-add">
-          <select value={addWho} onChange={(e) => setAddWho(e.target.value)}>
-            <option value="">— добавить человека —</option>
-            {available.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.name}
-              </option>
-            ))}
-          </select>
-          <select value={addRole} onChange={(e) => setAddRole(e.target.value as TaskParticipantRole)}>
-            {(Object.keys(ROLE_LABEL) as TaskParticipantRole[]).map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABEL[r]}
-              </option>
-            ))}
-          </select>
-          <button className="btn btn-small" type="button" onClick={() => void handleAdd()} disabled={!addWho}>
-            Добавить
-          </button>
-        </div>
-      )}
-
-      {notice && <div className="tp-notice">{notice}</div>}
 
       {/* B4: отчитались все — дальше слово за постановщиком. Это и есть
           «Кирилл проверит», ради чего всё затевалось. */}

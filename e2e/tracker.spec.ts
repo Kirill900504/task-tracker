@@ -275,18 +275,20 @@ test("a weekly recurring task keeps its rule across a reload", async ({ page }) 
   await login(page);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
-  await page.selectOption("#fRecur", "weekly");
-  await page.selectOption("#fRecurWeekday", "3");
-  await page.selectOption("#fPriority", "high");
+  // Поля — кнопки, а не списки (см. ChipChoice): выбранное помечено
+  // aria-pressed, по нему и проверяется, что правило вернулось из базы.
+  await page.click('#fRecur [data-value="weekly"]');
+  await page.click('#fRecurWeekday [data-value="3"]');
+  await page.click('#fPriority [data-value="high"]');
   await page.click("#saveTaskBtn");
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
   await waitForSaved(page);
 
   await page.reload();
   await page.locator(".task", { hasText: title }).click();
-  await expect(page.locator("#fRecur")).toHaveValue("weekly");
-  await expect(page.locator("#fRecurWeekday")).toHaveValue("3");
-  await expect(page.locator("#fPriority")).toHaveValue("high");
+  await expect(page.locator('#fRecur [data-value="weekly"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('#fRecurWeekday [data-value="3"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('#fPriority [data-value="high"]')).toHaveAttribute("aria-pressed", "true");
 });
 
 // "Сбросить расположение" kept reappearing on a fresh load even though

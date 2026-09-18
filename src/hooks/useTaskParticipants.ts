@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { assignPerson, waitForTaskRow } from "@/lib/assignWork";
 import type { TaskParticipant, TaskParticipantRole } from "@/lib/taskProgress";
 
@@ -116,7 +117,12 @@ export function useTaskParticipants() {
       };
       (grouped[raw.task_id] ||= []).push(p);
     }
-    return { grouped, people: ((assignees || []) as PersonOption[]).map((a) => ({ id: a.id, name: a.name })) };
+    return {
+      grouped,
+      // Порядок — тот, который назвал Кирилл, а не алфавитный: списки людей
+      // во всём трекере должны читаться одинаково (см. peopleOrder.ts).
+      people: sortByPeopleOrder(((assignees || []) as PersonOption[]).map((a) => ({ id: a.id, name: a.name })), (p) => p.name),
+    };
   }, []);
 
   const load = useCallback(async () => {
@@ -246,6 +252,29 @@ export function useTaskParticipants() {
     [load],
   );
 
+  // Только что заведённый человек должен появиться кнопкой сразу.
+  //
+  // Список людей здесь читается из таблицы напрямую, а заводит человека
+  // движок синхронизации — своим чередом и своей очередью. Пока строка не
+  // доехала, её id неизвестен, а без id человека нельзя поставить на задачу:
+  // раньше это скрывалось тем, что «Исполнитель» был просто именем в
+  // выпадающем списке. Поэтому — подождать строку и перечитать список; то
+  // же самое и по той же причине делает waitForTaskRow в assignWork.ts.
+  const waitForPerson = useCallback(
+    async (name: string) => {
+      const clean = (name || "").trim();
+      if (!clean) return;
+      const db = createClient();
+      for (let i = 0; i < 12; i++) {
+        const { data } = await db.from("assignees").select("id").eq("name", clean).maybeSingle();
+        if (data) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      await load();
+    },
+    [load],
+  );
+
   // ---- Приёмка ------------------------------------------------------
   //
   // These write ONLY columns the sync engine does not own (see taskToRow:
@@ -289,7 +318,7 @@ export function useTaskParticipants() {
   );
 
   return useMemo(
-    () => ({ loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, clearRescheduleRequest, approve, returnForRework, forceClose, reload: load }),
-    [loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, clearRescheduleRequest, approve, returnForRework, forceClose, load],
+    () => ({ loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, waitForPerson, clearRescheduleRequest, approve, returnForRework, forceClose, reload: load }),
+    [loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, waitForPerson, clearRescheduleRequest, approve, returnForRework, forceClose, load],
   );
 }

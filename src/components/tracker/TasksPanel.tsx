@@ -18,6 +18,7 @@ import { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { progressLabel, taskStage } from "@/lib/taskProgress";
 import type { useToasts } from "@/hooks/useToasts";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
+import { sortNames } from "@/lib/peopleOrder";
 
 type Term = "short" | "long";
 
@@ -406,7 +407,7 @@ export default function TasksPanel({
             <div className="search-wrap" id="quickAddSlot" />
             <select id="filterAssignee" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
               <option value="all">Все исполнители</option>
-              {assignees.map((a) => (
+              {sortNames(assignees).map((a) => (
                 <option key={a} value={a}>
                   {a}
                 </option>
@@ -502,7 +503,6 @@ export default function TasksPanel({
           task={modalTask}
           prefill={modalPrefill}
           sections={sections}
-          assignees={assignees}
           onSave={(t, pending) => {
             actions.saveTask(t);
             // Задача только что создана — строки участия заводятся и по
@@ -523,7 +523,8 @@ export default function TasksPanel({
           onAddSection={actions.saveSection}
           onRemoveSection={removeSection}
           participants={modalTask ? participants.forTask(modalTask.id) : []}
-          availablePeople={modalTask ? participants.availableFor(modalTask.id) : participants.people}
+          availablePeople={participants.people}
+          onPersonAdded={(name) => participants.waitForPerson(name)}
           onAddParticipant={(assigneeId, role) => (modalTask ? participants.add(modalTask.id, assigneeId, role) : undefined)}
           onSetParticipantRole={(id, role) => void participants.setRole(id, role)}
           onRemoveParticipant={(id) => void participants.remove(id)}

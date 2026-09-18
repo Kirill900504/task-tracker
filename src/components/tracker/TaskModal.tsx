@@ -16,24 +16,42 @@ import TaskParticipants from "./TaskParticipants";
 import ItemChat from "./ItemChat";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import type { Participant, PendingParticipant, PersonOption } from "@/hooks/useTaskParticipants";
-import PendingParticipants from "./PendingParticipants";
+import PeoplePicker, { type PickedPerson } from "./PeoplePicker";
+import ChipChoice from "./ChipChoice";
 import MicButton from "./MicButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
 
+// Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
+// «Понедельник…Воскресенье» подряд не помещаются никуда, а «Пн Вт Ср» читают
+// не читая.
 const WEEKDAY_OPTIONS = [
-  { value: "1", label: "Понедельник" },
-  { value: "2", label: "Вторник" },
-  { value: "3", label: "Среда" },
-  { value: "4", label: "Четверг" },
-  { value: "5", label: "Пятница" },
-  { value: "6", label: "Суббота" },
-  { value: "0", label: "Воскресенье" },
+  { value: "1", label: "Понедельник", short: "Пн" },
+  { value: "2", label: "Вторник", short: "Вт" },
+  { value: "3", label: "Среда", short: "Ср" },
+  { value: "4", label: "Четверг", short: "Чт" },
+  { value: "5", label: "Пятница", short: "Пт" },
+  { value: "6", label: "Суббота", short: "Сб" },
+  { value: "0", label: "Воскресенье", short: "Вс" },
 ];
 const MONTH_OPTIONS = [
   "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
-].map((label, i) => ({ value: String(i + 1), label }));
+].map((label, i) => ({ value: String(i + 1), label, short: label.slice(0, 3) }));
+
+// Сроки, которые ставят чаще всего. Считаются от сегодняшнего дня по местному
+// времени — то же, что делает календарь трекера.
+const QUICK_DEADLINES = [
+  { label: "Сегодня", days: 0 },
+  { label: "Завтра", days: 1 },
+  { label: "Через неделю", days: 7 },
+];
+
+function isoInDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 function emptyForm(task: Task | null, prefill?: TaskPrefill) {
   return {
@@ -56,7 +74,6 @@ export default function TaskModal({
   task,
   prefill,
   sections,
-  assignees,
   onSave,
   onDelete,
   onClose,
@@ -75,11 +92,11 @@ export default function TaskModal({
   onAcceptReschedule,
   onRejectReschedule,
   onScheduleMeeting,
+  onPersonAdded,
 }: {
   task: Task | null;
   prefill?: TaskPrefill;
   sections: Section[];
-  assignees: string[];
   onSave: (task: Task, pendingParticipants: PendingParticipant[]) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -100,6 +117,9 @@ export default function TaskModal({
   // «Назначить встречу по задаче» (C5). Задача остаётся задачей: встреча —
   // это то, где по ней соберутся, а не то, чем она станет.
   onScheduleMeeting?: (task: Task, participants: string[]) => void;
+  // Дождаться, пока только что заведённый человек доедет до базы, и
+  // перечитать список: без id его нельзя поставить на задачу.
+  onPersonAdded?: (name: string) => void | Promise<void>;
 }) {
   const { colleagues } = useColleagues();
   const ask = useAsk();
@@ -113,12 +133,23 @@ export default function TaskModal({
   // и Никите» открывает карточку уже с двумя исполнителями, а не с одним и
   // потерянным вторым. Список людей к этому моменту давно загружен (он
   // читается при запуске приложения), поэтому имена находятся сразу.
-  const [pending, setPending] = useState<PendingParticipant[]>(() =>
-    (prefill?.executors || [])
-      .map((name) => availablePeople.find((person) => person.name === name))
-      .filter((person): person is PersonOption => !!person)
-      .map((person) => ({ assigneeId: person.id, name: person.name, role: "executor" as const })),
-  );
+  //
+  // Сюда же попадает и тот, кого раньше называло отдельное поле
+  // «Исполнитель»: поле теперь одно, а имя первого исполнителя уходит в
+  // tasks.assignee при сохранении (см. save).
+  const [pending, setPending] = useState<PendingParticipant[]>(() => {
+    const names = [prefill?.assignee || "", ...(prefill?.executors || [])].map((n) => (n || "").trim()).filter(Boolean);
+    const out: PendingParticipant[] = [];
+    for (const name of names) {
+      const person = availablePeople.find((p) => p.name === name);
+      if (person && !out.some((x) => x.assigneeId === person.id)) {
+        out.push({ assigneeId: person.id, name: person.name, role: "executor" });
+      }
+    }
+    return out;
+  });
+  // Описание раскрыто только там, где оно уже написано.
+  const [descOpen, setDescOpen] = useState(() => !!(task?.desc || prefill?.desc));
 
   // Esc closes the modal, same as legacy's global keydown handler.
   useEffect(() => {
@@ -130,7 +161,42 @@ export default function TaskModal({
   }, [onClose]);
 
   const isEditing = !!task;
-  const assigneeOptions = form.assignee && !assignees.includes(form.assignee) ? [...assignees, form.assignee] : assignees;
+
+  // Кто сейчас на задаче — одинаково для новой и для сохранённой, чтобы
+  // поле людей было одно и то же в обоих случаях. У новой это набранный
+  // состав, у сохранённой — настоящие строки участия.
+  const picked: PickedPerson[] = isEditing
+    ? participants.map((p) => ({ id: p.assigneeId, name: p.name, role: p.role }))
+    : pending.map((p) => ({ id: p.assigneeId, name: p.name, role: p.role }));
+
+  function pickPerson(person: PersonOption, role: TaskParticipantRole) {
+    if (!isEditing) {
+      setPending((prev) => {
+        const without = prev.filter((p) => p.assigneeId !== person.id);
+        return [...without, { assigneeId: person.id, name: person.name, role }];
+      });
+      return;
+    }
+    const existing = participants.find((p) => p.assigneeId === person.id);
+    if (existing) {
+      onSetParticipantRole(existing.id, role);
+      return;
+    }
+    void onAddParticipant(person.id, role);
+    // Имя в самой задаче — только если его там ещё нет: это подпись «для
+    // кого это вообще», и перебивать её вторым исполнителем незачем.
+    if (role === "executor" && !form.assignee.trim()) setForm((f) => ({ ...f, assignee: person.name }));
+  }
+
+  function removePerson(p: PickedPerson) {
+    if (!isEditing) {
+      setPending((prev) => prev.filter((x) => x.assigneeId !== p.id));
+      return;
+    }
+    const row = participants.find((x) => x.assigneeId === p.id);
+    if (row) onRemoveParticipant(row.id);
+    if (form.assignee.trim() === p.name) setForm((f) => ({ ...f, assignee: "" }));
+  }
 
   // Offered as soon as the task exists and there is anyone to send it to.
   // It used to require the assignee to be connected, which made the ordinary
@@ -145,11 +211,16 @@ export default function TaskModal({
       void ask.say({ title: "Название не заполнено", question: "Укажите название задачи." });
       return;
     }
+    // Имя в задаче — первый исполнитель из набранного состава. Поле
+    // «Исполнитель» исчезло, но колонка осталась: её читают карточка,
+    // фильтр, бот и сводки, и триггер миграции 0024 заводит по ней строку
+    // участия, если её почему-то нет.
+    const primary = pending.find((p) => p.role === "executor");
     const next: Task = {
       id: task?.id ?? uid(),
       title,
       desc: form.desc.trim(),
-      assignee: form.assignee,
+      assignee: isEditing ? form.assignee : primary?.name || "",
       sectionId: form.sectionId,
       priority: form.priority as Task["priority"],
       term: form.term as Task["term"],
@@ -170,28 +241,31 @@ export default function TaskModal({
 
   async function handleAddAssignee() {
     const v = await ask.ask({
-      title: "Новый исполнитель",
+      title: "Новый человек",
       question: "Как его зовут?",
       placeholder: "Имя и фамилия",
       okText: "Добавить",
-      required: "Без имени исполнителя не бывает.",
+      required: "Без имени человека не бывает.",
     });
     if (!v) return;
     const name = v.trim();
     if (!name) return;
     onAddAssignee(name);
-    setForm((f) => ({ ...f, assignee: name }));
+    // Кнопка с его именем должна появиться сразу: список людей в поле —
+    // строки таблицы, а заводит их движок синхронизации своим ходом.
+    await onPersonAdded?.(name);
   }
 
-  async function handleRemoveAssignee() {
-    if (!form.assignee) return;
+  async function handleRemovePersonFromList(name: string) {
     const yes = await ask.confirm({
-      question: `Удалить исполнителя «${form.assignee}» из списка?`,
-      note: "Уже созданные задачи сохранят его имя, но выбрать его для новых задач будет нельзя.",
+      question: `Удалить «${name}» из списка людей?`,
+      note: "Уже созданные задачи сохранят его имя, но поставить его на новые будет нельзя.",
       okText: "Удалить",
       danger: true,
     });
-    if (yes) onRemoveAssignee(form.assignee);
+    if (!yes) return;
+    onRemoveAssignee(name);
+    if (form.assignee.trim() === name) setForm((f) => ({ ...f, assignee: "" }));
   }
 
   async function handleAddSection() {
@@ -271,38 +345,40 @@ export default function TaskModal({
           </div>
         </div>
 
-        <div className="field">
-          <label>Описание (необязательно)</label>
-          <div className="input-with-mic">
-            <AutoGrowTextarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} minRows={2} />
-            <MicButton value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} title="Надиктовать описание" />
+        {/* Описание убрано с глаз: в девяти задачах из десяти его не пишут,
+            а поле в два ряда стояло вторым сверху и отодвигало всё, ради
+            чего карточку открывают. Оно тут же, если понадобится, и само
+            раскрыто у задачи, где текст уже есть, — иначе написанное
+            однажды стало бы невидимым. */}
+        {descOpen ? (
+          <div className="field">
+            <label>Описание (необязательно)</label>
+            <div className="input-with-mic">
+              <AutoGrowTextarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} minRows={2} />
+              <MicButton value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} title="Надиктовать описание" />
+            </div>
           </div>
-        </div>
+        ) : (
+          <button type="button" className="btn btn-small field-add" id="addDescBtn" onClick={() => setDescOpen(true)}>
+            + описание
+          </button>
+        )}
 
-        <div className="field">
-          <label>Исполнитель</label>
-          <div className="select-with-add">
-            <select id="fAssignee" value={form.assignee} onChange={(e) => setForm((f) => ({ ...f, assignee: e.target.value }))}>
-              <option value=""></option>
-              {assigneeOptions.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-            <button className="btn" id="addAssigneeBtn" type="button" title="Добавить исполнителя" onClick={() => void handleAddAssignee()}>
-              +
-            </button>
-            <button className="btn btn-danger-ghost" id="removeAssigneeBtn" type="button" title="Удалить выбранного исполнителя" onClick={() => void handleRemoveAssignee()}>
-              −
-            </button>
-          </div>
-        </div>
+        {/* Одно поле людей вместо двух. «Исполнитель» списком и «Кто на
+            задаче» с выбором роли спрашивали об одном и том же в двух
+            местах; теперь человек выбирается нажатием, а роль — маленьким
+            меню у самой кнопки (см. PeoplePicker). Имя первого исполнителя
+            по-прежнему попадает в tasks.assignee: это короткая запись «для
+            кого это вообще», её читают бот, сводки и карточки. */}
+        <PeoplePicker
+          people={availablePeople}
+          picked={picked}
+          onPick={pickPerson}
+          onRemove={removePerson}
+          onAddPerson={() => void handleAddAssignee()}
+          onDeletePerson={(person) => void handleRemovePersonFromList(person.name)}
+        />
 
-        {/* Один «исполнитель» выше остаётся: он — короткая запись «для кого
-            это вообще», её читают бот, сводка и все прежние экраны. Список
-            ниже — то, чего строкой не выразить: несколько исполнителей,
-            каждый со своим отчётом, плюс соисполнители и наблюдатели. */}
         {task && onScheduleMeeting && (
           <button
             type="button"
@@ -320,14 +396,15 @@ export default function TaskModal({
           </button>
         )}
 
-        {task ? (
+        {/* Состав выбирается полем выше; здесь — то, чего в кнопках не
+            выразить: кто принял, кто отчитался и какими словами, кто просит
+            перенос, и сама приёмка. У новой задачи ничего этого ещё нет. */}
+        {task && (
           <TaskParticipants
             taskId={task.id}
             participants={participants}
-            available={availablePeople}
             approvalState={task.approvalState || "open"}
             approvalComment={task.approvalComment}
-            onAdd={onAddParticipant}
             onSetRole={onSetParticipantRole}
             onRemove={onRemoveParticipant}
             onApprove={onApproveWork}
@@ -335,13 +412,6 @@ export default function TaskModal({
             onForceClose={onForceCloseWork}
             onAcceptReschedule={onAcceptReschedule}
             onRejectReschedule={onRejectReschedule}
-          />
-        ) : (
-          <PendingParticipants
-            people={availablePeople}
-            primaryName={form.assignee}
-            chosen={pending}
-            onChange={setPending}
           />
         )}
 
@@ -351,72 +421,127 @@ export default function TaskModal({
 
         <div className="field">
           <label>Раздел</label>
-          <div className="select-with-add">
-            <select id="fSection" value={form.sectionId} onChange={(e) => setForm((f) => ({ ...f, sectionId: e.target.value }))}>
-              <option value="">Без раздела</option>
-              {sections.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <button className="btn" id="addSectionBtn" type="button" title="Добавить раздел" onClick={() => void handleAddSection()}>
-              +
-            </button>
-            <button className="btn btn-danger-ghost" id="removeSectionBtn" type="button" title="Удалить выбранный раздел" onClick={() => void handleRemoveSection()}>
-              −
-            </button>
-          </div>
+          <ChipChoice
+            id="fSection"
+            value={form.sectionId}
+            options={[{ value: "", label: "Без раздела" }, ...sections.map((s) => ({ value: s.id, label: s.name }))]}
+            onSelect={(id) => setForm((f) => ({ ...f, sectionId: id }))}
+            extra={
+              <>
+                <button
+                  type="button"
+                  className="participant-chip chip-add"
+                  id="addSectionBtn"
+                  title="Добавить раздел"
+                  onClick={() => void handleAddSection()}
+                >
+                  + раздел
+                </button>
+                {form.sectionId && (
+                  <button
+                    type="button"
+                    className="participant-chip chip-del"
+                    id="removeSectionBtn"
+                    title="Удалить выбранный раздел"
+                    onClick={() => void handleRemoveSection()}
+                  >
+                    ✕
+                  </button>
+                )}
+              </>
+            }
+          />
         </div>
 
         <div className="row2">
           <div className="field">
             <label>Приоритет</label>
-            <select id="fPriority" value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as Task["priority"] }))}>
-              <option value="high">Высокий</option>
-              <option value="med">Средний</option>
-            </select>
+            <ChipChoice
+              id="fPriority"
+              value={form.priority}
+              options={[
+                { value: "high", label: "Высокий" },
+                { value: "med", label: "Средний" },
+              ]}
+              onSelect={(v) => setForm((f) => ({ ...f, priority: v as Task["priority"] }))}
+            />
           </div>
           <div className="field">
             <label>Срочность</label>
-            <select id="fTerm" value={form.term} onChange={(e) => setForm((f) => ({ ...f, term: e.target.value as Task["term"] }))}>
-              <option value="short">Краткосрочная</option>
-              <option value="long">Долгосрочная</option>
-            </select>
+            <ChipChoice
+              id="fTerm"
+              value={form.term}
+              options={[
+                { value: "short", label: "Краткосрочная" },
+                { value: "long", label: "Долгосрочная" },
+              ]}
+              onSelect={(v) => setForm((f) => ({ ...f, term: v as Task["term"] }))}
+            />
           </div>
         </div>
 
         <div className="field">
           <label>Дедлайн / дата</label>
-          <input
-            type="date"
-            id="fDeadline"
-            className="date-input"
-            value={form.deadline}
-            onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))}
-            onClick={openPickerOnClick}
-          />
+          {/* Дата остаётся полем — календарь кнопками не заменить, — но
+              три срока, которые ставят чаще всего, стоят рядом кнопками: это
+              и есть «сегодня», «завтра» и «через неделю», ради которых
+              открывали календарь. */}
+          <div className="deadline-row">
+            <input
+              type="date"
+              id="fDeadline"
+              className="date-input"
+              value={form.deadline}
+              onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))}
+              onClick={openPickerOnClick}
+            />
+            {QUICK_DEADLINES.map((q) => (
+              <button
+                key={q.label}
+                type="button"
+                className={"participant-chip" + (form.deadline && form.deadline === isoInDays(q.days) ? " selected" : "")}
+                onClick={() => setForm((f) => ({ ...f, deadline: isoInDays(q.days) }))}
+              >
+                {q.label}
+              </button>
+            ))}
+            {form.deadline && (
+              <button
+                type="button"
+                className="participant-chip chip-del"
+                title="Убрать срок"
+                onClick={() => setForm((f) => ({ ...f, deadline: "" }))}
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="field">
           <label>Повторение задачи</label>
-          <select id="fRecur" value={form.recur} onChange={(e) => setForm((f) => ({ ...f, recur: e.target.value as RecurKind }))}>
-            <option value="none">Не повторяется</option>
-            <option value="daily">Каждый день</option>
-            <option value="weekly">Каждую неделю (день недели)</option>
-            <option value="monthly">Каждый месяц (число)</option>
-            <option value="yearly">Каждый год (число и месяц)</option>
-          </select>
+          <ChipChoice
+            id="fRecur"
+            value={form.recur}
+            options={[
+              { value: "none", label: "Не повторяется" },
+              { value: "daily", label: "Каждый день" },
+              { value: "weekly", label: "Каждую неделю" },
+              { value: "monthly", label: "Каждый месяц" },
+              { value: "yearly", label: "Каждый год" },
+            ]}
+            onSelect={(v) => setForm((f) => ({ ...f, recur: v as RecurKind }))}
+          />
 
           <div className={"recur-config" + (form.recur === "weekly" ? " open" : "")} id="recurWeekly">
             <label>День недели</label>
-            <select id="fRecurWeekday" value={form.recurWeekday} onChange={(e) => setForm((f) => ({ ...f, recurWeekday: e.target.value }))}>
-              {WEEKDAY_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <ChipChoice
+              id="fRecurWeekday"
+              compact
+              value={form.recurWeekday}
+              options={WEEKDAY_OPTIONS.map((o) => ({ value: o.value, label: o.short, title: o.label }))}
+              onSelect={(v) => setForm((f) => ({ ...f, recurWeekday: v }))}
+            />
           </div>
           <div className={"recur-config" + (form.recur === "monthly" ? " open" : "")} id="recurMonthly">
             <label>Число месяца</label>
@@ -430,22 +555,20 @@ export default function TaskModal({
           </div>
           <div className={"recur-config" + (form.recur === "yearly" ? " open" : "")} id="recurYearly">
             <label>День и месяц</label>
-            <div className="row2">
-              <input
-                type="text"
-                id="fRecurYearDay"
-                placeholder="Число (напр. 15)"
-                value={form.recurYearDay}
-                onChange={(e) => setForm((f) => ({ ...f, recurYearDay: e.target.value }))}
-              />
-              <select id="fRecurYearMonth" value={form.recurYearMonth} onChange={(e) => setForm((f) => ({ ...f, recurYearMonth: e.target.value }))}>
-                {MONTH_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <input
+              type="text"
+              id="fRecurYearDay"
+              placeholder="Число (напр. 15)"
+              value={form.recurYearDay}
+              onChange={(e) => setForm((f) => ({ ...f, recurYearDay: e.target.value }))}
+            />
+            <ChipChoice
+              id="fRecurYearMonth"
+              compact
+              value={form.recurYearMonth}
+              options={MONTH_OPTIONS.map((o) => ({ value: o.value, label: o.short, title: o.label }))}
+              onSelect={(v) => setForm((f) => ({ ...f, recurYearMonth: v }))}
+            />
           </div>
 
           <div className={"stop-recur-row" + (showStopRecur ? " show" : "")} id="stopRecurRow">

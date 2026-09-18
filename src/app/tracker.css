@@ -691,6 +691,21 @@
   }
   .participant-chip:hover{border-color:var(--accent); color:var(--accent);}
   .participant-chip.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:600;}
+  /* Роль видно на самой кнопке: исполнитель — просто выбранный, остальные
+     подписаны, потому что их меньшинство и их легко перепутать с главным. */
+  .participant-chip .chip-role{opacity:.8; font-weight:500;}
+  .participant-chip.role-coexecutor{background:var(--accent-soft); color:var(--accent); border-color:var(--accent);}
+  .participant-chip.role-watcher{background:var(--paper-soft); color:var(--ink-soft); border-color:var(--ink-soft); font-weight:500;}
+  .participant-chip.chip-add{border-style:dashed; color:var(--ink-soft);}
+  .participant-chip.chip-del{color:var(--high); border-color:var(--high-bg);}
+  .participant-chip.chip-del:hover{border-color:var(--high); color:var(--high);}
+  .chips-compact .participant-chip{padding:5px 9px; min-width:38px; text-align:center;}
+  .people-field .participant-grid{margin-bottom:6px;}
+  /* Кнопка, открывающая спрятанное поле («+ описание»): не команда, а
+     приглашение, поэтому пунктиром и в один ряд с полями. */
+  .field-add{border-style:dashed; color:var(--ink-soft); margin-bottom:14px;}
+  .deadline-row{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
+  .deadline-row .date-input{flex:0 0 auto;}
 
   .participants-field{position:relative;}
   .participants-trigger{
