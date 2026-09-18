@@ -895,3 +895,62 @@ test("время и состав встречи меняются только п
   await expect(all.filter({ hasText: "15:30" })).toBeVisible();
   await expect(all.filter({ has: page.locator(".mstatus.no_result") })).toBeVisible();
 });
+
+test("написанное в обсуждении появляется до того, как доедет до облака", async ({ page }) => {
+  const title = `E2E обсуждение ${Date.now()}`;
+  const text = `сообщение ${Date.now()}`;
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+  await waitForSaved(page);
+
+  await page.click(`.task:has-text("${title}")`);
+  const composer = page.locator(".chat-composer textarea");
+  await expect(composer).toBeVisible();
+
+  // Вставка нарочно задерживается на три секунды. Проверяем ровно то, ради
+  // чего всё это писалось: экран не ждёт облако. Тест без задержки ничего бы
+  // не доказал — на быстрой связи и прежний, последовательный порядок
+  // уложился бы в отведённое время.
+  await page.route("**/item_comments*", async (route) => {
+    if (route.request().method() === "POST") await new Promise((resolve) => setTimeout(resolve, 3000));
+    await route.continue();
+  });
+
+  await composer.fill(text);
+  await page.click(".chat-composer .btn-primary");
+
+  // Сообщение в ленте и поле пустое — сразу, а не через три секунды.
+  await expect(page.locator(".chat-msg", { hasText: text })).toBeVisible({ timeout: 1200 });
+  await expect(composer).toHaveValue("", { timeout: 1200 });
+  // И пока оно едет, видно, что оно едет.
+  await expect(page.locator(".chat-msg.sending", { hasText: text })).toBeVisible({ timeout: 1200 });
+
+  // Доехало — пометка снимается, сообщение остаётся ровно одно: местная
+  // копия уступает место серверной строке, а не ложится рядом с ней.
+  await page.unroute("**/item_comments*");
+  await expect(page.locator(".chat-msg.sending")).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.locator(".chat-msg", { hasText: text })).toHaveCount(1);
+});
+
+test("«Команда» открывается на готовом списке, а не на «Загрузка…»", async ({ page }) => {
+  await login(page);
+  // Список людей доезжает до базы первой же синхронизацией — окно читает его
+  // оттуда, а не из состояния страницы.
+  await waitForSaved(page);
+
+  await page.click("#teamBtn");
+  await expect(page.locator("#teamList")).toBeVisible();
+  await page.click("#teamCloseBtn");
+
+  // Второе открытие — то, ради чего всё это: список уже спрошен, и окно
+  // показывает людей, а не идёт за ними. Раньше каждое окно спрашивало само,
+  // с нуля и со своим «Загрузка…», — и это было ровно то, что Кирилл видел
+  // как задержку при нажатии «Команда».
+  await page.click("#teamBtn");
+  await expect(page.locator("#teamList")).toBeVisible({ timeout: 1000 });
+  await expect(page.locator("#teamOverlay .empty", { hasText: "Загрузка" })).toHaveCount(0);
+});
