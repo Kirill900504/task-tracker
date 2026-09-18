@@ -13,6 +13,7 @@ export default function IdeaItem({
   idea,
   onToggleDone,
   onToggleImportant,
+  canEdit = true,
   onEditText,
   onDelete,
   onConvertToTask,
@@ -22,6 +23,8 @@ export default function IdeaItem({
   idea: Idea;
   onToggleDone: () => void;
   onToggleImportant: () => void;
+  // Чужая мысль правится только автором.
+  canEdit?: boolean;
   onEditText: (text: string) => void;
   onDelete: () => void;
   // Turning a thought into work used to be a drag — onto a task column or
@@ -54,6 +57,8 @@ export default function IdeaItem({
   }
 
   function startEdit() {
+    // Чужую мысль не правят: её прислали, а не отдали, и база откажет.
+    if (!canEdit) return;
     setDraft(idea.text);
     savedRef.current = false;
     setEditing(true);
@@ -157,16 +162,18 @@ export default function IdeaItem({
         >
           🚩
         </button>
-        <button
-          className="idea-del"
-          title="Удалить"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
-          ×
-        </button>
+        {canEdit && (
+          <button
+            className="idea-del"
+            title="Удалить"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            ×
+          </button>
+        )}
       </div>
       {sendNote && <div className="send-result">{sendNote}</div>}
       {convertAt && (

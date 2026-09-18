@@ -395,6 +395,7 @@ export default function NewTracker() {
         ),
         meetingsPanel: (
           <MeetingsPanel
+            myUserId={identity.userId}
             meetings={meetings}
             assignees={assignees}
             showResolved={showDone}
@@ -487,6 +488,7 @@ export default function NewTracker() {
         ),
         ideasPanel: (
           <IdeasPanel
+            myUserId={identity.userId}
             ideas={ideas}
             showDone={showDone}
             highlightId={highlightIdeaId}

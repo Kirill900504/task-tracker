@@ -12,6 +12,7 @@ import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
 
 export default function IdeasPanel({
+  myUserId = "",
   ideas,
   showDone,
   highlightId,
@@ -23,6 +24,8 @@ export default function IdeasPanel({
   isDragging,
   dropIndicatorBefore,
 }: {
+  // Свой auth-id: чужую мысль прислали тебе, а не отдали.
+  myUserId?: string;
   ideas: Idea[];
   showDone: boolean;
   actions: {
@@ -91,6 +94,9 @@ export default function IdeasPanel({
             <IdeaItem
               key={idea.id}
               idea={idea}
+              // Чужая мысль: её прислали тебе, а не отдали. Править и
+              // удалять её вправе автор — база откажет молча.
+              canEdit={!myUserId || (idea.createdBy || "") === myUserId}
               onToggleDone={() => actions.saveIdea({ ...idea, done: !idea.done, doneAt: idea.done ? "" : new Date().toISOString() })}
               onToggleImportant={() => actions.saveIdea({ ...idea, important: !idea.important })}
               onEditText={(newText) => actions.saveIdea({ ...idea, text: newText })}

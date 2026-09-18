@@ -46,6 +46,7 @@ export default function MeetingModal({
   onClose,
   onSetStatus,
   onReschedule,
+  canEdit = true,
   isMove,
 }: {
   meeting: Meeting | null;
@@ -59,6 +60,10 @@ export default function MeetingModal({
   // Открывает форму НОВОЙ встречи с тем же составом; старая закроется как
   // перенесённая, когда новая будет сохранена (см. MeetingsPanel).
   onReschedule?: () => void;
+  // Чужая встреча: её видно, потому что позвали, но закрывать, переносить
+  // и удалять её вправе организатор. База откажет всё равно — и откажет
+  // молча, поэтому кнопок здесь просто нет.
+  canEdit?: boolean;
   // Эта новая встреча — перенос прежней. Форма та же, что у любой новой, но
   // называться «Новая встреча» она не должна: человек нажал «Перенести», и
   // заголовок обязан подтвердить, что происходит именно это, — иначе
@@ -245,7 +250,7 @@ export default function MeetingModal({
           </>
         )}
 
-        {isEditing && (
+        {isEditing && canEdit && (
           <div className="field outcome-field" id="outcomeField">
             <label>Итог встречи</label>
             <div className={"outcome-badge" + (resolved ? ` show ${meeting.status}` : "")} id="outcomeBadge">
@@ -288,7 +293,7 @@ export default function MeetingModal({
 
         <div className="modal-actions">
           <div className="left">
-            {isEditing && (
+            {isEditing && canEdit && (
               <button
                 className="btn btn-danger-ghost"
                 id="deleteMeetingBtn"
@@ -320,9 +325,11 @@ export default function MeetingModal({
             <button className="btn" id="meetingCancelBtn" onClick={onClose}>
               Отмена
             </button>
-            <button className="btn btn-primary" id="meetingSaveBtn" onClick={save}>
-              Сохранить
-            </button>
+            {canEdit && (
+              <button className="btn btn-primary" id="meetingSaveBtn" onClick={save}>
+                Сохранить
+              </button>
+            )}
           </div>
         </div>
       </div>

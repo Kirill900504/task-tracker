@@ -18,6 +18,7 @@ import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./
 import { useAsk } from "@/components/Ask";
 
 export default function MeetingsPanel({
+  myUserId = "",
   meetings,
   assignees,
   showResolved,
@@ -36,6 +37,10 @@ export default function MeetingsPanel({
   isDragging,
   dropIndicatorBefore,
 }: {
+  // Свой auth-id: чужую встречу видно, потому что тебя на неё позвали, но
+  // это не право её закрывать, переносить и удалять — база откажет молча
+  // (миграция 0019). Пусто у владельца: в его пространстве всё его.
+  myUserId?: string;
   meetings: Meeting[];
   assignees: string[];
   showResolved: boolean;
@@ -296,6 +301,9 @@ export default function MeetingsPanel({
           // старой встречи вместо предзаполненных.
           key={modalMeeting?.id ?? (movingFrom ? "move-" + movingFrom.id : "new")}
           meeting={modalMeeting}
+          // Своя встреча — та, которую собрал сам. Чужую видно, потому что
+          // позвали; закрывать, переносить и удалять её вправе организатор.
+          canEdit={!myUserId || !modalMeeting || (modalMeeting.createdBy || "") === myUserId}
           prefill={modalPrefill}
           assignees={assignees}
           onSave={handleModalSave}
