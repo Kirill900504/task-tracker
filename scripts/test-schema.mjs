@@ -373,21 +373,28 @@ async function main() {
       [OWNER, MANAGER_A],
     );
     check("руководитель может завести себе задачу из мысли", rowCount === 1);
-    // А вот строку участия он себе добавить не может: писать в
-    // task_participants разрешено только владельцу пространства. Значит
-    // «взять в работу» обязано идти через сервер, иначе задача появится
-    // без единого исполнителя.
+    // В СВОЮ задачу он людей ставит: миграция 0031 дала это право, и без
+    // него он не завёл бы ни одной задачи — задача без исполнителя здесь не
+    // заводится вовсе. Право строго по автору: tasks.created_by = auth.uid().
+    const mine = await db.query(
+      `insert into public.task_participants (task_id, assignee_id, role) values ('tsk_from_idea',$1,'executor')`,
+      [byName["Аня"]],
+    );
+    check("в свою задачу ставит исполнителя", mine.rowCount === 1);
+
+    // А в чужую — нет. Её ему видно, потому что он на ней участник, но
+    // дописать туда третьего значит распорядиться чужой работой.
     let denied = false;
     try {
       const res = await db.query(
-        `insert into public.task_participants (task_id, assignee_id, role) values ('tsk_from_idea',$1,'executor')`,
+        `insert into public.task_participants (task_id, assignee_id, role) values ('tsk_test_shipment',$1,'watcher')`,
         [byName["Аня"]],
       );
       denied = res.rowCount === 0;
     } catch {
       denied = true;
     }
-    check("но исполнителем себя из браузера не назначит (нужен сервер)", denied);
+    check("а в чужую задачу человека не вписывает", denied);
   });
 
   console.log("\nПеренос старых записей (0021):");
