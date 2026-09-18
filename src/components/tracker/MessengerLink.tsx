@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { MessengerState } from "@/hooks/useMyMessenger";
 import type { ColleagueChannel } from "@/hooks/useColleagues";
+import { checkedButNotLinked, showCode } from "@/lib/messengerLink";
 
 // «Подключить себе бота» — глазами руководителя.
 //
@@ -18,6 +19,13 @@ import type { ColleagueChannel } from "@/hooks/useColleagues";
 // И кнопка «Проверить»: подключение случается в другом приложении, человек
 // возвращается на эту вкладку, и ему надо увидеть результат, а не догадаться
 // обновить страницу.
+//
+// Кнопка обязана отвечать. Евгений Макаров подключил MAX, вернулся и нажал
+// «Готово, проверить» — и не увидел ровно ничего: проверка проходила, но он
+// УЖЕ был подключён, менять на экране было нечего, а блок с кодом никто не
+// убирал. Отсюда правило: пока идёт проверка — это видно; когда канал
+// подключился — блок с кодом исчезает сам; когда не подключился — так и
+// написано, вместе с тем, что делать дальше.
 
 const LABEL: Record<ColleagueChannel, string> = { telegram: "Telegram", max: "MAX" };
 
@@ -25,12 +33,17 @@ export default function MessengerLink({ messenger }: { messenger: MessengerState
   const [pending, setPending] = useState<{ channel: ColleagueChannel; link: string; code: string } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  // «Проверил и не нашёл» — единственное состояние, о котором иначе никто не
+  // расскажет. Сбрасывается любой новой попыткой.
+  const [notYet, setNotYet] = useState(false);
 
   const { telegram, max, loading } = messenger;
   const connected = telegram.connected || max.connected;
 
   async function ask(channel: ColleagueChannel) {
     setError("");
+    setNotYet(false);
     setBusy(true);
     try {
       const result = await messenger.connect(channel);
@@ -38,6 +51,21 @@ export default function MessengerLink({ messenger }: { messenger: MessengerState
       else setPending({ channel, link: result.link, code: result.code });
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Проверка одного канала (из блока с кодом) или вообще (кнопка сверху).
+  async function check(channel?: ColleagueChannel) {
+    setError("");
+    setNotYet(false);
+    setChecking(true);
+    try {
+      const now = await messenger.refresh();
+      // Блок с кодом уберёт сама отрисовка, как только канал подключён, —
+      // здесь остаётся только случай «ещё нет».
+      setNotYet(checkedButNotLinked(channel ?? null, now));
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -82,8 +110,8 @@ export default function MessengerLink({ messenger }: { messenger: MessengerState
             </button>
           ))}
           {connected && (
-            <button className="btn btn-small" type="button" onClick={messenger.refresh}>
-              Проверить
+            <button className="btn btn-small" type="button" disabled={checking} onClick={() => void check()}>
+              {checking ? "Проверяю…" : "Проверить"}
             </button>
           )}
         </div>
@@ -91,7 +119,10 @@ export default function MessengerLink({ messenger }: { messenger: MessengerState
 
       {error && <div className="ms-link-error">{error}</div>}
 
-      {pending && (
+      {/* Код показывается ровно до тех пор, пока этот канал не подключён:
+          так блок исчезает сам — и при возвращении на вкладку, и по кнопке,
+          и нажавшему видно, что нажатие что-то дало. */}
+      {pending && showCode(pending.channel, { telegram: telegram.connected, max: max.connected }) && (
         <div className="ms-link-code">
           <a className="btn btn-small btn-primary" href={pending.link} target="_blank" rel="noreferrer">
             Открыть {LABEL[pending.channel]} →
@@ -100,9 +131,15 @@ export default function MessengerLink({ messenger }: { messenger: MessengerState
             В боте нажмите «Начать». Если ссылка не открылась — напишите боту это сообщение:
           </div>
           <div className="ms-link-value">{pending.code}</div>
-          <button className="btn btn-small" type="button" onClick={messenger.refresh}>
-            Готово, проверить
+          <button className="btn btn-small" type="button" disabled={checking} onClick={() => void check(pending.channel)}>
+            {checking ? "Проверяю…" : "Готово, проверить"}
           </button>
+          {notYet && (
+            <div className="ms-link-hint ms-link-notyet">
+              Пока не вижу подключения. Откройте {LABEL[pending.channel]}, нажмите в боте «Начать» — или отправьте ему
+              код сообщением — и проверьте ещё раз.
+            </div>
+          )}
         </div>
       )}
     </div>
