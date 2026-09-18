@@ -468,6 +468,58 @@ try {
   const afterRestore = await post(mgrA, "/api/workspace/report", { action: "accept", participantId: partA.id });
   check("возврат доступа возвращает и работу", afterRestore.status === 200, afterRestore);
 
+  // ── Руководитель со своим трекером ─────────────────────────────────────
+  //
+  // Кирилл попросил дать коллегам такой же трекер, оставив админское себе.
+  // Права на это открыла миграция 0031, и проверяется здесь ровно граница:
+  // что теперь можно и что по-прежнему нельзя.
+  section("Руководитель со своим трекером");
+
+  // Раздел заводит владелец: у свежего пространства их нет вовсе, и
+  // пустой список ничего не сказал бы о правах.
+  const sectionId = "sec-ws-" + Date.now();
+  const mkSection = await owner.db.from("sections").insert({ id: sectionId, user_id: owner.id, name: "Проверочный", kind: "work", sort_order: 0 });
+  check("владелец заводит раздел", !mkSection.error, mkSection.error?.message);
+
+  const { data: ownSections } = await mgrA.db.from("sections").select("id, name").eq("id", sectionId);
+  check("руководитель видит разделы пространства", (ownSections || []).length === 1, ownSections);
+
+  const renameTry = await mgrA.db.from("sections").update({ name: "Переименовал" }).eq("id", sectionId).select("id");
+  check("но переименовать его не может", (renameTry.data || []).length === 0, renameTry.error?.message);
+
+  const deleteTry = await mgrA.db.from("sections").delete().eq("id", sectionId).select("id");
+  check("и удалить не может", (deleteTry.data || []).length === 0, deleteTry.error?.message);
+
+  const badSection = await mgrA.db.from("sections").insert({ id: "sec-mgr-" + Date.now(), user_id: owner.id, name: "Самовольный" });
+  check("но завести раздел не может", !!badSection.error, badSection.error?.message);
+
+  const mgrTaskId = "wsmgr" + Date.now().toString(36);
+  const mkTask = await mgrA.db.from("tasks").insert({
+    id: mgrTaskId,
+    user_id: owner.id,
+    created_by: mgrA.id,
+    title: "Задача от руководителя",
+    assignee: "",
+    status: "in_progress",
+    priority: "med",
+    term: "short",
+  });
+  check("заводит задачу в пространстве владельца", !mkTask.error, mkTask.error?.message);
+
+  const mkPart = await mgrA.db.from("task_participants").insert({ task_id: mgrTaskId, assignee_id: personB.id, role: "executor" });
+  check("и ставит на неё исполнителя", !mkPart.error, mkPart.error?.message);
+
+  // Своя — своя, чужая — чужая. Видно ему и ту, где он исполнитель, но
+  // дописать туда третьего значит распорядиться чужой работой.
+  const intoOthers = await mgrA.db.from("task_participants").insert({ task_id: taskId, assignee_id: personA.id, role: "watcher" });
+  check("в чужую задачу человека не вписывает", !!intoOthers.error, intoOthers.error?.message);
+
+  const { data: mgrTaskSeen } = await mgrB.db.from("tasks").select("id").eq("id", mgrTaskId).maybeSingle();
+  check("исполнитель видит поставленную ему задачу", mgrTaskSeen?.id === mgrTaskId, mgrTaskSeen);
+
+  const stealTitle = await mgrB.db.from("tasks").update({ title: "Переписал" }).eq("id", mgrTaskId).select("id");
+  check("но переписать её не может", (stealTitle.data || []).length === 0, stealTitle.error?.message);
+
   // ── Принудительное закрытие ────────────────────────────────────────────
   section("Принудительное закрытие");
   const stuckId = randomUUID();
