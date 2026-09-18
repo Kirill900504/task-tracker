@@ -156,8 +156,17 @@ export default function TasksPanel({
     if (calendarFilterDate && !isTaskDueOnDate(t, new Date(calendarFilterDate + "T00:00:00"))) return false;
     return true;
   });
-  const shortOpen = filtered.filter((t) => t.term === "short" && t.status !== "done").sort(taskSortFn);
-  const longOpen = filtered.filter((t) => t.term === "long" && t.status !== "done").sort(taskSortFn);
+  // На приёмке — это не срок, а состояние, и потому третий столбец, а не
+  // метка внутри первых двух. Задача, по которой отчитались все, ждёт одного
+  // человека — постановщика; пока она лежит вперемешку с теми, которые
+  // делают другие, она теряется среди них, и «отчитался, а он не принял»
+  // становится обычным делом. Здесь у неё своё место, и видно, сколько их.
+  const stageOf = (t: Task) => taskStage(participants.forTask(t.id), t.approvalState || "open");
+  const openTasks = filtered.filter((t) => t.status !== "done");
+  const onReview = openTasks.filter((t) => stageOf(t) === "awaiting_review").sort(taskSortFn);
+  const reviewIds = new Set(onReview.map((t) => t.id));
+  const shortOpen = openTasks.filter((t) => t.term === "short" && !reviewIds.has(t.id)).sort(taskSortFn);
+  const longOpen = openTasks.filter((t) => t.term === "long" && !reviewIds.has(t.id)).sort(taskSortFn);
   // Most recently completed first — this list exists to reopen what was just
   // closed, so closing order beats deadline order. Tasks closed before
   // completedAt existed have no timestamp; they fall back to deadline and
@@ -330,6 +339,40 @@ export default function TasksPanel({
     );
   }
 
+  // Столбец приёмки — читать, а не перетаскивать. Перенести сюда карточку
+  // мышью нельзя нарочно: «на приёмке» означает, что все исполнители
+  // отчитались, и объявить это перетаскиванием значило бы отчитаться за них.
+  function renderReviewColumn() {
+    const collapsed = collapsedCols.colReview;
+    return (
+      <div className={"column column-review" + (collapsed ? " collapsed" : "")} id="colReview">
+        <div className="section-title" onClick={() => toggleCollapsed("colReview")}>
+          На приёмку <span className="count">{onReview.length}</span>
+          <span className="collapse-arrow">▾</span>
+        </div>
+        <div>
+          {onReview.length === 0 ? (
+            <div className="empty">Здесь появятся задачи, по которым отчитались все, — их ждёт ваше решение.</div>
+          ) : (
+            onReview.map((t) => (
+              <TaskCard
+                key={t.id}
+                task={t}
+                section={sectionById.get(t.sectionId) ?? null}
+                progress={progressLabel(participants.forTask(t.id))}
+                stage={stageOf(t)}
+                onToggleDone={() => toggleDone(t)}
+                onOpen={() => setModalState({ open: true, task: t })}
+                justCreated={justCreatedId === t.id}
+                menuItems={isMobile ? menuItemsFor(t) : undefined}
+              />
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={"main-col dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")} id="mainCol" data-panel-id="mainCol">
       <div className="dash-panel-head">
@@ -361,14 +404,6 @@ export default function TasksPanel({
               </button>
             )}
             <div className="search-wrap" id="quickAddSlot" />
-            <select id="filterSection" value={filterSection} onChange={(e) => setFilterSection(e.target.value)}>
-              <option value="all">Все разделы</option>
-              {sections.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
             <select id="filterAssignee" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
               <option value="all">Все исполнители</option>
               {assignees.map((a) => (
@@ -389,9 +424,40 @@ export default function TasksPanel({
         );
       })()}
 
+      {/* Разделы — кнопками, а не выпадающим списком.
+          Раздел выбирают чаще всех прочих фильтров и переключают по многу
+          раз подряд; в списке это два нажатия и обязательное чтение всего
+          перечня, а здесь видно сразу, что вообще есть и что выбрано. Стоят
+          они между кнопкой «Новая задача» и столбцами — там, куда смотрят
+          перед тем, как читать сами задачи. */}
+      {sections.length > 0 && (
+        <div className="section-tabs" id="sectionTabs">
+          <button
+            type="button"
+            className={"section-tab" + (filterSection === "all" ? " active" : "")}
+            onClick={() => setFilterSection("all")}
+          >
+            Все
+          </button>
+          {sections.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className={
+                "section-tab" + (s.kind === "personal" ? " personal" : "") + (filterSection === s.id ? " active" : "")
+              }
+              onClick={() => setFilterSection(filterSection === s.id ? "all" : s.id)}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="columns">
         {renderColumn(shortOpen, "Нет краткосрочных задач по текущим фильтрам", "Краткосрочные", "short", shortColRef)}
         {renderColumn(longOpen, "Нет долгосрочных задач по текущим фильтрам", "Долгосрочные", "long", longColRef)}
+        {renderReviewColumn()}
       </div>
 
       {showDone && (
@@ -471,9 +537,17 @@ export default function TasksPanel({
               toasts.showToast(e instanceof Error ? e.message : "Не получилось принять работу");
               return;
             }
-            // Статус — поле, которым владеет синхронизация, поэтому он
-            // переключается обычным путём, а не записью в базу мимо неё.
-            toggleDone({ ...modalTask, status: "in_progress" });
+            // Задачу закрывает и сам маршрут (см. /api/workspace/review) —
+            // здесь то же самое делается локально, чтобы это было видно
+            // сразу, не дожидаясь эха. Обе стороны ставят «done», поэтому
+            // перезаписать друг друга они не могут.
+            //
+            // approvalState едет рядом: приёмка живёт вне колонок синхронизации
+            // (taskToRow её не пишет), так что в базу отсюда она не попадёт, а
+            // на экране блок «Принимаете работу?» исчезнет сразу — раньше он
+            // оставался висеть до перезагрузки, и приёмка выглядела
+            // несработавшей.
+            toggleDone({ ...modalTask, status: "in_progress", approvalState: "accepted", approvalComment: comment });
           }}
           onReturnWork={async (comment) => {
             if (!modalTask) return;
@@ -500,7 +574,7 @@ export default function TasksPanel({
               toasts.showToast(e instanceof Error ? e.message : "Не получилось закрыть задачу");
               return;
             }
-            toggleDone({ ...modalTask, status: "in_progress" });
+            toggleDone({ ...modalTask, status: "in_progress", approvalState: "accepted", approvalComment: reason });
           }}
         />
       )}

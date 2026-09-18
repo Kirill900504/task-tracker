@@ -12,9 +12,21 @@ import { recordEvent } from "@/lib/itemHistory";
 // доработку узнавался только из утренней сводки: задача, которую ждут
 // сегодня, лежала бы до завтра просто потому, что человеку не сказали.
 //
-// Состояние приёмки пишется здесь, а `status` задачи — нет: им владеет
-// движок синхронизации в браузере, и запись мимо него откатится первой же
-// открытой вкладкой (см. taskToRow).
+// Принятая работа закрывает задачу — здесь же, одной записью.
+//
+// Раньше здесь писалось только состояние приёмки, а `status` переключала
+// вкладка сразу после ответа маршрута: им владеет движок синхронизации, и
+// запись мимо него в принципе может откатиться (см. taskToRow). Но у этого
+// порядка оказалась гонка, и она стоила Кириллу закрытой задачи: маршрут
+// менял строку задачи, эхо realtime возвращалось в браузер и заменяло и
+// live, и shadow серверной строкой — то есть стирало ещё не отправленное
+// «сделано», поставленное миллисекундой раньше. Отчёт принят, комментарий
+// записан, а задача осталась открытой.
+//
+// Поэтому закрытие едет вместе с приёмкой в одном UPDATE: что бы ни пришло
+// эхом, там уже `done`. Вкладка всё равно переключает статус у себя (см.
+// TasksPanel) — но теперь обе стороны говорят одно и то же, а значит
+// перезаписать друг друга не могут.
 
 type Body = {
   action: "approve" | "return" | "force";
@@ -59,8 +71,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Нужна причина" }, { status: 400 });
   }
 
+  // Принято и закрыто — одно и то же событие. «Принял, но задача висит
+  // открытой» не значит ничего: ни для списка, ни для сводки, ни для
+  // человека, который отчитался.
+  const closed = { status: "done", completed_at: now, last_completed_on: now.slice(0, 10) };
+
   if (body.action === "approve") {
-    await admin.from("tasks").update({ approval_state: "accepted", approval_comment: comment || null, approved_at: now }).eq("id", task.id);
+    await admin
+      .from("tasks")
+      .update({ approval_state: "accepted", approval_comment: comment || null, approved_at: now, ...closed })
+      .eq("id", task.id);
   } else if (body.action === "return") {
     await admin.from("tasks").update({ approval_state: "returned", approval_comment: comment, approved_at: null }).eq("id", task.id);
     // Отчёты исполнителей обнуляются: иначе задача осталась бы в состоянии
@@ -69,7 +89,7 @@ export async function POST(req: Request) {
   } else {
     await admin
       .from("tasks")
-      .update({ approval_state: "accepted", approved_at: now, force_closed_by: user.id, force_closed_reason: comment })
+      .update({ approval_state: "accepted", approved_at: now, force_closed_by: user.id, force_closed_reason: comment, ...closed })
       .eq("id", task.id);
   }
 

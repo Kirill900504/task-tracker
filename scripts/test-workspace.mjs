@@ -231,8 +231,12 @@ try {
 
   const approved = await post(owner, "/api/workspace/review", { action: "approve", taskId, comment: "Годится" });
   check("приёмка проходит", approved.status === 200, approved);
-  const { data: afterApprove } = await admin.from("tasks").select("approval_state, approved_at").eq("id", taskId).maybeSingle();
+  const { data: afterApprove } = await admin.from("tasks").select("approval_state, approved_at, status, completed_at").eq("id", taskId).maybeSingle();
   check("approval_state = accepted", afterApprove?.approval_state === "accepted", afterApprove);
+  // Принято — значит закрыто. Раньше статус переключала вкладка уже после
+  // ответа маршрута, и эхо realtime успевало стереть это переключение:
+  // работа принята, комментарий записан, а задача висит открытой.
+  check("принятая задача закрыта", afterApprove?.status === "done" && !!afterApprove?.completed_at, afterApprove);
 
   // ── Хроника ───────────────────────────────────────────────────────────
   section("История задачи");
@@ -473,8 +477,9 @@ try {
   check("закрыть волевым без причины нельзя", forceNoReason.status === 400, forceNoReason);
   const forced = await post(owner, "/api/workspace/review", { action: "force", taskId: stuckId, comment: "Потеряло смысл" });
   check("закрытие волевым проходит", forced.status === 200, forced);
-  const { data: forcedRow } = await admin.from("tasks").select("approval_state, force_closed_by, force_closed_reason").eq("id", stuckId).maybeSingle();
+  const { data: forcedRow } = await admin.from("tasks").select("approval_state, force_closed_by, force_closed_reason, status").eq("id", stuckId).maybeSingle();
   check("и отмечено как волевое", forcedRow?.approval_state === "accepted" && !!forcedRow?.force_closed_by && !!forcedRow?.force_closed_reason, forcedRow);
+  check("закрытая волевым — тоже закрыта", forcedRow?.status === "done", forcedRow);
 } catch (e) {
   console.error("\nСценарий оборвался:", e.message);
   failures++;
