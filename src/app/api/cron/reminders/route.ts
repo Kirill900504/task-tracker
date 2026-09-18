@@ -134,17 +134,29 @@ export async function GET(req: Request) {
         // отдельным уведомлением превратило бы мессенджер в ленту, а
         // одной строкой утром это ровно то, чем оно и является:
         // «есть что почитать вот здесь».
+        //
+        // Считаются и те сообщения, что написаны в самом трекере. Раньше
+        // стояло `author_user_id is null`, то есть «только из мессенджера»,
+        // и руководитель, ответивший с экрана, для этой сводки молчал —
+        // владелец не узнавал о его словах ни сразу, ни утром. Отсекается
+        // ровно одно: собственные сообщения Кирилла, напоминать о которых
+        // ему незачем.
         const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
         const { data: fresh } = await admin
           .from("item_comments")
-          .select("item_id, item_kind")
+          .select("item_id, item_kind, author_user_id")
           .eq("user_id", userId)
           .eq("item_kind", "task")
           .gt("created_at", since)
           .is("deleted_at", null)
-          .is("author_user_id", null)
           .eq("system", false);
-        const discussed = [...new Set(((fresh || []) as { item_id: string }[]).map((c) => c.item_id))];
+        const discussed = [
+          ...new Set(
+            ((fresh || []) as { item_id: string; author_user_id: string | null }[])
+              .filter((c) => c.author_user_id !== userId)
+              .map((c) => c.item_id),
+          ),
+        ];
         if (discussed.length) {
           const { data: titles } = await admin.from("tasks").select("title").in("id", discussed.slice(0, 5));
           const names = ((titles || []) as { title: string }[]).map((t) => `• ${t.title}`);

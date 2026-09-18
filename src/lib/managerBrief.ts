@@ -17,10 +17,22 @@ export type ManagerBriefFacts = {
   unanswered: { title: string }[];
   meetings: { title: string; time: string }[];
   returned: { title: string; comment: string }[];
+  // Где со вчера что-то писали без него. Первое сообщение разговора уходит
+  // сразу (см. commentDelivery), остальные копятся и приходят сюда — иначе
+  // четырнадцать переписок превращают мессенджер в ленту, которую
+  // перестают читать вместе со «сделал» и «не могу».
+  discussed: { title: string }[];
 };
 
 export function managerBriefIsEmpty(f: ManagerBriefFacts): boolean {
-  return !f.overdue.length && !f.today.length && !f.unanswered.length && !f.meetings.length && !f.returned.length;
+  return (
+    !f.overdue.length &&
+    !f.today.length &&
+    !f.unanswered.length &&
+    !f.meetings.length &&
+    !f.returned.length &&
+    !f.discussed.length
+  );
 }
 
 export async function buildManagerBrief(
@@ -36,16 +48,18 @@ export async function buildManagerBrief(
     unanswered: [],
     meetings: [],
     returned: [],
+    discussed: [],
   };
 
   const { data: rows } = await admin
     .from("task_participants")
-    .select("role, accepted_at, done_at, declined_at, tasks(title, deadline, status, approval_state, approval_comment, deleted_at)")
+    .select("task_id, role, accepted_at, done_at, declined_at, tasks(title, deadline, status, approval_state, approval_comment, deleted_at)")
     .eq("assignee_id", assignee.id)
     .eq("user_id", ownerId)
     .eq("role", "executor");
 
   type Row = {
+    task_id: string;
     accepted_at: string | null;
     done_at: string | null;
     declined_at: string | null;
@@ -83,6 +97,38 @@ export async function buildManagerBrief(
   }
   facts.meetings.sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
 
+  // Обсуждения, в которых со вчера писали другие. Своих сообщений здесь
+  // быть не должно: сводка, напоминающая человеку о том, что он сам вчера
+  // написал, учит пролистывать сводку.
+  const mine = ((rows || []) as unknown as Row[]).filter((r) => r.tasks && !r.tasks.deleted_at).map((r) => r.task_id);
+  if (mine.length) {
+    const since = new Date(Date.parse(today + "T00:00:00Z") - 24 * 60 * 60 * 1000).toISOString();
+    const { data: comments } = await admin
+      .from("item_comments")
+      .select("item_id, author_assignee_id")
+      .eq("item_kind", "task")
+      .eq("user_id", ownerId)
+      .in("item_id", mine)
+      .gt("created_at", since)
+      .is("deleted_at", null)
+      .eq("system", false);
+
+    const others = [
+      ...new Set(
+        ((comments || []) as { item_id: string; author_assignee_id: string | null }[])
+          .filter((c) => c.author_assignee_id !== assignee.id)
+          .map((c) => c.item_id),
+      ),
+    ];
+    const titleOf = new Map(
+      ((rows || []) as unknown as Row[]).filter((r) => r.tasks).map((r) => [r.task_id, r.tasks!.title]),
+    );
+    for (const id of others) {
+      const title = titleOf.get(id);
+      if (title) facts.discussed.push({ title });
+    }
+  }
+
   return facts;
 }
 
@@ -110,6 +156,11 @@ export function composeManagerBrief(f: ManagerBriefFacts): string {
   if (f.meetings.length) {
     lines.push("", "Встречи сегодня:");
     for (const m of f.meetings) lines.push(`• ${m.time ? m.time + " — " : ""}${m.title}`);
+  }
+  // Последним: это не то, что нужно сделать, а то, что стоит прочитать.
+  if (f.discussed.length) {
+    lines.push("", "💬 Писали в обсуждениях:");
+    for (const t of f.discussed) lines.push(`• ${t.title}`);
   }
 
   return lines.join("\n");

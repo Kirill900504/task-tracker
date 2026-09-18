@@ -22,6 +22,17 @@ export type ColleagueRow = {
 
 export type SendKind = "task" | "meeting" | "idea";
 
+// Ответить ровно в это обсуждение.
+//
+// Без этой кнопки написанное коллегой уходило в «самую свежую открытую
+// задачу» — угадывание, о котором бот честно говорил вслух, и всё равно
+// запись оказывалась не в той истории. Кнопка стоит под каждым сообщением
+// обсуждения и под самой задачей: ответ адресуется тем же нажатием,
+// которым его читают.
+export function replyButtons(kind: "task" | "meeting", itemId: string): BotButton[][] {
+  return [[{ text: "💬 Ответить", data: encodeCallback(kind, "msg", itemId) }]];
+}
+
 // Кто это нажал и что именно — упаковано в данные кнопки, у которых
 // Telegram ограничивает длину 64 байтами, поэтому только вид, действие и id.
 export type CallbackAction = { kind: SendKind; action: string; id: string };
@@ -71,14 +82,29 @@ export function taskButtons(taskId: string, role: "executor" | "coexecutor" | "w
   // Наблюдателя не спрашивают — его поставили знать, а не отвечать. Кнопка
   // «Сделал» у него означала бы отчёт, которого от него никто не ждёт, и
   // постановщик получил бы сообщение, будто работу сделал человек, которого
-  // на неё не ставили.
-  if (role === "watcher") return [];
+  // на неё не ставили. Но сказать слово он вправе: раньше сообщение
+  // приходило к нему вовсе без кнопок, и ответить на него было нечем — при
+  // том что обсуждение задачи наблюдатель видит целиком.
+  if (role === "watcher") return replyButtons("task", taskId);
+  // Соисполнителю «Сделал» не даётся: отчитываются только исполнители
+  // (закрытие задачи считает именно их), а сообщение постановщику при этом
+  // уходило со словами «выполнил свою часть» — то есть говорило о
+  // продвижении, которого в задаче не происходило.
+  if (role === "coexecutor") {
+    return [
+      [{ text: "✅ Принял", data: encodeCallback("task", "acc", taskId) }],
+      [{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }],
+    ];
+  }
   return [
     [
       { text: "✅ Принял", data: encodeCallback("task", "acc", taskId) },
       { text: "🏁 Сделал", data: encodeCallback("task", "done", taskId) },
     ],
-    [{ text: "⛔ Не могу", data: encodeCallback("task", "no", taskId) }],
+    [
+      { text: "⛔ Не могу", data: encodeCallback("task", "no", taskId) },
+      { text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) },
+    ],
   ];
 }
 

@@ -49,6 +49,12 @@ export async function POST(req: Request) {
       toast: outcome.toast,
       rewriteTo: outcome.rewriteTo,
     });
+    // Отдельным сообщением: список, карточка или «пишите — отправлю в
+    // обсуждение». Переписать нажатое сообщение здесь нельзя — под ним
+    // остаются кнопки, которые ещё понадобятся.
+    if (outcome.say) {
+      await transport.send(pressedChatId, outcome.say, outcome.sayButtons?.length ? { buttons: outcome.sayButtons } : undefined);
+    }
     if (outcome.notifyOwner) {
       const colleagueOwner = await admin.from("assignees").select("user_id").eq("telegram_chat_id", pressedChatId).limit(1).maybeSingle();
       if (colleagueOwner.data?.user_id)

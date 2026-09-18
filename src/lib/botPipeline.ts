@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig, BotTransport } from "@/lib/botTransport";
 import { colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
+import { navButtons } from "@/lib/colleagueQueries";
 import { findColleagueByChat } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { parseQuickAdd } from "@/lib/quickAdd";
@@ -386,11 +387,14 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       // почему, и вот этот текст и приходит сюда следующим сообщением.
       const answered = await handleColleagueText(ctx.admin, colleague, trimmed, ctx.channel.id);
       if (answered) {
-        await say(ctx, answered.reply);
+        await ctx.transport.send(ctx.chatId, answered.reply, answered.buttons?.length ? { buttons: answered.buttons } : undefined);
         if (answered.notifyOwner) await notifyAuthor(ctx.admin, colleague.user_id, answered.notifyTo ?? null, answered.notifyOwner);
         return;
       }
-      await say(ctx, colleagueHelp(colleague.name));
+      // Ответить оказалось нечем — ни задачи, ни встречи, ни команды.
+      // Справка идёт с кнопками списков: человеку, который ещё не знает, что
+      // тут можно, показать это дешевле, чем рассказать.
+      await ctx.transport.send(ctx.chatId, colleagueHelp(colleague.name), { buttons: navButtons() });
       return;
     }
     await say(ctx, `Этот чат ещё не привязан. Откройте трекер на сайте → «Подключить ${ctx.channel.label}».`);

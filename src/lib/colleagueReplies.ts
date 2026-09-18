@@ -5,7 +5,9 @@ import { findColleagueByChat } from "@/lib/colleagues";
 import { uid } from "@/lib/uid";
 import { recordEvent } from "@/lib/itemHistory";
 import { newTaskRow } from "@/lib/newTask";
-import type { BotChannelConfig } from "@/lib/botTransport";
+import { deliverComment } from "@/lib/commentDelivery";
+import { colleagueCommandsHelp, matchColleagueCommand, meetingCard, replyForColleague, taskCard } from "@/lib/colleagueQueries";
+import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 
 // What happens when a colleague presses a button under a task or a meeting.
 //
@@ -25,6 +27,13 @@ export type CallbackOutcome = {
   // The message is rewritten to this, so the chat shows what happened
   // instead of buttons that no longer do anything.
   rewriteTo?: string;
+  // Отдельным сообщением вслед, не вместо. Нужно там, где нажатие ничего в
+  // задаче не изменило и переписывать сообщение не за что, а сказать надо —
+  // «Ответить», список задач, открытая карточка. В MAX это ещё и
+  // единственный способ: всплывающих подсказок там нет, и toast не
+  // показывается никому.
+  say?: string;
+  sayButtons?: BotButton[][];
   // The owner hears about it — in every messenger he is connected to, which
   // the caller resolves (see botDelivery.notifyOwner).
   notifyOwner?: string;
@@ -35,14 +44,83 @@ export type CallbackOutcome = {
   notifyTo?: string | null;
 };
 
+// Ответ бота на сообщение коллеги. Кнопки здесь потому же, почему они есть
+// под задачей: список без кнопок — это отчёт о том, сколько накопилось, а
+// не то, из чего можно ответить.
+export type ColleagueTextResult = {
+  reply: string;
+  buttons?: BotButton[][];
+  notifyOwner?: string;
+  notifyTo?: string | null;
+};
+
+// Куда направлен следующий текст этого человека.
+//
+// Намерение живёт два часа (миграция 0028) и только до первого сообщения:
+// нажал, отвлёкся, написал совсем о другом — и это «другое» должно попасть
+// туда же, куда попало бы без нажатия, а не в задачу, о которой он уже
+// забыл.
+const AIM_LIFETIME_MS = 2 * 60 * 60 * 1000;
+
+async function aimReply(
+  admin: SupabaseClient,
+  colleague: { id: string; name: string; user_id: string },
+  kind: "task" | "meeting",
+  itemId: string,
+): Promise<CallbackOutcome> {
+  const table = kind === "task" ? "tasks" : "meetings";
+  const { data } = await admin
+    .from(table)
+    .select("id, title, user_id")
+    .eq("id", itemId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  const item = data as { id: string; title: string; user_id: string } | null;
+  if (!item || item.user_id !== colleague.user_id) return { toast: "Это обсуждение уже не ваше" };
+
+  await admin
+    .from("assignees")
+    .update({ pending_reply_kind: kind, pending_reply_id: itemId, pending_reply_at: new Date().toISOString() })
+    .eq("id", colleague.id);
+
+  // Сообщение не переписывается: под ним остаются кнопки задачи, и человек,
+  // передумавший писать, ничего не теряет.
+  return {
+    toast: "Пишите — отправлю в обсуждение",
+    say: `💬 Следующее сообщение уйдёт в обсуждение ${kind === "task" ? "задачи" : "встречи"} «${item.title}».\nЕго увидят все участники.`,
+  };
+}
+
+// Не остыло ли намерение. Заодно снимает его: направление действует на одно
+// сообщение, иначе человек, ответивший однажды, писал бы в ту же задачу до
+// скончания века.
+async function takeAim(
+  admin: SupabaseClient,
+  colleagueId: string,
+): Promise<{ kind: "task" | "meeting"; id: string } | null> {
+  const { data } = await admin
+    .from("assignees")
+    .select("pending_reply_kind, pending_reply_id, pending_reply_at")
+    .eq("id", colleagueId)
+    .maybeSingle();
+  const row = data as { pending_reply_kind: "task" | "meeting" | null; pending_reply_id: string | null; pending_reply_at: string | null } | null;
+  if (!row?.pending_reply_kind || !row.pending_reply_id) return null;
+
+  await admin
+    .from("assignees")
+    .update({ pending_reply_kind: null, pending_reply_id: null, pending_reply_at: null })
+    .eq("id", colleagueId);
+
+  const at = Date.parse(row.pending_reply_at || "");
+  if (!at || Date.now() - at > AIM_LIFETIME_MS) return null;
+  return { kind: row.pending_reply_kind, id: row.pending_reply_id };
+}
+
+// Справка — одна на весь бот, и живёт она там же, где команды, о которых
+// рассказывает (colleagueQueries): две справки разошлись бы в первый же
+// раз, когда команду добавят.
 export function colleagueHelp(name: string): string {
-  return (
-    `${name}, сюда приходят задачи и встречи — отвечать можно кнопками под сообщением.\n\n` +
-    "«🏁 Сделал» и «⛔ Не могу» после нажатия попросят одно сообщение: что именно сделано или почему не выйдет. " +
-    "Оно уходит постановщику.\n\n" +
-    "Просто написанное сообщение попадёт в обсуждение вашей последней открытой задачи — я скажу, какой именно.\n\n" +
-    "Свои задачи здесь пока не заводятся."
-  );
+  return colleagueCommandsHelp(name);
 }
 
 export async function handleColleagueCallback(
@@ -53,6 +131,33 @@ export async function handleColleagueCallback(
 ): Promise<CallbackOutcome> {
   const colleague = await findColleagueByChat(admin, chatId, channel);
   if (!colleague) return { toast: "Этот чат не подключён" };
+
+  // «Ответить» ничего не меняет в задаче — оно только направляет следующее
+  // сообщение. Поэтому стоит до всех проверок состояния: ответить можно и
+  // по закрытой задаче, и по той, где ты наблюдатель.
+  if (action.action === "msg" && (action.kind === "task" || action.kind === "meeting")) {
+    return aimReply(admin, colleague, action.kind, action.id);
+  }
+
+  // Списки и карточки — чтение. Они тоже ничего не меняют, поэтому идут
+  // рядом с «Ответить», а не среди действий. Именно из-за их отсутствия
+  // кнопка жила только под тем сообщением, которым задачу прислали: стоило
+  // переписке уехать вверх — и ответить было нечем.
+  if (action.action === "list") {
+    const today = new Date().toISOString().slice(0, 10);
+    const reply = await replyForColleague(admin, colleague, action.kind === "meeting" ? "meetings" : "tasks", today);
+    return { toast: "Открываю", say: reply.text, sayButtons: reply.buttons };
+  }
+
+  if (action.action === "show") {
+    const today = new Date().toISOString().slice(0, 10);
+    const card =
+      action.kind === "meeting"
+        ? await meetingCard(admin, colleague, action.id)
+        : await taskCard(admin, colleague, action.id, today);
+    if (!card) return { toast: action.kind === "meeting" ? "Эта встреча уже не ваша" : "Эта задача уже не ваша" };
+    return { toast: "Открываю", say: card.text, sayButtons: card.buttons };
+  }
 
   if (action.kind === "task") {
     const { data: task } = await admin
@@ -321,7 +426,7 @@ export async function handleColleagueText(
   // Из какого мессенджера пришло: в обсуждении это видно строкой «из
   // Telegram», и подменять её на другую значит врать в записи.
   source: "telegram" | "max" = "telegram",
-): Promise<{ reply: string; notifyOwner?: string; notifyTo?: string | null } | null> {
+): Promise<ColleagueTextResult | null> {
   const body = text.trim();
   if (!body) return null;
 
@@ -344,6 +449,24 @@ export async function handleColleagueText(
   const rows = ((data as Row[]) || []).filter(
     (r) => (r.done_at && !r.done_comment) || (r.declined_at && !r.decline_reason),
   );
+
+  // Нажатое «Ответить» сильнее незакрытого вопроса: человек только что
+  // указал пальцем, куда пишет, и спорить с этим значит снова угадывать.
+  const aim = await takeAim(admin, colleague.id);
+  if (aim) return writeToDiscussion(admin, colleague, aim.kind, aim.id, body, source);
+
+  // Команда — это то, что человек пишет, когда его ни о чём не спрашивали.
+  // Порядок здесь и есть всё правило: сперва незакрытый вопрос (отчёт,
+  // причина), потом указанный пальцем адрес, и только потом слово-команда.
+  // Иначе «сегодня», написанное в ответ на «что именно сделано?», уехало бы
+  // списком дел, а человек остался бы с отчётом без единого слова —
+  // уверенный, что отчитался.
+  const command = matchColleagueCommand(body);
+  if (!rows.length && command) {
+    const today = new Date().toISOString().slice(0, 10);
+    const answer = await replyForColleague(admin, colleague, command, today);
+    return { reply: answer.text, buttons: answer.buttons };
+  }
 
   // Причина отказа от встречи ждёт ответа ровно так же — незаполненная
   // строка и есть заданный вопрос.
@@ -427,6 +550,48 @@ async function handleMeetingReason(
 }
 
 
+// Записать сообщение в обсуждение и рассказать о нём всем, кого оно
+// касается.
+//
+// Одно место на оба пути — и на адресный ответ по кнопке, и на угаданный.
+// Рассылка тоже одна (см. commentDelivery): раньше сообщение из мессенджера
+// уходило только владельцу, и трое других исполнителей той же задачи о нём
+// не узнавали вовсе, хотя обсуждение заводилось ровно ради них.
+async function writeToDiscussion(
+  admin: SupabaseClient,
+  colleague: { id: string; name: string; user_id: string },
+  kind: "task" | "meeting",
+  itemId: string,
+  body: string,
+  source: "telegram" | "max",
+): Promise<{ reply: string; notifyOwner?: string; notifyTo?: string | null }> {
+  const table = kind === "task" ? "tasks" : "meetings";
+  const { data: item } = await admin.from(table).select("title").eq("id", itemId).maybeSingle();
+  const title = (item as { title: string } | null)?.title || "";
+
+  const { data: inserted, error } = await admin
+    .from("item_comments")
+    .insert({
+      item_kind: kind,
+      item_id: itemId,
+      body,
+      author_assignee_id: colleague.id,
+      source,
+    })
+    .select("id")
+    .maybeSingle();
+
+  // Молчать нельзя: человек считает, что ответил, а его слов нигде нет.
+  if (error || !inserted) {
+    return { reply: "Не получилось записать сообщение — попробуйте ещё раз." };
+  }
+
+  await deliverComment(admin, (inserted as { id: string }).id);
+  // notifyOwner здесь не возвращается намеренно: владельцу уже сказала
+  // рассылка, и второе сообщение о том же было бы эхом.
+  return { reply: `Записал в обсуждение ${kind === "task" ? "задачи" : "встречи"} «${title}».` };
+}
+
 // Сообщение, которое никуда не отвечает, попадает в обсуждение задачи.
 //
 // Отвечать из мессенджера обязательно: руководитель вне офиса иначе
@@ -461,37 +626,15 @@ async function handleChatMessage(
   const open = rows.find((r) => r.task && !r.task.deleted_at && r.task.status !== "done");
   if (!open || !open.task) return null;
 
-  // Первое сообщение в обсуждении уходит владельцу сразу, остальные —
-  // копятся и попадают в утреннюю сводку. Четырнадцать человек, каждый со
-  // своей перепиской по каждой задаче, иначе превращают мессенджер в
-  // ленту, которую перестают читать целиком — вместе со «сделал» и
-  // «не могу», ради которых всё и затевалось.
-  //
-  // «Первое» считается по паузе, а не по счётчику: разговор, возобновлённый
-  // через два часа, — это новый разговор, и о нём стоит знать.
-  const { data: previous } = await admin
-    .from("item_comments")
-    .select("created_at")
-    .eq("item_kind", "task")
-    .eq("item_id", open.taskId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  const last = (previous as { created_at: string }[] | null)?.[0]?.created_at;
-  const QUIET_GAP_MS = 2 * 60 * 60 * 1000;
-  const isNewConversation = !last || Date.now() - Date.parse(last) > QUIET_GAP_MS;
-
-  await admin.from("item_comments").insert({
-    item_kind: "task",
-    item_id: open.taskId,
-    body,
-    author_assignee_id: colleague.id,
-    source,
-  });
-
+  // Запись и рассылка — общие с адресным ответом (writeToDiscussion). Порог
+  // «первое сообщение сразу, остальные утром» живёт там же, один на оба
+  // пути.
+  const written = await writeToDiscussion(admin, colleague, "task", open.taskId, body, source);
+  // Угадали — говорим об этом вслух и даём поправить. Человек, у которого
+  // задач пять, иначе узнает о промахе только тогда, когда его слова начнут
+  // искать не в той истории.
   return {
-    reply: `Записал в обсуждение задачи «${open.task.title}».`,
-    notifyOwner: isNewConversation ? `💬 ${colleague.name} по задаче «${open.task.title}»: ${body}` : undefined,
+    ...written,
+    reply: written.reply + "\nНе та? Нажмите «💬 Ответить» под нужной задачей и повторите.",
   };
 }

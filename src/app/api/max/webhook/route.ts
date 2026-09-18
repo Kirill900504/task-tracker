@@ -109,6 +109,12 @@ export async function POST(req: Request) {
       toast: outcome.toast,
       rewriteTo: outcome.rewriteTo,
     });
+    // В MAX это тем более обязательно: всплывающих подсказок там нет, и без
+    // этого сообщения нажатие «Ответить» или «Мои задачи» выглядело бы как
+    // кнопка, которая ничего не делает.
+    if (outcome.say) {
+      await transport.send(chatId, outcome.say, outcome.sayButtons?.length ? { buttons: outcome.sayButtons } : undefined);
+    }
     if (outcome.notifyOwner) {
       const owner = await admin.from("assignees").select("user_id").eq("max_user_id", chatId).limit(1).maybeSingle();
       if (owner.data?.user_id) await notifyAuthor(admin, owner.data.user_id as string, outcome.notifyTo ?? null, outcome.notifyOwner);
