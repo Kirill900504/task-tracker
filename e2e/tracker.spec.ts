@@ -252,12 +252,17 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   await expect(chip).toBeVisible();
   await waitForSaved(page);
 
-  // Reopen it: the slot and the participant come back as chosen, so the
-  // grid's selection really is what got saved and not just local state.
+  // Открываем заново: назначенная встреча больше не даёт менять ни название,
+  // ни время, ни состав — они показаны фактом. Проверяется и то, что
+  // сохранилось именно выбранное (время и участник видны в сводке), и то,
+  // что редактировать их отсюда нечем: полей нет вовсе.
   await chip.click();
-  // Выбранное время — это выбранная кнопка: поля «другое время» больше нет.
-  await expect(page.locator("#mTimeGrid .time-slot", { hasText: "10:00" })).toHaveClass(/selected/);
-  await expect(page.locator("#mParticipants .participant-chip", { hasText: participant })).toHaveClass(/selected/);
+  await expect(page.locator(".meeting-facts")).toContainText(title);
+  await expect(page.locator(".meeting-facts")).toContainText("10:00");
+  await expect(page.locator(".meeting-facts")).toContainText(participant);
+  await expect(page.locator("#mTimeGrid")).toHaveCount(0);
+  await expect(page.locator("#mParticipants")).toHaveCount(0);
+  await expect(page.locator("#mTitle")).toHaveCount(0);
 
   await page.fill("#mResult", "Договорились по срокам");
   // «Успешно» writes the outcome and closes the modal on its own — there is
@@ -840,4 +845,53 @@ test("задача не сохраняется без исполнителя", a
   await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
+});
+
+// Перенос — единственный путь изменить время и состав назначенной встречи.
+//
+// Правило Кирилла: «изменения и дополнения участниками возможны только при
+// дальнейшем переносе». Проверяется вся цепочка: в открытой встрече полей
+// нет, кнопка «Перенести» открывает форму новой с тем же составом, править
+// там можно всё, а прежняя встреча после сохранения закрывается как
+// перенесённая.
+test("время и состав встречи меняются только переносом", async ({ page }) => {
+  const title = `E2E перенос ${Date.now()}`;
+  await login(page);
+
+  await page.click("#addMeetingBtn");
+  await page.fill("#mTitle", title);
+  await page.locator("#mTimeGrid .time-slot", { hasText: "10:00" }).click();
+  const firstChip = page.locator("#mParticipants .participant-chip").first();
+  const participant = (await firstChip.textContent())?.trim() || "";
+  await firstChip.click();
+  await page.click("#meetingSaveBtn");
+  const chip = page.locator(".meeting-chip", { hasText: title });
+  await expect(chip).toBeVisible();
+  await waitForSaved(page);
+
+  // Открытая встреча полей не даёт — только факт и кнопку переноса.
+  await chip.click();
+  await expect(page.locator("#mTitle")).toHaveCount(0);
+  await expect(page.locator("#mTimeGrid")).toHaveCount(0);
+  await expect(page.locator("#meetingMoveBtn")).toBeVisible();
+
+  // Перенос открывает форму новой встречи — с тем же составом и временем.
+  await page.click("#meetingMoveBtn");
+  await expect(page.locator("#meetingModalTitle")).toHaveText("Перенос встречи");
+  await expect(page.locator("#mTitle")).toHaveValue(title);
+  await expect(page.locator("#mTimeGrid .time-slot", { hasText: "10:00" })).toHaveClass(/selected/);
+  await expect(page.locator("#mParticipants .participant-chip", { hasText: participant })).toHaveClass(/selected/);
+
+  // И тут их уже можно менять — ради чего перенос и затевался.
+  await page.locator("#mTimeGrid .time-slot", { hasText: "15:30" }).click();
+  await page.click("#meetingSaveBtn");
+  await waitForSaved(page);
+
+  // Новая встреча в плане и с новым временем; прежняя закрыта как
+  // перенесённая (видна только при «показывать завершённые»).
+  await showDoneOn(page);
+  const all = page.locator(".meeting-chip", { hasText: title });
+  await expect(all).toHaveCount(2);
+  await expect(all.filter({ hasText: "15:30" })).toBeVisible();
+  await expect(all.filter({ has: page.locator(".mstatus.no_result") })).toBeVisible();
 });

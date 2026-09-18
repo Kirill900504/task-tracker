@@ -610,6 +610,23 @@
   }
   .field-mic-btn:hover{color:var(--accent); border-color:var(--accent);}
   .field-mic-btn.listening{color:var(--high); border-color:var(--high); background:var(--high-bg); animation:quick-add-mic-pulse 1s ease-in-out infinite;}
+  /* Назначенная встреча: «когда» и «кто» — факт, который читают, а не поля.
+     Раньше здесь стояли календарь, сетка из двадцати кнопок времени и
+     четырнадцать кнопок состава — полтора экрана на то, что менять всё
+     равно нельзя (см. MeetingModal). Три строки говорят ровно то же. */
+  .meeting-facts{
+    padding:14px 16px; border:1px solid var(--line-soft); border-radius:var(--radius-md);
+    background:var(--paper-soft); box-shadow:var(--edge);
+  }
+  .meeting-fact-title{font-size:15px; font-weight:700; color:var(--ink); line-height:1.4; margin-bottom:8px;}
+  .meeting-fact-row{
+    display:flex; align-items:center; gap:8px; margin-top:5px;
+    font-size:13px; color:var(--ink-soft); line-height:1.45;
+  }
+  .meeting-fact-row span{min-width:0;}
+  .meeting-fact-row .icon{color:var(--ink-soft); margin-top:1px;}
+  .meeting-move-btn{margin-top:12px;}
+
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
   .select-with-add{display:flex; gap:6px;}
   .select-with-add select{flex:1;}

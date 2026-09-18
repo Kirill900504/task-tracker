@@ -67,6 +67,16 @@ export default function MeetingsPanel({
   const [ideaDragOver, setIdeaDragOver] = useState(false);
   const ask = useAsk();
   const [modalState, setModalState] = useState<{ open: boolean; meeting: Meeting | null; prefill?: MeetingPrefill }>({ open: false, meeting: null });
+  // Перенос, начатый из формы встречи: та встреча, которую надо закрыть как
+  // перенесённую, когда новая будет сохранена.
+  //
+  // Почему через форму, а не сразу, как кнопка ⇢ в списке: у назначенной
+  // встречи ни время, ни состав больше не редактируются (см. MeetingModal),
+  // и перенос остался единственным местом, где их задают. Значит он и
+  // должен спрашивать их полностью — формой, а не окном «дата и время».
+  // Быстрый ⇢ в списке при этом никуда не делся: там переносят, ничего не
+  // меняя, и два шага вместо одного были бы там потерей.
+  const [movingFrom, setMovingFrom] = useState<Meeting | null>(null);
 
   // See TasksPanel's identical pattern: an external open request from a
   // sibling (the calendar's date popover) is treated as an alternate open
@@ -80,12 +90,20 @@ export default function MeetingsPanel({
   const modalPrefill = modalState.open ? modalState.prefill : (openMeetingRequest ?? undefined);
   function closeModal() {
     setModalState({ open: false, meeting: null });
+    // Закрыли форму, не сохранив — переноса не было, и старая встреча
+    // остаётся в плане нетронутой.
+    setMovingFrom(null);
     if (openMeetingRequest !== null) onOpenMeetingHandled();
     if (openExistingMeetingId) onOpenExistingHandled?.();
   }
   function handleModalSave(m: Meeting) {
     const before = modalMeeting;
     actions.saveMeeting(m);
+    // Новая встреча сохранена — значит перенос состоялся: старую закрываем
+    // тем же способом, что и быстрый ⇢, включая отмену. Порядок важен:
+    // сначала новая должна попасть в состояние, иначе отмена восстановит
+    // старую в мир, где следующей ещё нет.
+    if (movingFrom) closeAsMoved(movingFrom, m);
     // Строки голосования держатся за списком участников, а не редактируются
     // рядом с ним: два списка одних и тех же людей расходятся за неделю.
     void votes.sync(m.id, m.participants).then((added) => {
@@ -167,8 +185,27 @@ export default function MeetingsPanel({
     setStatus(m, status, text);
   }
 
-  function reschedule(m: Meeting, newDate: string, newTime: string, resultNote: string) {
+  // Закрыть встречу как перенесённую на другую, уже созданную.
+  //
+  // Одна функция на оба пути — быстрый ⇢ в списке и перенос из формы, — иначе
+  // они разойдутся: «перенесено» это не одна пометка, а четыре поля разом
+  // плюс отмена, которая должна вернуть ровно то, что было.
+  function closeAsMoved(m: Meeting, followUp: Meeting, resultNote?: string) {
     const prev = { status: m.status, result: m.result, movedToDate: m.movedToDate, resolvedAt: m.resolvedAt };
+    actions.saveMeeting({
+      ...m,
+      status: "no_result",
+      result: (resultNote ?? m.result ?? "").trim() || "Перенесено на следующий этап",
+      movedToDate: followUp.date,
+      resolvedAt: new Date().toISOString(),
+    });
+    toasts.showToast("Встреча перенесена", m.title, () => {
+      actions.deleteMeeting(followUp.id);
+      actions.saveMeeting({ ...m, ...prev });
+    });
+  }
+
+  function reschedule(m: Meeting, newDate: string, newTime: string, resultNote: string) {
     const followUp: Meeting = {
       id: uid(),
       date: newDate,
@@ -181,17 +218,7 @@ export default function MeetingsPanel({
       resolvedAt: "",
     };
     actions.saveMeeting(followUp);
-    actions.saveMeeting({
-      ...m,
-      status: "no_result",
-      result: (resultNote || "").trim() || "Перенесено на следующий этап",
-      movedToDate: newDate,
-      resolvedAt: new Date().toISOString(),
-    });
-    toasts.showToast("Встреча перенесена", m.title, () => {
-      actions.deleteMeeting(followUp.id);
-      actions.saveMeeting({ ...m, ...prev });
-    });
+    closeAsMoved(m, followUp, resultNote);
   }
 
   async function quickReschedule(m: Meeting) {
@@ -252,7 +279,11 @@ export default function MeetingsPanel({
 
       {modalOpen && (
         <MeetingModal
-          key={modalMeeting?.id ?? "new"}
+          // key меняется вместе с тем, что показывает форма. При переносе
+          // она превращается из открытой встречи в новую, и без этого React
+          // оставил бы прежнее состояние полей — то есть состав и время
+          // старой встречи вместо предзаполненных.
+          key={modalMeeting?.id ?? (movingFrom ? "move-" + movingFrom.id : "new")}
           meeting={modalMeeting}
           prefill={modalPrefill}
           assignees={assignees}
@@ -260,6 +291,29 @@ export default function MeetingsPanel({
           onDelete={() => modalMeeting && deleteMeeting(modalMeeting)}
           onClose={closeModal}
           onSetStatus={setStatus}
+          isMove={!!movingFrom && !modalMeeting}
+          onReschedule={
+            modalMeeting
+              ? () => {
+                  const from = modalMeeting;
+                  setMovingFrom(from);
+                  // Форма новой встречи, предзаполненная прежней: по
+                  // умолчанию тот же день + 1 и то же время — перенос без
+                  // правок остаётся парой нажатий, а поправить время или
+                  // состав можно здесь же.
+                  setModalState({
+                    open: true,
+                    meeting: null,
+                    prefill: {
+                      title: from.title,
+                      date: addDaysIso(from.date, 1),
+                      time: from.time || "",
+                      participants: from.participants.slice(),
+                    },
+                  });
+                }
+              : undefined
+          }
         />
       )}
     </div>

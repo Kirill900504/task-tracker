@@ -45,6 +45,8 @@ export default function MeetingModal({
   onDelete,
   onClose,
   onSetStatus,
+  onReschedule,
+  isMove,
 }: {
   meeting: Meeting | null;
   prefill?: MeetingPrefill;
@@ -53,6 +55,15 @@ export default function MeetingModal({
   onDelete: () => void;
   onClose: () => void;
   onSetStatus: (meeting: Meeting, status: MeetingStatus, result: string) => void;
+  // Единственный путь изменить «когда» и «кого» у назначенной встречи.
+  // Открывает форму НОВОЙ встречи с тем же составом; старая закроется как
+  // перенесённая, когда новая будет сохранена (см. MeetingsPanel).
+  onReschedule?: () => void;
+  // Эта новая встреча — перенос прежней. Форма та же, что у любой новой, но
+  // называться «Новая встреча» она не должна: человек нажал «Перенести», и
+  // заголовок обязан подтвердить, что происходит именно это, — иначе
+  // выглядит так, будто нажатие завело вторую встречу вдобавок к первой.
+  isMove?: boolean;
 }) {
   const isEditing = !!meeting;
   const [date, setDate] = useState(meeting?.date ?? prefill?.date ?? "");
@@ -94,10 +105,15 @@ export default function MeetingModal({
     }
     onSave({
       id: meeting?.id ?? uid(),
-      date,
-      time: time || "",
-      title: trimmedTitle,
-      participants: sanitizeAssigneeList(participants),
+      // У назначенной встречи «когда», «что» и «кто» берутся из неё самой,
+      // а не из состояния формы. Полей для них в этом режиме нет вовсе, и
+      // состояние просто повторяет исходное — но брать его отсюда значило
+      // бы, что достаточно одной будущей кнопки, меняющей `time`, чтобы
+      // запрет перестал существовать молча. Меняется это переносом.
+      date: isEditing ? meeting.date : date,
+      time: isEditing ? meeting.time : time || "",
+      title: isEditing ? meeting.title : trimmedTitle,
+      participants: isEditing ? meeting.participants : sanitizeAssigneeList(participants),
       status: meeting?.status ?? "planned",
       result: meeting ? result.trim() : "",
       movedToDate: meeting?.movedToDate ?? "",
@@ -117,71 +133,117 @@ export default function MeetingModal({
   return createPortal(
     <div className="overlay open" id="meetingOverlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h2 id="meetingModalTitle">{isEditing ? "Редактировать встречу" : "Новая встреча"}</h2>
+        <h2 id="meetingModalTitle">{isEditing ? "Встреча" : isMove ? "Перенос встречи" : "Новая встреча"}</h2>
+        {isMove && (
+          <p className="field-hint meeting-move-hint">
+            Прежняя встреча закроется как перенесённая, когда вы сохраните эту. Время и состав можно поправить здесь.
+          </p>
+        )}
         <input type="hidden" id="meetingId" value={meeting?.id ?? ""} readOnly />
 
-        <div className="field">
-          <label>Дата</label>
-          {/* Сразу календарём, а не полем «дд.мм.гггг»: встречу назначают на
-              день недели («в четверг»), а не на число, и сетка месяца
-              отвечает на этот вопрос сама. */}
-          <MiniCalendar popover id="mDate" value={date} onChange={setDate} />
-        </div>
-
-        <div className="field">
-          <label>Название встречи</label>
-          <div className="input-with-mic">
-            <AutoGrowTextarea id="mTitle" placeholder="Например: Совещание по опту" value={title} onChange={setTitle} singleLine />
-            <MicButton value={title} onChange={setTitle} title="Надиктовать название" />
-          </div>
-        </div>
-
-        <div className="field">
-          <label>Время</label>
-          {/* Рабочий день кнопками, 09:00–18:00 через полчаса — одно нажатие.
-              Поля «другое время» под ними больше нет: Кирилл сказал, что оно
-              неактуально, и за всё время им ставили разве что промах мимо
-              кнопки. Встреча, назначенная когда-то на 20:15, свою кнопку
-              сохраняет — время в ней не переписывается молча. */}
-          <div className="time-grid" id="mTimeGrid">
-            {TIME_SLOTS.map((slot) => (
-              <button
-                key={slot}
-                type="button"
-                className={"time-slot" + (time === slot ? " selected" : "")}
-                onClick={() => setTime(slot)}
-              >
-                {slot}
-              </button>
-            ))}
-            {time && !TIME_SLOTS.includes(time) && (
-              <button type="button" className="time-slot selected" onClick={() => setTime(time)}>
-                {time}
+        {/* Назначенная встреча — это уже состоявшаяся договорённость, а не
+            черновик.
+            Кирилл сказал прямо: название менять нельзя, а состав и время
+            «в моменте не подлежат изменению» — «изменения и дополнения
+            участниками возможны только при дальнейшем переносе». Он прав, и
+            дело не в аккуратности: о встрече УЖЕ сообщили всем, кого она
+            касается (MeetingsPanel зовёт их при сохранении), участники по
+            ней УЖЕ проголосовали, и тихая правка времени у себя в окне не
+            меняет ни того, ни другого — она только разводит то, что люди
+            видели у себя, и то, что написано в трекере. Поэтому «когда» и
+            «кто» здесь — факт, который читают, а меняются они переносом:
+            перенос заводит НОВУЮ встречу, которую снова рассылают и снова
+            голосуют, и вот в ней и время, и состав открыты. */}
+        {isEditing ? (
+          <div className="field meeting-facts">
+            <label>Встреча</label>
+            <div className="meeting-fact-title">{title}</div>
+            <div className="meeting-fact-row">
+              <Icon name="calendar" size={14} />
+              <span>
+                {fmtDate(date)}
+                {time ? `, ${time}` : ""}
+              </span>
+            </div>
+            <div className="meeting-fact-row">
+              <Icon name="users" size={14} />
+              <span>{participants.length ? participants.join(", ") : "никого не позвали"}</span>
+            </div>
+            {/* Путь к изменению — здесь же, а не «где-то в списке». Кнопка
+                открывает форму новой встречи с тем же составом: перенести и
+                заодно поправить, кого зовём, — одно действие. */}
+            {onReschedule && !resolved && (
+              <button type="button" className="btn btn-small meeting-move-btn" id="meetingMoveBtn" onClick={onReschedule}>
+                <Icon name="calendar" size={15} /> Перенести — и поправить время или состав
               </button>
             )}
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="field">
+              <label>Дата</label>
+              {/* Сразу календарём, а не полем «дд.мм.гггг»: встречу назначают на
+                  день недели («в четверг»), а не на число, и сетка месяца
+                  отвечает на этот вопрос сама. */}
+              <MiniCalendar popover id="mDate" value={date} onChange={setDate} />
+            </div>
 
-        <div className="field participants-field" id="participantsField">
-          <label>Состав участников</label>
-          {/* Тap-to-toggle chips instead of a dropdown of checkboxes — the
-              whole team fits in a few rows. Кирилл himself is left out on
-              purpose (he runs the meetings, so he is never the one being
-              picked); if he is already listed on an existing meeting that
-              stays untouched — see save(). */}
-          <div className="participant-grid" id="mParticipants">
-            {selectableAssignees.map((name) => (
-              <button
-                key={name}
-                type="button"
-                className={"participant-chip" + (participants.includes(name) ? " selected" : "")}
-                onClick={() => toggleParticipant(name)}
-              >
-                {name}
-              </button>
-            ))}
-          </div>
-        </div>
+            <div className="field">
+              <label>Название встречи</label>
+              <div className="input-with-mic">
+                <AutoGrowTextarea id="mTitle" placeholder="Например: Совещание по опту" value={title} onChange={setTitle} singleLine />
+                <MicButton value={title} onChange={setTitle} title="Надиктовать название" />
+              </div>
+            </div>
+
+            <div className="field">
+              <label>Время</label>
+              {/* Рабочий день кнопками, 09:00–18:00 через полчаса — одно нажатие.
+                  Поля «другое время» под ними больше нет: Кирилл сказал, что оно
+                  неактуально, и за всё время им ставили разве что промах мимо
+                  кнопки. Встреча, назначенная когда-то на 20:15, свою кнопку
+                  сохраняет — время в ней не переписывается молча. */}
+              <div className="time-grid" id="mTimeGrid">
+                {TIME_SLOTS.map((slot) => (
+                  <button
+                    key={slot}
+                    type="button"
+                    className={"time-slot" + (time === slot ? " selected" : "")}
+                    onClick={() => setTime(slot)}
+                  >
+                    {slot}
+                  </button>
+                ))}
+                {time && !TIME_SLOTS.includes(time) && (
+                  <button type="button" className="time-slot selected" onClick={() => setTime(time)}>
+                    {time}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="field participants-field" id="participantsField">
+              <label>Состав участников</label>
+              {/* Тap-to-toggle chips instead of a dropdown of checkboxes — the
+                  whole team fits in a few rows. Кирилл himself is left out on
+                  purpose (he runs the meetings, so he is never the one being
+                  picked); if he is already listed on an existing meeting that
+                  stays untouched — see save(). */}
+              <div className="participant-grid" id="mParticipants">
+                {selectableAssignees.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    className={"participant-chip" + (participants.includes(name) ? " selected" : "")}
+                    onClick={() => toggleParticipant(name)}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         {isEditing && (
           <div className="field outcome-field" id="outcomeField">

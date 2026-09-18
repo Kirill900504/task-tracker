@@ -32,6 +32,9 @@ function timeLabel(iso: string): string {
 const SOURCE_MARK: Record<string, string> = { telegram: " · из Telegram", max: " · из MAX", app: "" };
 
 export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: string }) {
+  // «По задаче» в обсуждении встречи — мелочь, но именно из таких мелочей
+  // складывается ощущение, что окно собрано из чужих кусков.
+  const about = kind === "meeting" ? "встрече" : kind === "idea" ? "мысли" : "задаче";
   const { comments, loading, send, edit, remove, react } = useItemComments(kind, itemId);
   const ask = useAsk();
   const [draft, setDraft] = useState("");
@@ -148,7 +151,7 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
 
       {!loading && comments.length === 0 && (
         <div className="chat-empty">
-          Пока тихо. Здесь видно всё, что говорили по задаче, — и это видят все, кто на ней.
+          Пока тихо. Здесь видно всё, что говорили по {about}, — и это видят все её участники.
         </div>
       )}
 
@@ -289,7 +292,7 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
       <div className="chat-composer">
         <textarea
           value={draft}
-          placeholder="Написать по задаче…"
+          placeholder={`Написать по ${about}…`}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             // Enter отправляет, Shift+Enter переносит строку: сообщение в
