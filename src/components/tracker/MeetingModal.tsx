@@ -9,7 +9,6 @@ import { useColleagues } from "@/hooks/useColleagues";
 import SendMenu from "./SendMenu";
 import ItemChat from "./ItemChat";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
-import { addDaysIso } from "@/lib/calendarLogic";
 import { fmtDate } from "@/lib/taskDisplay";
 import { isSelfAssignee, sanitizeAssigneeList } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
@@ -42,7 +41,6 @@ export default function MeetingModal({
   onDelete,
   onClose,
   onSetStatus,
-  onReschedule,
 }: {
   meeting: Meeting | null;
   prefill?: MeetingPrefill;
@@ -51,7 +49,6 @@ export default function MeetingModal({
   onDelete: () => void;
   onClose: () => void;
   onSetStatus: (meeting: Meeting, status: MeetingStatus, result: string) => void;
-  onReschedule: (meeting: Meeting, newDate: string, newTime: string, resultNote: string) => void;
 }) {
   const isEditing = !!meeting;
   const [date, setDate] = useState(meeting?.date ?? prefill?.date ?? "");
@@ -63,8 +60,6 @@ export default function MeetingModal({
   const [sendState, setSendState] = useState("");
   const [sendAt, setSendAt] = useState<DOMRect | null>(null);
   const [result, setResult] = useState(meeting?.result ?? "");
-  const [rescheduleDate, setRescheduleDate] = useState(meeting ? addDaysIso(meeting.date, 1) : "");
-  const [rescheduleTime, setRescheduleTime] = useState(meeting?.time || "10:00");
 
   // Esc closes the modal, same as legacy's global keydown handler.
   useEffect(() => {
@@ -116,16 +111,6 @@ export default function MeetingModal({
   function setStatus(status: MeetingStatus) {
     if (!meeting) return;
     onSetStatus(meeting, status, result);
-    onClose();
-  }
-
-  function reschedule() {
-    if (!meeting) return;
-    if (!rescheduleDate) {
-      void ask.say({ title: "Дата не заполнена", question: "Укажите дату следующего этапа." });
-      return;
-    }
-    onReschedule(meeting, rescheduleDate, rescheduleTime || meeting.time || "10:00", result);
     onClose();
   }
 
@@ -223,32 +208,12 @@ export default function MeetingModal({
                 </button>
               )}
             </div>
-            {/* Время следующего этапа — теми же кнопками, что и время самой
-                встречи: поле «выбрать любое время» убрано и здесь, иначе
-                правило действовало бы через строчку. */}
-            <MiniCalendar id="mRescheduleDate" value={rescheduleDate} onChange={setRescheduleDate} />
-            <div className="reschedule-row">
-              <button type="button" className="btn btn-small" id="rescheduleBtn" onClick={reschedule}>
-                📅 Перенести следующий этап
-              </button>
-            </div>
-            <div className="time-grid time-grid-compact" id="mRescheduleTimeGrid">
-              {TIME_SLOTS.map((slot) => (
-                <button
-                  key={slot}
-                  type="button"
-                  className={"time-slot" + (rescheduleTime === slot ? " selected" : "")}
-                  onClick={() => setRescheduleTime(slot)}
-                >
-                  {slot}
-                </button>
-              ))}
-              {rescheduleTime && !TIME_SLOTS.includes(rescheduleTime) && (
-                <button type="button" className="time-slot selected" onClick={() => setRescheduleTime(rescheduleTime)}>
-                  {rescheduleTime}
-                </button>
-              )}
-            </div>
+            {/* Блока «Перенести следующий этап» здесь больше нет.
+                Он занимал полкарточки — календарь, ряд часов и кнопка —
+                ради действия, которое делают одним нажатием в списке: у
+                встречи есть кнопка ⇢, и она спрашивает дату и время тем же
+                окном (useDateTimeConfirm). Второй способ сделать то же самое,
+                вчетверо длиннее, только удлинял карточку. */}
           </div>
         )}
 

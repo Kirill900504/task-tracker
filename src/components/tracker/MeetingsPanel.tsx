@@ -260,7 +260,6 @@ export default function MeetingsPanel({
           onDelete={() => modalMeeting && deleteMeeting(modalMeeting)}
           onClose={closeModal}
           onSetStatus={setStatus}
-          onReschedule={reschedule}
         />
       )}
     </div>
