@@ -710,11 +710,24 @@ export default function TasksPanel({
           onAcceptReschedule={async (participantId, date) => {
             if (!modalTask) return;
             // Срок — колонка синхронизации, поэтому двигается обычным
-            // сохранением задачи, а не записью в базу мимо него.
+            // сохранением задачи, а не записью в базу мимо него. Сама
+            // просьба закрывается маршрутом: он же и скажет человеку, чем
+            // кончилось.
             actions.saveTask({ ...modalTask, deadline: date });
-            await participants.clearRescheduleRequest(participantId);
+            try {
+              await participants.decideReschedule(modalTask.id, participantId, true, date);
+            } catch (e) {
+              toasts.showToast(e instanceof Error ? e.message : "Не получилось ответить на просьбу");
+            }
           }}
-          onRejectReschedule={(participantId) => void participants.clearRescheduleRequest(participantId)}
+          onRejectReschedule={async (participantId) => {
+            if (!modalTask) return;
+            try {
+              await participants.decideReschedule(modalTask.id, participantId, false);
+            } catch (e) {
+              toasts.showToast(e instanceof Error ? e.message : "Не получилось ответить на просьбу");
+            }
+          }}
           onScheduleMeeting={onScheduleMeetingFor ? (t, people) => onScheduleMeetingFor(t, people) : undefined}
           onForceCloseWork={async (reason) => {
             if (!modalTask) return;

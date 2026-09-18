@@ -76,7 +76,7 @@ export function ManagerScreenInner({
   askReschedule: (participantId: string, to: string, reason: string) => void | Promise<void>;
   // Раунд не передаётся: его знает сервер, и он же единственный, кто
   // может знать его наверняка в момент нажатия.
-  vote?: (participantId: string, response: "yes" | "no", reason: string) => void | Promise<void>;
+  vote?: (participantId: string, response: "yes" | "no" | "late", reason: string) => void | Promise<void>;
   takeIdea?: (recipientId: string) => void | Promise<void>;
   // Необязателен: половина с логикой проверяется без базы, а подключение
   // мессенджера — это как раз база и сеть.
@@ -353,14 +353,23 @@ export function ManagerScreenInner({
                     {m.date.split("-").reverse().join(".")}
                     {m.time ? ", " + m.time : ""}
                   </span>
-                  {answered && m.response === "yes" && <span className="pill pill-accepted">✅ вы будете</span>}
+                  {answered && m.response === "yes" && !m.late && <span className="pill pill-accepted">✅ вы будете</span>}
+                  {answered && m.response === "yes" && m.late && <span className="pill pill-accepted">🕐 будете, но опоздаете</span>}
                   {answered && m.response === "no" && <span className="pill pill-blocked">❌ не сможете</span>}
                 </div>
                 {answered && m.response === "no" && m.reason && <div className="ms-declined">Причина: {m.reason}</div>}
-                {!answered && vote && asking?.id !== m.participantId && (
+                {/* Кнопки остаются и после ответа: передумать можно до
+                    начала — это решение проекта, и в мессенджере оно теперь
+                    работает, а здесь до сих пор не работало вовсе: ответив
+                    однажды, человек не мог ни исправить ошибку, ни сообщить
+                    об изменившихся планах. */}
+                {vote && asking?.id !== m.participantId && (
                   <div className="ms-actions">
                     <button className="btn btn-small btn-primary" type="button" onClick={() => void run(() => vote(m.participantId, "yes", ""))}>
                       <Icon name="check" size={15} /> Буду
+                    </button>
+                    <button className="btn btn-small" type="button" onClick={() => void run(() => vote(m.participantId, "late", ""))}>
+                      <Icon name="clock" size={15} /> Опоздаю
                     </button>
                     <button className="btn btn-small" type="button" onClick={() => setAsking({ kind: "vote", id: m.participantId })}>
                       <Icon name="close" size={15} /> Не смогу

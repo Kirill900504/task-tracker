@@ -380,6 +380,71 @@ export async function meetingCard(
   return { text: lines.join("\n"), buttons: [...meetingButtons(meetingId), [{ text: "💬 Ответить", data: encodeCallback("meeting", "msg", meetingId) }], ...navButtons()] };
 }
 
+// Кто идёт на встречу — тот же расклад, что показывает карточка в трекере.
+//
+// Три состояния, а не два: не ответивший и отказавшийся — разные вещи, и
+// именно эту разницу список подтвердивших выразить не мог. Опоздавший стоит
+// среди идущих, потому что он идёт.
+export async function meetingRoster(
+  admin: SupabaseClient,
+  colleague: { user_id: string },
+  meetingId: string,
+): Promise<string | null> {
+  const { data: meetingRow } = await admin
+    .from("meetings")
+    .select("id, title, date, time, participants, vote_round, user_id, deleted_at")
+    .eq("id", meetingId)
+    .maybeSingle();
+  const meeting = meetingRow as {
+    title: string;
+    date: string;
+    time: string | null;
+    participants: string[] | null;
+    vote_round: number | null;
+    user_id: string;
+    deleted_at: string | null;
+  } | null;
+  if (!meeting || meeting.deleted_at || meeting.user_id !== colleague.user_id) return null;
+
+  const round = Number(meeting.vote_round ?? 1) || 1;
+  const { data: rows } = await admin
+    .from("meeting_participants")
+    .select("response, reason, round, late, role, assignees(name)")
+    .eq("meeting_id", meetingId);
+
+  type Row = {
+    response: "none" | "yes" | "no";
+    reason: string | null;
+    round: number;
+    late: boolean | null;
+    role: string;
+    assignees: { name: string } | { name: string }[] | null;
+  };
+
+  const yes: string[] = [];
+  const no: string[] = [];
+  const silent: string[] = [];
+  for (const r of ((rows as unknown as Row[]) || [])) {
+    if (r.role !== "participant") continue;
+    const a = r.assignees;
+    const name = (Array.isArray(a) ? a[0]?.name : a?.name) || "";
+    if (!name) continue;
+    // Ответ из прежнего круга ничего не говорит о новом времени.
+    if (r.round < round || r.response === "none") silent.push(name);
+    else if (r.response === "yes") yes.push(name + (r.late ? " (опоздает)" : ""));
+    else no.push(name + (r.reason ? " — " + r.reason : ""));
+  }
+
+  const lines = [`📅 ${meeting.title}`, fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : ""), ""];
+  if (yes.length) lines.push(`✅ Будут (${yes.length}):`, ...yes.map((n) => "• " + n), "");
+  if (no.length) lines.push(`❌ Не смогут (${no.length}):`, ...no.map((n) => "• " + n), "");
+  // Отдельной строкой и последними: «не ответил» — это не «не придёт», и
+  // смешивать их значит врать организатору в обе стороны.
+  if (silent.length) lines.push(`❓ Ещё не ответили (${silent.length}):`, ...silent.map((n) => "• " + n), "");
+  if (!yes.length && !no.length && !silent.length) lines.push("Участников пока нет.");
+  return lines.join("\n").trim();
+}
+
 export function colleagueCommandsHelp(name: string): string {
   return [
     `${name}, вот что я умею.`,

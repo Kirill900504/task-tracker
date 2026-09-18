@@ -120,9 +120,12 @@ export function telegramTransport(): BotTransport {
       const result = await sendTelegramMessage(chatId, text, buttons?.length ? { buttons } : undefined);
       return { ok: result.ok, error: result.error, messageId: result.messageId != null ? String(result.messageId) : undefined };
     },
-    async resolveCallback({ callbackId, chatId, messageId, toast, rewriteTo }) {
+    async resolveCallback({ callbackId, chatId, messageId, toast, rewriteTo, rewriteButtons }) {
       await answerCallbackQuery(callbackId, toast);
-      if (rewriteTo && messageId) await editTelegramMessage(chatId, Number(messageId), rewriteTo);
+      if (rewriteTo && messageId) {
+        const buttons = rewriteButtons?.map((row) => row.map((b) => ({ text: b.text, callback_data: b.data })));
+        await editTelegramMessage(chatId, Number(messageId), rewriteTo, buttons?.length ? { buttons } : undefined);
+      }
     },
   };
 }

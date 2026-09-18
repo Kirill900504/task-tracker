@@ -15,6 +15,7 @@ import { findAssignmentDrift } from "@/lib/assignmentDrift";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { onceOnly } from "@/lib/onceOnly";
 import { findSilent, composeSilence } from "@/lib/silence";
+import { setMaxCommands, setTelegramCommands } from "@/lib/botCommands";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -89,6 +90,17 @@ export async function GET(req: Request) {
   ]);
   const userIds = [...new Set([...(tgAccounts || []), ...(maxAccounts || [])].map((r) => r.user_id as string))];
   if (!userIds.length) return NextResponse.json({ ok: true, checked: 0 });
+
+  // Меню команд бота — раз в сутки, отсюда.
+  //
+  // Ставить его при выкладке негде: у бота нет «установки», а запускать
+  // скрипт руками — это терминал на стороне Кирилла, то есть ровно то, чего
+  // здесь не делают. Крон и так ходит каждые несколько минут; onceOnly
+  // превращает это в одну попытку в день, а не выставилось — бот работает
+  // как работал, и завтра попробует снова.
+  await onceOnly(admin, { userId: userIds[0], kind: "bot_commands", refId: today, date: today }, async () => {
+    await Promise.all([setTelegramCommands(), setMaxCommands()]);
+  });
 
   for (const userId of userIds) {
 

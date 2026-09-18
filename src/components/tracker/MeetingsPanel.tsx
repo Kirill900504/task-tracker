@@ -151,7 +151,18 @@ export default function MeetingsPanel({
       // meeting goes back into the plan.
       resolvedAt: status === "planned" ? "" : new Date().toISOString(),
     });
-    toasts.showToast(status === "planned" ? "Встреча возвращена в план" : "Итог встречи сохранён", m.title, () =>
+    // Итог уходит тем, кто был: до сих пор его не получал никто, кроме
+    // самого Кирилла, — а «о чём договорились» и есть то единственное, ради
+    // чего половина участников на встречу шла. Не дошло — встреча всё равно
+    // закрыта: рассылка не должна ронять сохранение.
+    if (status !== "planned" && resultText.trim()) {
+      void fetch("/api/workspace/recap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meetingId: m.id, result: resultText.trim() }),
+      }).catch(() => {});
+    }
+    toasts.showToast(status === "planned" ? "Встреча возвращена в план" : "Итог встречи сохранён и отправлен участникам", m.title, () =>
       actions.saveMeeting({ ...m, ...prev }),
     );
   }

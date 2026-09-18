@@ -214,6 +214,106 @@ try {
   // бы в ту же задачу до скончания века.
   check("направление снимается после одного сообщения", cleared?.pending_reply_id === null, cleared);
 
+  // ---- Четвёртая дверь: «Прошу перенос» ----
+  //
+  // В трекере она была с самого начала, в мессенджере её не было, и выбор у
+  // большинства стоял между «не могу» и молчанием. Два шага: сперва на
+  // сколько (кнопками — дату словами разбирать было бы нечем, кроме модели),
+  // потом почему.
+  const mvTask = "chkmv" + Math.random().toString(36).slice(2, 8);
+  await admin.from("tasks").insert({ id: mvTask, user_id: userId, title: "Проверка переноса", assignee: "Проверочный Коллега", status: "in_progress" });
+  await admin.from("task_participants").upsert(
+    { task_id: mvTask, assignee_id: assignee.id, role: "executor" },
+    { onConflict: "task_id,assignee_id" },
+  );
+  const askMove = await post(
+    "/api/telegram/webhook",
+    {
+      update_id: Math.floor(Math.random() * 1e9),
+      callback_query: { id: "cbq4", data: "t:mv:" + mvTask, message: { chat: { id: colleagueChat }, message_id: 8 } },
+    },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("предлагает выбрать срок переноса", askMove.status === 200, askMove);
+
+  const pickMove = await post(
+    "/api/telegram/webhook",
+    {
+      update_id: Math.floor(Math.random() * 1e9),
+      callback_query: { id: "cbq5", data: "t:mv3:" + mvTask, message: { chat: { id: colleagueChat }, message_id: 9 } },
+    },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("принимает выбранный срок", pickMove.status === 200, pickMove);
+  const { data: asked } = await admin
+    .from("task_participants")
+    .select("reschedule_requested_at, reschedule_to, reschedule_reason")
+    .eq("task_id", mvTask)
+    .eq("assignee_id", assignee.id)
+    .maybeSingle();
+  // Незаполненная причина при заполненной дате и есть заданный вопрос — тот
+  // же приём, что у «Сделал» и «Не могу».
+  check(
+    "записывает дату и ждёт причину",
+    !!asked?.reschedule_requested_at && !!asked?.reschedule_to && asked?.reschedule_reason === null,
+    asked,
+  );
+
+  const whyMove = await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "Поставщик сдвинул отгрузку" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("принимает причину переноса", whyMove.status === 200, whyMove);
+  const { data: explainedMove } = await admin
+    .from("task_participants")
+    .select("reschedule_reason")
+    .eq("task_id", mvTask)
+    .eq("assignee_id", assignee.id)
+    .maybeSingle();
+  check("причина легла в просьбу, а не в обсуждение", explainedMove?.reschedule_reason === "Поставщик сдвинул отгрузку", explainedMove);
+
+  // ---- «Опоздаю» ----
+  //
+  // Не третий вариант ответа, а уточнение к «да»: для подсчёта опоздавший —
+  // пришедший, встречу из-за него не переносят (миграция 0029).
+  const lateMeeting = "chkml" + Math.random().toString(36).slice(2, 8);
+  await admin.from("meetings").insert({
+    id: lateMeeting,
+    user_id: userId,
+    title: "Проверка опоздания",
+    date: new Date(Date.now() + 86400_000).toISOString().slice(0, 10),
+    time: "09:00",
+    participants: ["Проверочный Коллега"],
+    status: "planned",
+  });
+  const late = await post(
+    "/api/telegram/webhook",
+    {
+      update_id: Math.floor(Math.random() * 1e9),
+      callback_query: { id: "cbq6", data: "m:late:" + lateMeeting, message: { chat: { id: colleagueChat }, message_id: 10 } },
+    },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("принимает «Опоздаю»", late.status === 200, late);
+  const { data: lateRow } = await admin
+    .from("meeting_participants")
+    .select("response, late")
+    .eq("meeting_id", lateMeeting)
+    .eq("assignee_id", assignee.id)
+    .maybeSingle();
+  check("опоздавший считается пришедшим и помечен", lateRow?.response === "yes" && lateRow?.late === true, lateRow);
+
+  const who = await post(
+    "/api/telegram/webhook",
+    {
+      update_id: Math.floor(Math.random() * 1e9),
+      callback_query: { id: "cbq7", data: "m:who:" + lateMeeting, message: { chat: { id: colleagueChat }, message_id: 11 } },
+    },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("показывает, кто идёт", who.status === 200, who);
+
   // ---- MAX ----
   console.log("\nMAX webhook:");
   // Секрет вебхука теперь живёт в базе — его придумывает /api/max/setup в

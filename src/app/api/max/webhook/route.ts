@@ -108,6 +108,7 @@ export async function POST(req: Request) {
       messageId: message?.body?.mid,
       toast: outcome.toast,
       rewriteTo: outcome.rewriteTo,
+      rewriteButtons: outcome.rewriteButtons,
     });
     // В MAX это тем более обязательно: всплывающих подсказок там нет, и без
     // этого сообщения нажатие «Ответить» или «Мои задачи» выглядело бы как

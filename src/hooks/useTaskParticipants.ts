@@ -247,15 +247,26 @@ export function useTaskParticipants() {
   // Просьбу либо удовлетворяют, либо отклоняют — в обоих случаях она
   // перестаёт висеть. Сам срок меняет вызывающий: колонка deadline
   // принадлежит движку синхронизации, и писать её отсюда нельзя.
-  const clearRescheduleRequest = useCallback(
-    async (participantId: string) => {
+  //
+  // А вот закрытие просьбы идёт через маршрут, а не строкой в базу, и по
+  // той же причине, по которой через маршрут идут приёмка и возврат: решение
+  // ждёт человек. Раньше вкладка просто стирала строку, и для попросившего
+  // «срок двинули», «отказали» и «не заметили» выглядели одинаково — то есть
+  // никак.
+  const decideReschedule = useCallback(
+    async (taskId: string, participantId: string, moved: boolean, date?: string | null) => {
       patchParticipant(participantId, (p) => ({ ...p, rescheduleTo: null, rescheduleReason: null }));
-      const db = createClient();
-      const { error } = await db
-        .from("task_participants")
-        .update({ reschedule_requested_at: null, reschedule_to: null, reschedule_reason: null })
-        .eq("id", participantId);
-      if (error) await load();
+      const res = await fetch("/api/workspace/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: moved ? "moved" : "kept", taskId, participantId, date: date ?? null }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.error) {
+        await load();
+        throw new Error(data?.error || "Не получилось ответить на просьбу");
+      }
+      await load();
     },
     [load, patchParticipant],
   );
@@ -340,7 +351,7 @@ export function useTaskParticipants() {
   );
 
   return useMemo(
-    () => ({ loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, waitForPerson, clearRescheduleRequest, approve, returnForRework, forceClose, reload: load }),
-    [loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, waitForPerson, clearRescheduleRequest, approve, returnForRework, forceClose, load],
+    () => ({ loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, waitForPerson, decideReschedule, approve, returnForRework, forceClose, reload: load }),
+    [loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, waitForPerson, decideReschedule, approve, returnForRework, forceClose, load],
   );
 }

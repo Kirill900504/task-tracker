@@ -103,19 +103,63 @@ export function taskButtons(taskId: string, role: "executor" | "coexecutor" | "w
     ],
     [
       { text: "⛔ Не могу", data: encodeCallback("task", "no", taskId) },
-      { text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) },
+      // Четвёртая дверь. В трекере она была с самого начала, в мессенджере
+      // её не было — а четверо из шести в трекер не заходят вовсе, и выбор
+      // у них стоял между «не могу» и молчанием. «Не могу» вместо «дайте
+      // срок» — это отказ от работы, которую человек готов сделать, и
+      // разницу между этими двумя ответами постановщик обязан видеть.
+      { text: "📅 Прошу перенос", data: encodeCallback("task", "mv", taskId) },
     ],
+    [{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }],
+  ];
+}
+
+// На сколько переносим — кнопками, а не датой словами.
+//
+// Разобрать «до конца следующей недели» можно только моделью, а модель в
+// этом трекере не считает и не решает фактов. Четыре срока закрывают почти
+// всё, а если не подошло — человек напишет в причине («лучше до 25-го»):
+// перенос он всё равно только ПРОСИТ, двигает срок постановщик, и точная
+// дата здесь — предложение, а не решение.
+export const RESCHEDULE_OPTIONS: { days: number; label: string }[] = [
+  { days: 1, label: "на день" },
+  { days: 3, label: "на 3 дня" },
+  { days: 7, label: "на неделю" },
+  { days: 14, label: "на 2 недели" },
+];
+
+export function rescheduleButtons(taskId: string): BotButton[][] {
+  return [
+    RESCHEDULE_OPTIONS.slice(0, 2).map((o) => ({ text: o.label, data: encodeCallback("task", "mv" + o.days, taskId) })),
+    RESCHEDULE_OPTIONS.slice(2).map((o) => ({ text: o.label, data: encodeCallback("task", "mv" + o.days, taskId) })),
+    [{ text: "← Отмена", data: encodeCallback("task", "show", taskId) }],
   ];
 }
 
 // «Не смогу» — не вежливость, а половина смысла: список подтвердивших не
 // отличает того, кто не придёт, от того, кто просто не ответил, а
 // организатору нужна именно эта разница. Причина спрашивается следом.
+// Кнопки остаются и ПОСЛЕ ответа — «передумать можно до начала» это решение
+// проекта, а сообщение, переписанное без кнопок, делало его недействующим:
+// передумать было нечем, кроме как писать словами.
+//
+// «Опоздаю» стоит между «буду» и «не смогу» потому, что раньше человеку,
+// задерживающемуся на двадцать минут, приходилось выбирать из двух неправд.
+// На практике он жал «буду», и организатор узнавал о задержке в момент
+// задержки.
 export function meetingButtons(meetingId: string): BotButton[][] {
   return [
     [
       { text: "✅ Буду", data: encodeCallback("meeting", "yes", meetingId) },
+      { text: "🕐 Опоздаю", data: encodeCallback("meeting", "late", meetingId) },
       { text: "❌ Не смогу", data: encodeCallback("meeting", "no", meetingId) },
+    ],
+    [
+      // Состав с ответами был виден только в трекере, а идёт человек,
+      // глядя в телефон: «кто ещё будет» — вопрос, который задают перед
+      // встречей, а не после.
+      { text: "👥 Кто идёт", data: encodeCallback("meeting", "who", meetingId) },
+      { text: "💬 Ответить", data: encodeCallback("meeting", "msg", meetingId) },
     ],
   ];
 }

@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
-import { findColleagueByChat } from "@/lib/colleagues";
+import { findColleagueByChat, meetingButtons, rescheduleButtons, RESCHEDULE_OPTIONS } from "@/lib/colleagues";
 import { uid } from "@/lib/uid";
 import { recordEvent } from "@/lib/itemHistory";
 import { newTaskRow } from "@/lib/newTask";
 import { deliverComment } from "@/lib/commentDelivery";
-import { colleagueCommandsHelp, matchColleagueCommand, meetingCard, replyForColleague, taskCard } from "@/lib/colleagueQueries";
+import { colleagueCommandsHelp, matchColleagueCommand, meetingCard, meetingRoster, replyForColleague, taskCard } from "@/lib/colleagueQueries";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 
 // What happens when a colleague presses a button under a task or a meeting.
@@ -27,6 +27,9 @@ export type CallbackOutcome = {
   // The message is rewritten to this, so the chat shows what happened
   // instead of buttons that no longer do anything.
   rewriteTo?: string;
+  // Чем заменить кнопки. Пусто — снять совсем; для ответа на встречу они,
+  // наоборот, обязаны остаться: передумать можно до начала.
+  rewriteButtons?: BotButton[][];
   // Отдельным сообщением вслед, не вместо. Нужно там, где нажатие ничего в
   // задаче не изменило и переписывать сообщение не за что, а сказать надо —
   // «Ответить», список задач, открытая карточка. В MAX это ещё и
@@ -276,9 +279,45 @@ export async function handleColleagueCallback(
         notifyOwner: `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
       };
     }
+
+    // «Прошу перенос»: сперва на сколько, потом почему.
+    //
+    // Два шага, а не один, потому что срок и причина — разные вещи, и
+    // спрошенные вместе они приходят одной фразой, из которой дату
+    // пришлось бы вытаскивать моделью. Кнопки отвечают на «насколько»
+    // точно и бесплатно.
+    if (action.action === "mv") {
+      if (!participant) return { toast: "Эта задача уже не ваша" };
+      return {
+        toast: "На сколько перенести?",
+        say: `📅 На сколько перенести «${task.title}»?\nПосле выбора напишите, что мешает успеть — без причины это не просьба, а просто новая дата.`,
+        sayButtons: rescheduleButtons(task.id),
+      };
+    }
+
+    const shift = RESCHEDULE_OPTIONS.find((o) => action.action === "mv" + o.days);
+    if (shift) {
+      if (!participant) return { toast: "Эта задача уже не ваша" };
+      // Считается от сегодняшнего дня, а не от прежнего срока: просьба
+      // «на неделю» у просроченной задачи означает неделю от сегодня, а не
+      // неделю от даты, которая уже прошла.
+      const to = new Date();
+      to.setDate(to.getDate() + shift.days);
+      const date = to.toISOString().slice(0, 10);
+      // Незаполненная причина при заполненном reschedule_requested_at и
+      // есть заданный вопрос — тот же приём, что у «Сделал» и «Не могу».
+      await admin
+        .from("task_participants")
+        .update({ reschedule_requested_at: new Date().toISOString(), reschedule_to: date, reschedule_reason: null })
+        .eq("id", participant.id);
+      return {
+        toast: "Записал дату",
+        say: `📅 Прошу перенести «${task.title}» на ${fmtDate(date)}.\nНапишите одним сообщением, что мешает успеть — это увидит постановщик, и решение за ним.`,
+      };
+    }
   }
 
-  if (action.kind === "meeting" && (action.action === "yes" || action.action === "no")) {
+  if (action.kind === "meeting" && (action.action === "yes" || action.action === "no" || action.action === "late")) {
     const { data: meeting } = await admin
       .from("meetings")
       .select("id, title, date, time, participants, confirmed_by, user_id, vote_round, created_by")
@@ -292,7 +331,11 @@ export async function handleColleagueCallback(
 
     const when = fmtDate(meeting.date as string) + (meeting.time ? ", " + meeting.time : "");
     const round = Number((meeting as { vote_round?: number }).vote_round ?? 1) || 1;
-    const coming = action.action === "yes";
+    // Опоздавший — это пришедший: встречу из-за него не переносят и кворум
+    // он не ломает (см. миграцию 0029). Поэтому для подсчёта он «yes», а то,
+    // что он придёт позже, живёт отдельной колонкой.
+    const late = action.action === "late";
+    const coming = action.action === "yes" || late;
 
     // Ответ пишется в строку голосования — там же, где его ждёт карточка.
     // Раунд обязателен: ответ принадлежит тому времени, о котором спросили,
@@ -309,6 +352,7 @@ export async function handleColleagueCallback(
       reason: null,
       responded_at: new Date().toISOString(),
       round,
+      late,
     };
     if (existing) await admin.from("meeting_participants").update(patch).eq("id", (existing as { id: string }).id);
     else await admin.from("meeting_participants").insert({ meeting_id: meeting.id, assignee_id: colleague.id, role: "participant", ...patch });
@@ -317,7 +361,7 @@ export async function handleColleagueCallback(
       userId: meeting.user_id,
       kind: "meeting",
       itemId: meeting.id,
-      text: coming ? `✅ ${colleague.name} будет` : `❌ ${colleague.name} не сможет`,
+      text: late ? `🕐 ${colleague.name} будет, но опоздает` : coming ? `✅ ${colleague.name} будет` : `❌ ${colleague.name} не сможет`,
     });
 
     // confirmed_by остаётся в согласии со строками, пока его кто-то читает.
@@ -329,10 +373,18 @@ export async function handleColleagueCallback(
 
     if (coming) {
       return {
-        toast: "Отметил, что будете",
-        rewriteTo: `📅 ${meeting.title}\n${when}\n\n✅ Вы подтвердили участие`,
+        toast: late ? "Отметил, что опоздаете" : "Отметил, что будете",
+        rewriteTo:
+          `📅 ${meeting.title}\n${when}\n\n` +
+          (late ? "🕐 Вы придёте, но опоздаете" : "✅ Вы подтвердили участие") +
+          "\nПередумали? Нажмите другую кнопку — ответ можно менять до начала.",
+        // Кнопки остаются: «передумать можно до начала» — решение проекта, и
+        // без них оно не действует.
+        rewriteButtons: meetingButtons(meeting.id as string),
         notifyTo: meeting.created_by,
-        notifyOwner: `✅ ${colleague.name} будет на встрече «${meeting.title}» (${when})`,
+        notifyOwner: late
+          ? `🕐 ${colleague.name} будет на встрече «${meeting.title}» (${when}), но опоздает`
+          : `✅ ${colleague.name} будет на встрече «${meeting.title}» (${when})`,
       };
     }
     // Организатору сразу говорится и то, что причины пока нет: иначе
@@ -342,10 +394,21 @@ export async function handleColleagueCallback(
     // напоминанием о встрече (см. cron/reminders).
     return {
       toast: "Передал. Напишите, почему",
-      rewriteTo: `📅 ${meeting.title}\n${when}\n\n❌ Вы не сможете\nНапишите одним сообщением, почему — это увидит организатор.`,
+      rewriteTo:
+        `📅 ${meeting.title}\n${when}\n\n❌ Вы не сможете\n` +
+        "Напишите одним сообщением, почему — это увидит организатор.\n" +
+        "Передумали? Нажмите другую кнопку — ответ можно менять до начала.",
+      rewriteButtons: meetingButtons(meeting.id as string),
       notifyTo: meeting.created_by,
       notifyOwner: `❌ ${colleague.name} не сможет быть на встрече «${meeting.title}» (${when})\nСпросил, почему — пришлю, как ответит.`,
     };
+  }
+
+  // «Кто идёт» — тот же расклад, что видит карточка в трекере.
+  if (action.kind === "meeting" && action.action === "who") {
+    const roster = await meetingRoster(admin, colleague, action.id);
+    if (!roster) return { toast: "Эта встреча уже не ваша" };
+    return { toast: "Показываю", say: roster, sayButtons: meetingButtons(action.id) };
   }
 
   if (action.kind === "idea" && action.action === "task") {
@@ -432,7 +495,10 @@ export async function handleColleagueText(
 
   const { data } = await admin
     .from("task_participants")
-    .select("id, task_id, done_at, done_comment, declined_at, decline_reason, tasks(title, created_by)")
+    .select(
+      "id, task_id, done_at, done_comment, declined_at, decline_reason, " +
+        "reschedule_requested_at, reschedule_to, reschedule_reason, tasks(title, created_by)",
+    )
     .eq("assignee_id", colleague.id)
     .eq("user_id", colleague.user_id);
 
@@ -443,11 +509,17 @@ export async function handleColleagueText(
     done_comment: string | null;
     declined_at: string | null;
     decline_reason: string | null;
+    reschedule_requested_at: string | null;
+    reschedule_to: string | null;
+    reschedule_reason: string | null;
     tasks: { title: string; created_by: string | null } | { title: string; created_by: string | null }[] | null;
   };
 
-  const rows = ((data as Row[]) || []).filter(
-    (r) => (r.done_at && !r.done_comment) || (r.declined_at && !r.decline_reason),
+  const rows = ((data as unknown as Row[]) || []).filter(
+    (r) =>
+      (r.done_at && !r.done_comment) ||
+      (r.declined_at && !r.decline_reason) ||
+      (r.reschedule_requested_at && !r.reschedule_reason),
   );
 
   // Нажатое «Ответить» сильнее незакрытого вопроса: человек только что
@@ -473,10 +545,27 @@ export async function handleColleagueText(
   if (!rows.length) return (await handleMeetingReason(admin, colleague, body)) ?? handleChatMessage(admin, colleague, body, source);
 
   // Самая свежая: человек отвечает на то, что нажал только что.
-  rows.sort((a, b) => Date.parse(b.done_at || b.declined_at || "") - Date.parse(a.done_at || a.declined_at || ""));
+  const askedAt = (r: Row) => Date.parse(r.done_at || r.declined_at || r.reschedule_requested_at || "") || 0;
+  rows.sort((a, b) => askedAt(b) - askedAt(a));
   const row = rows[0];
   const taskRef = Array.isArray(row.tasks) ? row.tasks[0] : row.tasks;
   const title = taskRef?.title || "";
+
+  if (row.reschedule_requested_at && !row.reschedule_reason) {
+    await admin.from("task_participants").update({ reschedule_reason: body }).eq("id", row.id);
+    const to = row.reschedule_to ? ` на ${fmtDate(row.reschedule_to)}` : "";
+    await recordEvent(admin, {
+      userId: colleague.user_id,
+      kind: "task",
+      itemId: row.task_id,
+      text: `📅 ${colleague.name} просит перенос${to}: ${body}`,
+    });
+    return {
+      reply: `Передал: просите перенести «${title}»${to} — ${body}.\nСрок двигает постановщик, я скажу, когда он ответит.`,
+      notifyTo: taskRef?.created_by ?? null,
+      notifyOwner: `📅 ${colleague.name} просит перенести «${title}»${to}: ${body}`,
+    };
+  }
 
   if (row.done_at && !row.done_comment) {
     await admin.from("task_participants").update({ done_comment: body }).eq("id", row.id);
@@ -549,6 +638,86 @@ async function handleMeetingReason(
   };
 }
 
+
+// Фотография или документ из мессенджера — в обсуждение той же задачи.
+//
+// В трекере файлы у обсуждения были с самого начала (миграция 0020), а из
+// мессенджера не доходили вовсе: вебхук читал только текст и голос. При
+// этом «покажи, что сделал» на практике означает именно фотографию, и она
+// пропадала молча — человек был уверен, что показал.
+//
+// Адресуется так же, как текст: нажатое «Ответить» сильнее, иначе самая
+// свежая открытая задача. Подпись под фотографией становится сообщением;
+// без подписи остаётся один файл, и `commentText` скажет «📎 файл» вместо
+// пустой строки.
+export async function handleColleagueFile(
+  admin: SupabaseClient,
+  colleague: { id: string; name: string; user_id: string },
+  file: { bytes: ArrayBuffer; name: string; type: string },
+  caption: string,
+  source: "telegram" | "max",
+): Promise<ColleagueTextResult | null> {
+  const aim = await takeAim(admin, colleague.id);
+  const target = aim ?? (await guessOpenTask(admin, colleague));
+  if (!target) return null;
+
+  // Путь начинается с пространства: по первому сегменту права корзины и
+  // решают, чей это файл (миграция 0020).
+  const safe = file.name.replace(/[^\w.\-]+/g, "_").slice(-80) || "file";
+  const path = `${colleague.user_id}/${target.kind}/${target.id}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safe}`;
+  const { error: upError } = await admin.storage
+    .from("item-files")
+    .upload(path, file.bytes, { contentType: file.type || "application/octet-stream", upsert: false });
+  if (upError) return { reply: "Не получилось сохранить файл: " + upError.message };
+
+  const { data: inserted, error } = await admin
+    .from("item_comments")
+    .insert({
+      item_kind: target.kind,
+      item_id: target.id,
+      body: caption.trim(),
+      attachments: [{ path, name: file.name, size: file.bytes.byteLength, type: file.type }],
+      author_assignee_id: colleague.id,
+      source,
+    })
+    .select("id")
+    .maybeSingle();
+  if (error || !inserted) return { reply: "Не получилось записать файл — попробуйте ещё раз." };
+
+  await deliverComment(admin, (inserted as { id: string }).id);
+  const title = await titleOf(admin, target.kind, target.id);
+  return {
+    reply:
+      `📎 Приложил к ${target.kind === "task" ? "задаче" : "встрече"} «${title}».` +
+      (aim ? "" : "\nНе та? Нажмите «💬 Ответить» под нужной задачей и пришлите ещё раз."),
+  };
+}
+
+async function titleOf(admin: SupabaseClient, kind: "task" | "meeting", id: string): Promise<string> {
+  const { data } = await admin.from(kind === "task" ? "tasks" : "meetings").select("title").eq("id", id).maybeSingle();
+  return (data as { title: string } | null)?.title || "";
+}
+
+// Самая свежая открытая задача этого человека — запасной адрес, когда
+// «Ответить» не нажимали.
+async function guessOpenTask(
+  admin: SupabaseClient,
+  colleague: { id: string; user_id: string },
+): Promise<{ kind: "task"; id: string } | null> {
+  const { data } = await admin
+    .from("task_participants")
+    .select("task_id, created_at, tasks(status, deleted_at)")
+    .eq("assignee_id", colleague.id)
+    .eq("user_id", colleague.user_id)
+    .order("created_at", { ascending: false })
+    .limit(10);
+  type Row = { task_id: string; tasks: { status: string | null; deleted_at: string | null } | { status: string | null; deleted_at: string | null }[] | null };
+  for (const r of ((data as unknown as Row[]) || [])) {
+    const t = Array.isArray(r.tasks) ? r.tasks[0] : r.tasks;
+    if (t && !t.deleted_at && t.status !== "done") return { kind: "task", id: r.task_id };
+  }
+  return null;
+}
 
 // Записать сообщение в обсуждение и рассказать о нём всем, кого оно
 // касается.

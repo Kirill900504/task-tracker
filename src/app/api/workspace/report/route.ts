@@ -29,7 +29,7 @@ type Body = {
   recipientId?: string;
   comment?: string;
   date?: string;
-  response?: "yes" | "no";
+  response?: "yes" | "no" | "late";
   round?: number;
 };
 
@@ -130,7 +130,11 @@ export async function POST(req: Request) {
     if (!vote || vote.assignee_id !== m.assignee_id) return NextResponse.json({ error: "Это не ваша встреча" }, { status: 403 });
 
     const meeting = Array.isArray(vote.meetings) ? vote.meetings[0] : vote.meetings;
-    const coming = body.response === "yes";
+    // Опоздавший — это пришедший: кворум он не ломает и встречу из-за него
+    // не переносят. Отдельной колонкой, а не третьим значением ответа
+    // (миграция 0029).
+    const late = body.response === "late";
+    const coming = body.response === "yes" || late;
     const reason = (body.comment || "").trim();
     if (!coming && !canVoteNo(reason)) return NextResponse.json({ error: "Нужна причина" }, { status: 400 });
 
@@ -141,6 +145,7 @@ export async function POST(req: Request) {
         reason: coming ? null : reason,
         responded_at: now,
         round: Number(meeting?.vote_round ?? 1) || 1,
+        late,
       })
       .eq("id", body.participantId);
 
@@ -149,7 +154,7 @@ export async function POST(req: Request) {
       userId: m.owner_id,
       kind: "meeting",
       itemId: vote.meeting_id,
-      text: coming ? `✅ ${myName} будет` : `❌ ${myName} не сможет: ${reason}`,
+      text: late ? `🕐 ${myName} будет, но опоздает` : coming ? `✅ ${myName} будет` : `❌ ${myName} не сможет: ${reason}`,
     });
     // Организатору, а не владельцу: планёрку собирает тот, кому и важно,
     // кто на неё придёт.
@@ -157,9 +162,11 @@ export async function POST(req: Request) {
       admin,
       m.owner_id,
       meeting?.created_by || null,
-      coming
-        ? `✅ ${myName} будет на встрече «${meeting?.title || ""}» (${when})`
-        : `❌ ${myName} не сможет быть на «${meeting?.title || ""}» (${when}): ${reason}`,
+      late
+        ? `🕐 ${myName} будет на встрече «${meeting?.title || ""}» (${when}), но опоздает`
+        : coming
+          ? `✅ ${myName} будет на встрече «${meeting?.title || ""}» (${when})`
+          : `❌ ${myName} не сможет быть на «${meeting?.title || ""}» (${when}): ${reason}`,
     );
     return NextResponse.json({ ok: true });
   }

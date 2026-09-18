@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
+import { chatsFor, replyButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { recordEvent } from "@/lib/itemHistory";
+import { fmtDate } from "@/lib/taskDisplay";
 
 // Решение постановщика по отчёту: принять, вернуть, закрыть волевым.
 //
@@ -29,9 +30,13 @@ import { recordEvent } from "@/lib/itemHistory";
 // перезаписать друг друга не могут.
 
 type Body = {
-  action: "approve" | "return" | "force";
+  action: "approve" | "return" | "force" | "moved" | "kept";
   taskId: string;
   comment?: string;
+  // Только для решения по переносу: чью просьбу закрываем и какой срок
+  // поставили.
+  participantId?: string;
+  date?: string | null;
 };
 
 export async function POST(req: Request) {
@@ -69,6 +74,61 @@ export async function POST(req: Request) {
   }
   if (body.action === "force" && !comment) {
     return NextResponse.json({ error: "Нужна причина" }, { status: 400 });
+  }
+
+  // Решение по просьбе о переносе.
+  //
+  // Просьба была видна, решение — нет: вкладка просто стирала строку, и
+  // человек, попросивший срок, не узнавал ответа ни в какой форме. Для него
+  // это выглядит одинаково и когда срок двинули, и когда отказали, и когда
+  // просто не заметили — то есть худшим из трёх способов.
+  //
+  // Сам срок здесь не двигается: им владеет движок синхронизации, и запись
+  // мимо него откатится первой же открытой вкладкой (см. правило про
+  // приёмку в CLAUDE.md). Вкладка сохраняет задачу как обычно, маршрут
+  // закрывает просьбу и говорит человеку.
+  if (body.action === "moved" || body.action === "kept") {
+    if (!body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+    const { data: partRow } = await admin
+      .from("task_participants")
+      .select("id, task_id, assignee_id, reschedule_to, reschedule_reason")
+      .eq("id", body.participantId)
+      .maybeSingle();
+    const part = partRow as { id: string; task_id: string; assignee_id: string; reschedule_to: string | null } | null;
+    if (!part || part.task_id !== task.id) return NextResponse.json({ error: "Просьба не найдена" }, { status: 404 });
+
+    await admin
+      .from("task_participants")
+      .update({ reschedule_requested_at: null, reschedule_to: null, reschedule_reason: null })
+      .eq("id", part.id);
+
+    const when = body.date || part.reschedule_to;
+    const moved = body.action === "moved";
+    await recordEvent(admin, {
+      userId: task.user_id,
+      kind: "task",
+      itemId: task.id,
+      text: moved
+        ? `📅 Срок перенесён${when ? " на " + fmtDate(when) : ""}${comment ? ": " + comment : ""}`
+        : `📅 В переносе отказано${comment ? ": " + comment : ""}`,
+    });
+
+    const { data: person } = await admin
+      .from("assignees")
+      .select("id, name, telegram_chat_id, max_user_id")
+      .eq("id", part.assignee_id)
+      .maybeSingle();
+    const target = person ? chatsFor(person as ColleagueRow)[0] : undefined;
+    if (target) {
+      await sendToColleague(
+        target,
+        moved
+          ? `📅 Срок перенесён: «${task.title}»${when ? "\nНовый срок: " + fmtDate(when) : ""}${comment ? "\n\n" + comment : ""}`
+          : `📅 Срок остаётся прежним: «${task.title}»${comment ? "\n\n" + comment : ""}`,
+        taskButtons(task.id, "executor"),
+      );
+    }
+    return NextResponse.json({ ok: true });
   }
 
   // Принято и закрыто — одно и то же событие. «Принял, но задача висит
@@ -130,9 +190,20 @@ export async function POST(req: Request) {
           ? `✅ Принято: «${task.title}»${comment ? "\n\n" + comment : ""}`
           : `🔒 Задача закрыта: «${task.title}»\n\n${comment}`;
 
+    // Под возвратом — кнопки, которыми на него отвечают.
+    //
+    // Раньше приходил голый текст, а сообщение с кнопками, которым задачу
+    // присылали, к этому моменту уже переписано в «🏁 Отмечено
+    // выполненным» — то есть отчитаться заново было буквально нечем, кроме
+    // как листать переписку назад. Правило шире этого места: каждое
+    // сообщение бота, после которого от человека чего-то ждут, обязано
+    // нести кнопку этого действия. После приёмки и закрытия ждать нечего —
+    // там остаётся только «Ответить», чтобы сказать спасибо или возразить.
+    const buttons = body.action === "return" ? taskButtons(task.id, "executor") : replyButtons("task", task.id);
+
     for (const person of ((people || []) as ColleagueRow[])) {
       const target = chatsFor(person)[0];
-      if (target) await sendToColleague(target, text);
+      if (target) await sendToColleague(target, text, buttons);
     }
   }
 

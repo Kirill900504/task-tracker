@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { encodeCallback, decodeCallback, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, chatsFor } from "@/lib/colleagues";
+import { encodeCallback, decodeCallback, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, rescheduleButtons, chatsFor } from "@/lib/colleagues";
 
 describe("callback data", () => {
   it("survives a round trip", () => {
@@ -100,12 +100,34 @@ describe("buttons", () => {
     expect(rows[1][0].text).toContain("Не могу");
   });
 
-  it("asks a meeting both ways: приду и не приду", () => {
+  it("спрашивает про встречу тремя ответами, а не двумя", () => {
     // Один вариант ответа не отличал «не придёт» от «не ответил», а
-    // организатору нужна именно эта разница.
-    expect(meetingButtons("m7")[0]).toHaveLength(2);
-    expect(meetingButtons("m7")[0].map((b) => b.data)).toEqual(["m:yes:m7", "m:no:m7"]);
-    expect(meetingButtons("m7")[0][0].data).toBe("m:yes:m7");
+    // организатору нужна именно эта разница. Третий — «опоздаю»: без него
+    // задерживающийся выбирал из двух неправд и на практике жал «буду»,
+    // после чего организатор узнавал о задержке в момент задержки.
+    expect(meetingButtons("m7")[0].map((b) => b.data)).toEqual(["m:yes:m7", "m:late:m7", "m:no:m7"]);
+  });
+
+  it("даёт спросить, кто ещё идёт, и сказать слово", () => {
+    // Состав с ответами был виден только в трекере, а идёт человек, глядя
+    // в телефон.
+    const all = meetingButtons("m7").flat().map((b) => b.data);
+    expect(all).toContain("m:who:m7");
+    expect(all).toContain("m:msg:m7");
+  });
+
+  it("исполнителю даёт четвёртую дверь — попросить перенос", () => {
+    // В трекере она была с самого начала, в мессенджере её не было, и выбор
+    // у большинства стоял между «не могу» и молчанием.
+    expect(taskButtons("t42").flat().map((b) => b.data)).toContain("t:mv:t42");
+  });
+
+  it("сроки переноса — кнопками, и каждая несёт свой сдвиг", () => {
+    const data = rescheduleButtons("t42").flat().map((b) => b.data);
+    expect(data).toContain("t:mv1:t42");
+    expect(data).toContain("t:mv7:t42");
+    // Отмена возвращает в карточку, а не оставляет человека в тупике.
+    expect(data).toContain("t:show:t42");
   });
 });
 

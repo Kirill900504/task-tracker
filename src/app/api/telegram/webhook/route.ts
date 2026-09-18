@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { downloadTelegramFile, telegramTransport } from "@/lib/telegram";
-import { decodeCallback } from "@/lib/colleagues";
-import { handleColleagueCallback } from "@/lib/colleagueReplies";
+import { decodeCallback, findColleagueByChat } from "@/lib/colleagues";
+import { handleColleagueCallback, handleColleagueFile } from "@/lib/colleagueReplies";
 import { handleLinkCode, handleText, type BotContext } from "@/lib/botPipeline";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
@@ -48,6 +48,7 @@ export async function POST(req: Request) {
       messageId: callbackQuery.message?.message_id != null ? String(callbackQuery.message.message_id) : undefined,
       toast: outcome.toast,
       rewriteTo: outcome.rewriteTo,
+      rewriteButtons: outcome.rewriteButtons,
     });
     // Отдельным сообщением: список, карточка или «пишите — отправлю в
     // обсуждение». Переписать нажатое сообщение здесь нельзя — под ним
@@ -87,6 +88,42 @@ export async function POST(req: Request) {
     if (dedupError && dedupError.code === "23505") {
       return NextResponse.json({ ok: true });
     }
+  }
+
+  // Фотография или документ от коллеги — в обсуждение задачи.
+  //
+  // Раньше это просто терялось: вебхук читал только текст и голос, и
+  // человек, приславший фотографию сделанного, был уверен, что показал её.
+  // Только от коллеги: у владельца фотография в этом чате ничего не значит,
+  // а заводить ей задачу — угадывание, которого он не просил.
+  const photo = Array.isArray(message?.photo) ? message.photo[message.photo.length - 1] : null;
+  const document = message?.document;
+  if (photo || document) {
+    const colleague = await findColleagueByChat(admin, chatId, TELEGRAM_CHANNEL);
+    if (!colleague) return NextResponse.json({ ok: true });
+    try {
+      const fileId: string = photo?.file_id || document?.file_id;
+      const bytes = await downloadTelegramFile(fileId);
+      const answered = await handleColleagueFile(
+        admin,
+        colleague,
+        {
+          bytes,
+          // У фотографии имени нет вовсе — Telegram отдаёт её без него.
+          name: document?.file_name || `photo-${Date.now()}.jpg`,
+          type: document?.mime_type || "image/jpeg",
+        },
+        typeof message?.caption === "string" ? message.caption : "",
+        "telegram",
+      );
+      await transport.send(
+        chatId,
+        answered?.reply || "Пока не к чему приложить: у вас нет открытых задач.",
+      );
+    } catch (e) {
+      await transport.send(chatId, "Не получилось сохранить файл: " + (e instanceof Error ? e.message : String(e)));
+    }
+    return NextResponse.json({ ok: true });
   }
 
   // Voice message: transcribe it, then treat the result exactly like a

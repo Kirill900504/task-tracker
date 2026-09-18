@@ -167,14 +167,32 @@ export async function editMaxMessage(messageId: string, text: string): Promise<v
 // MAX has no toast of its own: answering a callback either replaces the
 // message or does nothing visible. So the outcome is written into the
 // message where there is one to write, and sent as a plain reply otherwise.
-export async function answerMaxCallback(callbackId: string, replacementText?: string): Promise<void> {
+export async function answerMaxCallback(
+  callbackId: string,
+  replacementText?: string,
+  buttons?: BotButton[][],
+): Promise<void> {
   const settings = await maxSettings();
   if (!settings) return;
   try {
     await russianFetch(`${API}/answers?callback_id=${encodeURIComponent(callbackId)}`, {
       method: "POST",
       headers: headers(settings.token),
-      body: JSON.stringify(replacementText ? { message: { text: clip(replacementText), attachments: [] } } : {}),
+      body: JSON.stringify(
+        replacementText
+          ? {
+              message: {
+                text: clip(replacementText),
+                // Пустой массив снимает кнопки, непустой — заменяет их. В
+                // MAX это единственный способ оставить действие доступным
+                // после нажатия: всплывающих подсказок тут нет, и
+                // переписанное сообщение — весь ответ, который человек
+                // увидит.
+                attachments: buttons?.length ? [keyboardAttachment(buttons)] : [],
+              },
+            }
+          : {},
+      ),
     });
   } catch {
     /* the action itself has already happened */
@@ -186,11 +204,11 @@ export function maxTransport(): BotTransport {
     channel: "max",
     label: "MAX",
     send: (chatId, text, options) => sendMaxMessage(chatId, text, options),
-    async resolveCallback({ callbackId, chatId, toast, rewriteTo }) {
+    async resolveCallback({ callbackId, chatId, toast, rewriteTo, rewriteButtons }) {
       // One call where the message can carry the outcome; a separate line in
       // the chat where it cannot, so a press is never silent.
       if (rewriteTo) {
-        await answerMaxCallback(callbackId, rewriteTo);
+        await answerMaxCallback(callbackId, rewriteTo, rewriteButtons);
         return;
       }
       await answerMaxCallback(callbackId);

@@ -30,6 +30,7 @@ export type IconName =
   | "reset"
   | "plus"
   | "calendar"
+  | "clock"
   | "mic"
   | "send"
   | "check"
@@ -110,6 +111,15 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M12 5v14" />
       <path d="M5 12h14" />
+    </>
+  ),
+  // «Опоздаю» — циферблат со стрелками, а не эмодзи 🕐: системную цветную
+  // наклейку рисует шрифт Windows, и рядом со словом в кнопке она выглядит
+  // приклеенной (см. правило про шрифты в CLAUDE.md).
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
     </>
   ),
   calendar: (

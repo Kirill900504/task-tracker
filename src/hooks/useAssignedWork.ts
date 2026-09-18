@@ -87,6 +87,7 @@ export type AssignedMeeting = {
   date: string;
   time: string;
   response: "none" | "yes" | "no";
+  late: boolean;
   reason: string | null;
   // Круг голосования строки и текущий круг встречи: ответ из прежнего
   // круга ничего не говорит о новом времени и считается неотвеченным.
@@ -124,7 +125,7 @@ export function useAssignedWork(assigneeId: string) {
       // а список тем длиннее.
       db
         .from("meeting_participants")
-        .select("id, meeting_id, response, reason, round, meetings(title, date, time, status, vote_round, deleted_at)")
+        .select("id, meeting_id, response, reason, round, late, meetings(title, date, time, status, vote_round, deleted_at)")
         .eq("assignee_id", assigneeId),
       db
         .from("idea_recipients")
@@ -136,6 +137,7 @@ export function useAssignedWork(assigneeId: string) {
       id: string;
       meeting_id: string;
       response: "none" | "yes" | "no";
+      late: boolean | null;
       reason: string | null;
       round: number;
       meetings: { title: string; date: string; time: string | null; status: string; vote_round: number | null; deleted_at: string | null } | null;
@@ -150,6 +152,7 @@ export function useAssignedWork(assigneeId: string) {
         date: r.meetings!.date,
         time: r.meetings!.time || "",
         response: r.response,
+        late: !!r.late,
         reason: r.reason,
         round: r.round,
         meetingRound: Number(r.meetings!.vote_round ?? 1) || 1,
@@ -263,7 +266,7 @@ export function useAssignedWork(assigneeId: string) {
   );
 
   const vote = useCallback(
-    (participantId: string, response: "yes" | "no", reason: string) =>
+    (participantId: string, response: "yes" | "no" | "late", reason: string) =>
       answer({ action: "vote", participantId, response, comment: reason }),
     [answer],
   );

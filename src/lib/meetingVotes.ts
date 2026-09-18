@@ -23,6 +23,12 @@ export type MeetingVote = {
   reason: string | null;
   // Which round of voting this answer was given in.
   round: number;
+  // Придёт, но опоздает. Не третий вариант ответа, а уточнение к «да»: для
+  // подсчёта такой человек — пришедший, встречу из-за него не переносят
+  // (миграция 0029). Отдельным значением `response` это пришлось бы учесть
+  // в каждом месте, которое спрашивает «yes или no», и в каждом ответ был
+  // бы «считать как yes».
+  late?: boolean;
 };
 
 // The organizer is coming by definition — he called it. Watchers are kept
@@ -55,7 +61,9 @@ export function voteTally(votes: MeetingVote[], round = 1): VoteTally {
 
   for (const v of asked) {
     if (!isCurrent(v, round) || v.response === "none") pending.push(v.name);
-    else if (v.response === "yes") yes.push(v.name);
+    // Опоздавший стоит среди идущих, потому что он идёт; помечен, потому
+    // что начала не застанет, а планирует встречу тот, кто это читает.
+    else if (v.response === "yes") yes.push(v.late ? v.name + " (опоздает)" : v.name);
     else no.push({ name: v.name, reason: v.reason || "" });
   }
 
