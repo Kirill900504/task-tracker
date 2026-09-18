@@ -87,11 +87,26 @@ function emptyShadow(): Shadow {
   return { tasks: [], meetings: [], ideas: [], assignees: [], sections: [] };
 }
 
+// В чьём пространстве работает этот слой.
+//
+// У владельца всё как было: пространство — он сам, и каждая строка уходит
+// в базу с его id по умолчанию колонки. Руководитель работает в ЧУЖОМ
+// пространстве, и это меняет две вещи. Во-первых, строка должна нести
+// user_id владельца и created_by самого руководителя — иначе её отвергнет
+// политика (миграция 0019), и отвергнет молча для всех, кроме того, кто
+// читает логи. Во-вторых, писать он вправе только своё: чужую задачу ему
+// видно, потому что он на ней исполнитель, но это не повод её править.
+//
+// Фильтр по автору здесь ещё и сеть под остальным интерфейсом: что бы ни
+// пометило чужую строку изменившейся — пересчёт повторяющихся задач,
+// случайное сохранение, — до базы это не доедет.
+export type WorkspaceContext = { ownerId: string; userId: string; isManager: boolean };
+
 // `enabled: false` останавливает всё до загрузки: ни чтения, ни подписок,
-// ни синхронизации. Нужно ровно для одного случая — вошёл руководитель, и
-// пространство, которое этот слой умеет загружать и писать, ему не
-// принадлежит. Хук нельзя вызвать условно, поэтому условие живёт внутри.
-export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
+// ни синхронизации. Нужно ровно для одного случая — роль ещё не выяснена, и
+// пространство, которое надо грузить, неизвестно. Хук нельзя вызвать
+// условно, поэтому условие живёт внутри.
+export function useTrackerData({ enabled = true, workspace }: { enabled?: boolean; workspace?: WorkspaceContext } = {}) {
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
@@ -112,6 +127,15 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
   // scheduleRetry() so they never act on a stale closure — every setter
   // below updates the ref in the same call that updates React state.
   const liveRef = useRef({ tasks, meetings, ideas, assignees, sections });
+  // Через ссылку, как и всё остальное, что читает persistAll: роль
+  // выясняется одним запросом и приезжает позже первого рендера, а
+  // синхронизация к этому моменту может уже идти. Обновляется эффектом, а
+  // не присваиванием при отрисовке: правило React-компилятора запрещает
+  // менять то, что уже захвачено хуком.
+  const workspaceRef = useRef(workspace);
+  useEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
   const shadowRef = useRef<Shadow>(emptyShadow());
   const syncChainRef = useRef<Promise<void>>(Promise.resolve());
   const pendingCountRef = useRef(0);
@@ -181,8 +205,26 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
     queueSnapshotSave();
     let hadError = false;
 
+    // Чьё пространство и чьи строки. У владельца обе функции — тождество,
+    // и код ниже читается ровно так же, как читался до появления
+    // руководителей.
+    const manager = workspaceRef.current?.isManager ? workspaceRef.current : null;
+    const stamp = <T, R>(toRow: (x: T) => R) =>
+      manager ? (x: T) => ({ ...toRow(x), user_id: manager.ownerId, created_by: manager.userId }) : toRow;
+    // Своё — то, что завёл сам. Пустой created_by у руководителя означает
+    // «завёл кто-то другой, давно»: свои строки помечаются при создании
+    // (см. NewTracker), поэтому сравнение строгое.
+    // id в сигнатуре не для дела: без обязательного поля TypeScript считает
+    // тип «слабым» и отказывается принимать функцию в filter.
+    const mine = (x: { id: string; createdBy?: string }) => !manager || (x.createdBy || "") === manager.userId;
+
     syncChainRef.current = syncChainRef.current
       .then(async () => {
+        // Разделы руководителю только читаются: их заводит, переименовывает
+        // и удаляет владелец — это и есть «структурные изменения трекера»
+        // (миграция 0031). Пропуск здесь не косметика: без него каждая
+        // синхронизация упиралась бы в отказ политики.
+        if (manager) return;
         const sectionsNow = liveRef.current.sections;
         const { upserts, deleteIds } = diffRows(sectionsNow, shadowRef.current.sections, sectionToRow);
         if (upserts.length) {
@@ -196,8 +238,8 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
         shadowRef.current.sections = snapshotList(sectionsNow);
       })
       .then(async () => {
-        const tasksNow = liveRef.current.tasks;
-        const { upserts, deleteIds } = diffRows(tasksNow, shadowRef.current.tasks, taskToRow);
+        const tasksNow = liveRef.current.tasks.filter(mine);
+        const { upserts, deleteIds } = diffRows(tasksNow, shadowRef.current.tasks.filter(mine), stamp(taskToRow));
         if (upserts.length) {
           const { error } = await db.from("tasks").upsert(upserts as TaskRow[]);
           if (error) throw error;
@@ -206,11 +248,14 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
           const { error } = await db.from("tasks").delete().in("id", deleteIds);
           if (error) throw error;
         }
-        shadowRef.current.tasks = snapshotList(tasksNow);
+        // В тень кладётся ВЕСЬ список, а не отфильтрованный: тень — это
+        // «что было в прошлый раз», и чужие строки в ней должны остаться,
+        // иначе следующий дифф сочтёт их новыми.
+        shadowRef.current.tasks = snapshotList(liveRef.current.tasks);
       })
       .then(async () => {
-        const meetingsNow = liveRef.current.meetings;
-        const { upserts, deleteIds } = diffRows(meetingsNow, shadowRef.current.meetings, meetingToRow);
+        const meetingsNow = liveRef.current.meetings.filter(mine);
+        const { upserts, deleteIds } = diffRows(meetingsNow, shadowRef.current.meetings.filter(mine), stamp(meetingToRow));
         if (upserts.length) {
           const { error } = await db.from("meetings").upsert(upserts as MeetingRow[]);
           if (error) throw error;
@@ -219,11 +264,11 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
           const { error } = await db.from("meetings").delete().in("id", deleteIds);
           if (error) throw error;
         }
-        shadowRef.current.meetings = snapshotList(meetingsNow);
+        shadowRef.current.meetings = snapshotList(liveRef.current.meetings);
       })
       .then(async () => {
-        const ideasNow = liveRef.current.ideas;
-        const { upserts, deleteIds } = diffRows(ideasNow, shadowRef.current.ideas, ideaToRow);
+        const ideasNow = liveRef.current.ideas.filter(mine);
+        const { upserts, deleteIds } = diffRows(ideasNow, shadowRef.current.ideas.filter(mine), stamp(ideaToRow));
         if (upserts.length) {
           const { error } = await db.from("ideas").upsert(upserts as IdeaRow[]);
           if (error) throw error;
@@ -232,7 +277,7 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
           const { error } = await db.from("ideas").delete().in("id", deleteIds);
           if (error) throw error;
         }
-        shadowRef.current.ideas = snapshotList(ideasNow);
+        shadowRef.current.ideas = snapshotList(liveRef.current.ideas);
       })
       .then(async () => {
         // Людей эта синхронизация только ЗАВОДИТ. Удалять она умела, и один
@@ -393,7 +438,30 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
   }, [persistAll]);
 
   // ---- Task actions
-  const saveTask = useCallback((task: Task) => commitTasks(upsertById(liveRef.current.tasks, task)), [commitTasks]);
+  // Своё — своим именем.
+  //
+  // Руководитель пишет в чужое пространство, и до базы доедет только то,
+  // что он завёл сам (см. фильтр в persistAll). Новая строка приходит сюда
+  // без автора — интерфейс о ролях не знает и знать не должен, — поэтому
+  // автор проставляется здесь, один раз и на все три вида. Пропустить это
+  // значит завести задачу, которая живёт только в этой вкладке.
+  const own = useCallback(
+    <T extends { id: string; createdBy?: string }>(item: T, existing: T[]): T => {
+      const ws = workspaceRef.current;
+      if (!ws?.isManager) return item;
+      if (item.createdBy) return item;
+      // У существующей строки автор уже есть (или её завёл кто-то другой) —
+      // присваивать себе чужое нельзя.
+      if (existing.some((x) => x.id === item.id)) return item;
+      return { ...item, createdBy: ws.userId };
+    },
+    [],
+  );
+
+  const saveTask = useCallback(
+    (task: Task) => commitTasks(upsertById(liveRef.current.tasks, own(task, liveRef.current.tasks))),
+    [commitTasks, own],
+  );
   const deleteTask = useCallback((id: string) => {
     commitTasks(removeById(liveRef.current.tasks, id));
     shadowRef.current.tasks = removeById(shadowRef.current.tasks, id);
@@ -405,7 +473,10 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
   }, [commitTasks, restoreRow]);
 
   // ---- Meeting actions
-  const saveMeeting = useCallback((meeting: Meeting) => commitMeetings(upsertById(liveRef.current.meetings, meeting)), [commitMeetings]);
+  const saveMeeting = useCallback(
+    (meeting: Meeting) => commitMeetings(upsertById(liveRef.current.meetings, own(meeting, liveRef.current.meetings))),
+    [commitMeetings, own],
+  );
   const deleteMeeting = useCallback((id: string) => {
     commitMeetings(removeById(liveRef.current.meetings, id));
     shadowRef.current.meetings = removeById(shadowRef.current.meetings, id);
@@ -417,7 +488,10 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
   }, [commitMeetings, restoreRow]);
 
   // ---- Idea actions
-  const saveIdea = useCallback((idea: Idea) => commitIdeas(upsertById(liveRef.current.ideas, idea)), [commitIdeas]);
+  const saveIdea = useCallback(
+    (idea: Idea) => commitIdeas(upsertById(liveRef.current.ideas, own(idea, liveRef.current.ideas))),
+    [commitIdeas, own],
+  );
   const deleteIdea = useCallback((id: string) => {
     commitIdeas(removeById(liveRef.current.ideas, id));
     shadowRef.current.ideas = removeById(shadowRef.current.ideas, id);

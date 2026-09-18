@@ -23,6 +23,16 @@ export type WorkspaceIdentity = {
   assigneeId: string;
   name: string;
   ownerId: string;
+  // Свой auth-id. По нему интерфейс отличает «мою задачу» от «чужой,
+  // которую мне видно»: править можно только то, что поставил сам.
+  userId: string;
+  // Администратор — только владелец. За этим флагом прячется всё, что
+  // Кирилл назвал структурными изменениями: разделы, «Команда», экспорт,
+  // принудительное закрытие. Прятать этого мало — те же границы стоят
+  // политиками в базе (миграция 0031), потому что запрет, который обходится
+  // через консоль браузера, не запрет. Кнопка убрана ради честности
+  // интерфейса: предлагать то, в чём откажут, хуже, чем не предлагать.
+  isAdmin: boolean;
   loading: boolean;
 };
 
@@ -32,6 +42,8 @@ export function useWorkspaceRole(): WorkspaceIdentity {
     assigneeId: "",
     name: "",
     ownerId: "",
+    userId: "",
+    isAdmin: true,
   });
   const [loading, setLoading] = useState(true);
 
@@ -49,22 +61,31 @@ export function useWorkspaceRole(): WorkspaceIdentity {
           .eq("member_id", userId)
           .eq("status", "active")
           .maybeSingle();
-        return row as {
+        const member = row as {
           owner_id: string;
           assignee_id: string;
           assignees: { name: string } | { name: string }[] | null;
         } | null;
+        return { userId, member };
       })
-      .then((row) => {
+      .then((found) => {
         if (cancelled) return;
-        if (row) {
-          const a = row.assignees;
-          setState({
-            role: "manager",
-            assigneeId: row.assignee_id,
-            name: (Array.isArray(a) ? a[0]?.name : a?.name) || "",
-            ownerId: row.owner_id,
-          });
+        if (found) {
+          const { userId, member } = found;
+          if (member) {
+            const a = member.assignees;
+            setState({
+              role: "manager",
+              assigneeId: member.assignee_id,
+              name: (Array.isArray(a) ? a[0]?.name : a?.name) || "",
+              ownerId: member.owner_id,
+              userId,
+              isAdmin: false,
+            });
+          } else {
+            // Строки членства нет — это его собственное пространство.
+            setState((s) => ({ ...s, userId, ownerId: userId, isAdmin: true }));
+          }
         }
         setLoading(false);
       })

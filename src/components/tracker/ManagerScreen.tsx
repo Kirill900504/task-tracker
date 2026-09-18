@@ -28,11 +28,12 @@ import Icon from "./Icon";
 // deadline — B6), and an interface offering something that will be refused
 // is worse than one that never offered it.
 
-export default function ManagerScreen({ assigneeId, name }: { assigneeId: string; name: string }) {
+export default function ManagerScreen({ assigneeId, name, embedded }: { assigneeId: string; name: string; embedded?: boolean }) {
   const { tasks, meetings, ideas, loading, accept, report, decline, askReschedule, vote, takeIdea } = useAssignedWork(assigneeId);
   const messenger = useMyMessenger(assigneeId);
   return (
     <ManagerScreenInner
+      embedded={embedded}
       name={name}
       tasks={tasks}
       meetings={meetings}
@@ -52,6 +53,7 @@ export default function ManagerScreen({ assigneeId, name }: { assigneeId: string
 // Разделено ради тестов: вся логика группировки и все правила «что можно
 // нажать» живут в этой половине и проверяются без базы вообще.
 export function ManagerScreenInner({
+  embedded,
   name,
   tasks,
   meetings = [],
@@ -65,6 +67,12 @@ export function ManagerScreenInner({
   takeIdea,
   messenger,
 }: {
+  // Внутри трекера, а не вместо него: у руководителя теперь полноценный
+  // трекер, и это — его раздел «что от меня ждут». Тогда лишними
+  // становятся заголовок с именем и «Выйти»: и то и другое уже есть в
+  // шапке трекера, а второй выход рядом с первым — это вопрос, какой из
+  // них настоящий.
+  embedded?: boolean;
   name: string;
   tasks: AssignedTask[];
   meetings?: AssignedMeeting[];
@@ -260,18 +268,20 @@ export function ManagerScreenInner({
   }
 
   return (
-    <div className="ms">
+    <div className={"ms" + (embedded ? " ms-embedded" : "")}>
       <div className="ms-head">
         <div>
-          <h1 className="ms-title">{name || "Ваши задачи"}</h1>
+          <h1 className="ms-title">{embedded ? "Что от вас ждут" : name || "Ваши задачи"}</h1>
           <div className="ms-sub">То, что адресовано вам. Отвечать можно здесь или в мессенджере — это одно и то же.</div>
         </div>
-        {/* Свой выход, а не общий: слой данных владельца для руководителя
-            не запускается вовсе, и его signOut здесь просто некому
-            выполнить. */}
-        <button className="btn btn-small ms-exit" type="button" onClick={() => void signOut()}>
-          Выйти
-        </button>
+        {/* Свой выход — только когда этот экран и есть всё приложение.
+            Внутри трекера выход уже стоит в шапке, и второй рядом с первым
+            это вопрос, какой из них настоящий. */}
+        {!embedded && (
+          <button className="btn btn-small ms-exit" type="button" onClick={() => void signOut()}>
+            Выйти
+          </button>
+        )}
       </div>
 
       {/* Выше задач, пока не подключено: без мессенджера этот экран —

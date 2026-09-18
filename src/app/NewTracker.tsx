@@ -5,7 +5,7 @@
 // conversion, and (still to come in this same pass) meeting→calendar and
 // dashboard panel rearrange.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTrackerData } from "@/hooks/useTrackerData";
 import { useToasts } from "@/hooks/useToasts";
 import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
@@ -49,19 +49,31 @@ function formatClock(d: Date): string {
 }
 
 export default function NewTracker() {
-  // Владелец или руководитель. Развилка стоит первой строкой и до всего
-  // остального: руководителю не нужен ни один из механизмов ниже — ни
-  // синхронизация чужого пространства, ни напоминания владельца, ни
-  // конструктор панелей, — а грузить их «на всякий случай» значит показать
-  // ему чужой инструмент со снятыми кнопками.
+  // Владелец или руководитель.
+  //
+  // Раньше здесь стояла развилка на два разных приложения: владельцу трекер,
+  // руководителю экран из четырёх кнопок. Кирилл попросил другого — «чтобы у
+  // моих коллег был такой же интерфейс работы с таск-трекером, как и у меня
+  // со всеми возможностями, НО ФУНКЦИЯ АДМИНИСТРАТОРА БЫЛА ТОЛЬКО У МЕНЯ».
+  // Поэтому трекер теперь один на всех, а разница — в том, что за админским
+  // флагом спрятано, и, главное, в том, что запрещено политиками базы
+  // (миграция 0031). Прятать кнопку мало: запрет, который обходится через
+  // консоль браузера, не запрет.
   const identity = useWorkspaceRole();
 
-  // Пока роль не выяснена — не грузим ничего: половина людей, которые
-  // сюда войдут, к этому пространству отношения не имеют, и тянуть его
-  // «на всякий случай» значит писать чужие данные в чужую базу от их имени.
-  const isOwner = !identity.loading && identity.role === "owner";
+  // Пока роль не выяснена — не грузим ничего: пространство, которое надо
+  // загрузить, ещё неизвестно, а тянуть «на всякий случай» значит писать
+  // чужие данные от чужого имени.
+  const ready = !identity.loading;
+  const isAdmin = identity.isAdmin;
+  // Пересоздаётся только при смене роли: объект уходит в ссылку внутри
+  // слоя данных, и новая ссылка на каждый рендер гоняла бы эффект впустую.
+  const workspace = useMemo(
+    () => ({ ownerId: identity.ownerId, userId: identity.userId, isManager: identity.role === "manager" }),
+    [identity.ownerId, identity.userId, identity.role],
+  );
   const { loading, loadError, tasks, meetings, ideas, sections, assignees, panelLayout, syncStatus, offline, actions } =
-    useTrackerData({ enabled: isOwner });
+    useTrackerData({ enabled: ready, workspace });
   const isMobile = useIsMobile();
   const toasts = useToasts();
   const dateTimeConfirm = useDateTimeConfirm();
@@ -399,6 +411,7 @@ export default function NewTracker() {
         ),
         mainCol: (
           <TasksPanel
+            isAdmin={isAdmin}
             tasks={tasks}
             sections={sections}
             assignees={assignees}
@@ -453,9 +466,13 @@ export default function NewTracker() {
   // выключенными кнопками. Проверка стоит до loadError/loading владельца:
   // его загрузка руководителя не касается, и её ошибка не должна
   // показывать ему «не получилось загрузить данные».
-  if (!identity.loading && identity.role === "manager") {
-    return <ManagerScreen assigneeId={identity.assigneeId} name={identity.name} />;
-  }
+  // Раздел «Что от вас ждут» — только у руководителя, и внутри трекера, а
+  // не вместо него. У владельца его нет: задачи ставит он, и отдельный
+  // список «что мне поручили» у него всегда был бы пуст.
+  const assignedToMe =
+    identity.role === "manager" && identity.assigneeId ? (
+      <ManagerScreen embedded assigneeId={identity.assigneeId} name={identity.name} />
+    ) : null;
 
   if (loadError) {
     // Not a dead end: the tracker keeps trying in the background and opens
@@ -486,7 +503,7 @@ export default function NewTracker() {
       <ToastStack toasts={toasts.toasts} onUndo={toasts.undo} onDismiss={toasts.dismiss} />
       {dateTimeConfirm.dialog}
       <QuickAdd provider={quickAddProvider} />
-      {teamOpen && <TeamModal onClose={() => setTeamOpen(false)} />}
+      {teamOpen && isAdmin && <TeamModal onClose={() => setTeamOpen(false)} />}
       {searchOpen && (
         <SearchOverlay
           tasks={tasks}
@@ -509,7 +526,7 @@ export default function NewTracker() {
             clockText={clockText}
             onSearch={() => setSearchOpen(true)}
             items={[
-              { id: "team", label: "👥 Команда", onSelect: () => setTeamOpen(true) },
+              ...(isAdmin ? [{ id: "team", label: "👥 Команда", onSelect: () => setTeamOpen(true) }] : []),
               { id: "done", label: showDone ? "🙈 Скрыть завершённые" : "👁 Показать завершённые", onSelect: () => setShowDone((v) => !v) },
               ...(notifications.permission !== "unsupported"
                 ? [
@@ -540,6 +557,10 @@ export default function NewTracker() {
                 keeps scroll position and open editors, and the modals inside
                 them are portalled to <body>, so they show over the shell. */}
             <div hidden={mobileTab !== "today"}>
+              {/* У руководителя «Сегодня» начинается с того, чего ждут от
+                  него: на телефоне он чаще всего открывает трекер именно
+                  затем, чтобы ответить. */}
+              {assignedToMe}
               <TodayScreen
                 tasks={tasks}
                 meetings={meetings}
@@ -622,10 +643,18 @@ export default function NewTracker() {
                 <Icon name="reset" /> Сбросить расположение
               </button>
             )}
-            <button className="btn" id="teamBtn" title="Кто на связи в мессенджерах" onClick={() => setTeamOpen(true)}>
-              <Icon name="users" /> Команда
-            </button>
-            <ExportMenu tasks={tasks} meetings={meetings} ideas={ideas} sections={sections} assignees={assignees} />
+            {/* «Команда» и выгрузка — админское: приглашения, отключение
+                доступа, отвязка мессенджера и весь архив пространства
+                принадлежат владельцу. Руководителю их не показывают, и
+                база отказала бы ему в них всё равно (миграции 0019, 0031). */}
+            {isAdmin && (
+              <>
+                <button className="btn" id="teamBtn" title="Кто на связи в мессенджерах" onClick={() => setTeamOpen(true)}>
+                  <Icon name="users" /> Команда
+                </button>
+                <ExportMenu tasks={tasks} meetings={meetings} ideas={ideas} sections={sections} assignees={assignees} />
+              </>
+            )}
             {botLink.needs.telegram && (
               <button className="btn" id="telegramLinkBtn" onClick={() => botLink.link("telegram")}>
                 <Icon name="link" /> Telegram
@@ -642,6 +671,10 @@ export default function NewTracker() {
           </div>
         </div>
       </header>
+      {/* Первым, до всего остального: это единственное на экране, чего
+          ждут ОТ НЕГО, а не он от других. Ниже — его собственный трекер,
+          такой же, как у Кирилла. */}
+      {assignedToMe}
       <DashboardLayout
         layout={panelLayout}
         onLayoutChange={actions.savePanelLayout}

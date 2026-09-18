@@ -69,6 +69,7 @@ export default function TasksPanel({
   onIdeaDropped,
   onTaskToMeeting,
   onScheduleMeetingFor,
+  isAdmin = true,
   justCreatedId,
   notifBanner,
   extraBanner,
@@ -110,6 +111,9 @@ export default function TasksPanel({
   onTaskToMeeting?: (taskId: string) => void;
   // То же самое из формы задачи, где известен и полный состав участников.
   onScheduleMeetingFor?: (task: Task, participants: string[]) => void;
+  // Разделы и принудительное закрытие — админское: их держит владелец
+  // пространства, и база откажет остальным (миграция 0031).
+  isAdmin?: boolean;
   justCreatedId?: string | null;
   notifBanner?: string | null;
   // Rendered under the notification banner, in the same slot legacy's
@@ -600,6 +604,7 @@ export default function TasksPanel({
       {/* Разделы — кнопками под панелью задач: выбрать, завести новый («+»)
           и переставить, зажав и потянув (см. SectionTabs). */}
       <SectionTabs
+        canEdit={isAdmin}
         sections={sections}
         value={filterSection}
         onSelect={setFilterSection}

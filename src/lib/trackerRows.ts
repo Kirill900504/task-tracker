@@ -42,6 +42,7 @@ export type MeetingRow = {
   moved_to_date: string | null;
   resolved_at: string | null;
   vote_round?: number | null;
+  created_by?: string | null;
   // Written by the bot only, like TaskRow.accepted_at.
   confirmed_by?: string[] | null;
 };
@@ -53,6 +54,7 @@ export type IdeaRow = {
   done: boolean;
   created_at?: string;
   done_at: string | null;
+  created_by?: string | null;
 };
 
 export type SectionRow = {
@@ -159,6 +161,7 @@ export function meetingFromRow(r: MeetingRow): Meeting {
     resolvedAt: r.resolved_at || "",
     confirmedBy: r.confirmed_by || [],
     voteRound: r.vote_round ?? 1,
+    createdBy: r.created_by || "",
   };
 }
 
@@ -181,7 +184,7 @@ export function formatIdeaCreatedAt(iso: string | Date | undefined): string {
 }
 
 export function ideaFromRow(r: IdeaRow): Idea {
-  return { id: r.id, text: r.text, important: !!r.important, done: !!r.done, createdAt: formatIdeaCreatedAt(r.created_at), doneAt: r.done_at || "" };
+  return { id: r.id, text: r.text, important: !!r.important, done: !!r.done, createdAt: formatIdeaCreatedAt(r.created_at), doneAt: r.done_at || "", createdBy: r.created_by || "" };
 }
 
 export function sectionToRow(s: Section): SectionRow {

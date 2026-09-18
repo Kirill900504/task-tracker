@@ -62,6 +62,8 @@ export interface Meeting {
   // Какой это круг голосования. Растёт при переносе: ответы, данные о
   // прежнем времени, перестают считаться подтверждением (см. meetingVotes).
   voteRound?: number;
+  // Кто собрал встречу. Только для чтения, как и у задачи.
+  createdBy?: string;
 }
 
 export interface Idea {
@@ -72,6 +74,8 @@ export interface Idea {
   createdAt: string; // formatted "dd.mm.yyyy hh:mm", display-only
   // ISO timestamp of when the idea was ticked off ("" while active).
   doneAt: string;
+  // Кто записал мысль. Только для чтения.
+  createdBy?: string;
 }
 
 export interface Section {

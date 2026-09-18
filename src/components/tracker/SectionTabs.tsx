@@ -35,6 +35,7 @@ export default function SectionTabs({
   onReorder,
   onRename,
   onDelete,
+  canEdit = true,
 }: {
   sections: Section[];
   value: string;
@@ -45,6 +46,11 @@ export default function SectionTabs({
   // Правая кнопка мыши по разделу: переименовать или удалить.
   onRename: (section: Section) => void;
   onDelete: (section: Section) => void;
+  // Разделы — структура трекера, и меняет её владелец. Руководитель их
+  // видит и выбирает ими, но не заводит, не переименовывает, не удаляет и
+  // не переставляет: его в этом откажет и база (миграция 0031), а кнопка,
+  // ведущая к отказу, хуже отсутствующей.
+  canEdit?: boolean;
 }) {
   // Порядок, который человек видит, пока держит палец: настоящий приезжает
   // из состояния приложения после отпускания.
@@ -165,12 +171,13 @@ export default function SectionTabs({
               (value === s.id ? " active" : "") +
               (dragId === s.id ? " dragging" : "")
             }
-            title={`${s.name} — зажмите, чтобы переставить; правая кнопка — переименовать или удалить`}
+            title={canEdit ? `${s.name} — зажмите, чтобы переставить; правая кнопка — переименовать или удалить` : s.name}
             onContextMenu={(e) => {
+              if (!canEdit) return;
               e.preventDefault();
               setMenuFor({ section: s, anchor: e.currentTarget.getBoundingClientRect() });
             }}
-            onPointerDown={(e) => onPointerDown(e, s.id)}
+            onPointerDown={(e) => canEdit && onPointerDown(e, s.id)}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
@@ -184,9 +191,11 @@ export default function SectionTabs({
         );
       })}
 
-      <button type="button" className="section-tab section-tab-add" id="addSectionTabBtn" title="Новый раздел" onClick={onAdd}>
-        +
-      </button>
+      {canEdit && (
+        <button type="button" className="section-tab section-tab-add" id="addSectionTabBtn" title="Новый раздел" onClick={onAdd}>
+          +
+        </button>
+      )}
 
       {menuFor && (
         <ActionMenu
