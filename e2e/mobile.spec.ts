@@ -107,7 +107,7 @@ test("a thought becomes a task from its own menu — the drag a finger cannot do
   await login(page);
   await page.click('[data-tab="ideas"]');
   await page.fill("#ideaInput", text);
-  await page.click("#ideaAddBtn");
+  await page.locator("#ideaInput").press("Enter");
   const item = page.locator(".idea-item", { hasText: text });
   await expect(item).toBeVisible();
 
@@ -153,7 +153,7 @@ test("a notification is closed by its cross on the phone too", async ({ page }) 
   await login(page);
   await page.click('[data-tab="ideas"]');
   await page.fill("#ideaInput", text);
-  await page.click("#ideaAddBtn");
+  await page.locator("#ideaInput").press("Enter");
   const idea = page.locator(".idea-item", { hasText: text });
   await expect(idea).toBeVisible();
   await idea.locator(".idea-del").click();

@@ -219,7 +219,11 @@
   .panel-title{font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); font-family:var(--mono);}
 
   /* Calendar */
-  .cal-nav{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  /* gap вместо space-between: в строке теперь ещё и ручка перетаскивания
+     слева, и «месяц» должен остаться посередине между стрелками, а не
+     разъехаться вместе с ней. */
+  .cal-nav{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+  .cal-nav .cal-month{flex:1; text-align:center;}
   .cal-month{font-family:var(--display); font-weight:700; font-size:14px;}
   .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
   .cal-wd{font-size:11px; color:var(--ink-soft); text-align:center; font-family:var(--mono); padding:2px 0;}

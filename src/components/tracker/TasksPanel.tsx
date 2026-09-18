@@ -409,10 +409,6 @@ export default function TasksPanel({
 
   return (
     <div className={"main-col dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")} id="mainCol" data-panel-id="mainCol">
-      <div className="dash-panel-head">
-        <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
-        <div className="panel-title">Задачи</div>
-      </div>
       {notifBanner && (
         <div className="notif-banner show" id="notifBanner">
           {notifBanner}
@@ -423,7 +419,11 @@ export default function TasksPanel({
         const filtersActive = filterSection !== "all" || filterAssignee !== "all" || onlyOverdue;
         const collapsed = isMobile && !filtersOpen;
         return (
+          // Строки с надписью «ЗАДАЧИ» над этой панелью больше нет: она
+          // ничего не объясняла (задачи ни с чем не спутать) и стоила
+          // высоты. Ручка перетаскивания живёт здесь же, слева от кнопки.
           <div className={"toolbar" + (collapsed ? " collapsed" : "")}>
+            <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
             <button className="btn btn-primary" id="newTaskBtn" title="Новая задача (N)" onClick={() => setModalState({ open: true, task: null })}>
               + Новая задача
             </button>

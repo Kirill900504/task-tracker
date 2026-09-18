@@ -52,7 +52,7 @@ test("full loop: login, task, meeting, idea, calendar, logout", async ({ page })
 
   // ---- Create idea ----
   await page.fill("#ideaInput", ideaText);
-  await page.click("#ideaAddBtn");
+  await page.locator("#ideaInput").press("Enter");
   await expect(page.locator(".idea-item", { hasText: ideaText })).toBeVisible();
 
   // ---- Calendar renders ----
@@ -152,7 +152,7 @@ test("dragging an idea onto a calendar day converts it into a meeting", async ({
 
   await login(page);
   await page.fill("#ideaInput", ideaText);
-  await page.click("#ideaAddBtn");
+  await page.locator("#ideaInput").press("Enter");
   await expect(page.locator(".idea-item", { hasText: ideaText })).toBeVisible();
   await waitForSaved(page);
 
@@ -490,7 +490,7 @@ test("a notification is closed by its cross", async ({ page }) => {
 
   await login(page);
   await page.fill("#ideaInput", text);
-  await page.click("#ideaAddBtn");
+  await page.locator("#ideaInput").press("Enter");
   const idea = page.locator(".idea-item", { hasText: text });
   await expect(idea).toBeVisible();
   await idea.locator(".idea-del").click();

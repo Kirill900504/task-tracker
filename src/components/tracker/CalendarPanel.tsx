@@ -86,11 +86,12 @@ export default function CalendarPanel({
 
   return (
     <div className={"panel dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")} id="calPanel" data-panel-id="calPanel">
-      <div className="dash-panel-head">
-        <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
-        <div className="panel-title">Календарь</div>
-      </div>
+      {/* Отдельной строки с надписью «КАЛЕНДАРЬ» больше нет: сетка месяца и
+          так ни на что другое не похожа, а строка стоила высоты, которой в
+          рабочем поле всегда не хватает. Ручка перетаскивания переехала в
+          строку месяца — переставлять панели по-прежнему можно. */}
       <div className="cal-nav">
+        <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
         <button className="btn btn-small" id="calPrevBtn" onClick={() => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>
           ←
         </button>

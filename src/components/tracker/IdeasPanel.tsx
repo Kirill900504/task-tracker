@@ -74,12 +74,11 @@ export default function IdeasPanel({
           singleLine
           onEnter={add}
         />
-        {/* Dictation saves the thought as soon as you stop talking — an idea
-            is a one-liner you want off your mind, not something to review. */}
+        {/* Кнопки «+» рядом нет: надиктованная мысль сохраняется сама, как
+            только человек замолчал, а набранная — по Enter. Кнопка повторяла
+            то, что и так происходит, и занимала место в строке, которой
+            пользуются одной рукой. */}
         <MicButton value={text} onChange={setText} onDone={(finalText) => addText(finalText)} title="Надиктовать мысль" />
-        <button className="btn btn-primary btn-small" id="ideaAddBtn" onClick={add}>
-          +
-        </button>
       </div>
       <div id="ideaList">
         {visible.length === 0 ? (
