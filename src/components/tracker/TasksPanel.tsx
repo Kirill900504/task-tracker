@@ -24,6 +24,7 @@ import { useAsk } from "@/components/Ask";
 import { uid } from "@/lib/uid";
 import { sortNames } from "@/lib/peopleOrder";
 import Icon from "./Icon";
+import { isMine } from "@/lib/ownership";
 
 type Term = "short" | "long";
 
@@ -298,15 +299,15 @@ export default function TasksPanel({
     removeSection(section.id);
   }
 
-  // Своя задача — та, которую поставил сам. У владельца свои все.
-  const isMine = (t: Task) => !myUserId || (t.createdBy || "") === myUserId;
+  // Своё или чужое — одно правило на весь трекер (см. lib/ownership).
+  const mine = (t: Task | null) => isMine(t, myUserId);
 
   function toggleDone(t: Task) {
     // Чужую задачу нельзя закрыть за постановщика — и, что важнее, нельзя
     // сделать вид, что закрыл: база откажет молча, галочка проживёт до
     // перезагрузки, а человек будет считать дело сделанным. Отчитаться по
     // ней он может там, где это его дело, — в разделе «Что от вас ждут».
-    if (!isMine(t)) {
+    if (!mine(t)) {
       toasts.showToast("Это не ваша задача", "Отчитаться по ней можно в разделе «Что от вас ждут» — вверху страницы.");
       return;
     }
@@ -382,7 +383,7 @@ export default function TasksPanel({
     // Чужую задачу не переносят: срочность и порядок — свойства самой
     // задачи, то есть правка, и база откажет молча. Карточка при этом уже
     // «переехала» бы на экране и вернулась после перезагрузки.
-    if (!isMine(dragged)) {
+    if (!mine(dragged)) {
       toasts.showToast("Это не ваша задача", "Переносить её может только тот, кто поставил.");
       return;
     }
@@ -443,7 +444,7 @@ export default function TasksPanel({
     // Порядок и срочность — свойства самой задачи, то есть правка. У чужой
     // задачи остаётся только то, что правкой не является: показать её
     // коллеге и собрать по ней встречу.
-    const items: ActionMenuItem[] = isMine(t)
+    const items: ActionMenuItem[] = mine(t)
       ? [
           { id: "top", label: "Наверх списка", icon: "arrow-up", onSelect: () => moveWithinColumn(t, "top") },
           { id: "bottom", label: "В конец списка", icon: "arrow-down", onSelect: () => moveWithinColumn(t, "bottom") },
@@ -698,7 +699,7 @@ export default function TasksPanel({
           key={modalTask?.id ?? "new"}
           // Своя задача — та, которую поставил сам. У владельца свои все:
           // пространство его, и колонка created_by у старых задач пуста.
-          canEdit={!modalTask || isMine(modalTask)}
+          canEdit={mine(modalTask)}
           task={modalTask}
           prefill={modalPrefill}
           sections={sections}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Idea } from "@/types/tracker";
 import { sortIdeasForList } from "@/lib/ideaDisplay";
+import { isMine } from "@/lib/ownership";
 import { formatIdeaCreatedAt } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
 import IdeaItem from "./IdeaItem";
@@ -96,7 +97,7 @@ export default function IdeasPanel({
               idea={idea}
               // Чужая мысль: её прислали тебе, а не отдали. Править и
               // удалять её вправе автор — база откажет молча.
-              canEdit={!myUserId || (idea.createdBy || "") === myUserId}
+              canEdit={isMine(idea, myUserId)}
               onToggleDone={() => actions.saveIdea({ ...idea, done: !idea.done, doneAt: idea.done ? "" : new Date().toISOString() })}
               onToggleImportant={() => actions.saveIdea({ ...idea, important: !idea.important })}
               onEditText={(newText) => actions.saveIdea({ ...idea, text: newText })}

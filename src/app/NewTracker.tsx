@@ -68,6 +68,15 @@ export default function NewTracker() {
   // чужие данные от чужого имени.
   const ready = !identity.loading;
   const isAdmin = identity.isAdmin;
+  // Пусто у владельца — и это не мелочь.
+  //
+  // Правило «своё» сравнивает created_by с этим id, а у всего, что завёл
+  // владелец, created_by в базе пуст: колонка появилась вместе с
+  // многопользовательской частью и его собственные строки не помечает.
+  // Передать сюда его настоящий id значит объявить чужой всю его работу —
+  // и запретить ему закрыть собственную задачу. Пустая строка означает
+  // «всё моё», и это ровно правда для владельца пространства.
+  const mineOnlyId = identity.role === "manager" ? identity.userId : "";
   // Пересоздаётся только при смене роли: объект уходит в ссылку внутри
   // слоя данных, и новая ссылка на каждый рендер гоняла бы эффект впустую.
   const workspace = useMemo(
@@ -395,7 +404,7 @@ export default function NewTracker() {
         ),
         meetingsPanel: (
           <MeetingsPanel
-            myUserId={identity.userId}
+            myUserId={mineOnlyId}
             meetings={meetings}
             assignees={assignees}
             showResolved={showDone}
@@ -418,7 +427,7 @@ export default function NewTracker() {
         mainCol: (
           <TasksPanel
             isAdmin={isAdmin}
-            myUserId={identity.userId}
+            myUserId={mineOnlyId}
             filterAssignee={filterAssignee}
             onFilterAssigneeChange={setFilterAssignee}
             tasks={tasks}
@@ -488,7 +497,7 @@ export default function NewTracker() {
         ),
         ideasPanel: (
           <IdeasPanel
-            myUserId={identity.userId}
+            myUserId={mineOnlyId}
             ideas={ideas}
             showDone={showDone}
             highlightId={highlightIdeaId}

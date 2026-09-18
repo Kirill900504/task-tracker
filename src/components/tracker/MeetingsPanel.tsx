@@ -16,6 +16,7 @@ import type { useToasts } from "@/hooks/useToasts";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 import { useAsk } from "@/components/Ask";
+import { isMine } from "@/lib/ownership";
 
 export default function MeetingsPanel({
   myUserId = "",
@@ -303,7 +304,7 @@ export default function MeetingsPanel({
           meeting={modalMeeting}
           // Своя встреча — та, которую собрал сам. Чужую видно, потому что
           // позвали; закрывать, переносить и удалять её вправе организатор.
-          canEdit={!myUserId || !modalMeeting || (modalMeeting.createdBy || "") === myUserId}
+          canEdit={isMine(modalMeeting, myUserId)}
           prefill={modalPrefill}
           assignees={assignees}
           onSave={handleModalSave}
