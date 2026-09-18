@@ -304,10 +304,16 @@ test("a weekly recurring task keeps its rule across a reload", async ({ page }) 
   await waitForSaved(page);
 
   await page.reload();
-  await page.locator(".task", { hasText: title }).click();
-  await expect(page.locator('#fRecur [data-value="weekly"]')).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator('#fRecurWeekday [data-value="3"]')).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator('#fPriority [data-value="high"]')).toHaveAttribute("aria-pressed", "true");
+  // Правило проверяется по самой карточке, а не по полям формы: у
+  // заведённой задачи полей нет вовсе (см. TaskModal — её уже отправили
+  // человеку, и править её у себя в окне значит развести то, что записано,
+  // и то, что он видел). Карточка говорит то же самое: пилюля повторения и
+  // пилюля приоритета.
+  const card = page.locator(".task", { hasText: title });
+  // «По срм» — как карточка пишет «по средам»: и повтор, и день недели
+  // одной пилюлей, то есть проверяются оба сохранённых поля сразу.
+  await expect(card.locator(".pill-recur")).toContainText("ср");
+  await expect(card).toHaveClass(/high/);
 });
 
 // "Сбросить расположение" kept reappearing on a fresh load even though
@@ -338,7 +344,9 @@ test("search finds a task and opens its card", async ({ page }) => {
   await waitForSaved(page);
 
   // The keyboard route, not the button: "/" is the way this is meant to be used.
-  await page.locator("body").click();
+  // По шапке, а не по body: см. соседний тест — середина страницы занята
+  // карточкой задачи, и щелчок по ней открывает окно.
+  await page.locator("header .brand").click();
   await page.keyboard.press("/");
   await expect(page.locator("#searchInput")).toBeFocused();
 
@@ -348,7 +356,8 @@ test("search finds a task and opens its card", async ({ page }) => {
   await hit.click();
 
   await expect(page.locator("#searchOverlay")).toHaveCount(0);
-  await expect(page.locator("#fTitle")).toHaveValue(title);
+  // У заведённой задачи название — заголовок карточки, а не поле.
+  await expect(page.locator("#modalTitle")).toHaveText(title);
 
   // Esc closes the search without opening anything.
   await page.keyboard.press("Escape");
@@ -455,7 +464,11 @@ test("export writes a CSV of the tasks", async ({ page }) => {
 // working is invisible until you reach for it.
 test("hotkeys open a task, a meeting and the idea field, Esc closes", async ({ page }) => {
   await login(page);
-  await page.locator("body").click();
+  // Щелчок ПО ШАПКЕ, а не по body: click() бьёт в середину элемента, и
+  // середина страницы — это карточка задачи. Открывшаяся карточка глотает
+  // горячие клавиши (обработчик молчит, когда открыто окно), и тест
+  // проверял не то, что думал.
+  await page.locator("header .brand").click();
 
   await page.keyboard.press("n");
   await expect(page.locator("#fTitle")).toBeVisible();

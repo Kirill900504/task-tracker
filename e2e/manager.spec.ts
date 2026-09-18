@@ -81,9 +81,20 @@ test("«Готово, проверить» отвечает — и когда п
   await page.fill("#password", manager.password);
   await page.click('button[type="submit"]');
 
-  // Руководитель видит свой экран, а не трекер владельца.
+  // Руководитель видит СВОЙ раздел «что от вас ждут» и полноценный трекер
+  // под ним. Раньше здесь проверялось обратное — что трекера у него нет;
+  // это изменил Кирилл: «хочу, чтобы у моих коллег был такой же интерфейс
+  // работы с таск-трекером, как и у меня со всеми возможностями, НО ФУНКЦИЯ
+  // АДМИНИСТРАТОРА БЫЛА ТОЛЬКО У МЕНЯ».
   await expect(page.locator(".ms-link")).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator("#newTaskBtn")).toHaveCount(0);
+  await expect(page.locator("#newTaskBtn")).toHaveCount(1);
+
+  // А админского у него нет: «Команда» и выгрузка — владельцевы, и база
+  // отказала бы ему в них всё равно (миграции 0019 и 0031).
+  await expect(page.locator("#teamBtn")).toHaveCount(0);
+  await expect(page.locator("#exportBtn")).toHaveCount(0);
+  // Разделы он видит, но «+» рядом с ними — админская кнопка.
+  await expect(page.locator("#addSectionTabBtn")).toHaveCount(0);
 
   // Код выдаётся на собственную строку — это и есть «подключить себе бота».
   await page.getByRole("button", { name: "Подключить Telegram" }).click();

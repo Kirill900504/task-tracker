@@ -205,6 +205,16 @@ async function main() {
   // the webhook with the service-role key, never by a signed-in browser.
   await testServerOnlyTable("max_accounts", { max_user_id: Math.floor(Math.random() * 1e9), user_id: "00000000-0000-0000-0000-000000000000" });
 
+  // Очередь уведомлений: её наполняют маршруты и разбирает крон, браузеру
+  // она не нужна ни для чего. Строки в ней — чужие слова о чужой работе
+  // (миграция 0030), и читать их со стороны нельзя тем более.
+  await testServerOnlyTable("notification_queue", {
+    user_id: "00000000-0000-0000-0000-000000000000",
+    kind: "reported",
+    item: "rls",
+    who: "rls",
+  });
+
 
   console.log(`\n${failures === 0 ? "ALL PASSED" : failures + " FAILURE(S)"}`);
   process.exit(failures === 0 ? 0 : 1);
