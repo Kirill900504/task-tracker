@@ -1,5 +1,6 @@
 "use client";
 
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 // Список, который нужен сразу нескольким окнам, — один на всех.
@@ -35,9 +36,12 @@ export type SharedStore<T> = {
   refresh: () => Promise<void>;
 };
 
-// Сколько данные считаются свежими. Секунды, а не минуты: справочник людей
-// меняется руками, и лишний фоновый запрос дешевле устаревшего экрана.
-const FRESH_MS = 20_000;
+// Сколько данные считаются свежими — то есть только сколько длится один
+// всплеск монтирований. Открытое окно всё равно перечитает список фоном,
+// показав при этом уже известное: кэш здесь ускоряет показ, а не заменяет
+// правду. Больше этого ставить нельзя — на 20 секундах человек, нажавший
+// «Start» в боте, ещё полминуты числился бы неподключённым.
+const FRESH_MS = 2_000;
 
 const created: { reset: () => void }[] = [];
 let watchingAuth = false;
@@ -56,7 +60,12 @@ function watchAuth() {
   });
 }
 
-export function createSharedStore<T>(empty: T, load: () => Promise<T | null>): SharedStore<T> {
+// `watch` — таблицы, изменение которых означает, что список устарел. Это и
+// есть настоящий ответ на «а вдруг данные протухли»: человек, нажавший
+// «Start» в боте, должен появиться подключённым во всех открытых окнах сразу,
+// как появляется всё остальное в трекере. Срок годности выше — только чтобы
+// не спрашивать одно и то же по десять раз на одной отрисовке.
+export function createSharedStore<T>(empty: T, load: () => Promise<T | null>, watch: string[] = []): SharedStore<T> {
   // Один и тот же объект, пока данных нет: useSyncExternalStore сравнивает
   // снимки по ссылке и зациклится на функции, которая каждый раз возвращает
   // новый пустой массив.
@@ -93,14 +102,38 @@ export function createSharedStore<T>(empty: T, load: () => Promise<T | null>): S
     return inFlight;
   }
 
+  // Канал живёт, только пока на список кто-то смотрит: держать сокет ради
+  // окна, которое закрыли, незачем.
+  let channel: RealtimeChannel | null = null;
+
+  function listen() {
+    if (channel || !watch.length || typeof window === "undefined") return;
+    const db = createClient();
+    const ch = db.channel(`shared-${watch.join("-")}`);
+    for (const table of watch) {
+      ch.on("postgres_changes", { event: "*", schema: "public", table }, () => {
+        void refresh();
+      });
+    }
+    channel = ch.subscribe();
+  }
+
+  function stopListening() {
+    if (!channel) return;
+    void createClient().removeChannel(channel);
+    channel = null;
+  }
+
   const store: SharedStore<T> = {
     snapshot: () => snapshot,
     serverSnapshot: () => idle,
     subscribe(fn) {
       watchAuth();
       listeners.add(fn);
+      listen();
       return () => {
         listeners.delete(fn);
+        if (!listeners.size) stopListening();
       };
     },
     update(change) {
