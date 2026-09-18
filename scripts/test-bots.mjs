@@ -245,7 +245,7 @@ try {
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   check("принимает выбранный срок", pickMove.status === 200, pickMove);
-  const { data: asked } = await admin
+  const { data: askedMove } = await admin
     .from("task_participants")
     .select("reschedule_requested_at, reschedule_to, reschedule_reason")
     .eq("task_id", mvTask)
@@ -255,8 +255,8 @@ try {
   // же приём, что у «Сделал» и «Не могу».
   check(
     "записывает дату и ждёт причину",
-    !!asked?.reschedule_requested_at && !!asked?.reschedule_to && asked?.reschedule_reason === null,
-    asked,
+    !!askedMove?.reschedule_requested_at && !!askedMove?.reschedule_to && askedMove?.reschedule_reason === null,
+    askedMove,
   );
 
   const whyMove = await post(
