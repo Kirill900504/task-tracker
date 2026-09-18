@@ -216,6 +216,32 @@ export default function TasksPanel({
     actions.saveSection({ id: uid(), name: name.trim(), kind: kind === "personal" ? "personal" : "work", sortOrder: sections.length });
   }
 
+  // Правая кнопка по разделу: переименовать или удалить. Задачи раздел не
+  // уносит с собой — они остаются, просто без него.
+  async function renameSection(section: Section) {
+    const name = await ask.ask({
+      title: "Раздел",
+      question: "Как он должен называться?",
+      value: section.name,
+      okText: "Сохранить",
+      required: "У раздела должно быть название.",
+    });
+    if (!name?.trim() || name.trim() === section.name) return;
+    actions.saveSection({ ...section, name: name.trim() });
+  }
+
+  async function deleteSectionAsked(section: Section) {
+    const yes = await ask.confirm({
+      question: `Удалить раздел «${section.name}»?`,
+      note: "Задачи в нём останутся — они просто будут без раздела.",
+      okText: "Удалить",
+      danger: true,
+    });
+    if (!yes) return;
+    if (filterSection === section.id) setFilterSection("all");
+    removeSection(section.id);
+  }
+
   function toggleDone(t: Task) {
     if (t.status === "done") {
       actions.saveTask({ ...t, status: "in_progress", lastCompletedOn: "", completedAt: "" });
@@ -488,6 +514,8 @@ export default function TasksPanel({
         value={filterSection}
         onSelect={setFilterSection}
         onAdd={() => void addSection()}
+        onRename={(s) => void renameSection(s)}
+        onDelete={(s) => void deleteSectionAsked(s)}
         onReorder={(ids) =>
           ids.forEach((id, i) => {
             const s = sections.find((x) => x.id === id);

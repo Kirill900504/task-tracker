@@ -74,6 +74,7 @@ export function useDateTimeConfirm() {
         <div className="field">
           <label>Дата</label>
           <MiniCalendar
+            popover
             id="confirmDateTimeDate"
             value={pending.date}
             onChange={(iso) => setPending((p) => (p ? { ...p, date: iso } : p))}

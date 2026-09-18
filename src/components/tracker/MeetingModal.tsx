@@ -127,7 +127,7 @@ export default function MeetingModal({
           {/* Сразу календарём, а не полем «дд.мм.гггг»: встречу назначают на
               день недели («в четверг»), а не на число, и сетка месяца
               отвечает на этот вопрос сама. */}
-          <MiniCalendar id="mDate" value={date} onChange={setDate} />
+          <MiniCalendar popover id="mDate" value={date} onChange={setDate} />
         </div>
 
         <div className="field">

@@ -453,8 +453,10 @@ test("hotkeys open a task, a meeting and the idea field, Esc closes", async ({ p
   // Dated, so the form is ready to save rather than complaining about a date.
   // Дата теперь календарь, а не поле: выбранный день помечен в сетке, и
   // само значение лежит на ней атрибутом.
+  // Дата — всплывающий календарь: сама дата написана на кнопке, которая его
+  // открывает, и лежит на обёртке атрибутом.
   await expect(page.locator("#mDate")).not.toHaveAttribute("data-value", "");
-  await expect(page.locator("#mDate .mini-cal-day.selected")).toHaveCount(1);
+  await expect(page.locator("#mDate .mini-cal-trigger")).toContainText(/\d{2}\.\d{2}\.\d{4}/);
   await page.keyboard.press("Escape");
   await expect(page.locator("#mTitle")).toHaveCount(0);
 
@@ -714,4 +716,85 @@ test("человека ставят на задачу с ролью и сним�
   await chip.click();
   await expect(chip).not.toHaveClass(/selected/);
   await expect(page.locator(".export-menu, .action-sheet")).toHaveCount(0);
+});
+
+// Разделы переставляются мышью — зажал и сразу потянул.
+//
+// Первая версия требовала подержать кнопку неподвижно четверть секунды, и
+// мышью не работала вовсе: мышью «зажал и потянул» означает потянул сразу.
+// Поэтому тест НЕ делает паузы после нажатия — он воспроизводит именно то
+// движение, которым это делает человек.
+test("разделы переставляются перетаскиванием", async ({ page }) => {
+  const stamp = Date.now().toString(36);
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const ids = ["ra" + stamp, "rb" + stamp, "rc" + stamp];
+  const { error } = await admin.from("sections").insert([
+    { id: ids[0], user_id: userId, name: `Альфа${stamp}`, kind: "work", sort_order: 0 },
+    { id: ids[1], user_id: userId, name: `Бета${stamp}`, kind: "work", sort_order: 1 },
+    { id: ids[2], user_id: userId, name: `Гамма${stamp}`, kind: "work", sort_order: 2 },
+  ]);
+  expect(error).toBeNull();
+
+  await login(page);
+  const tabs = page.locator("#sectionTabs .section-tab");
+  await expect(page.locator("#sectionTabs .section-tab", { hasText: `Гамма${stamp}` })).toBeVisible({ timeout: 20_000 });
+
+  const src = page.locator("#sectionTabs .section-tab", { hasText: `Гамма${stamp}` });
+  const dst = page.locator("#sectionTabs .section-tab", { hasText: `Альфа${stamp}` });
+  const a = (await src.boundingBox())!;
+  const b = (await dst.boundingBox())!;
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  // Никакой паузы: тянем сразу — и по обеим осям, потому что строка
+  // разделов переносится и цель может оказаться на другой строке.
+  const from = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
+  const to = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  for (let i = 1; i <= 10; i++) {
+    await page.mouse.move(from.x + (to.x - from.x) * (i / 10), from.y + (to.y - from.y) * (i / 10), { steps: 2 });
+  }
+  await page.mouse.up();
+
+  await expect(tabs.filter({ hasText: stamp }).first()).toHaveText(`Гамма${stamp}`);
+  await waitForSaved(page);
+  const { data } = await admin.from("sections").select("name, sort_order").in("id", ids).order("sort_order");
+  expect((data || []).map((s) => s.name)[0]).toBe(`Гамма${stamp}`);
+
+  // Нажатие без перетаскивания по-прежнему фильтрует, а не переставляет.
+  await src.click();
+  await expect(src).toHaveClass(/active/);
+
+  await admin.from("sections").delete().in("id", ids);
+});
+
+// Правая кнопка по разделу — своё меню, а не браузерное.
+test("раздел переименовывается и удаляется правой кнопкой", async ({ page }) => {
+  const stamp = Date.now().toString(36);
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const id = "rn" + stamp;
+  await admin.from("sections").insert({ id, user_id: userId, name: `Старое${stamp}`, kind: "work", sort_order: 99 });
+
+  await login(page);
+  const tab = page.locator("#sectionTabs .section-tab", { hasText: `Старое${stamp}` });
+  await expect(tab).toBeVisible({ timeout: 20_000 });
+
+  await tab.click({ button: "right" });
+  await page.locator(".export-menu .export-item", { hasText: "Редактировать" }).click();
+  await expect(page.locator(".ask-modal")).toBeVisible();
+  await page.fill("#askInput", `Новое${stamp}`);
+  await page.click("#askOkBtn");
+  const renamed = page.locator("#sectionTabs .section-tab", { hasText: `Новое${stamp}` });
+  await expect(renamed).toBeVisible();
+  await waitForSaved(page);
+
+  await renamed.click({ button: "right" });
+  await page.locator(".export-menu .export-item", { hasText: "Удалить" }).click();
+  await expect(page.locator(".ask-modal")).toBeVisible();
+  await page.click("#askOkBtn");
+  await expect(page.locator("#sectionTabs .section-tab", { hasText: stamp })).toHaveCount(0);
+
+  await admin.from("sections").delete().eq("id", id);
 });
