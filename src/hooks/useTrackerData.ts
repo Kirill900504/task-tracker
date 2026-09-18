@@ -235,17 +235,25 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
         shadowRef.current.ideas = snapshotList(ideasNow);
       })
       .then(async () => {
+        // Людей эта синхронизация только ЗАВОДИТ. Удалять она умела, и один
+        // день в трекере была кнопка, которая этим пользовалась: строка в
+        // assignees уходит каскадом и уносит всё участие человека во всех
+        // задачах и встречах — «принял», «сделал» с комментарием, голоса по
+        // встречам. Кирилл нажал её по ошибке и потерял Котова Михаила;
+        // восстановить удалось только то, что записано где-то ещё.
+        //
+        // Кнопки больше нет (см. PeoplePicker), но пока здесь оставался
+        // `delete`, тот же каскад мог случиться сам: достаточно вкладке
+        // разойтись со своим снимком — и имя, пропавшее из локального
+        // списка, стёрло бы человека из базы. Поэтому ветки удаления тут
+        // нет вовсе: список имён только растёт.
         const assigneesNow = liveRef.current.assignees;
-        const { added, removed } = diffAssignees(assigneesNow, shadowRef.current.assignees);
+        const { added } = diffAssignees(assigneesNow, shadowRef.current.assignees);
         if (added.length) {
           const { error } = await db.from("assignees").upsert(
             added.map((name) => ({ name })),
             { onConflict: "user_id,name" },
           );
-          if (error) throw error;
-        }
-        if (removed.length) {
-          const { error } = await db.from("assignees").delete().in("name", removed);
           if (error) throw error;
         }
         shadowRef.current.assignees = assigneesNow.slice();
@@ -428,9 +436,6 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
   const addAssignee = useCallback((name: string) => {
     if (!name || liveRef.current.assignees.includes(name)) return;
     commitAssignees([...liveRef.current.assignees, name]);
-  }, [commitAssignees]);
-  const removeAssignee = useCallback((name: string) => {
-    commitAssignees(liveRef.current.assignees.filter((a) => a !== name));
   }, [commitAssignees]);
 
   // ---- Sign out: waits for every queued write (persistAll's diffAndSync,
@@ -850,7 +855,6 @@ export function useTrackerData({ enabled = true }: { enabled?: boolean } = {}) {
       saveSection,
       deleteSection,
       addAssignee,
-      removeAssignee,
       savePanelLayout,
       signOut,
     },

@@ -35,11 +35,19 @@ export default function MiniCalendar({
   id,
   // Кнопка «без срока»: у задачи дата необязательна, у встречи — нет.
   clearable,
+  // Раскрываться по нажатию, а не стоять развёрнутым.
+  //
+  // У встречи дата — первое, о чём спрашивают, и календарь там уместен
+  // сразу. В задаче он оказался седьмым блоком сверху и растягивал форму на
+  // полтора экрана ради поля, которое заполняют не всегда, — поэтому здесь
+  // он прячется за строкой с самой датой.
+  popover,
 }: {
   value: string;
   onChange: (iso: string) => void;
   id?: string;
   clearable?: boolean;
+  popover?: boolean;
 }) {
   // Показанный месяц ведётся отдельно от выбранной даты: листать вперёд,
   // ничего не выбирая, — обычное дело.
@@ -48,12 +56,15 @@ export default function MiniCalendar({
   const today = dateStr(new Date());
   const month = view.getMonth();
 
+  // Раскрыт ли календарь. В обычном режиме — всегда.
+  const [open, setOpen] = useState(false);
+
   function shiftMonth(by: number) {
     setView((v) => new Date(v.getFullYear(), v.getMonth() + by, 1));
   }
 
-  return (
-    <div className="mini-cal" id={id} data-value={value}>
+  const grid = (
+    <div className="mini-cal" id={popover ? undefined : id} data-value={popover ? undefined : value}>
       <div className="mini-cal-head">
         <button type="button" className="mini-cal-nav" onClick={() => shiftMonth(-1)} title="Предыдущий месяц">
           ←
@@ -89,13 +100,44 @@ export default function MiniCalendar({
                 (iso === today ? " today" : "") +
                 (iso === value ? " selected" : "")
               }
-              onClick={() => onChange(iso)}
+              onClick={() => {
+                onChange(iso);
+                // Выбрали дату — всплывающий календарь закрылся: его ради
+                // неё и открывали. Закрывать его перехватом клика нельзя:
+                // разметка исчезает раньше, чем нажатие доходит до самой
+                // кнопки, и дата не выбирается вовсе.
+                setOpen(false);
+              }}
             >
               {d.getDate()}
             </button>
           );
         })}
       </div>
+    </div>
+  );
+
+  if (!popover) return grid;
+
+  return (
+    <div className="mini-cal-wrap" id={id} data-value={value}>
+      <button
+        type="button"
+        className={"mini-cal-trigger" + (open ? " open" : "")}
+        onClick={() => setOpen((v) => !v)}
+        title="Выбрать дату"
+      >
+        📅 {value ? value.split("-").reverse().join(".") : "Выбрать дату"}
+      </button>
+      {open && (
+        <>
+          {/* Клик мимо закрывает — тот же приём, что и у меню карточки
+              (.export-backdrop): без него календарь остаётся раскрытым и
+              закрывать его приходится той же кнопкой, которой открыли. */}
+          <div className="mini-cal-backdrop" onClick={() => setOpen(false)} />
+          <div className="mini-cal-pop">{grid}</div>
+        </>
+      )}
     </div>
   );
 }

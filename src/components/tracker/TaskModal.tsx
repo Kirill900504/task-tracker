@@ -78,7 +78,6 @@ export default function TaskModal({
   onDelete,
   onClose,
   onAddAssignee,
-  onRemoveAssignee,
   onAddSection,
   onRemoveSection,
   participants,
@@ -101,7 +100,6 @@ export default function TaskModal({
   onDelete: () => void;
   onClose: () => void;
   onAddAssignee: (name: string) => void;
-  onRemoveAssignee: (name: string) => void;
   onAddSection: (section: Section) => void;
   onRemoveSection: (id: string) => void;
   participants: Participant[];
@@ -256,18 +254,6 @@ export default function TaskModal({
     await onPersonAdded?.(name);
   }
 
-  async function handleRemovePersonFromList(name: string) {
-    const yes = await ask.confirm({
-      question: `Удалить «${name}» из списка людей?`,
-      note: "Уже созданные задачи сохранят его имя, но поставить его на новые будет нельзя.",
-      okText: "Удалить",
-      danger: true,
-    });
-    if (!yes) return;
-    onRemoveAssignee(name);
-    if (form.assignee.trim() === name) setForm((f) => ({ ...f, assignee: "" }));
-  }
-
   async function handleAddSection() {
     const v = await ask.ask({
       title: "Новый раздел",
@@ -376,7 +362,6 @@ export default function TaskModal({
           onPick={pickPerson}
           onRemove={removePerson}
           onAddPerson={() => void handleAddAssignee()}
-          onDeletePerson={(person) => void handleRemovePersonFromList(person.name)}
         />
 
         {task && onScheduleMeeting && (
@@ -459,9 +444,11 @@ export default function TaskModal({
             <ChipChoice
               id="fPriority"
               value={form.priority}
+              // Средний слева, высокий справа: обычное — первым, исключение —
+              // вторым. Так просил Кирилл, и так же читается срочность рядом.
               options={[
-                { value: "high", label: "Высокий" },
                 { value: "med", label: "Средний" },
+                { value: "high", label: "Высокий" },
               ]}
               onSelect={(v) => setForm((f) => ({ ...f, priority: v as Task["priority"] }))}
             />
@@ -488,6 +475,7 @@ export default function TaskModal({
               восемь цифр. Тремя кнопками рядом ставятся сроки, которые
               ставят чаще всего. */}
           <MiniCalendar
+            popover
             id="fDeadline"
             value={form.deadline}
             onChange={(iso) => setForm((f) => ({ ...f, deadline: iso }))}

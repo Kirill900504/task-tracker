@@ -21,9 +21,17 @@ import type { PersonOption } from "@/hooks/useTaskParticipants";
 // нижнего края (см. ActionMenu), так что выбор роли не превращается в
 // попадание пальцем в строку выпадающего списка.
 //
-// Исполнитель по умолчанию: девять задач из десяти ставятся одному человеку
-// и без ролей, поэтому первое нажатие ставит исполнителя сразу, а меню
-// открывается уже у выбранного — чтобы поменять роль или убрать.
+// Нажатие устроено как у участников встречи, где кнопка просто включает и
+// выключает человека: первое спрашивает роль, второе снимает с задачи.
+//
+// Удалить человека из списка людей отсюда нельзя вовсе, и это решение, а не
+// упущение. Такая кнопка здесь была ровно один день и за этот день стоила
+// Кириллу Котова Михаила: строка в assignees удаляется каскадом, унося с
+// собой всё участие во всех задачах и встречах. Восстановить удалось только
+// то, что записано где-то ещё — имя в самой задаче и в составе встречи;
+// «принял», «сделал» и голоса не вернулись ниоткуда. Кнопка, стоящая рядом с
+// «убрать с задачи» и выглядящая так же, но означающая на два порядка
+// больше, — плохая кнопка, и её здесь нет.
 
 export type PickedPerson = { id: string; name: string; role: TaskParticipantRole };
 
@@ -45,7 +53,6 @@ export default function PeoplePicker({
   onPick,
   onRemove,
   onAddPerson,
-  onDeletePerson,
 }: {
   people: PersonOption[];
   picked: PickedPerson[];
@@ -54,10 +61,6 @@ export default function PeoplePicker({
   // «Человека нет в списке» — тот же вопрос, что раньше задавала кнопка «+»
   // рядом с выпадающим списком.
   onAddPerson?: () => void;
-  // А это бывшая кнопка «−»: удалить человека из списка людей вообще. Живёт
-  // в меню, а не рядом с именами: её нажимают раз в полгода, а стоя рядом с
-  // «убрать с задачи» она читалась бы как то же самое.
-  onDeletePerson?: (person: PersonOption) => void;
 }) {
   const [menuFor, setMenuFor] = useState<{ person: PersonOption; anchor: DOMRect } | null>(null);
   const roleOf = (id: string) => picked.find((p) => p.id === id)?.role;
@@ -74,13 +77,15 @@ export default function PeoplePicker({
               type="button"
               className={"participant-chip" + (role ? " selected role-" + role : "")}
               onClick={(e) => {
-                // Первое нажатие — сразу исполнитель, без лишнего вопроса.
-                // Меню открывается только у того, кто уже выбран: тогда речь
-                // о роли и о том, чтобы убрать.
-                if (!role) onPick(person, "executor");
+                // Нажал — спросили роль. Нажал второй раз — снял с задачи.
+                // Так это работает у участников встречи (там нажатие просто
+                // включает и выключает человека), и разными эти два списка
+                // быть не должны: роль — единственное, чем они отличаются,
+                // и спросить о ней стоит там же, где выбирают человека.
+                if (role) onRemove({ id: person.id, name: person.name, role });
                 else setMenuFor({ person, anchor: e.currentTarget.getBoundingClientRect() });
               }}
-              title={role ? `${person.name} — ${ROLE_LABEL[role]}` : `Поставить на задачу: ${person.name}`}
+              title={role ? `${person.name} — ${ROLE_LABEL[role]}. Нажмите, чтобы снять с задачи` : `Поставить на задачу: ${person.name}`}
             >
               {person.name}
               {role && role !== "executor" && <span className="chip-role"> · {ROLE_LABEL[role]}</span>}
@@ -95,38 +100,22 @@ export default function PeoplePicker({
       </div>
 
       <div className="tp-hint">
-        Исполнителей может быть несколько — задача закроется, когда отчитается каждый. Соисполнитель помогает, наблюдатель
-        только видит. Нажмите на выбранного, чтобы сменить роль или убрать.
+        Нажмите на человека и выберите роль; нажали второй раз — он снят с задачи. Исполнителей может быть несколько —
+        задача закроется, когда отчитается каждый. Соисполнитель помогает, наблюдатель только видит.
       </div>
 
       {menuFor && (
         <ActionMenu
           anchor={menuFor.anchor}
           title={menuFor.person.name}
-          items={[
-            ...ROLE_MENU.filter((r) => r.role !== roleOf(menuFor.person.id)).map((r) => ({
-              id: r.role,
-              label: r.label,
-              onSelect: () => onPick(menuFor.person, r.role),
-            })),
-            {
-              id: "remove",
-              label: "✕ Убрать с задачи",
-              onSelect: () => {
-                const current = picked.find((p) => p.id === menuFor.person.id);
-                if (current) onRemove(current);
-              },
-            },
-            ...(onDeletePerson
-              ? [
-                  {
-                    id: "delete",
-                    label: "🗑 Удалить из списка людей",
-                    onSelect: () => onDeletePerson(menuFor.person),
-                  },
-                ]
-              : []),
-          ]}
+          // Только роли. «Убрать с задачи» отсюда ушло — это второе нажатие
+          // по самой кнопке; а удаления человека из списка людей нет вовсе
+          // (см. комментарий наверху файла).
+          items={ROLE_MENU.map((r) => ({
+            id: r.role,
+            label: r.label,
+            onSelect: () => onPick(menuFor.person, r.role),
+          }))}
           onClose={() => setMenuFor(null)}
         />
       )}
