@@ -97,6 +97,11 @@ Supabase auth rate limits after many logins — retry before investigating.
   messengers). `botTransport.ts` + `telegram.ts` + `max.ts` — how it is sent.
   `botDelivery.ts` — who to send to. `colleagues*.ts` — colleague messages,
   buttons and their permission checks.
+- `src/components/Ask.tsx` — единственное окно вопроса: `ask` / `confirm` /
+  `say` / `choose`. Системных `prompt/confirm/alert` в трекере нет.
+- `src/components/tracker/ChipChoice.tsx`, `PeoplePicker.tsx` — выбор
+  кнопками: поля формы и люди с ролями. `src/lib/peopleOrder.ts` — порядок
+  людей во всех списках.
 - `src/lib/quickAdd.ts`, `meetingNotes.ts`, `dailyBrief.ts`, `weeklyReview.ts`,
   `telegramQueries.ts`, `telegramManage.ts`, `bulkActions.ts` — the assistant.
 - `src/app/api/*` — Telegram/MAX webhooks, invite/link/send, cron.
@@ -207,6 +212,24 @@ and never seen: fourteen people put it a screenful below the button that was
 pressed, and «не даёт ссылку» meant exactly that and nothing else. The same
 goes for the error, which is worse: it is the only explanation of what just
 happened. Render both beside the row they answer, and pull them into view.
+
+**Вопрос задаёт трекер, выбор делается кнопками.** Ни `prompt`, ни `confirm`,
+ни `alert`: чужое системное окно нельзя ни объяснить, ни проверить, а на
+телефоне во встроенном браузере мессенджера оно может не показаться вовсе —
+и кнопка тогда просто «не работает». Всё спрашивает `components/Ask.tsx`.
+Выбор из нескольких — кнопки (`ChipChoice`), а не выпадающий список: список
+это пять действий и обязательное чтение там, где вариантов два. Списками
+остаются только те, где кнопок вышла бы стена (число месяца). Люди во всех
+списках идут в одном порядке — `lib/peopleOrder.ts`, он продиктован Кириллом
+и сортируется по фамилии, потому что имя стоит то впереди, то позади.
+
+**Принято — значит закрыто, и закрывает это маршрут.** `/api/workspace/review`
+пишет `status: done` той же записью, что и приёмку. Раньше статус переключала
+вкладка сразу после ответа маршрута — и эхо realtime, вернувшееся с серверной
+строкой, стирало это переключение вместе с ещё не отправленным «сделано».
+Вкладка тоже ставит done у себя, но обе стороны говорят одно и то же, а
+значит перезаписать друг друга не могут. Любое серверное изменение колонки,
+которой владеет синхронизация, должно быть устроено так же — или не быть.
 
 **Windows/Git Bash:** heredocs eat backslashes, so a patch script written
 with `cat <<'EOF'` mangles `\n` and regexes — use the Write/Edit tools for
