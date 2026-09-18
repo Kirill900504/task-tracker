@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useColleagues, type ColleagueChannel } from "@/hooks/useColleagues";
 import { useMaxBot } from "@/hooks/useMaxBot";
 import { useAsk } from "@/components/Ask";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 // «Команда»: who can be written to, and how to connect the rest.
 //
@@ -60,6 +61,10 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<{ id: string; text: string } | null>(null);
 
   const [copied, setCopied] = useState(false);
+
+  // Esc закрывает — как и любое другое окно трекера. Раньше не закрывал:
+  // обработчик каждое окно заводило себе само, и это его не завело.
+  useEscapeToClose(onClose);
 
   // Ссылка стоит прямо под строкой, но сама строка может оказаться у нижнего
   // края окна — тогда её всё равно не видно. Ref стабилен, поэтому прокрутка
@@ -139,8 +144,21 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
               const where = [person.telegram ? "Telegram" : "", person.max ? "MAX" : ""].filter(Boolean).join(" · ");
               return (
                 <Fragment key={person.id}>
+                  {/* Строка человека — сетка из трёх ячеек, а не общий ряд,
+                      в который свалены все кнопки подряд.
+                      Раньше имя, состояние мессенджера, кнопки мессенджера,
+                      состояние доступа и кнопки доступа были соседями в одном
+                      flex-wrap: как только строка переставала помещаться — а
+                      она перестаёт на каждом втором человеке, — перенос рвал
+                      её в произвольном месте, и кнопки вставали то под
+                      именем, то посреди чужой подписи. У четырнадцати человек
+                      подряд это и выглядело «кнопки гуляют как хотят».
+                      Теперь мессенджер и доступ — две отдельные ячейки: они
+                      переносятся целиком и всегда остаются рядом со своей
+                      подписью. */}
                   <div className="team-row">
                     <span className="team-name">{person.name}</span>
+                    <div className="team-cell">
                     {person.linked ? (
                       <>
                         <span className="team-status linked">
@@ -179,9 +197,11 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                         )}
                       </>
                     )}
+                    </div>
 
                     {/* Приглашение в сам трекер — отдельно от мессенджеров:
                         это логин, а не чат, и одно другого не заменяет. */}
+                    <div className="team-cell">
                     {person.member === "none" && (
                       <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name)}>
                         + В трекер
@@ -245,6 +265,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                         </button>
                       </>
                     )}
+                    </div>
                   </div>
 
                   {inviteFor?.id === person.id && (

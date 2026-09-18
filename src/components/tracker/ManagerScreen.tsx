@@ -13,6 +13,7 @@ import { useMyMessenger, type MessengerState } from "@/hooks/useMyMessenger";
 import MessengerLink from "@/components/tracker/MessengerLink";
 import ManagerAnswer from "@/components/tracker/ManagerAnswer";
 import ItemChat from "@/components/tracker/ItemChat";
+import Icon from "./Icon";
 
 // Что видит руководитель, когда войдёт по приглашению.
 //
@@ -184,17 +185,17 @@ export function ManagerScreenInner({
           <div className="ms-actions">
             {!t.acceptedAt && (
               <button className="btn btn-small btn-primary" type="button" onClick={() => void run(() => accept(t.participantId))}>
-                ✅ Принял
+                <Icon name="check" size={15} /> Принял
               </button>
             )}
             <button className="btn btn-small" type="button" onClick={() => setAsking({ kind: "done", id: t.participantId })}>
-              🏁 Сделал
+              <Icon name="flag" size={15} /> Сделал
             </button>
             <button className="btn btn-small" type="button" onClick={() => setAsking({ kind: "decline", id: t.participantId })}>
-              ⛔ Не могу
+              <Icon name="ban" size={15} /> Не могу
             </button>
             <button className="btn btn-small" type="button" onClick={() => setAsking({ kind: "reschedule", id: t.participantId })}>
-              📅 Прошу перенос
+              <Icon name="calendar" size={15} /> Прошу перенос
             </button>
           </div>
         )}
@@ -205,7 +206,7 @@ export function ManagerScreenInner({
             question={`Что сделано по задаче «${t.title}»? Это увидит постановщик.`}
             placeholder="Например: свёл цифры за август, таблица в общей папке"
             emptyHint="Отчёт без слов — не отчёт. Напишите хотя бы коротко, что сделано."
-            submitLabel="🏁 Отчитаться"
+            submitLabel="Отчитаться"
             busy={sending}
             onCancel={() => setAsking(null)}
             onSubmit={(text) => {
@@ -219,7 +220,7 @@ export function ManagerScreenInner({
             id={"decline-" + t.participantId}
             question={`Почему не получится выполнить «${t.title}»?`}
             emptyHint="Причина обязательна — именно она даёт постановщику шанс что-то поправить."
-            submitLabel="⛔ Отправить"
+            submitLabel="Отправить"
             busy={sending}
             onCancel={() => setAsking(null)}
             onSubmit={(text) => {
@@ -247,7 +248,7 @@ export function ManagerScreenInner({
             id={"move-" + t.participantId}
             question="Что мешает успеть к сроку?"
             emptyHint="Без причины это не просьба, а просто новая дата — напишите, что мешает."
-            submitLabel="📅 Попросить"
+            submitLabel="Попросить"
             date={{ label: "Перенести на", initial: t.deadline || "" }}
             busy={sending}
             onCancel={() => setAsking(null)}
@@ -359,10 +360,10 @@ export function ManagerScreenInner({
                 {!answered && vote && asking?.id !== m.participantId && (
                   <div className="ms-actions">
                     <button className="btn btn-small btn-primary" type="button" onClick={() => void run(() => vote(m.participantId, "yes", ""))}>
-                      ✅ Буду
+                      <Icon name="check" size={15} /> Буду
                     </button>
                     <button className="btn btn-small" type="button" onClick={() => setAsking({ kind: "vote", id: m.participantId })}>
-                      ❌ Не смогу
+                      <Icon name="close" size={15} /> Не смогу
                     </button>
                   </div>
                 )}

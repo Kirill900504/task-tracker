@@ -39,6 +39,7 @@ import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import ManagerScreen from "@/components/tracker/ManagerScreen";
 import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
+import Icon from "@/components/tracker/Icon";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 function formatClock(d: Date): string {
@@ -567,11 +568,14 @@ export default function NewTracker() {
           </div>
           <div className="header-btns">
             {/* Search and notifications are icons only: the words were the
-                widest thing in the header and said nothing the 🔍 and the
-                bell don't. The label lives in title/aria-label, so the
-                hover tooltip and a screen reader still name the button. */}
+                widest thing in the header and said nothing the magnifier and
+                the bell don't. The label lives in title/aria-label, so the
+                hover tooltip and a screen reader still name the button.
+                Сами значки — контурные (Icon.tsx), а не эмодзи: цветную
+                наклейку из системного шрифта рисует не трекер, и рядом со
+                словом в шрифте интерфейса она выглядит приклеенной. */}
             <button className="btn btn-icon" id="searchBtn" title="Поиск по трекеру (/)" aria-label="Поиск по трекеру" onClick={() => setSearchOpen(true)}>
-              🔍
+              <Icon name="search" size={15} />
             </button>
             {notifications.permission !== "unsupported" && (
               <button
@@ -591,12 +595,12 @@ export default function NewTracker() {
                 aria-label={notifications.permission === "granted" ? "Уведомления включены" : "Включить уведомления"}
                 onClick={notifications.requestPermission}
               >
-                {notifications.permission === "granted" ? "🔔" : "🔕"}
+                <Icon name={notifications.permission === "granted" ? "bell" : "bell-off"} size={15} />
               </button>
             )}
             {installPrompt.visible && (
               <button className="btn btn-primary" id="installAppBtn" onClick={installPrompt.promptInstall}>
-                📥 Установить
+                <Icon name="install" /> Установить
               </button>
             )}
             {!sameLayout(panelLayout, DEFAULT_PANEL_LAYOUT) && (
@@ -606,21 +610,21 @@ export default function NewTracker() {
                 title="Панели вернутся на исходные места"
                 onClick={() => actions.savePanelLayout(DEFAULT_PANEL_LAYOUT)}
               >
-                ↺ Сбросить расположение
+                <Icon name="reset" /> Сбросить расположение
               </button>
             )}
             <button className="btn" id="teamBtn" title="Кто на связи в мессенджерах" onClick={() => setTeamOpen(true)}>
-              👥 Команда
+              <Icon name="users" /> Команда
             </button>
             <ExportMenu tasks={tasks} meetings={meetings} ideas={ideas} sections={sections} assignees={assignees} />
             {botLink.needs.telegram && (
               <button className="btn" id="telegramLinkBtn" onClick={() => botLink.link("telegram")}>
-                🔗 Telegram
+                <Icon name="link" /> Telegram
               </button>
             )}
             {botLink.needs.max && (
               <button className="btn" id="maxLinkBtn" onClick={() => botLink.link("max")}>
-                🔗 MAX
+                <Icon name="link" /> MAX
               </button>
             )}
             <button className="btn" id="signOutBtn" onClick={() => actions.signOut()}>

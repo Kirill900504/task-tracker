@@ -65,9 +65,20 @@ export default function PeoplePicker({
   const [menuFor, setMenuFor] = useState<{ person: PersonOption; anchor: DOMRect } | null>(null);
   const roleOf = (id: string) => picked.find((p) => p.id === id)?.role;
 
+  // Исполнитель обязателен (см. save() в TaskModal). Сказать об этом надо
+  // здесь, у самого поля, а не только окном при сохранении: правило,
+  // которое человек узнаёт в момент отказа, выглядит придиркой, а то же
+  // правило, стоящее у поля, — обычным требованием формы.
+  const hasExecutor = picked.some((p) => p.role === "executor");
+
   return (
     <div className="field people-field">
-      <label>Кто на задаче</label>
+      <label>
+        Кто на задаче
+        <span className={"field-req" + (hasExecutor ? " met" : "")}>
+          {hasExecutor ? "исполнитель назначен" : "нужен исполнитель"}
+        </span>
+      </label>
       <div className="participant-grid" id="fPeople">
         {people.map((person) => {
           const role = roleOf(person.id);

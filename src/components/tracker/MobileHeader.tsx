@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Icon from "./Icon";
 
 // On a phone the desktop header cost half the screen: a logo, eight buttons
 // wrapped onto three rows, and the quote. Here it is one row — who and when,
@@ -30,14 +32,7 @@ export default function MobileHeader({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setMenuOpen(false);
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [menuOpen]);
+  useEscapeToClose(() => setMenuOpen(false), menuOpen);
 
   return (
     <header className="mobile-header" id="mobileHeader">
@@ -50,7 +45,7 @@ export default function MobileHeader({
         </div>
       </div>
       <button className="mobile-icon-btn" id="mobileSearchBtn" aria-label="Поиск" onClick={onSearch}>
-        🔍
+        <Icon name="search" size={17} />
       </button>
       <button
         className="mobile-icon-btn"

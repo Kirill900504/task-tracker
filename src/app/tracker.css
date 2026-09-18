@@ -27,24 +27,67 @@
     --section-work-bg:#1E3A37;
     --section-personal:#D98BA0;
     --section-personal-bg:#3A222B;
+    /* Один шрифт на весь интерфейс, и это Manrope.
+       Раньше их было три, и третий — моноширинный — стоял не на коде, а на
+       подписях: заголовки блоков, названия полей, даты на карточках, время
+       встречи. Consolas в роли подписи выглядит ровно тем, чем является, —
+       текстом из «Блокнота», и Кирилл назвал это первым же словом. Теперь
+       --mono остался только там, где моноширинность действительно значит
+       моноширинность: код приглашения и ссылка, которые переписывают с
+       чужого экрана по одному символу (.ask-code, .ms-link-value). Всё
+       остальное — Manrope, потому что подпись это тоже текст интерфейса. */
     --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --display: var(--font-display), var(--sans);
+    --sans: var(--font-display), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --display: var(--sans);
+    /* Цифры в таблицах и на карточках не должны дёргаться при каждом
+       изменении: «0 из 3», «18.09.2026», «11:30» стоят в столбик и рядом
+       друг с другом. Manrope умеет моноширинные цифры — это даёт
+       выравнивание, ради которого раньше брали целый моноширинный шрифт. */
+    --nums: "tnum" 1, "lnum" 1;
+
+    /* Подпись — тоже текст, и её должно быть видно.
+       Всё, что называет блок, раздел или поле, набирается этими тремя
+       величинами, а не выдумывается на месте: 12px серым по тёмному
+       читается как технический шум, и Кирилл просил обратного — чтобы
+       названия были заметными и крупнее. */
+    --label-size: 13px;
+    --label-weight: 700;
+    --ink-label:#C3CFD4;
 
     /* Elevation — a flat border was doing all the "this is a card" work
        before; these give panels/menus actual depth without leaning on a
        generic drop-shadow-everywhere look. */
     --shadow-1: 0 1px 2px rgba(0,0,0,.22), 0 6px 16px -6px rgba(0,0,0,.35);
     --shadow-2: 0 10px 28px -6px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
-    --radius-sm: 7px;
-    --radius-md: 11px;
-    --radius-lg: 16px;
+    --radius-sm: 9px;
+    --radius-md: 14px;
+    --radius-lg: 18px;
+
+    /* Контур, который не спорит с содержимым.
+       --line — сплошной серый (#445157), и на каждой карточке, каждом поле
+       и каждом чипе он рисует отчётливую рамку: вместе они складываются в
+       сетку из линий, которую глаз читает раньше текста. Мягкий контур —
+       это полупрозрачный белый: на тёмном фоне он виден как край, а не как
+       черта, и чем светлее подложка, тем он незаметнее, сам собой.
+       --line остаётся для состояний, где рамка ДОЛЖНА быть заметна:
+       наведение, фокус, выбранное, перетаскивание. */
+    --line-soft: rgba(255,255,255,.09);
+    --line-softer: rgba(255,255,255,.06);
+    /* Верхний блик: один пиксель света по верхней кромке. Это то, чем
+       «современная» карточка отличается от прямоугольника с рамкой, —
+       она выглядит приподнятой, а не нарисованной. */
+    --edge: inset 0 1px 0 rgba(255,255,255,.045);
   }
   *{box-sizing:border-box;}
   body{
     margin:0; background:var(--bg); color:var(--ink);
     font-family:var(--sans); font-size:14px; line-height:1.5;
     padding-bottom:60px;
+    /* Сглаживание — то, из-за чего один и тот же шрифт выглядит то
+       «системным», то нарисованным: без него Manrope на тёмном фоне
+       утолщается и теряет форму букв. */
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;
     /* The page's own scrollbar is now the only one in the tracker (panels
        no longer scroll separately), so it gets the thin, dark-theme-matched
        styling the panel scrollbars used to have, rather than the browser's
@@ -55,8 +98,20 @@
   body::-webkit-scrollbar-track{background:transparent;}
   body::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px;}
   body::-webkit-scrollbar-thumb:hover{background:var(--ink-soft);}
+  /* Всё, что раньше держалось ровно за счёт моноширинного шрифта, теперь
+     держится за счёт табличных цифр: даты в столбик, время встреч, счётчики
+     «0 из 3» и числа календаря стоят друг под другом так же, как стояли, —
+     но буквами обычного шрифта. Это ровно то, ради чего --mono здесь и
+     заводили; сам шрифт для этого не нужен. */
+  .subtitle, .pill, .pill-date, .idea-meta, .cal-day, .mini-cal-day,
+  .meeting-chip .mdate, .meeting-chip .mtime, .filter-pill-count,
+  .tp-progress, .chat-time, .search-hit-meta, .team-status,
+  .mobile-date, .today-meeting-time, .section-title .count, #syncStatus{
+    font-variant-numeric:tabular-nums lining-nums;
+  }
+
   header{
-    background:var(--paper); border-bottom:1px solid var(--line);
+    background:var(--paper); border-bottom:1px solid var(--line-soft);
     padding:16px 28px; position:sticky; top:0; z-index:20;
   }
   .header-row{display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:16px;}
@@ -74,11 +129,11 @@
     font-family:var(--display); font-size:20px; margin:0; letter-spacing:-.01em;
     color:var(--ink); font-weight:800;
   }
-  .subtitle{color:var(--ink-soft); font-size:12px; margin-top:2px; font-family:var(--mono);}
+  .subtitle{color:var(--ink-soft); font-size:12px; margin-top:2px; font-family:var(--display);}
   .btn{
-    border:1px solid var(--line); background:var(--paper-soft); color:var(--ink);
-    padding:8px 14px; border-radius:var(--radius-sm); font-size:13px; cursor:pointer;
-    font-family:var(--display); font-weight:600;
+    border:1px solid var(--line-soft); background:var(--paper-soft); color:var(--ink);
+    padding:9px 15px; border-radius:var(--radius-sm); font-size:13px; cursor:pointer;
+    font-family:var(--display); font-weight:600; letter-spacing:.005em; box-shadow:var(--edge);
     transition:border-color .15s ease, background .15s ease, transform .1s ease, box-shadow .15s ease;
     white-space:nowrap;
   }
@@ -90,7 +145,15 @@
   .btn-danger-ghost:hover{box-shadow:0 0 0 3px var(--high-bg);}
   .btn-ghost{border:none; background:none; color:var(--ink-soft); padding:4px 6px;}
   .btn-ghost:hover{color:var(--accent); box-shadow:none;}
-  .btn-small{padding:5px 10px; font-size:12px;}
+  .btn-small{padding:6px 11px; font-size:12px;}
+  /* Значок внутри кнопки стоит на одной линии со словом и принимает его
+     цвет. flex:none — иначе в узкой кнопке контур сплющивается в овал. */
+  .icon{flex:none; display:block;}
+  /* Любая кнопка со значком — строка из значка и слова, а не блок, в
+     котором значок стоит абзацем над текстом. Без этого «Выбрать дату»
+     переносилась на две строки: <svg> ведёт себя как картинка в потоке, и
+     white-space:nowrap на неё не действует. */
+  button:has(> .icon){display:inline-flex; align-items:center; gap:7px;}
   /* A flex row rather than inline-blocks separated by whitespace: with an
      icon-only button in the row the baseline alignment left it a pixel off,
      and the gap is the same whether the row wraps or not. */
@@ -181,42 +244,61 @@
   @keyframes quick-add-sheet-up{ from{transform:translateY(100%);} to{transform:translateY(0);} }
   .quick-add-sheet-handle{width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 12px;}
   .quick-add-mic-btn{
-    flex:none; border:1px solid var(--line); background:var(--paper-soft); color:var(--ink);
-    border-radius:6px; width:38px; display:flex; align-items:center; justify-content:center;
-    cursor:pointer; font-size:16px; padding:0;
+    flex:none; border:1px solid var(--line-soft); background:var(--paper-soft); color:var(--ink-soft);
+    border-radius:var(--radius-sm); width:40px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; padding:0; box-shadow:var(--edge);
+    transition:color .12s ease, border-color .12s ease;
   }
-  .quick-add-mic-btn.listening{background:var(--high); border-color:var(--high); animation:quick-add-mic-pulse 1s ease-in-out infinite;}
+  .quick-add-mic-btn:hover{color:var(--accent); border-color:var(--accent);}
+  /* Идёт запись — красным и с пульсацией. Цвет здесь на самом значке, а не
+     заливкой кнопки: контурный микрофон в красном читается как «пишу», а
+     красный прямоугольник — как «ошибка». */
+  .quick-add-mic-btn.listening{color:var(--high); border-color:var(--high); background:var(--high-bg); animation:quick-add-mic-pulse 1s ease-in-out infinite;}
   @keyframes quick-add-mic-pulse{ 0%,100%{opacity:1;} 50%{opacity:.55;} }
   .quick-add-preview{display:flex; flex-direction:column; gap:8px; font-size:13px;}
   .quick-add-preview .qap-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
   .quick-add-preview .qap-actions{display:flex; gap:8px; margin-top:2px;}
 
   select, input[type=text], input[type=date], input[type=search]{
-    font-family:var(--sans); font-size:13px; padding:7px 9px;
-    border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--paper-soft); color:var(--ink);
+    font-family:var(--sans); font-size:13.5px; padding:9px 11px;
+    border:1px solid var(--line-soft); border-radius:var(--radius-sm); background:var(--bg); color:var(--ink);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
+  /* Подсказка в пустом поле — это пример, а не текст: она должна читаться
+     как более тихая, иначе пустое поле выглядит заполненным. */
+  ::placeholder{color:var(--ink-soft); opacity:.75;}
   select:focus, input:focus, textarea:focus{
     outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);
   }
 
   .toolbar{
     display:flex; gap:8px; flex-wrap:wrap; align-items:center;
-    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-md);
-    padding:12px; margin-bottom:18px; box-shadow:var(--shadow-1);
+    background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
+    padding:12px; margin-bottom:18px; box-shadow:var(--shadow-1), var(--edge);
   }
   .toolbar select{min-width:130px;}
+  /* Фильтр по исполнителю: ширины хватает на «Все исполнители» и на самое
+     длинное имя, но панель он не растягивает — длинное имя обрезается
+     многоточием внутри своей строки (.dd-value). */
+  .toolbar-dd{min-width:180px; max-width:240px;}
   .search-wrap{flex:1; min-width:160px;}
   .search-wrap input{width:100%;}
   .check-wrap{display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-soft); white-space:nowrap;}
   .check-wrap input{width:15px; height:15px; cursor:pointer;}
 
   .panel{
-    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-md);
-    padding:14px; margin-bottom:18px; box-shadow:var(--shadow-1);
+    background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
+    padding:16px; margin-bottom:18px; box-shadow:var(--shadow-1), var(--edge);
   }
   .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
-  .panel-title{font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); font-family:var(--mono);}
+  /* Название блока. Прописные и разрядка остаются — они и делают строку
+     заголовком, не занимая ни лишней высоты, ни отдельной черты, — но
+     набраны они теперь тем же шрифтом, что и всё остальное, крупнее и
+     светлее: это название раздела, на который смотрят, а не сноска. */
+  .panel-title{
+    font-size:var(--label-size); text-transform:uppercase; letter-spacing:.09em;
+    color:var(--ink-label); font-family:var(--display); font-weight:var(--label-weight);
+  }
 
   /* Calendar */
   /* gap вместо space-between: в строке теперь ещё и ручка перетаскивания
@@ -226,7 +308,7 @@
   .cal-nav .cal-month{flex:1; text-align:center;}
   .cal-month{font-family:var(--display); font-weight:700; font-size:14px;}
   .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
-  .cal-wd{font-size:11px; color:var(--ink-soft); text-align:center; font-family:var(--mono); padding:2px 0;}
+  .cal-wd{font-size:11px; color:var(--ink-soft); text-align:center; font-family:var(--display); padding:2px 0;}
   .cal-day{
     position:relative; text-align:center; padding:8px 2px; border-radius:var(--radius-sm); font-size:13px;
     cursor:pointer; border:1px solid transparent; color:var(--ink); transition:border-color .15s ease, background .15s ease;
@@ -249,8 +331,9 @@
     font-family:var(--sans); font-size:13px; background:var(--paper-soft); color:var(--ink);
   }
   .idea-item{
-    border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:6px;
+    border:1px solid var(--line-soft); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:7px;
     display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px; align-items:flex-start; background:var(--paper-soft);
+    box-shadow:var(--edge);
   }
   /* «Отправляю Никита Козлов…» — четвёртый ребёнок этой же флекс-строки, и
      без переноса он забирал ширину у текста мысли: текст сжимался до одной
@@ -259,7 +342,7 @@
   .idea-item > .send-result{flex-basis:100%; margin-top:2px;}
   .idea-item:hover{border-color:var(--accent);}
   .idea-text{white-space:pre-wrap; word-break:break-word; font-size:13px;}
-  .idea-meta{font-size:11px; color:var(--ink-soft); font-family:var(--mono); margin-top:3px;}
+  .idea-meta{font-size:11px; color:var(--ink-soft); font-family:var(--display); margin-top:3px;}
   .idea-del{cursor:pointer; color:var(--ink-soft); background:none; border:none; font-size:15px; line-height:1; flex:none;}
   .idea-del:hover{color:var(--high);}
   /* No scrollbar of its own: the whole page scrolls instead (see the
@@ -269,14 +352,18 @@
      the panel. */
   #ideaList{padding:5px 5px 0; margin:-5px -5px 0;}
 
+  /* Заголовок столбца — та же величина, что и у заголовка блока: это
+     названия одного уровня («ВСТРЕЧИ» и «КРАТКОСРОЧНЫЕ» стоят на экране
+     рядом), и разной величиной они спорили бы друг с другом. */
   .section-title{
-    font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft);
-    margin:0 0 10px; font-family:var(--mono); transition:color .15s ease;
+    font-size:var(--label-size); text-transform:uppercase; letter-spacing:.09em; color:var(--ink-label);
+    margin:0 0 12px; font-family:var(--display); font-weight:var(--label-weight); transition:color .15s ease;
     display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;
   }
   .section-title:hover{color:var(--ink);}
   .section-title .count{
-    background:var(--accent-soft); color:var(--accent); border-radius:10px; padding:1px 8px; font-size:11px;
+    background:var(--accent-soft); color:var(--accent); border-radius:999px; padding:2px 8px; font-size:11.5px;
+    font-weight:700; font-variant-numeric:tabular-nums; line-height:1.4; min-width:22px; text-align:center;
   }
   .section-title .collapse-arrow{
     margin-left:auto; font-size:10px; color:var(--ink-soft); transition:transform .15s ease; flex:none;
@@ -309,10 +396,11 @@
      прочитать весь список, выбрать. */
   .section-tabs{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px;}
   .section-tab{
-    padding:5px 11px; border:1px solid var(--line); border-radius:999px;
+    padding:7px 14px; border:1px solid var(--line-soft); border-radius:999px;
     background:var(--paper-soft); color:var(--ink-soft); cursor:pointer;
-    font-family:var(--display); font-weight:600; font-size:12px; white-space:nowrap;
-    transition:color .15s ease, border-color .15s ease, background .15s ease;
+    font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
+    box-shadow:var(--edge);
+    transition:color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
   }
   .section-tab:hover{color:var(--ink); border-color:var(--ink-soft);}
   .section-tab.active{background:var(--accent); border-color:var(--accent); color:#F3F8FA;}
@@ -334,14 +422,14 @@
      задают чаще всего, и оба теперь в одно нажатие. */
   .filter-pill{
     display:inline-flex; align-items:center; gap:6px;
-    padding:6px 13px; border:1px solid var(--line); border-radius:999px;
-    background:var(--paper-soft); color:var(--ink-soft); cursor:pointer;
+    padding:8px 14px; border:1px solid var(--line-soft); border-radius:999px;
+    background:var(--paper-soft); color:var(--ink-soft); cursor:pointer; box-shadow:var(--edge);
     font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
     transition:color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
   }
   .filter-pill:hover{color:var(--ink); border-color:var(--ink-soft);}
   .filter-pill-count{
-    font-family:var(--mono); font-size:11px; font-weight:700; line-height:1;
+    font-family:var(--display); font-size:11px; font-weight:700; line-height:1;
     padding:2px 6px; border-radius:999px; background:var(--high-bg); color:var(--high);
   }
   .filter-pill.overdue:hover{color:var(--high); border-color:var(--high);}
@@ -358,9 +446,9 @@
   .done-wrap{margin-top:26px;}
 
   .task{
-    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm);
-    padding:12px 14px; margin-bottom:8px; display:flex; gap:12px; align-items:flex-start;
-    cursor:pointer; min-width:0; position:relative;
+    background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
+    padding:13px 15px; margin-bottom:9px; display:flex; gap:12px; align-items:flex-start;
+    cursor:pointer; min-width:0; position:relative; box-shadow:var(--edge);
     transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
   }
   .task:hover{border-color:var(--accent); box-shadow:var(--shadow-1); transform:translateY(-1px);}
@@ -415,7 +503,12 @@
   }
   .task-assignee .arrow{color:var(--ink-soft); font-weight:400; margin-right:2px;}
   .pill{
-    font-size:11px; padding:2px 8px; border-radius:20px; font-family:var(--mono);
+    /* inline-flex, а не inline-block: в плашке рядом со словом стоит
+       контурный значок, и выровнять его по центру строки может только
+       флекс — как картинка в потоке он садился на базовую линию и вылезал
+       снизу за скруглённый край. */
+    display:inline-flex; align-items:center; gap:5px;
+    font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:999px; font-family:var(--display);
     white-space:nowrap;
     /* База без модификатора тоже должна читаться как метка: роль
        «наблюдатель» на экране руководителя выглядела обрывком текста,
@@ -431,7 +524,13 @@
   .pill-section{background:var(--section-work-bg); color:var(--section-work); font-weight:600;}
   .pill-section-personal{background:var(--section-personal-bg); color:var(--section-personal);}
 
-  .empty{color:var(--ink-soft); font-size:13px; padding:20px; text-align:center; border:1px dashed var(--line); border-radius:var(--radius-md);}
+  /* Пусто — это состояние, а не ошибка: пунктир мягкий, фон чуть заметен,
+     текст не кричит. Сплошная серая рамка вокруг пустого места делала из
+     него объект, который читаешь раньше, чем соседний столбец с задачами. */
+  .empty{
+    color:var(--ink-soft); font-size:13px; line-height:1.5; padding:22px 18px; text-align:center;
+    border:1px dashed var(--line-soft); border-radius:var(--radius-md); background:rgba(255,255,255,.012);
+  }
 
   /* Modal */
   .overlay{
@@ -441,8 +540,8 @@
   .overlay.open{display:flex; animation:overlay-in .15s ease-out;}
   @keyframes overlay-in{from{opacity:0;} to{opacity:1;}}
   .modal{
-    background:var(--paper); border-radius:var(--radius-lg); width:100%; max-width:560px;
-    padding:22px; border:1px solid var(--line); box-shadow:var(--shadow-2);
+    background:var(--paper); border-radius:var(--radius-lg); width:100%; max-width:580px;
+    padding:26px; border:1px solid var(--line-soft); box-shadow:var(--shadow-2), var(--edge);
     animation:modal-in .18s cubic-bezier(.2,.9,.3,1.1);
     /* Vertically centred when it fits, top-aligned (and scrollable) when it
        doesn't — `margin:auto` does both, which `align-items:center` alone
@@ -450,10 +549,35 @@
     margin:auto;
   }
   @keyframes modal-in{from{opacity:0; transform:translateY(8px) scale(.98);} to{opacity:1; transform:none;}}
-  .modal h2{margin:0 0 16px; font-size:17px; font-family:var(--display); font-weight:700; color:var(--ink);}
+  .modal h2{margin:0 0 20px; font-size:20px; font-family:var(--display); font-weight:800; letter-spacing:-.015em; color:var(--ink);}
   @media (prefers-reduced-motion: reduce){ .overlay.open, .modal{animation:none;} }
-  .field{margin-bottom:14px;}
-  .field label{display:block; font-size:12px; color:var(--ink-soft); margin-bottom:5px; font-family:var(--mono);}
+  .field{margin-bottom:18px;}
+  /* Название поля. В отличие от заголовка блока — БЕЗ прописных: «Кто на
+     задаче» и «Дедлайн / дата» это вопросы, заданные человеку, а вопрос,
+     набранный капслоком, читается как ярлык на папке. Заметность даёт вес
+     и цвет, а не регистр. */
+  .field label{
+    /* flex, а не block: справа от названия иногда стоит пометка
+       («нужен исполнитель»), и прижимать её к краю надо строкой, а не
+       float — плавающий элемент рисуется ПОД текстом соседнего блока, и
+       этим трекер уже обжигался на крестике всплывающего уведомления. */
+    display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+    font-size:var(--label-size); color:var(--ink-label); margin-bottom:7px;
+    font-family:var(--display); font-weight:var(--label-weight); letter-spacing:.005em;
+  }
+  /* Пояснение под полем — то, что объясняет, как им пользоваться
+     («нажали второй раз — он снят с задачи»). Оно НЕ должно спорить с
+     названием поля: тише и мельче его, но не мельче основного текста. */
+  .field-hint{font-size:12.5px; line-height:1.5; color:var(--ink-soft); margin:8px 0 0;}
+  /* Обязательное поле называется обязательным словами, а не звёздочкой:
+     звёздочку надо знать, а «нужен исполнитель» — нет. Выполненное
+     требование не исчезает, а меняет цвет и текст: исчезнувшая надпись
+     заставляет вспоминать, было там что-то или нет. */
+  .field-req{
+    flex:none; font-size:11.5px; font-weight:600; letter-spacing:0;
+    color:var(--high); text-transform:none;
+  }
+  .field-req.met{color:var(--success);}
   /* Every text-like input, not a hand-listed few. The login and invitation
      screens use type=email and type=password, neither of which was in this
      list — so those fields were drawn by the browser with no styling at all
@@ -462,8 +586,12 @@
   .field input[type=text], .field input[type=email], .field input[type=password],
   .field input[type=tel], .field input[type=number], .field input[type=url],
   .field textarea, .field select, .field input[type=date]{
-    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-family:var(--sans); font-size:13px;
-    background:var(--paper-soft); color:var(--ink);
+    width:100%; padding:10px 12px; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
+    font-family:var(--sans); font-size:13.5px;
+    /* Поле ввода темнее карточки, а не светлее её: «вырезанное» поле
+       читается как место, куда пишут, без обводки потемнее вокруг. */
+    background:var(--bg); color:var(--ink);
+    transition:border-color .15s ease, box-shadow .15s ease;
   }
   .field textarea{min-height:56px; resize:vertical;}
   /* Grown to fit by JS (AutoGrowTextarea): overflow hidden so no inner
@@ -475,12 +603,13 @@
   .input-with-mic{display:flex; gap:6px; align-items:flex-start;}
   .input-with-mic > input, .input-with-mic > textarea{flex:1; min-width:0;}
   .field-mic-btn{
-    flex:none; border:1px solid var(--line); background:var(--paper-soft); color:var(--ink);
-    border-radius:6px; width:36px; height:34px; display:flex; align-items:center; justify-content:center;
-    cursor:pointer; font-size:15px; padding:0;
+    flex:none; border:1px solid var(--line-soft); background:var(--paper-soft); color:var(--ink-soft);
+    border-radius:var(--radius-sm); width:40px; height:40px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; padding:0; box-shadow:var(--edge);
+    transition:color .12s ease, border-color .12s ease;
   }
-  .field-mic-btn:hover{border-color:var(--accent);}
-  .field-mic-btn.listening{background:var(--high); border-color:var(--high); animation:quick-add-mic-pulse 1s ease-in-out infinite;}
+  .field-mic-btn:hover{color:var(--accent); border-color:var(--accent);}
+  .field-mic-btn.listening{color:var(--high); border-color:var(--high); background:var(--high-bg); animation:quick-add-mic-pulse 1s ease-in-out infinite;}
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
   .select-with-add{display:flex; gap:6px;}
   .select-with-add select{flex:1;}
@@ -538,7 +667,7 @@
   #syncStatus{
     position:fixed; left:16px; bottom:16px; z-index:150; pointer-events:none;
     background:var(--paper); border:1px solid var(--line); border-radius:6px;
-    padding:6px 12px; font-size:12px; color:var(--ink-soft); font-family:var(--mono);
+    padding:6px 12px; font-size:12px; color:var(--ink-soft); font-family:var(--display);
     opacity:0; transition:opacity .3s ease;
   }
   #syncStatus.show{opacity:1;}
@@ -547,7 +676,7 @@
     background:var(--accent); color:#F3F8FA; padding:12px 40px 12px 14px; border-radius:var(--radius-md); font-size:13px;
     box-shadow:var(--shadow-2); animation:slidein .2s ease-out; pointer-events:auto;
   }
-  .toast b{display:block; margin-bottom:2px; font-size:12px; opacity:.75; font-family:var(--mono); text-transform:uppercase; letter-spacing:.04em;}
+  .toast b{display:block; margin-bottom:2px; font-size:12px; opacity:.75; font-family:var(--display); text-transform:uppercase; letter-spacing:.04em;}
   /* Крестик — отдельным слоем поверх текста, а не float внутри него.
      Плавающий элемент рисуется НИЖЕ строчного содержимого соседнего блока,
      поэтому клик по нему попадал в заголовок: крестик было видно, но нажать
@@ -635,8 +764,8 @@
   #meetingsForDay.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
   .meeting-chip{
     display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:6px 10px;
-    background:var(--paper-soft); border:1px solid var(--line); border-radius:var(--radius-sm);
-    padding:7px 9px; margin-top:6px; font-size:12px; cursor:pointer;
+    background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:var(--radius-md);
+    padding:9px 11px; margin-top:7px; font-size:12.5px; cursor:pointer; box-shadow:var(--edge);
     transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
   }
   .meeting-chip:hover{border-color:var(--today); box-shadow:var(--shadow-1); transform:translateY(-1px);}
@@ -647,14 +776,14 @@
     display:flex; flex-direction:column; align-items:flex-start; flex:none;
     min-width:44px; line-height:1.35;
   }
-  .meeting-chip .mdate{color:var(--ink-soft); font-family:var(--mono); font-size:11px; white-space:nowrap;}
-  .meeting-chip .mtime{color:var(--today); font-family:var(--mono); font-weight:700; white-space:nowrap;}
+  .meeting-chip .mdate{color:var(--ink-soft); font-family:var(--display); font-size:11.5px; white-space:nowrap;}
+  .meeting-chip .mtime{color:var(--today); font-family:var(--display); font-weight:700; white-space:nowrap;}
   .meeting-chip .mtitle{
     flex:1; min-width:120px; white-space:normal; overflow-wrap:break-word; word-break:normal;
     line-height:1.4; padding-top:1px;
   }
   .meeting-chip .mpeople{
-    color:var(--ink-soft); font-family:var(--mono); font-size:11px; white-space:nowrap;
+    color:var(--ink-soft); font-family:var(--display); font-size:11px; white-space:nowrap;
     flex:none; cursor:default; padding:2px 3px; border-radius:4px;
   }
   .meeting-chip .mpeople:hover{background:var(--paper);}
@@ -686,6 +815,58 @@
   .meeting-icon-btn.reschedule:hover{color:var(--accent); border-color:var(--accent);}
   .meeting-icon-btn:active{transform:scale(.94);}
 
+  /* ---------- Свой выпадающий список (Dropdown.tsx) ---------- */
+  /* Раскрытый системный `<select>` рисует не трекер, а операционная
+     система: белая полоса поверх тёмного окна, чужой шрифт, чужие отступы.
+     Здесь всё своё — и закрытая строка, и раскрытый перечень. */
+  .dd-wrap{position:relative; display:inline-block; min-width:0;}
+  .dd-trigger{
+    display:inline-flex; align-items:center; gap:10px; width:100%;
+    padding:9px 13px; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
+    background:var(--bg); color:var(--ink); cursor:pointer; box-shadow:var(--edge);
+    font-family:var(--display); font-weight:600; font-size:13.5px; text-align:left;
+    transition:border-color .12s ease, box-shadow .12s ease, color .12s ease;
+  }
+  .dd-trigger:hover{border-color:var(--accent);}
+  .dd-trigger.open{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft), var(--edge);}
+  .dd-value{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .dd-arrow{
+    flex:none; font-size:10px; line-height:1; color:var(--ink-soft);
+    transition:transform .15s ease, color .15s ease;
+  }
+  .dd-trigger.open .dd-arrow{transform:rotate(180deg); color:var(--accent);}
+  .dd-trigger.dd-compact{padding:6px 10px; font-size:12.5px; gap:7px;}
+  .dd-backdrop{position:fixed; inset:0; z-index:140;}
+  .dd-pop{
+    position:absolute; top:calc(100% + 6px); left:0; min-width:100%; z-index:141;
+    background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
+    box-shadow:var(--shadow-2); padding:6px;
+    /* Четырнадцать исполнителей — это уже список, который надо листать, но
+       он не должен вырасти выше экрана: своя полоса прокрутки здесь
+       единственное место в трекере, где она оправдана. */
+    max-height:min(340px, 60vh); overflow-y:auto; overscroll-behavior:contain;
+    scrollbar-width:thin; scrollbar-color:var(--line) transparent;
+    animation:dd-in .13s ease-out;
+  }
+  @keyframes dd-in{from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:none;}}
+  @media (prefers-reduced-motion: reduce){ .dd-pop{animation:none;} }
+  .dd-pop::-webkit-scrollbar{width:8px;}
+  .dd-pop::-webkit-scrollbar-track{background:transparent;}
+  .dd-pop::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px;}
+  .dd-option{
+    display:flex; align-items:center; gap:10px; width:100%;
+    padding:9px 11px; border:none; border-radius:var(--radius-sm); background:none;
+    color:var(--ink); cursor:pointer; text-align:left;
+    font-family:var(--display); font-weight:600; font-size:13.5px; line-height:1.35;
+    transition:background .1s ease, color .1s ease;
+  }
+  .dd-option-label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .dd-option:hover{background:var(--paper-soft); color:var(--accent);}
+  .dd-option.selected{background:var(--accent-soft); color:var(--accent);}
+  .dd-check{flex:none; font-size:12px; color:var(--accent);}
+  /* На телефоне строка списка — цель для пальца, а не для курсора. */
+  @media (max-width:768px){ .dd-option{padding:12px 12px; font-size:14px;} .dd-trigger{padding:11px 13px;} }
+
   /* Popover: create a task/meeting on a clicked calendar date */
   .date-popover{
     display:none; flex-direction:column; position:fixed; z-index:300; gap:2px;
@@ -700,47 +881,73 @@
   /* Мини-календарь на месте поля даты (MiniCalendar). Тот же вид, что и у
      большого календаря слева, только мельче: одна и та же сетка на экране
      не должна выглядеть двумя разными. */
-  .mini-cal{border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px; background:var(--bg); max-width:300px;}
-  .mini-cal-head{display:flex; align-items:center; gap:6px; margin-bottom:6px;}
-  .mini-cal-month{flex:1; text-align:center; font-family:var(--display); font-weight:700; font-size:12.5px; color:var(--ink);}
-  .mini-cal-nav, .mini-cal-clear{
-    width:24px; height:24px; flex:none; border:1px solid var(--line); border-radius:6px;
-    background:var(--paper-soft); color:var(--ink-soft); cursor:pointer; font-size:12px; line-height:1; padding:0;
+  .mini-cal{
+    border:1px solid var(--line-soft); border-radius:var(--radius-md); padding:12px;
+    background:var(--bg); max-width:318px; box-shadow:var(--edge);
   }
-  .mini-cal-nav:hover{color:var(--accent); border-color:var(--accent);}
+  .mini-cal-head{display:flex; align-items:center; gap:6px; margin-bottom:10px;}
+  .mini-cal-month{flex:1; text-align:center; font-family:var(--display); font-weight:700; font-size:13.5px; color:var(--ink);}
+  .mini-cal-nav, .mini-cal-clear{
+    width:28px; height:28px; flex:none; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
+    background:var(--paper-soft); color:var(--ink-soft); cursor:pointer; font-size:12px; line-height:1; padding:0;
+    transition:color .12s ease, border-color .12s ease, background .12s ease;
+  }
+  .mini-cal-nav:hover{color:var(--accent); border-color:var(--accent); background:var(--accent-soft);}
   .mini-cal-clear:hover{color:var(--high); border-color:var(--high);}
-  .mini-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px;}
-  .mini-cal-wd{text-align:center; font-family:var(--mono); font-size:10px; color:var(--ink-soft); padding-bottom:2px;}
+  .mini-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:3px;}
+  .mini-cal-wd{
+    text-align:center; font-family:var(--display); font-size:11px; font-weight:700;
+    letter-spacing:.04em; color:var(--ink-soft); padding-bottom:6px;
+  }
   .mini-cal-day{
-    aspect-ratio:1; min-height:28px; border:1px solid transparent; border-radius:6px;
-    background:none; color:var(--ink); cursor:pointer; font-family:var(--mono); font-size:12px; padding:0;
+    aspect-ratio:1; min-height:32px; border:1px solid transparent; border-radius:var(--radius-sm);
+    background:none; color:var(--ink); cursor:pointer; font-family:var(--display); font-size:12.5px;
+    font-weight:600; padding:0;
     transition:background .12s ease, color .12s ease, border-color .12s ease;
   }
   .mini-cal-day:hover{background:var(--paper-soft); border-color:var(--accent); color:var(--accent);}
-  .mini-cal-day.other{color:var(--ink-soft); opacity:.45;}
-  .mini-cal-day.today{border-color:var(--ink-soft);}
-  .mini-cal-day.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:700;}
-  @media (max-width:768px){ .mini-cal{max-width:none;} .mini-cal-day{min-height:34px;} }
+  .mini-cal-day.other{color:var(--ink-soft); opacity:.4; font-weight:500;}
+  /* Сегодня — точкой под числом, а не рамкой: рамка вокруг «18» и рамка
+     выбранного дня выглядят одинаково, и «сегодня» читалось как «выбрано».
+     Точка не спорит ни с чем и остаётся видимой на выбранном дне. */
+  .mini-cal-day.today{position:relative; color:var(--accent); font-weight:800;}
+  .mini-cal-day.today::after{
+    content:""; position:absolute; left:50%; bottom:4px; transform:translateX(-50%);
+    width:4px; height:4px; border-radius:50%; background:currentColor;
+  }
+  .mini-cal-day.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:800;}
+  @media (max-width:768px){ .mini-cal{max-width:none;} .mini-cal-day{min-height:38px;} }
   /* Всплывающий вариант (в карточке задачи): строка с датой, календарь — по
      нажатию. Разворачивать его там всегда значило растянуть форму на
      полтора экрана ради поля, которое заполняют не каждый раз. */
-  .mini-cal-wrap{position:relative; display:inline-block;}
+  /* display:contents — обёртка остаётся в разметке (на ней id и data-value,
+     по которым ходят e2e), но своей коробки не образует: кнопка и
+     раскрытый календарь становятся прямыми детьми строки сроков. Только
+     так календарь может уйти на СВОЮ строку под кнопками, а не растянуть
+     ту, в которой стоит триггер. */
+  .mini-cal-wrap{display:contents;}
+  /* Своя строка во всю ширину — и в строке сроков задачи (flex), и в поле
+     даты встречи (обычный блок). */
+  /* order — чтобы календарь встал ПОСЛЕ всех кнопок строки, а не сразу за
+     своим триггером: иначе он разрезает ряд пополам и «Сегодня / Завтра /
+     Через неделю» уезжают под сетку месяца, где их уже не видно. */
+  .mini-cal-inline{flex-basis:100%; width:100%; margin-top:10px; order:99;}
+  .mini-cal-inline .mini-cal{max-width:340px;}
   .mini-cal-trigger{
-    padding:7px 12px; border:1px solid var(--line); border-radius:var(--radius-sm);
-    background:var(--paper-soft); color:var(--ink); cursor:pointer;
-    font-family:var(--mono); font-size:12.5px; white-space:nowrap;
+    padding:8px 14px; border:1px solid var(--line-soft); border-radius:999px;
+    background:var(--paper-soft); color:var(--ink); cursor:pointer; box-shadow:var(--edge);
+    font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
+    transition:border-color .12s ease, color .12s ease, background .12s ease;
   }
   .mini-cal-trigger:hover, .mini-cal-trigger.open{border-color:var(--accent); color:var(--accent);}
-  .mini-cal-backdrop{position:fixed; inset:0; z-index:120;}
-  .mini-cal-pop{position:absolute; top:calc(100% + 6px); left:0; z-index:121; box-shadow:var(--shadow-2); border-radius:var(--radius-sm);}
-  .mini-cal-pop .mini-cal{background:var(--paper);}
-  @media (max-width:768px){ .mini-cal-pop{left:0; right:0;} }
+  .mini-cal-trigger.open{background:var(--accent-soft);}
+  @media (max-width:768px){ .mini-cal-inline .mini-cal{max-width:none;} }
 
   /* Working-hours time picker: one tap per slot, wrapping over a few rows. */
   .time-grid{display:flex; flex-wrap:wrap; gap:5px;}
   .time-slot{
     padding:5px 9px; border:1px solid var(--line); border-radius:6px; cursor:pointer;
-    background:var(--paper-soft); color:var(--ink); font-family:var(--mono); font-size:12px;
+    background:var(--paper-soft); color:var(--ink); font-family:var(--display); font-size:12px;
     transition:border-color .12s ease, background .12s ease, color .12s ease;
   }
   .time-slot:hover{border-color:var(--accent); color:var(--accent);}
@@ -751,11 +958,12 @@
   .time-grid-compact .time-slot{padding:4px 7px; font-size:11px;}
 
   /* Participants: tap-to-toggle chips over a few rows, no dropdown. */
-  .participant-grid{display:flex; flex-wrap:wrap; gap:5px;}
+  .participant-grid{display:flex; flex-wrap:wrap; gap:7px;}
   .participant-chip{
-    padding:5px 10px; border:1px solid var(--line); border-radius:999px; cursor:pointer;
-    background:var(--paper-soft); color:var(--ink); font-family:var(--sans); font-size:12px;
-    transition:border-color .12s ease, background .12s ease, color .12s ease;
+    padding:7px 13px; border:1px solid var(--line-soft); border-radius:999px; cursor:pointer;
+    background:var(--paper-soft); color:var(--ink); font-family:var(--sans); font-size:12.5px; font-weight:600;
+    line-height:1.35; box-shadow:var(--edge);
+    transition:border-color .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;
   }
   .participant-chip:hover{border-color:var(--accent); color:var(--accent);}
   .participant-chip.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:600;}
@@ -801,14 +1009,25 @@
     width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px;
     background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13px; resize:vertical;
   }
-  .outcome-badge{font-size:11px; font-family:var(--mono); margin-bottom:6px; display:none;}
+  /* Итог — меткой, а не цветной заливкой во всю строку: это состояние
+     встречи, которое читают, а не кнопка, на которую жмут. */
+  .outcome-badge{
+    font-size:12px; font-weight:700; font-family:var(--display); margin-bottom:8px; display:none;
+    padding:3px 10px; border-radius:999px; border:1px solid currentColor;
+  }
   .outcome-badge.show{display:inline-block;}
-  .outcome-badge.success{color:var(--long-border); }
+  .outcome-badge.success{color:var(--success);}
   .outcome-badge.no_result{color:var(--high);}
-  .outcome-actions{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;}
-  .outcome-btn-success{background:var(--success); color:#0B2116; border-color:var(--success); font-weight:600;}
-  .outcome-btn-success:hover{opacity:.9;}
-  .outcome-btn-noresult{color:var(--high); border-color:var(--high-bg);}
+  .outcome-actions{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  /* Обе кнопки — контурные, в своём цвете. Раньше «Успешно» была залита
+     зелёным целиком и стояла рядом с красной «Без результата»: две
+     сплошные заливки в одной строке спорят друг с другом и обе выглядят
+     наклейками. Цвет остаётся — он и отвечает на вопрос, что тут да, а что
+     нет, — но контуром, и заливается только та, на которую навели. */
+  .outcome-btn-success{color:var(--success); border-color:var(--success); background:var(--paper-soft);}
+  .outcome-btn-success:hover{background:var(--long-bg); border-color:var(--success); box-shadow:0 0 0 3px rgba(63,169,104,.15);}
+  .outcome-btn-noresult{color:var(--high); border-color:var(--high); background:var(--paper-soft);}
+  .outcome-btn-noresult:hover{background:var(--high-bg); border-color:var(--high); box-shadow:0 0 0 3px rgba(224,122,95,.15);}
 
   .confirm-dt-question{font-size:13px; color:var(--ink); margin:0 0 14px;}
   /* This dialog is short and never needs the top-aligned/scrollable
@@ -829,7 +1048,7 @@
   }
   .search-results{max-height:min(56vh, 460px); overflow-y:auto; padding:6px 0;}
   .search-group{
-    font-family:var(--mono); font-size:11px; color:var(--ink-soft);
+    font-family:var(--display); font-size:11px; color:var(--ink-soft);
     padding:8px 16px 4px; text-transform:uppercase; letter-spacing:.04em;
   }
   .search-hit{
@@ -838,7 +1057,7 @@
   }
   .search-hit.active{background:var(--paper-soft); border-left-color:var(--accent);}
   .search-hit-title{color:var(--ink); font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .search-hit-meta{color:var(--ink-soft); font-size:11px; font-family:var(--mono); flex:none; max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .search-hit-meta{color:var(--ink-soft); font-size:11px; font-family:var(--display); flex:none; max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .search-hit.done .search-hit-title{color:var(--ink-soft); text-decoration:line-through;}
   .search-empty{color:var(--ink-soft); font-size:13px; padding:18px 16px; text-align:center;}
 
@@ -846,22 +1065,30 @@
   .export-backdrop{position:fixed; inset:0; z-index:120;}
   .export-menu{
     position:fixed; z-index:121; min-width:220px; padding:6px;
-    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-md);
-    box-shadow:var(--shadow-2); display:flex; flex-direction:column; gap:2px;
+    background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
+    box-shadow:var(--shadow-2); display:flex; flex-direction:column; gap:1px;
   }
+  /* Пункт меню — строка из значка и подписи. Значок необязателен, и без
+     него подпись остаётся на том же месте, где была: собственной колонки
+     под значок нет, иначе меню, где значок есть у половины пунктов,
+     разъезжалось бы на два столбца. */
   .export-item{
-    text-align:left; padding:8px 10px; border:0; border-radius:6px; cursor:pointer;
-    background:transparent; color:var(--ink); font-family:var(--sans); font-size:13px;
+    display:flex; align-items:center; gap:9px;
+    text-align:left; padding:9px 11px; border:0; border-radius:var(--radius-sm); cursor:pointer;
+    background:transparent; color:var(--ink); font-family:var(--display); font-weight:600; font-size:13.5px;
+    transition:background .1s ease, color .1s ease;
   }
-  .export-item:hover{background:var(--paper-soft);}
+  .export-item-label{flex:1; min-width:0;}
+  .export-item:hover{background:var(--paper-soft); color:var(--accent);}
   .export-sep{
-    font-family:var(--mono); font-size:11px; color:var(--ink-soft);
-    padding:8px 10px 2px; border-top:1px solid var(--line); margin-top:4px;
+    font-family:var(--display); font-size:11.5px; font-weight:700; color:var(--ink-soft);
+    letter-spacing:.05em; text-transform:uppercase;
+    padding:10px 11px 4px; border-top:1px solid var(--line-soft); margin-top:5px;
   }
   /* Меню действий карточки: у кнопки на десктопе, листом снизу на телефоне
      (см. мобильный блок в конце файла). */
   .action-menu-title{
-    font-family:var(--mono); font-size:11px; color:var(--ink-soft);
+    font-family:var(--display); font-size:11px; color:var(--ink-soft);
     padding:4px 10px 6px; max-width:250px;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
@@ -873,11 +1100,36 @@
      подключённого человека кнопок вчетверо больше, чем у остальных, и при
      flex:1 без нижней границы имя ужималось в ноль — в списке оказывалась
      строка вообще без имени, зато с кнопкой «Отключить вход». */
-  .team-row{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; padding:7px 0; border-bottom:1px solid var(--line);}
+  /* Имя — мессенджер — доступ. Имя забирает остаток ширины, обе группы
+     кнопок стоят по правому краю и переносятся целиком, а не по одной
+     кнопке. Строки одной высоты потому, что высоту задаёт сетка, а не
+     самый длинный элемент в ряду. */
+  .team-row{
+    display:grid; grid-template-columns:minmax(120px,1fr) auto auto; align-items:center;
+    gap:8px 12px; padding:10px 0; border-bottom:1px solid var(--line-soft);
+  }
   .team-row:last-child{border-bottom:0;}
-  .team-name{flex:1 1 150px; min-width:130px; font-size:13px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .team-name{
+    min-width:0; font-size:13.5px; font-weight:600; color:var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  /* Ячейка: подпись и относящиеся к ней кнопки. Прижата вправо, потому что
+     у соседних строк колонки тогда встают друг под другом — именно этого
+     ряду из четырнадцати человек и не хватало. */
+  .team-cell{display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:6px;}
+  .team-cell:empty{display:none;}
   .team-row .btn{flex:none;}
-  .team-status{font-family:var(--mono); font-size:11px; color:var(--ink-soft); flex:none;}
+  /* Кнопки в строке — одной высоты и не уже своего слова: «MAX» и
+     «+ В трекер» стояли рядом разной величины, потому что высоту каждой
+     задавал её собственный текст. */
+  .team-row .btn-small{min-height:30px; display:inline-flex; align-items:center;}
+  .team-status{font-family:var(--display); font-size:11.5px; color:var(--ink-soft); flex:none; white-space:nowrap;}
+  /* На узком экране три колонки не помещаются никак: имя занимает свою
+     строку целиком, а группы встают под ним — по-прежнему каждая целиком. */
+  @media (max-width:560px){
+    .team-row{grid-template-columns:1fr; gap:8px;}
+    .team-cell{justify-content:flex-start;}
+  }
   .team-status.linked{color:var(--long-border);}
   /* Ссылка приглашения живёт под своей строкой, а не под всем списком:
      нажали у шестого человека — ответ там же, где нажали. Отступ слева и
@@ -886,7 +1138,7 @@
     margin:2px 0 10px; padding:10px 12px; border-left:2px solid var(--accent);
     border-radius:0 6px 6px 0; background:var(--paper-soft);
   }
-  .team-invite label{display:block; font-size:12px; color:var(--ink-soft); margin-bottom:5px; font-family:var(--mono);}
+  .team-invite label{display:block; font-size:12px; color:var(--ink-soft); margin-bottom:5px; font-family:var(--display);}
   .team-invite .team-hint{margin-top:6px;}
   .invite-link{
     padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg);
@@ -926,7 +1178,7 @@
     .mobile-logo{width:32px; height:32px; border-radius:7px; flex:none;}
     .mobile-brand-text{min-width:0;}
     .mobile-title{font-family:var(--display); font-size:15px; font-weight:700; color:var(--ink); line-height:1.1;}
-    .mobile-date{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .mobile-date{font-family:var(--display); font-size:10.5px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
     /* 44px — минимальная зона, по которой палец попадает не глядя. */
     .mobile-icon-btn{
       flex:none; width:44px; height:44px; border-radius:10px;
@@ -960,7 +1212,7 @@
     .mobile-tab-badge{
       position:absolute; top:-6px; left:11px;
       min-width:16px; height:16px; padding:0 4px; border-radius:8px;
-      background:var(--high); color:#2A130D; font-family:var(--mono); font-size:10px; font-weight:700;
+      background:var(--high); color:#2A130D; font-family:var(--display); font-size:10px; font-weight:700;
       display:flex; align-items:center; justify-content:center;
     }
     .mobile-tab.active .mobile-tab-badge{background:var(--accent); color:#F3F8FA;}
@@ -980,7 +1232,7 @@
     /* Экран «Сегодня» */
     .today-block{margin-bottom:18px;}
     .today-heading{
-      margin:0 0 8px; font-family:var(--mono); font-size:11px; font-weight:600;
+      margin:0 0 8px; font-family:var(--display); font-size:11px; font-weight:600;
       text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft);
     }
     .today-heading.overdue{color:var(--high);}
@@ -991,7 +1243,7 @@
       background:var(--paper); color:var(--ink); font-family:var(--sans); font-size:14px; cursor:pointer;
     }
     .today-meeting.muted{opacity:.65;}
-    .today-meeting-time{font-family:var(--mono); font-size:13px; color:var(--accent); flex:none;}
+    .today-meeting-time{font-family:var(--display); font-size:13px; color:var(--accent); flex:none;}
     .today-meeting-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
     .today-meeting-people{font-size:12px; color:var(--ink-soft); flex:none;}
     .today-undated{
@@ -1063,10 +1315,15 @@
       position:absolute; top:8px; right:8px; width:7px; height:7px; border-radius:50%;
       background:var(--accent);
     }
-    /* Свёрнуто — на экране только «Новая задача» и «Фильтры». */
+    /* Свёрнуто — на экране только «Новая задача» и «Фильтры».
+       .toolbar-dd наравне с select: фильтр по исполнителю больше не
+       системный список, а свой (Dropdown), и правило, написанное только под
+       `select`, перестало его прятать — на телефоне он остался висеть в
+       свёрнутой панели. */
     .toolbar.collapsed select,
+    .toolbar.collapsed .toolbar-dd,
     .toolbar.collapsed .check-wrap{display:none;}
-    .toolbar select{min-height:44px; font-size:16px;}
+    .toolbar select, .toolbar .dd-trigger{min-height:44px; font-size:16px;}
     .toolbar .check-wrap{min-height:40px;}
   }
 
@@ -1156,7 +1413,7 @@
   .auth-field{margin-bottom:14px; position:relative;}
   .auth-field label{
     display:block; font-size:11px; letter-spacing:.05em; text-transform:uppercase;
-    color:var(--ink-soft); margin-bottom:6px; font-family:var(--mono);
+    color:var(--ink-soft); margin-bottom:6px; font-family:var(--display);
   }
   .auth-field input{
     width:100%; padding:12px 13px; font-size:14px; font-family:var(--sans);
@@ -1183,7 +1440,7 @@
   .auth-peek{
     position:absolute; right:5px; bottom:5px; height:36px; min-width:56px;
     border:0; border-radius:7px; background:transparent; cursor:pointer;
-    color:var(--ink-soft); font-size:12px; font-family:var(--mono);
+    color:var(--ink-soft); font-size:12px; font-family:var(--display);
   }
   .auth-peek:hover{color:var(--ink); background:var(--paper);}
   .auth-btn{
@@ -1229,7 +1486,7 @@
     color:var(--ink-soft); font-size:13.5px; line-height:1.6;
   }
   .setup-steps li{margin-bottom:9px;}
-  .setup-steps li::marker{color:var(--accent); font-family:var(--mono); font-size:12px;}
+  .setup-steps li::marker{color:var(--accent); font-family:var(--display); font-size:12px;}
   .setup-steps b{color:var(--ink);}
   .setup-steps code{
     font-family:var(--mono); font-size:12.5px; color:var(--ink);
@@ -1256,7 +1513,7 @@
   /* Своя строка, а не ещё одна «таблетка» в общем ряду: это единственное
      место на карточке, где написано, сколько работы осталось. */
   .task-progress{
-    margin-top:6px; font-size:12px; color:var(--ink-soft); font-family:var(--mono);
+    margin-top:6px; font-size:12px; color:var(--ink-soft); font-family:var(--display);
     line-height:1.45;
   }
 
@@ -1267,17 +1524,17 @@
   /* Роль человека из поля «Исполнитель» в ещё не сохранённой задаче: она
      предопределена, поэтому показана словом, а не выпадашкой, которую всё
      равно нечем заполнить. */
-  .tp-role-static{font-size:12px; color:var(--ink-soft); font-family:var(--mono);}
+  .tp-role-static{font-size:12px; color:var(--ink-soft); font-family:var(--display);}
   .tp-hint{margin-top:10px; font-size:12px; color:var(--ink-soft); line-height:1.5;}
   .tp-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;}
-  .tp-title{font-size:12px; color:var(--ink-soft); font-family:var(--mono); text-transform:uppercase; letter-spacing:.04em;}
+  .tp-title{font-size:12px; color:var(--ink-soft); font-family:var(--display); text-transform:uppercase; letter-spacing:.04em;}
   .tp-stage{font-size:11.5px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--ink-soft);}
   .tp-stage-accepted{color:var(--today); border-color:var(--today);}
   .tp-stage-blocked{color:var(--high); border-color:var(--high);}
   .tp-stage-awaiting_review{color:var(--today); border-color:var(--today); background:var(--today-bg);}
   .tp-stage-returned{color:var(--med); border-color:var(--med);}
   .tp-stage-done{color:var(--success); border-color:var(--success);}
-  .tp-progress{font-size:12.5px; color:var(--ink); font-family:var(--mono); margin-bottom:10px;}
+  .tp-progress{font-size:12.5px; color:var(--ink); font-family:var(--display); margin-bottom:10px;}
   .tp-returned{
     font-size:12.5px; color:#F0D9A8; background:var(--med-bg);
     border:1px solid rgba(224,184,77,.35); border-radius:var(--radius-sm);
@@ -1285,16 +1542,17 @@
   }
   .tp-empty{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
   .tp-row{
-    display:flex; align-items:center; gap:8px; padding:6px 0;
-    border-top:1px solid var(--line); flex-wrap:wrap;
+    display:flex; align-items:center; gap:8px; padding:8px 0;
+    border-top:1px solid var(--line-soft); flex-wrap:wrap;
   }
   .tp-row:first-of-type{border-top:0;}
-  .tp-name{font-size:13px; color:var(--ink); min-width:110px; flex:0 1 auto;}
-  .tp-role{
-    font-size:12px; padding:4px 6px; border-radius:6px;
-    background:var(--paper); color:var(--ink); border:1px solid var(--line);
-  }
+  .tp-name{font-size:13.5px; font-weight:600; color:var(--ink); min-width:110px; flex:0 1 auto;}
+  /* Роль — свой список (Dropdown), а не системный: ширину задаёт обёртка,
+     кнопка внутри занимает её целиком. */
+  .tp-role{flex:none; min-width:132px;}
   .tp-state{font-size:12px; flex:1 1 140px; min-width:0;}
+  /* Состояние человека на задаче — значок и слово в одну строку. */
+  .tp-done, .tp-declined, .tp-accepted, .tp-unreachable{display:inline-flex; align-items:center; gap:5px;}
   .tp-done{color:var(--success);}
   .tp-declined{color:var(--high);}
   .tp-accepted{color:var(--long-border);}
@@ -1373,54 +1631,95 @@
      only kind worth keeping.
      ---------------------------------------------------------------- */
   .chat{
-    margin:0 0 14px; padding:12px 13px; border:1px solid var(--line);
-    border-radius:var(--radius-md); background:var(--paper-soft);
+    margin:0 0 14px; padding:14px 15px; border:1px solid var(--line-soft);
+    border-radius:var(--radius-md); background:var(--paper-soft); box-shadow:var(--edge);
   }
-  .chat-head{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
-  .chat-title{font-size:12px; color:var(--ink-soft); font-family:var(--mono); text-transform:uppercase; letter-spacing:.04em;}
+  .chat-head{display:flex; align-items:baseline; gap:9px; margin-bottom:12px; flex-wrap:wrap;}
+  .chat-title{
+    font-size:var(--label-size); color:var(--ink-label); font-family:var(--display);
+    font-weight:var(--label-weight); text-transform:uppercase; letter-spacing:.09em;
+  }
   .chat-count{
-    font-size:11px; color:var(--ink-soft); background:var(--paper);
-    border:1px solid var(--line); border-radius:999px; padding:1px 7px;
+    font-size:11.5px; font-weight:700; color:var(--accent); background:var(--accent-soft);
+    border:none; border-radius:999px; padding:2px 8px; font-variant-numeric:tabular-nums;
   }
+  /* Подсказка про правую кнопку — справа и тише всего в строке: она нужна
+     один раз, а стоит там всегда. */
+  .chat-hint{margin-left:auto; font-size:11.5px; color:var(--ink-soft); opacity:.8;}
+  @media (max-width:560px){ .chat-hint{display:none;} }
   .chat-empty{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
   .chat-msg{
-    padding:8px 10px; border-radius:var(--radius-sm); background:var(--paper);
-    border:1px solid var(--line); margin-bottom:8px;
+    padding:10px 12px; border-radius:var(--radius-md); background:var(--paper);
+    border:1px solid var(--line-soft); margin-bottom:8px; box-shadow:var(--edge);
+    /* Меню вызывают правой кнопкой по самому сообщению — выделение текста
+       при этом не должно превращаться в синюю заливку реплики; обычное
+       выделение мышью остаётся. */
+    transition:border-color .12s ease, background .12s ease;
   }
+  .chat-msg:hover{border-color:rgba(255,255,255,.16);}
+  /* Сообщение, у которого открыто меню, помечено — иначе в длинной ветке
+     непонятно, к чему относится то, что сейчас откроется. */
+  .chat-msg.menu-open{border-color:var(--accent); background:var(--accent-soft);}
   /* Своё сообщение отличается рамкой, а не расположением: переписка на две
      стороны на узкой карточке читается хуже, чем ровный столбец. */
   .chat-msg.mine{border-left:2px solid var(--accent);}
-  .chat-msg-head{display:flex; align-items:baseline; gap:8px; margin-bottom:4px; flex-wrap:wrap;}
-  .chat-author{font-size:12.5px; font-weight:600; color:var(--ink);}
-  .chat-time{font-size:11px; color:var(--ink-soft); font-family:var(--mono);}
-  .chat-body{font-size:13px; color:var(--ink); line-height:1.5; white-space:pre-wrap; word-break:break-word;}
-  .chat-foot{display:flex; align-items:center; gap:6px; margin-top:7px; flex-wrap:wrap;}
+  .chat-msg-head{display:flex; align-items:baseline; gap:8px; margin-bottom:5px; flex-wrap:wrap;}
+  .chat-author{font-size:12.5px; font-weight:700; color:var(--ink);}
+  .chat-time{font-size:11.5px; color:var(--ink-soft); font-family:var(--display);}
+  .chat-body{font-size:13.5px; color:var(--ink); line-height:1.55; white-space:pre-wrap; word-break:break-word;}
+  .chat-foot{display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap;}
   .chat-reaction{
-    min-height:26px; padding:2px 8px; font-size:12px; cursor:pointer;
-    background:var(--paper-soft); color:var(--ink); border:1px solid var(--line); border-radius:999px;
+    display:inline-flex; align-items:center; gap:5px;
+    min-height:28px; padding:3px 10px; font-size:12.5px; font-weight:600; cursor:pointer;
+    background:var(--paper-soft); color:var(--ink); border:1px solid var(--line-soft); border-radius:999px;
+    font-variant-numeric:tabular-nums;
+    transition:border-color .12s ease, background .12s ease;
   }
-  .chat-reaction.mine{border-color:var(--accent); background:var(--accent-soft);}
-  .chat-add{color:var(--ink-soft);}
+  .chat-reaction:hover{border-color:var(--accent);}
+  .chat-reaction.mine{border-color:var(--accent); background:var(--accent-soft); color:var(--accent);}
   .chat-mini{
     background:none; border:0; padding:2px 4px; cursor:pointer;
     font-size:11.5px; color:var(--ink-soft); font-family:var(--sans);
   }
   .chat-mini:hover{color:var(--ink); text-decoration:underline;}
-  .chat-picker{
-    display:flex; gap:4px; flex-wrap:wrap; margin-top:8px; padding:6px;
-    background:var(--paper-soft); border:1px solid var(--line); border-radius:var(--radius-sm);
+
+  /* ---------- Меню сообщения (ChatMessageMenu.tsx) ---------- */
+  .chat-menu-backdrop{position:fixed; inset:0; z-index:640;}
+  .chat-menu{
+    position:fixed; z-index:641; min-width:196px;
+    background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
+    box-shadow:var(--shadow-2); padding:6px; animation:dd-in .12s ease-out;
   }
-  /* 36px — иначе на телефоне промахиваешься мимо каждой второй. */
-  .chat-pick{
-    width:36px; height:36px; font-size:17px; cursor:pointer; line-height:1;
-    background:transparent; border:1px solid transparent; border-radius:8px;
+  @media (prefers-reduced-motion: reduce){ .chat-menu{animation:none;} }
+  /* Эмодзи в один ряд: реакция — самое частое действие, и оно не должно
+     стоять в очереди за «изменить» и «убрать». */
+  .chat-menu-emojis{display:flex; gap:2px; flex-wrap:wrap; justify-content:space-between;}
+  .chat-menu-emoji{
+    width:38px; height:38px; font-size:19px; line-height:1; cursor:pointer;
+    background:none; border:1px solid transparent; border-radius:var(--radius-sm);
+    transition:background .1s ease, transform .1s ease, border-color .1s ease;
   }
-  .chat-pick:hover{background:var(--paper); border-color:var(--line);}
-  .chat-composer{display:flex; gap:8px; align-items:flex-end; margin-top:10px;}
+  .chat-menu-emoji:hover{background:var(--paper-soft); transform:scale(1.14);}
+  .chat-menu-emoji.mine{border-color:var(--accent); background:var(--accent-soft);}
+  .chat-menu-actions{
+    display:flex; flex-direction:column; gap:1px;
+    margin-top:6px; padding-top:6px; border-top:1px solid var(--line-soft);
+  }
+  .chat-menu-item{
+    text-align:left; padding:9px 11px; border:none; border-radius:var(--radius-sm);
+    background:none; color:var(--ink); cursor:pointer;
+    font-family:var(--display); font-weight:600; font-size:13.5px;
+    transition:background .1s ease, color .1s ease;
+  }
+  .chat-menu-item:hover{background:var(--paper-soft); color:var(--accent);}
+  .chat-menu-item.danger{color:var(--high);}
+  .chat-menu-item.danger:hover{background:var(--high-bg); color:var(--high);}
+
+  .chat-composer{display:flex; gap:8px; align-items:flex-end; margin-top:12px;}
   .chat-composer textarea{
-    flex:1; min-height:38px; resize:vertical; padding:8px 10px; font-size:13px;
-    font-family:var(--sans); color:var(--ink); background:var(--paper);
-    border:1px solid var(--line); border-radius:var(--radius-sm);
+    flex:1; min-height:42px; resize:vertical; padding:10px 12px; font-size:13.5px;
+    font-family:var(--sans); color:var(--ink); background:var(--bg);
+    border:1px solid var(--line-soft); border-radius:var(--radius-sm);
   }
   .chat-composer textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
   /* Хроника задачи: кто что сделал и когда. Отметка на полях, а не

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Idea, Meeting, Section, Task } from "@/types/tracker";
 import { buildJson, exportFileName, ideasCsv, meetingsCsv, tasksCsv } from "@/lib/exportData";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Icon from "./Icon";
 
 // "Выгрузить" in the header: everything as JSON, or one list as CSV for a
 // spreadsheet. The menu is portalled to <body> for the usual reason — the
@@ -26,14 +28,7 @@ export default function ExportMenu({
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open]);
+  useEscapeToClose(() => setOpen(false), open);
 
   function toggle() {
     const rect = buttonRef.current?.getBoundingClientRect() ?? null;
@@ -56,7 +51,7 @@ export default function ExportMenu({
   return (
     <>
       <button className="btn" id="exportBtn" ref={buttonRef} title="Выгрузить данные" onClick={toggle}>
-        ⤓ Выгрузить
+        <Icon name="download" /> Выгрузить
       </button>
       {open &&
         anchor &&

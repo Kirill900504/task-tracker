@@ -68,7 +68,10 @@ export default function IdeasPanel({
       <div className="idea-add">
         <AutoGrowTextarea
           id="ideaInput"
-          placeholder="Мысль, идея (M)… Enter — сохранить, 🎤 — надиктовать"
+          // Без эмодзи: значок микрофона стоит тут же, справа от поля, — и
+          // нарисованный, а не в виде наклейки посреди подсказки, где он к
+          // тому же ломал её на две строки.
+          placeholder="Мысль, идея (M)… Enter — сохранить"
           value={text}
           onChange={setText}
           singleLine

@@ -8,6 +8,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSwipeComplete } from "@/hooks/useSwipeComplete";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
 import type { TaskStage } from "@/lib/taskProgress";
+import Icon from "./Icon";
 
 export default function TaskCard({
   task,
@@ -93,7 +94,7 @@ export default function TaskCard({
           )}
           {task.deadline && (
             <span className={"pill pill-date" + (overdue ? " overdue-text" : "") + (dueToday ? " due-today-text" : "")}>
-              {(overdue ? "⚠ Просрочено: " : dueToday ? "● Сегодня: " : "до ") + fmtDate(task.deadline)}
+              {(overdue ? "Просрочено: " : dueToday ? "Сегодня: " : "до ") + fmtDate(task.deadline)}
             </span>
           )}
           {!task.deadline && task.recur !== "none" && isDueTodayHighlight(task) && <span className="pill pill-date due-today-text">● Выполнить сегодня</span>}
@@ -109,12 +110,12 @@ export default function TaskCard({
               misreading («значит, взяли») that the progress line below is
               there to prevent. Where that line exists, it is the truth and
               this pill is not. */}
-          {task.acceptedAt && !progress && task.status !== "done" && <span className="pill pill-accepted">✅ принял</span>}
+          {task.acceptedAt && !progress && task.status !== "done" && <span className="pill pill-accepted"><Icon name="check" size={12} /> принял</span>}
           {/* Стадия важнее, чем «принял»: «на приёмке» — это очередь
               Кирилла, «кто-то не может» — остановка, о которой иначе
               узнаёшь последним. */}
-          {stage === "awaiting_review" && task.status !== "done" && <span className="pill pill-review">🔍 на приёмке</span>}
-          {stage === "blocked" && task.status !== "done" && <span className="pill pill-blocked">⛔ не может</span>}
+          {stage === "awaiting_review" && task.status !== "done" && <span className="pill pill-review"><Icon name="eye" size={12} /> на приёмке</span>}
+          {stage === "blocked" && task.status !== "done" && <span className="pill pill-blocked"><Icon name="ban" size={12} /> не может</span>}
           {stage === "returned" && task.status !== "done" && <span className="pill pill-returned">↩ на доработке</span>}
         </div>
         {progress && <div className="task-progress">{progress}</div>}

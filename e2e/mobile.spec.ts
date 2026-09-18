@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pickAnyExecutor } from "./helpers";
 
 // The phone layout is a different tree, not a narrower one — its own header,
 // its own navigation, its own first screen — so it needs its own tests. The
@@ -55,6 +56,7 @@ test("tabs switch sections and a task can be created from the phone", async ({ p
 
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
   // The form fills the screen, and its buttons stay reachable at the bottom.
   const modalBox = await page.locator(".modal").boundingBox();
   expect(modalBox?.width).toBeGreaterThan(380);
@@ -76,6 +78,7 @@ test("a task is finished by swiping the card to the right", async ({ page }) => 
   await page.click('[data-tab="tasks"]');
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
@@ -131,6 +134,7 @@ test("a task is moved between columns and to the top of one from its card menu",
   await page.click('[data-tab="tasks"]');
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   const card = page.locator("#colShort .task", { hasText: title });
   await expect(card).toBeVisible();

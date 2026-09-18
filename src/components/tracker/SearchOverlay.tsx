@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Idea, Meeting, Task } from "@/types/tracker";
 import { searchAll, KIND_LABELS, type SearchResult } from "@/lib/localSearch";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 // Global search: "/" anywhere, type, ↑↓ to pick, Enter to open. Results come
 // from the data already in memory, so the list narrows on every keystroke
@@ -38,13 +39,7 @@ export default function SearchOverlay({
 
   // Esc from anywhere, not only from inside the box — a click on a result
   // row can take focus out of the input, and the key has to keep working.
-  useEffect(() => {
-    function onEsc(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onEsc);
-    return () => document.removeEventListener("keydown", onEsc);
-  }, [onClose]);
+  useEscapeToClose(onClose);
 
   // A shorter list can leave the stored cursor pointing past the end;
   // clamping it where it is read keeps that from needing its own state

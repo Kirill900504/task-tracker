@@ -4,7 +4,7 @@
 // (render(), matchesFilters(), sortFn/rankOf, the modal open/save/delete
 // flow, setupTaskDragDrop()/reorderColumn(), and the idea-drop handlers
 // for elListShort/elListLong).
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, ReactNode, RefObject } from "react";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isOverdue, isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
@@ -19,11 +19,39 @@ import { progressLabel, taskStage } from "@/lib/taskProgress";
 import type { useToasts } from "@/hooks/useToasts";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 import SectionTabs from "./SectionTabs";
+import Dropdown from "./Dropdown";
 import { useAsk } from "@/components/Ask";
 import { uid } from "@/lib/uid";
 import { sortNames } from "@/lib/peopleOrder";
+import Icon from "./Icon";
 
 type Term = "short" | "long";
+
+// Спорит ли срок со столбцом, в который задачу только что перенесли.
+//
+// Дата и срочность — два разных ответа на «когда»: дата говорит, к какому
+// числу, срочность — в каком темпе этим заниматься. Обычно они согласованы,
+// и как раз поэтому расхождение стоит назвать вслух: долгосрочная задача со
+// сроком через три дня будет висеть в столбце, куда смотрят раз в неделю, а
+// краткосрочная со сроком через полгода — мозолить глаза каждый день.
+// Ничего не исправляется само: сказать — достаточно, решает Кирилл.
+const SOON_DAYS = 14;
+
+function deadlineNote(deadline: string, term: Term): string {
+  if (!deadline) return "";
+  const due = new Date(deadline + "T00:00:00");
+  if (Number.isNaN(due.getTime())) return "";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (term === "long" && days <= SOON_DAYS) {
+    return days < 0 ? "Срок уже прошёл — проверьте, не пора ли его сдвинуть" : `Срок через ${days} дн. — короткий для долгосрочной`;
+  }
+  if (term === "short" && days > SOON_DAYS) {
+    return `Срок через ${days} дн. — долгий для краткосрочной`;
+  }
+  return "";
+}
 
 export default function TasksPanel({
   tasks,
@@ -128,6 +156,21 @@ export default function TasksPanel({
   }
 
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  // Сеть под тем же самым: перетаскивание кончается не только броском в
+  // столбец задач, но и броском на день календаря, мимо всего, и клавишей
+  // Escape. Во всех этих случаях карточка может успеть перерисоваться
+  // раньше, чем до неё дойдёт dragend, и тогда она остаётся прозрачной и
+  // повёрнутой. Событие на документе приходит всегда — оно не привязано к
+  // элементу, которого уже нет.
+  useEffect(() => {
+    const clear = () => setDraggingTaskId(null);
+    document.addEventListener("dragend", clear);
+    document.addEventListener("drop", clear);
+    return () => {
+      document.removeEventListener("dragend", clear);
+      document.removeEventListener("drop", clear);
+    };
+  }, []);
   // The card whose «кому отправить» menu is open (phone only — with a
   // mouse the same thing sits in the task's own form).
   const [sendTask, setSendTask] = useState<Task | null>(null);
@@ -298,6 +341,17 @@ export default function TasksPanel({
     }
     const taskId = e.dataTransfer.getData("application/x-task-id");
     setDropIndicator(null);
+    // Снимаем «перетаскивается» ЗДЕСЬ, а не только в onDragEnd карточки.
+    //
+    // Между столбцами карточка меняет term и перерисовывается в другом
+    // списке — то есть исходный элемент размонтируется раньше, чем браузер
+    // успеет послать ему dragend. Событие уходит в никуда, draggingTaskId
+    // остаётся заполненным, и задача на новом месте так и стоит с классом
+    // .dragging: полупрозрачная и повёрнутая на полградуса. Внутри одного
+    // столбца этого не видно — там элемент остаётся на месте и dragend
+    // приходит, — поэтому поломка выглядела как «переносится только вниз,
+    // а вбок ломается».
+    setDraggingTaskId(null);
     if (!taskId) return;
     const dragged = tasks.find((t) => t.id === taskId);
     if (!dragged) return;
@@ -309,6 +363,8 @@ export default function TasksPanel({
     const insertAt = after ? siblingIds.indexOf(after.dataset.id as string) : -1;
     siblingIds.splice(insertAt === -1 ? siblingIds.length : insertAt, 0, taskId);
 
+    const movedColumns = dragged.term !== term;
+
     siblingIds.forEach((id, i) => {
       const t = tasks.find((x) => x.id === id);
       if (!t) return;
@@ -316,6 +372,27 @@ export default function TasksPanel({
       if (t.manualOrder === i && !changedTerm) return;
       actions.saveTask({ ...t, manualOrder: i, ...(changedTerm ? { term } : {}) });
     });
+
+    // Смена столбца — с отменой, как и всё остальное, что меняет задачу
+    // одним движением. Промахнуться мышью мимо своего столбца легко, а
+    // понять, куда задача делась, и вернуть её обратно — это уже найти её
+    // глазами в соседнем списке и перетащить назад.
+    //
+    // Перестановка ВНУТРИ столбца тоста не получает: там видно, что
+    // произошло, и ничего не пропадает из виду.
+    if (movedColumns) {
+      const before = dragged;
+      toasts.showToast(
+        term === "long" ? "Задача теперь долгосрочная" : "Задача теперь краткосрочная",
+        // Срок не трогаем: дата — это договорённость с человеком, а не
+        // следствие того, в каком столбце лежит карточка, и молча сдвинуть
+        // её значило бы решить за Кирилла. Но если после переноса срок
+        // спорит со столбцом, об этом стоит сказать — именно это
+        // несоответствие потом читается как «почему долгосрочная горит».
+        deadlineNote(before.deadline, term) || before.title,
+        () => actions.saveTask(before),
+      );
+    }
   }
 
   // Ordering by hand is a drag with a mouse, and a finger has no drag at
@@ -333,20 +410,21 @@ export default function TasksPanel({
 
   function menuItemsFor(t: Task): ActionMenuItem[] {
     const items: ActionMenuItem[] = [
-      { id: "top", label: "⬆ Наверх списка", onSelect: () => moveWithinColumn(t, "top") },
-      { id: "bottom", label: "⬇ В конец списка", onSelect: () => moveWithinColumn(t, "bottom") },
+      { id: "top", label: "Наверх списка", icon: "arrow-up", onSelect: () => moveWithinColumn(t, "top") },
+      { id: "bottom", label: "В конец списка", icon: "arrow-down", onSelect: () => moveWithinColumn(t, "bottom") },
       {
         id: "term",
         // Moving between columns was also a drag; the modal has the same
         // field, but this is one tap instead of four.
-        label: t.term === "short" ? "→ В долгосрочные" : "→ В краткосрочные",
+        label: t.term === "short" ? "В долгосрочные" : "В краткосрочные",
+        icon: "arrow-right",
         onSelect: () => actions.saveTask({ ...t, term: t.term === "short" ? "long" : "short", manualOrder: null }),
       },
     ];
-    if (onTaskToMeeting) items.push({ id: "meeting", label: "📅 Назначить встречу", onSelect: () => onTaskToMeeting(t.id) });
+    if (onTaskToMeeting) items.push({ id: "meeting", label: "Назначить встречу", icon: "calendar", onSelect: () => onTaskToMeeting(t.id) });
     // Sending is in here rather than only in the editor because on a phone
     // «скинуть Ане» should not cost opening a form and closing it again.
-    items.push({ id: "send", label: "✈ Отправить коллеге", onSelect: () => setSendTask(t) });
+    items.push({ id: "send", label: "Отправить коллеге", icon: "send", onSelect: () => setSendTask(t) });
     return items;
   }
 
@@ -464,14 +542,17 @@ export default function TasksPanel({
               </button>
             )}
             <div className="search-wrap" id="quickAddSlot" />
-            <select id="filterAssignee" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
-              <option value="all">Все исполнители</option>
-              {sortNames(assignees).map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
+            <Dropdown
+              id="filterAssignee"
+              className="toolbar-dd"
+              title="Фильтр по исполнителю"
+              value={filterAssignee}
+              onChange={setFilterAssignee}
+              options={[
+                { value: "all", label: "Все исполнители" },
+                ...sortNames(assignees).map((a) => ({ value: a, label: a })),
+              ]}
+            />
             {/* Две кнопки вместо списка приоритетов и галочки.
                 Фильтр «Любой приоритет» открывали, чтобы найти «Высокий», —
                 но высокий приоритет и так виден на карточке цветом, а
@@ -485,7 +566,7 @@ export default function TasksPanel({
               aria-pressed={onlyOverdue}
               onClick={() => setOnlyOverdue((v) => !v)}
             >
-              ⚠ Просрочено
+              <Icon name="warning" size={14} /> Просрочено
               {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
             </button>
             <button
@@ -495,7 +576,7 @@ export default function TasksPanel({
               aria-pressed={showDone}
               onClick={() => onShowDoneChange(!showDone)}
             >
-              ✓ Завершённые
+              <Icon name="check" size={14} /> Завершённые
             </button>
           </div>
         );

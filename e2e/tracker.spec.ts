@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pickAnyExecutor } from "./helpers";
 
 // The one smoke test covering the actual "Definition of Done" checklist
 // (login, create task, complete task, create meeting, create idea,
@@ -36,6 +37,7 @@ test("full loop: login, task, meeting, idea, calendar, logout", async ({ page })
   // ---- Create task ----
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", taskTitle);
+  await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   const taskCard = page.locator(".task", { hasText: taskTitle });
   await expect(taskCard).toBeVisible();
@@ -125,6 +127,7 @@ test("completing a task survives an immediate sign-out", async ({ page }) => {
   await login(page);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   await waitForSaved(page);
 
@@ -204,6 +207,7 @@ test("deleting a task survives an immediate sign-out", async ({ page }) => {
   await login(page);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   await waitForSaved(page);
 
@@ -284,6 +288,7 @@ test("a weekly recurring task keeps its rule across a reload", async ({ page }) 
   await login(page);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
   // Поля — кнопки, а не списки (см. ChipChoice): выбранное помечено
   // aria-pressed, по нему и проверяется, что правило вернулось из базы.
   await page.click('#fRecur [data-value="weekly"]');
@@ -322,6 +327,7 @@ test("search finds a task and opens its card", async ({ page }) => {
   await login(page);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
   await waitForSaved(page);
@@ -361,6 +367,7 @@ test("work done offline survives a reload and syncs when the network returns", a
   await login(page);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", onlineTitle);
+  await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   await waitForSaved(page);
 
@@ -386,6 +393,7 @@ test("work done offline survives a reload and syncs when the network returns", a
   await context.setOffline(true);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", offlineTitle);
+  await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   await expect(page.locator(".task", { hasText: offlineTitle })).toBeVisible();
   // The save cannot land, and the tracker says so rather than pretending.
@@ -418,6 +426,7 @@ test("export writes a CSV of the tasks", async ({ page }) => {
   await login(page);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
   await waitForSaved(page);
@@ -539,6 +548,7 @@ test("a task can be sent to any connected colleague, not only its assignee", asy
   // still be sent.
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   await page.click(`.task:has-text("${title}")`);
 
@@ -617,6 +627,7 @@ test("вопросы задаются окном трекера, а не бра�
   await login(page);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
 
   // Новый раздел: сначала имя, потом выбор из двух названных возможностей —
   // вместо «ОК — личный, Отмена — рабочий», где ответ был спрятан в чужих
@@ -797,4 +808,36 @@ test("раздел переименовывается и удаляется пр
   await expect(page.locator("#sectionTabs .section-tab", { hasText: stamp })).toHaveCount(0);
 
   await admin.from("sections").delete().eq("id", id);
+});
+
+// Задача без исполнителя не заводится.
+//
+// Правило Кирилла, сказанное прямо: «без исполнителя запрети создавать»,
+// соисполнитель и наблюдатель — по желанию. Проверяется именно отказ:
+// задача с одним только названием не должна ни сохраниться, ни закрыть
+// форму, а окно должно объяснить, чего не хватает. Проверка стоит и на
+// правке тоже — снять единственного исполнителя и нажать «Сохранить» это
+// тот же результат в два нажатия.
+test("задача не сохраняется без исполнителя", async ({ page }) => {
+  const title = `E2E без исполнителя ${Date.now()}`;
+  await login(page);
+
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  // Список людей должен успеть приехать — иначе «нет исполнителя» ничего
+  // не доказывает: его и выбрать было негде.
+  await expect(page.locator("#fPeople .participant-chip").first()).toBeVisible({ timeout: 20_000 });
+
+  await page.click("#saveTaskBtn");
+  await expect(page.locator(".ask-modal")).toContainText("исполнител");
+  await page.click("#askOkBtn");
+
+  // Форма осталась открытой, задача не создана.
+  await expect(page.locator("#fTitle")).toHaveValue(title);
+  await expect(page.locator(".task", { hasText: title })).toHaveCount(0);
+
+  // С исполнителем — сохраняется.
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+  await expect(page.locator(".task", { hasText: title })).toBeVisible();
 });

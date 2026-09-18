@@ -4,6 +4,7 @@ import { useState, useEffect, type FormEvent, type ReactNode } from "react";
 import { useSpeechInput } from "@/hooks/useSpeechInput";
 import { useAsk } from "@/components/Ask";
 import { createPortal } from "react-dom";
+import Icon from "@/components/tracker/Icon";
 
 export type TaskFields = {
   title: string;
@@ -363,7 +364,7 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
                 title={speech.listening ? "Остановить запись" : "Надиктовать"}
                 aria-label={speech.listening ? "Остановить запись" : "Надиктовать"}
               >
-                {speech.listening ? "⏺" : "🎤"}
+                <Icon name={speech.listening ? "recording" : "mic"} size={16} />
               </button>
             )}
           </form>

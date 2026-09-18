@@ -4,13 +4,14 @@
 // openDatePopover()/renderCalFilterNote() in legacy-tracker.js. Drag-to-
 // reschedule (dropping a meeting chip on a day) is a later phase — clicking
 // a day still opens the "+ Задача / + Встреча" popover as before.
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Meeting, Task } from "@/types/tracker";
 import { dateStr, fmtDate, isTaskDueOnDate, todayStr } from "@/lib/taskDisplay";
 import { getMonthGridDates } from "@/lib/calendarLogic";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -71,15 +72,8 @@ export default function CalendarPanel({
     el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - el.offsetWidth - 8)) + "px";
   }, [popover]);
 
-  // Esc closes it, same as legacy's global keydown handler.
-  useEffect(() => {
-    if (!popover) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setPopover(null);
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [popover]);
+  // Esc закрывает — как и любое другое окно трекера.
+  useEscapeToClose(() => setPopover(null), !!popover);
 
   const today = todayStr();
   const gridDates = getMonthGridDates(viewDate);

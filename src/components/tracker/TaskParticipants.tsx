@@ -5,6 +5,8 @@ import type { TaskParticipantRole } from "@/lib/taskProgress";
 import { hasDeclined, progressLabel, taskProgress, taskStage } from "@/lib/taskProgress";
 import type { Participant } from "@/hooks/useTaskParticipants";
 import { useAsk } from "@/components/Ask";
+import Dropdown from "./Dropdown";
+import Icon from "./Icon";
 
 // «Кто на задаче» — и в каком состоянии каждый из них.
 //
@@ -153,25 +155,24 @@ export default function TaskParticipants({
         <div className="tp-row" key={p.id}>
           <span className="tp-name">{p.name || "—"}</span>
 
-          <select
+          <Dropdown
             className="tp-role"
+            compact
             value={p.role}
-            onChange={(e) => onSetRole(p.id, e.target.value as TaskParticipantRole)}
+            onChange={(v) => onSetRole(p.id, v as TaskParticipantRole)}
             title="Роль в задаче"
-          >
-            {(Object.keys(ROLE_LABEL) as TaskParticipantRole[]).map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABEL[r]}
-              </option>
-            ))}
-          </select>
+            options={(Object.keys(ROLE_LABEL) as TaskParticipantRole[]).map((r) => ({
+              value: r,
+              label: ROLE_LABEL[r],
+            }))}
+          />
 
           <span className="tp-state">
-            {p.doneAt && <span className="tp-done" title={p.doneComment || ""}>🏁 сделал{p.doneComment ? ": " + p.doneComment : ""}</span>}
+            {p.doneAt && <span className="tp-done" title={p.doneComment || ""}><Icon name="flag" size={13} /> сделал{p.doneComment ? ": " + p.doneComment : ""}</span>}
             {!p.doneAt && hasDeclined(p) && (
-              <span className="tp-declined">⛔ не может{p.declineReason ? ": " + p.declineReason : ""}</span>
+              <span className="tp-declined"><Icon name="ban" size={13} /> не может{p.declineReason ? ": " + p.declineReason : ""}</span>
             )}
-            {!p.doneAt && !hasDeclined(p) && p.acceptedAt && <span className="tp-accepted">✅ принял</span>}
+            {!p.doneAt && !hasDeclined(p) && p.acceptedAt && <span className="tp-accepted"><Icon name="check" size={13} /> принял</span>}
             {/* «Ждём ответа» от человека без мессенджера — неправда: задача
                 до него не доехала, и ждать нечего. Поэтому одно вместо
                 другого, а не рядом. Видно это должно быть всегда, а не
@@ -182,7 +183,7 @@ export default function TaskParticipants({
             )}
             {!p.doneAt && !hasDeclined(p) && p.reachable === false && (
               <span className="tp-unreachable" title="Задача ему не отправлена: нет ни Telegram, ни MAX. Подключить можно в «Команде».">
-                📭 не подключён — задача не ушла
+                <Icon name="mailbox" size={13} /> не подключён — задача не ушла
               </span>
             )}
           </span>

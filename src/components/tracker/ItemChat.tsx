@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { REACTIONS, useItemComments, type ItemKind } from "@/hooks/useItemComments";
 import { useAsk } from "@/components/Ask";
+import ChatMessageMenu, { type ChatMenuAction } from "./ChatMessageMenu";
+import Icon from "./Icon";
 
 // Обсуждение задачи там же, где задача.
 //
@@ -33,7 +35,11 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
   const { comments, loading, send, edit, remove, react } = useItemComments(kind, itemId);
   const ask = useAsk();
   const [draft, setDraft] = useState("");
-  const [pickerFor, setPickerFor] = useState<string | null>(null);
+  // Меню сообщения: какое сообщение и в какой точке экрана его открыли.
+  const [menuFor, setMenuFor] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
+  // Долгое нажатие — правая кнопка телефона. Таймер один на весь список:
+  // одновременно жать два сообщения нельзя.
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // Выбранные, но ещё не отправленные файлы. Показываются списком до
@@ -41,6 +47,28 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
   // ошибиться файлом легко.
   const [pending, setPending] = useState<File[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // Долгое нажатие на телефоне открывает то же меню, что правая кнопка на
+  // компьютере: 450 мс — граница, на которой обычное нажатие ещё не
+  // считается долгим, а удержание уже не кажется задержкой. Движение пальцем
+  // отменяет: иначе меню открывается при каждой прокрутке ленты.
+  function longPressProps(id: string) {
+    const cancel = () => {
+      if (pressTimer.current) clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    };
+    return {
+      onTouchStart: (e: React.TouchEvent) => {
+        const t = e.touches[0];
+        const { clientX: x, clientY: y } = t;
+        cancel();
+        pressTimer.current = setTimeout(() => setMenuFor({ id, at: { x, y } }), 450);
+      },
+      onTouchMove: cancel,
+      onTouchEnd: cancel,
+      onTouchCancel: cancel,
+    };
+  }
 
   async function handleSend() {
     const text = draft.trim();
@@ -107,6 +135,13 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
       <div className="chat-head">
         <span className="chat-title">Обсуждение</span>
         {comments.length > 0 && <span className="chat-count">{comments.length}</span>}
+        {/* Правая кнопка — единственное, о чём нельзя догадаться, глядя на
+            ветку: под сообщениями теперь ничего не написано. Одна строка
+            справа от заголовка стоит дешевле, чем три подписи под каждой
+            репликой, которые она заменила. */}
+        {comments.some((c) => !c.system) && (
+          <span className="chat-hint">Правая кнопка на сообщении — реакции и действия</span>
+        )}
       </div>
 
       {loading && <div className="chat-empty">Загрузка…</div>}
@@ -129,7 +164,15 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
             <span className="chat-event-time">{timeLabel(c.createdAt)}</span>
           </div>
         ) : (
-        <div className={"chat-msg" + (c.mine ? " mine" : "")} key={c.id}>
+        <div
+          className={"chat-msg" + (c.mine ? " mine" : "") + (menuFor?.id === c.id ? " menu-open" : "")}
+          key={c.id}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setMenuFor({ id: c.id, at: { x: e.clientX, y: e.clientY } });
+          }}
+          {...longPressProps(c.id)}
+        >
           <div className="chat-msg-head">
             <span className="chat-author">{c.authorName}</span>
             <span className="chat-time">
@@ -158,59 +201,32 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={a.url} alt={a.name} />
                   ) : (
-                    <span className="chat-file-name">📎 {a.name}</span>
+                    <span className="chat-file-name">
+                      <Icon name="clip" size={14} /> {a.name}
+                    </span>
                   )}
                 </a>
               ))}
             </div>
           )}
 
-          <div className="chat-foot">
-            {c.reactions.map((r) => (
-              <button
-                key={r.emoji}
-                type="button"
-                className={"chat-reaction" + (r.mine ? " mine" : "")}
-                title={r.mine ? "Убрать реакцию" : "Поддержать"}
-                onClick={() => void react(c.id, r.emoji, !r.mine)}
-              >
-                {r.emoji} {r.count}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="chat-reaction chat-add"
-              title="Поставить реакцию"
-              onClick={() => setPickerFor(pickerFor === c.id ? null : c.id)}
-            >
-              ☺
-            </button>
-            {c.mine && (
-              <>
-                <button type="button" className="chat-mini" onClick={() => void handleEdit(c.id, c.body)}>
-                  изменить
-                </button>
-                <button type="button" className="chat-mini" onClick={() => void handleRemove(c.id)}>
-                  убрать
-                </button>
-              </>
-            )}
-          </div>
-
-          {pickerFor === c.id && (
-            <div className="chat-picker">
-              {REACTIONS.map((emoji) => (
+          {/* Под сообщением — только реакции, которые уже стоят. «изменить»,
+              «убрать» и кнопка выбора эмодзи отсюда ушли в меню по правой
+              кнопке: три служебных слова под КАЖДОЙ репликой — это ветка,
+              которую читаешь через подписи к ней. Пустая строка не
+              рисуется вовсе, поэтому обсуждение без реакций выглядит
+              обсуждением, а не панелью управления. */}
+          {c.reactions.length > 0 && (
+            <div className="chat-foot">
+              {c.reactions.map((r) => (
                 <button
-                  key={emoji}
+                  key={r.emoji}
                   type="button"
-                  className="chat-pick"
-                  onClick={() => {
-                    const already = c.reactions.find((r) => r.emoji === emoji)?.mine || false;
-                    void react(c.id, emoji, !already);
-                    setPickerFor(null);
-                  }}
+                  className={"chat-reaction" + (r.mine ? " mine" : "")}
+                  title={r.mine ? "Убрать реакцию" : "Поддержать"}
+                  onClick={() => void react(c.id, r.emoji, !r.mine)}
                 >
-                  {emoji}
+                  {r.emoji} {r.count}
                 </button>
               ))}
             </div>
@@ -219,13 +235,45 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
         ),
       )}
 
+      {/* Меню сообщения — одно на всю ветку, а не по штуке на реплику:
+          открыто всегда не больше одного. */}
+      {menuFor && (() => {
+        const c = comments.find((x) => x.id === menuFor.id);
+        if (!c) return null;
+        const actions: ChatMenuAction[] = [];
+        if (c.body) {
+          actions.push({
+            id: "copy",
+            label: "Копировать текст",
+            onSelect: () => void navigator.clipboard?.writeText(c.body).catch(() => {}),
+          });
+        }
+        if (c.mine) {
+          actions.push({ id: "edit", label: "Изменить", onSelect: () => void handleEdit(c.id, c.body) });
+          actions.push({ id: "remove", label: "Убрать", danger: true, onSelect: () => void handleRemove(c.id) });
+        }
+        return (
+          <ChatMessageMenu
+            at={menuFor.at}
+            emojis={REACTIONS}
+            activeEmojis={c.reactions.filter((r) => r.mine).map((r) => r.emoji)}
+            onPickEmoji={(emoji) => {
+              const already = c.reactions.find((r) => r.emoji === emoji)?.mine || false;
+              void react(c.id, emoji, !already);
+            }}
+            actions={actions}
+            onClose={() => setMenuFor(null)}
+          />
+        );
+      })()}
+
       {error && <div className="chat-error">{error}</div>}
 
       {pending.length > 0 && (
         <div className="chat-pending">
           {pending.map((f, i) => (
             <span className="chat-pending-item" key={f.name + i}>
-              📎 {f.name} <span className="chat-pending-size">{sizeLabel(f.size)}</span>
+              <Icon name="clip" size={14} /> {f.name} <span className="chat-pending-size">{sizeLabel(f.size)}</span>
               <button
                 type="button"
                 className="chat-mini"
@@ -264,8 +312,14 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
             e.target.value = "";
           }}
         />
-        <button type="button" className="btn btn-small chat-clip" title="Приложить файл" onClick={() => fileInput.current?.click()}>
-          📎
+        <button
+          type="button"
+          className="btn btn-small chat-clip"
+          title="Приложить файл"
+          aria-label="Приложить файл"
+          onClick={() => fileInput.current?.click()}
+        >
+          <Icon name="clip" size={16} />
         </button>
         <button
           type="button"
@@ -273,7 +327,7 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
           disabled={busy || (!draft.trim() && !pending.length)}
           onClick={() => void handleSend()}
         >
-          {busy ? "Отправляю…" : "Отправить"}
+          <Icon name="send" size={15} /> {busy ? "Отправляю…" : "Отправить"}
         </button>
       </div>
     </div>

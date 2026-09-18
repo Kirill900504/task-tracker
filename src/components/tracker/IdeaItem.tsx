@@ -7,6 +7,7 @@ import ActionMenu from "./ActionMenu";
 import SendMenu from "./SendMenu";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
+import Icon from "./Icon";
 
 export default function IdeaItem({
   idea,
@@ -143,7 +144,7 @@ export default function IdeaItem({
               setPickerAt(e.currentTarget.getBoundingClientRect());
             }}
           >
-            ✈
+            <Icon name="send" size={15} />
           </button>
         )}
         <button
@@ -174,9 +175,9 @@ export default function IdeaItem({
           title="Во что превратить"
           onClose={() => setConvertAt(null)}
           items={[
-            { id: "short", label: "✓ В задачи — краткосрочная", onSelect: () => onConvertToTask("short") },
-            { id: "long", label: "✓ В задачи — долгосрочная", onSelect: () => onConvertToTask("long") },
-            { id: "meeting", label: "📅 Назначить встречу", onSelect: () => onConvertToMeeting() },
+            { id: "short", label: "В задачи — краткосрочная", icon: "check", onSelect: () => onConvertToTask("short") },
+            { id: "long", label: "В задачи — долгосрочная", icon: "check", onSelect: () => onConvertToTask("long") },
+            { id: "meeting", label: "Назначить встречу", icon: "calendar", onSelect: () => onConvertToMeeting() },
           ]}
         />
       )}

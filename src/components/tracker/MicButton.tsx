@@ -8,6 +8,7 @@
 // than offering a button that would do nothing.
 import { useRef } from "react";
 import { useSpeechInput } from "@/hooks/useSpeechInput";
+import Icon from "./Icon";
 
 export default function MicButton({
   value,
@@ -45,7 +46,7 @@ export default function MicButton({
         speech.toggle();
       }}
     >
-      {speech.listening ? "⏺" : "🎤"}
+      <Icon name={speech.listening ? "recording" : "mic"} size={16} />
     </button>
   );
 }

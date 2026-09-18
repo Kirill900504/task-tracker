@@ -3,7 +3,7 @@
 // Port of the meeting modal from trackerMarkup.ts + openMeetingModal()/
 // meetingSaveBtn/deleteMeetingBtn/setMeetingStatus/performReschedule in
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useColleagues } from "@/hooks/useColleagues";
 import SendMenu from "./SendMenu";
@@ -17,6 +17,8 @@ import MiniCalendar from "./MiniCalendar";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
 import { sortNames } from "@/lib/peopleOrder";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Icon from "./Icon";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS: string[] = (() => {
@@ -28,8 +30,10 @@ const TIME_SLOTS: string[] = (() => {
 })();
 
 function outcomeLabel(status: MeetingStatus): string {
-  if (status === "success") return "✅ Успешно завершена";
-  if (status === "no_result") return "🚫 Без результата";
+  // Без эмодзи: метка уже покрашена в свой цвет и обведена им же
+  // (.outcome-badge), и наклейка поверх этого ничего не добавляет.
+  if (status === "success") return "Успешно завершена";
+  if (status === "no_result") return "Без результата";
   return "";
 }
 
@@ -61,14 +65,8 @@ export default function MeetingModal({
   const [sendAt, setSendAt] = useState<DOMRect | null>(null);
   const [result, setResult] = useState(meeting?.result ?? "");
 
-  // Esc closes the modal, same as legacy's global keydown handler.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  // Esc закрывает окно — как и любое другое окно трекера.
+  useEscapeToClose(onClose);
 
   // The account owner is the one scheduling, so he is not offered as
   // someone to add to his own meeting.
@@ -197,14 +195,14 @@ export default function MeetingModal({
             </div>
             <div className="outcome-actions">
               <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" onClick={() => setStatus("success")}>
-                ✅ Успешно
+                <Icon name="check" size={15} /> Успешно
               </button>
               <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" onClick={() => setStatus("no_result")}>
-                🚫 Без результата
+                <Icon name="ban" size={15} /> Без результата
               </button>
               {resolved && (
                 <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => setStatus("planned")}>
-                  ↺ Вернуть в план
+                  <Icon name="reset" size={15} /> Вернуть в план
                 </button>
               )}
             </div>
@@ -254,7 +252,7 @@ export default function MeetingModal({
                 title="Отправить встречу коллеге в мессенджер"
                 onClick={(e) => setSendAt(e.currentTarget.getBoundingClientRect())}
               >
-                ✈ Отправить
+                <Icon name="send" size={15} /> Отправить
               </button>
             )}
             <button className="btn" id="meetingCancelBtn" onClick={onClose}>

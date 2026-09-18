@@ -5,7 +5,7 @@
 // public/legacy-tracker.js. Kept on the same element ids (#overlay,
 // #fTitle, #saveTaskBtn, etc.) so the existing e2e patterns keep working
 // against the new UI with minimal changes.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useColleagues } from "@/hooks/useColleagues";
 import SendMenu from "./SendMenu";
@@ -21,6 +21,8 @@ import MiniCalendar from "./MiniCalendar";
 import MicButton from "./MicButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Icon from "./Icon";
 
 // Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
 // «Понедельник…Воскресенье» подряд не помещаются никуда, а «Пн Вт Ср» читают
@@ -149,14 +151,8 @@ export default function TaskModal({
   // Описание раскрыто только там, где оно уже написано.
   const [descOpen, setDescOpen] = useState(() => !!(task?.desc || prefill?.desc));
 
-  // Esc closes the modal, same as legacy's global keydown handler.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  // Esc закрывает карточку — как и любое другое окно трекера.
+  useEscapeToClose(onClose);
 
   const isEditing = !!task;
 
@@ -207,6 +203,30 @@ export default function TaskModal({
     const title = form.title.trim();
     if (!title) {
       void ask.say({ title: "Название не заполнено", question: "Укажите название задачи." });
+      return;
+    }
+    // Исполнитель обязателен — и при создании, и при правке.
+    //
+    // Кирилл сказал это правилом: «без исполнителя запрети создавать»,
+    // соисполнитель и наблюдатель — по желанию. Задача без исполнителя
+    // никому не уходит, ни в чьей сводке не появляется и никем не может
+    // быть закрыта: закрывается она тогда, когда отчитается каждый
+    // исполнитель, а если исполнителей ноль — «каждый» выполнен сразу и
+    // она висит вечно. Ровно это и находил scripts/check-assignments.mjs
+    // («две задачи назначены никому»), и дешевле не дать её завести, чем
+    // потом искать.
+    //
+    // Проверка стоит и на правке тоже, а не только на создании: снять
+    // единственного исполнителя и нажать «Сохранить» — это тот же самый
+    // результат, полученный в два нажатия, и запрет, который обходится в
+    // два нажатия, — не запрет. picked одинаково описывает и набранный
+    // состав новой задачи, и настоящие строки участия сохранённой.
+    if (!picked.some((p) => p.role === "executor")) {
+      void ask.say({
+        title: "Нужен исполнитель",
+        question: "У задачи должен быть хотя бы один исполнитель — тот, кто по ней отчитается.",
+        note: "Нажмите человека в поле «Кто на задаче» и выберите «Исполнитель». Соисполнитель и наблюдатель — по желанию.",
+      });
       return;
     }
     // Имя в задаче — первый исполнитель из набранного состава. Поле
@@ -377,7 +397,7 @@ export default function TaskModal({
               )
             }
           >
-            📅 Назначить встречу по задаче
+            <Icon name="calendar" size={15} /> Назначить встречу по задаче
           </button>
         )}
 
@@ -473,15 +493,23 @@ export default function TaskModal({
               «дд.мм.гггг»: срок — это вопрос про день недели и про то,
               сколько до него осталось, и на него отвечает сетка месяца, а не
               восемь цифр. Тремя кнопками рядом ставятся сроки, которые
-              ставят чаще всего. */}
-          <MiniCalendar
-            popover
-            id="fDeadline"
-            value={form.deadline}
-            onChange={(iso) => setForm((f) => ({ ...f, deadline: iso }))}
-            clearable
-          />
+              ставят чаще всего.
+
+              Календарь стоит в ОДНОЙ строке с этими кнопками, а не над
+              ними. Раскрываясь, он занимает место следующей строки — и
+              когда эта строка была строкой с «Сегодня / Завтра / Через
+              неделю», выходило, что кнопки наполовину скрыты, наполовину
+              торчат из-под сетки: ровно то, что Кирилл назвал «кнопки
+              залазят друг на друга». Теперь под календарём оказывается то,
+              что и должно быть под раскрытым списком, — следующее поле. */}
           <div className="deadline-row">
+            <MiniCalendar
+              popover
+              id="fDeadline"
+              value={form.deadline}
+              onChange={(iso) => setForm((f) => ({ ...f, deadline: iso }))}
+              clearable
+            />
             {QUICK_DEADLINES.map((q) => (
               <button
                 key={q.label}
@@ -613,7 +641,7 @@ export default function TaskModal({
                 title="Отправить задачу коллеге в мессенджер"
                 onClick={(e) => setSendAt(e.currentTarget.getBoundingClientRect())}
               >
-                ✈ Отправить
+                <Icon name="send" size={15} /> Отправить
               </button>
             )}
             <button className="btn" id="cancelBtn" onClick={onClose}>
