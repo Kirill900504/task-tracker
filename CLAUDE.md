@@ -201,6 +201,13 @@ button equivalent (`ActionMenu`, the card's ⋮, the thought's ⇢). A floated
 element is painted under the neighbouring block's text — that is why the
 toast × was unclickable; keep tap targets ≥36px and positioned, not floated.
 
+**The answer belongs where the button is.** A result printed once at the
+bottom of a long list — the invite link in «Команда» — is produced, rendered,
+and never seen: fourteen people put it a screenful below the button that was
+pressed, and «не даёт ссылку» meant exactly that and nothing else. The same
+goes for the error, which is worse: it is the only explanation of what just
+happened. Render both beside the row they answer, and pull them into view.
+
 **Windows/Git Bash:** heredocs eat backslashes, so a patch script written
 with `cat <<'EOF'` mangles `\n` and regexes — use the Write/Edit tools for
 anything containing a backslash. `next build` fails on `.next` files locked
