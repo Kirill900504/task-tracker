@@ -421,7 +421,16 @@ export default function TasksPanel({
         onSelect: () => actions.saveTask({ ...t, term: t.term === "short" ? "long" : "short", manualOrder: null }),
       },
     ];
-    if (onTaskToMeeting) items.push({ id: "meeting", label: "Назначить встречу", icon: "calendar", onSelect: () => onTaskToMeeting(t.id) });
+    // «Назначить встречу по задаче» переехала сюда из карточки: в самой
+    // карточке заведённой задачи осталось только то, что перечислил Кирилл.
+    // Состав берётся с задачи — собираются по ней обычно всем составом, а
+    // не с одним человеком из поля.
+    if (onScheduleMeetingFor) {
+      const people = [...new Set([t.assignee, ...participants.forTask(t.id).filter((p) => p.role !== "watcher").map((p) => p.name)])].filter(Boolean);
+      items.push({ id: "meeting", label: "Назначить встречу", icon: "calendar", onSelect: () => onScheduleMeetingFor(t, people) });
+    } else if (onTaskToMeeting) {
+      items.push({ id: "meeting", label: "Назначить встречу", icon: "calendar", onSelect: () => onTaskToMeeting(t.id) });
+    }
     // Sending is in here rather than only in the editor because on a phone
     // «скинуть Ане» should not cost opening a form and closing it again.
     items.push({ id: "send", label: "Отправить коллеге", icon: "send", onSelect: () => setSendTask(t) });
@@ -698,6 +707,11 @@ export default function TasksPanel({
             // оставался висеть до перезагрузки, и приёмка выглядела
             // несработавшей.
             toggleDone({ ...modalTask, status: "in_progress", approvalState: "accepted", approvalComment: comment });
+            // Принято — значит закрыто, и смотреть больше не на что: задача
+            // в ту же секунду уезжает в «Завершённые». Окно, остающееся
+            // открытым над закрытой задачей, — это вопрос «а что, не
+            // сработало?», который Кирилл задавал вслух.
+            closeModal();
           }}
           onReturnWork={async (comment) => {
             if (!modalTask) return;
@@ -705,7 +719,12 @@ export default function TasksPanel({
               await participants.returnForRework(modalTask.id, comment);
             } catch (e) {
               toasts.showToast(e instanceof Error ? e.message : "Не получилось вернуть на доработку");
+              return;
             }
+            // Возврат — тоже решение, после которого делать в карточке
+            // нечего: задача уходит обратно в свой столбец и ждёт человека,
+            // а не вас.
+            closeModal();
           }}
           onAcceptReschedule={async (participantId, date) => {
             if (!modalTask) return;
@@ -728,7 +747,6 @@ export default function TasksPanel({
               toasts.showToast(e instanceof Error ? e.message : "Не получилось ответить на просьбу");
             }
           }}
-          onScheduleMeeting={onScheduleMeetingFor ? (t, people) => onScheduleMeetingFor(t, people) : undefined}
           onForceCloseWork={async (reason) => {
             if (!modalTask) return;
             try {

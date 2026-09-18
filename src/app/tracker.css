@@ -550,6 +550,12 @@
   }
   @keyframes modal-in{from{opacity:0; transform:translateY(8px) scale(.98);} to{opacity:1; transform:none;}}
   .modal h2{margin:0 0 20px; font-size:20px; font-family:var(--display); font-weight:800; letter-spacing:-.015em; color:var(--ink);}
+  /* Описание заведённой задачи — текст, а не поле: править его там уже
+     нечего (см. TaskModal). Переносы сохраняются, потому что их писали. */
+  .task-card-desc{
+    margin:-10px 0 18px; font-size:13.5px; line-height:1.55;
+    color:var(--ink-soft); white-space:pre-wrap;
+  }
   @media (prefers-reduced-motion: reduce){ .overlay.open, .modal{animation:none;} }
   .field{margin-bottom:18px;}
   /* Название поля. В отличие от заголовка блока — БЕЗ прописных: «Кто на

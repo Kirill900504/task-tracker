@@ -92,7 +92,6 @@ export default function TaskModal({
   onForceCloseWork,
   onAcceptReschedule,
   onRejectReschedule,
-  onScheduleMeeting,
   onPersonAdded,
 }: {
   task: Task | null;
@@ -114,9 +113,6 @@ export default function TaskModal({
   onForceCloseWork: (reason: string) => void;
   onAcceptReschedule: (participantId: string, date: string) => void;
   onRejectReschedule: (participantId: string) => void;
-  // «Назначить встречу по задаче» (C5). Задача остаётся задачей: встреча —
-  // это то, где по ней соберутся, а не то, чем она станет.
-  onScheduleMeeting?: (task: Task, participants: string[]) => void;
   // Дождаться, пока только что заведённый человек доедет до базы, и
   // перечитать список: без id его нельзя поставить на задачу.
   onPersonAdded?: (name: string) => void | Promise<void>;
@@ -331,32 +327,105 @@ export default function TaskModal({
 
   const showStopRecur = isEditing && form.recur !== "none";
 
+  // Срок стоит в разных местах у новой задачи и у заведённой, поэтому живёт
+  // здесь, а не дважды в разметке. У новой он в общем ряду полей; у
+  // заведённой — сразу под названием, потому что перенести срок это одно из
+  // четырёх действий, ради которых её вообще открывают, и искать его под
+  // лентой обсуждения было бы издевательством.
+  const deadlineField = (
+    <div className="field">
+      <label>Дедлайн / дата</label>
+      {/* Календарь показан сразу, а не спрятан за значком в поле
+          «дд.мм.гггг»: срок — это вопрос про день недели и про то, сколько
+          до него осталось, и на него отвечает сетка месяца, а не восемь
+          цифр. Тремя кнопками рядом ставятся сроки, которые ставят чаще
+          всего.
+
+          Календарь стоит в ОДНОЙ строке с этими кнопками, а не над ними.
+          Раскрываясь, он занимает место следующей строки — и когда эта
+          строка была строкой с «Сегодня / Завтра / Через неделю», выходило,
+          что кнопки наполовину скрыты, наполовину торчат из-под сетки:
+          ровно то, что Кирилл назвал «кнопки залазят друг на друга». */}
+      <div className="deadline-row">
+        <MiniCalendar
+          popover
+          id="fDeadline"
+          value={form.deadline}
+          onChange={(iso) => setForm((f) => ({ ...f, deadline: iso }))}
+          clearable
+        />
+        {QUICK_DEADLINES.map((q) => (
+          <button
+            key={q.label}
+            type="button"
+            className={"participant-chip" + (form.deadline && form.deadline === isoInDays(q.days) ? " selected" : "")}
+            onClick={() => setForm((f) => ({ ...f, deadline: isoInDays(q.days) }))}
+          >
+            {q.label}
+          </button>
+        ))}
+        {form.deadline && (
+          <button
+            type="button"
+            className="participant-chip chip-del"
+            title="Убрать срок"
+            onClick={() => setForm((f) => ({ ...f, deadline: "" }))}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   return createPortal(
     <div className="overlay open" id="overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h2 id="modalTitle">{isEditing ? "Редактировать задачу" : "Новая задача"}</h2>
+        {/* Заведённая задача — не черновик.
+
+            Слова Кирилла: «убирай всё лишнее, в ней должен остаться чат,
+            возможность перенести дедлайн и добавить соисполнителей,
+            исполнителей и наблюдателей и возможность принять или вернуть на
+            доработку». Он прав ровно по той причине, по которой перестали
+            редактироваться назначенные встречи: задачу уже отправили
+            человеку, он её принял и по ней отчитывается — а название,
+            раздел, приоритет и срочность правятся в этот момент в никуда.
+            Их видел он, их видит бот, их помнит переписка, и тихая правка у
+            себя в окне разводит то, что записано, и то, что люди видели.
+
+            Что остаётся, перечислено им: срок (его двигает постановщик —
+            это его право по правилам проекта), состав, приёмка, обсуждение.
+            Всё остальное показывается как есть, без полей.
+
+            Новая задача открывается полной формой: пока её никто не видел,
+            править в ней можно что угодно. */}
+        <h2 id="modalTitle">{isEditing ? form.title || "Задача" : "Новая задача"}</h2>
         <input type="hidden" id="taskId" value={task?.id ?? ""} readOnly />
 
-        <div className="field">
-          <label>Название задачи</label>
-          <div className="input-with-mic">
-            <AutoGrowTextarea
-              id="fTitle"
-              placeholder="Например: Согласовать прайс с поставщиком"
-              value={form.title}
-              onChange={(text) => setForm((f) => ({ ...f, title: text }))}
-              singleLine
-            />
-            <MicButton value={form.title} onChange={(text) => setForm((f) => ({ ...f, title: text }))} title="Надиктовать название" />
+        {isEditing && form.desc && <div className="task-card-desc">{form.desc}</div>}
+
+        {!isEditing && (
+          <div className="field">
+            <label>Название задачи</label>
+            <div className="input-with-mic">
+              <AutoGrowTextarea
+                id="fTitle"
+                placeholder="Например: Согласовать прайс с поставщиком"
+                value={form.title}
+                onChange={(text) => setForm((f) => ({ ...f, title: text }))}
+                singleLine
+              />
+              <MicButton value={form.title} onChange={(text) => setForm((f) => ({ ...f, title: text }))} title="Надиктовать название" />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Описание убрано с глаз: в девяти задачах из десяти его не пишут,
             а поле в два ряда стояло вторым сверху и отодвигало всё, ради
             чего карточку открывают. Оно тут же, если понадобится, и само
             раскрыто у задачи, где текст уже есть, — иначе написанное
             однажды стало бы невидимым. */}
-        {descOpen ? (
+        {!isEditing && (descOpen ? (
           <div className="field">
             <label>Описание (необязательно)</label>
             <div className="input-with-mic">
@@ -368,7 +437,11 @@ export default function TaskModal({
           <button type="button" className="btn btn-small field-add" id="addDescBtn" onClick={() => setDescOpen(true)}>
             + описание
           </button>
-        )}
+        ))}
+
+        {/* У заведённой задачи срок идёт первым: перенести его — одно из
+            четырёх действий, ради которых её открывают. */}
+        {isEditing && deadlineField}
 
         {/* Одно поле людей вместо двух. «Исполнитель» списком и «Кто на
             задаче» с выбором роли спрашивали об одном и том же в двух
@@ -384,22 +457,6 @@ export default function TaskModal({
           onAddPerson={() => void handleAddAssignee()}
         />
 
-        {task && onScheduleMeeting && (
-          <button
-            type="button"
-            className="btn btn-small tp-meeting"
-            onClick={() =>
-              onScheduleMeeting(
-                task,
-                // Зовём тех, кто на задаче, а не одно имя из поля: собираются
-                // по задаче обычно всем составом.
-                [...new Set([form.assignee, ...participants.filter((p) => p.role !== "watcher").map((p) => p.name)])].filter(Boolean),
-              )
-            }
-          >
-            <Icon name="calendar" size={15} /> Назначить встречу по задаче
-          </button>
-        )}
 
         {/* Состав выбирается полем выше; здесь — то, чего в кнопках не
             выразить: кто принял, кто отчитался и какими словами, кто просит
@@ -424,6 +481,13 @@ export default function TaskModal({
             несуществующей ещё нечего обсуждать. */}
         {task && <ItemChat kind="task" itemId={task.id} />}
 
+        {/* Раздел, приоритет, срочность и повторение — только у новой
+            задачи. У заведённой их правка ни до кого не доходит: человеку
+            уже отправили задачу такой, какая она есть, и менять её у себя в
+            окне значит развести то, что записано, и то, что он видел. То же
+            решение, что у назначенной встречи, и по той же причине. */}
+        {!isEditing && (
+        <>
         <div className="field">
           <label>Раздел</label>
           <ChipChoice
@@ -487,51 +551,7 @@ export default function TaskModal({
           </div>
         </div>
 
-        <div className="field">
-          <label>Дедлайн / дата</label>
-          {/* Календарь показан сразу, а не спрятан за значком в поле
-              «дд.мм.гггг»: срок — это вопрос про день недели и про то,
-              сколько до него осталось, и на него отвечает сетка месяца, а не
-              восемь цифр. Тремя кнопками рядом ставятся сроки, которые
-              ставят чаще всего.
-
-              Календарь стоит в ОДНОЙ строке с этими кнопками, а не над
-              ними. Раскрываясь, он занимает место следующей строки — и
-              когда эта строка была строкой с «Сегодня / Завтра / Через
-              неделю», выходило, что кнопки наполовину скрыты, наполовину
-              торчат из-под сетки: ровно то, что Кирилл назвал «кнопки
-              залазят друг на друга». Теперь под календарём оказывается то,
-              что и должно быть под раскрытым списком, — следующее поле. */}
-          <div className="deadline-row">
-            <MiniCalendar
-              popover
-              id="fDeadline"
-              value={form.deadline}
-              onChange={(iso) => setForm((f) => ({ ...f, deadline: iso }))}
-              clearable
-            />
-            {QUICK_DEADLINES.map((q) => (
-              <button
-                key={q.label}
-                type="button"
-                className={"participant-chip" + (form.deadline && form.deadline === isoInDays(q.days) ? " selected" : "")}
-                onClick={() => setForm((f) => ({ ...f, deadline: isoInDays(q.days) }))}
-              >
-                {q.label}
-              </button>
-            ))}
-            {form.deadline && (
-              <button
-                type="button"
-                className="participant-chip chip-del"
-                title="Убрать срок"
-                onClick={() => setForm((f) => ({ ...f, deadline: "" }))}
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        </div>
+        {deadlineField}
 
         <div className="field">
           <label>Повторение задачи</label>
@@ -592,6 +612,8 @@ export default function TaskModal({
             </button>
           </div>
         </div>
+        </>
+        )}
 
         {sendState && <div className="send-result" id="taskSendResult">{sendState}</div>}
         {sendAt && task && (
