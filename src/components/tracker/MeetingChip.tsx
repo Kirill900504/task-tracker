@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { Meeting } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
 import { sanitizeAssigneeList } from "@/lib/trackerRows";
+import { useAsk } from "@/components/Ask";
 
 export default function MeetingChip({
   meeting,
@@ -32,6 +33,7 @@ export default function MeetingChip({
   // anchor's rect, exactly as legacy's showPeopleTooltip() did: the meetings
   // list scrolls (#meetingsForDay{overflow:auto}), so a tooltip nested inside
   // a chip gets clipped for meetings near the bottom of the list.
+  const ask = useAsk();
   const [peopleAnchor, setPeopleAnchor] = useState<DOMRect | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const participants = sanitizeAssigneeList(meeting.participants);
@@ -107,7 +109,12 @@ export default function MeetingChip({
                 <div className="prow" key={p}>
                   {coming ? "✅ " : said ? "❌ " : votes ? "· " : ""}
                   {p}
-                  {said?.reason ? ` — ${said.reason}` : ""}
+                  {/* Отказ без причины — не то же самое, что отказ с
+                      причиной, и молчать об этом в списке значит выдавать
+                      половину ответа за целый. Бот причину спрашивает и
+                      переспрашивает, но увидеть, что её пока нет, нужно
+                      здесь. */}
+                  {said ? (said.reason ? ` — ${said.reason}` : " — причину не назвал") : ""}
                 </div>
               );
             })}
@@ -115,37 +122,46 @@ export default function MeetingChip({
           document.body,
         )}
 
+      {/* Три ответа на встречу — три одинаковые кнопки.
+          Были три цветные картинки разного размера (✅ 🚫 📅): каждая рисуется
+          шрифтом эмодзи, то есть своим цветом, своей шириной и своей высотой,
+          и рядом они читались как три случайные наклейки, а не как один
+          выбор из трёх. Теперь форма одна, знак одноцветный, а цвет
+          появляется под курсором — там, где он что-то значит. */}
       {showQuickActions && (
         <div className="meeting-quick-actions">
           <button
             className="meeting-icon-btn success"
-            title="Успешно"
+            title="Встреча прошла успешно"
+            aria-label="Встреча прошла успешно"
             onClick={(e) => {
               e.stopPropagation();
               onQuickStatus("success");
             }}
           >
-            ✅
+            ✓
           </button>
           <button
             className="meeting-icon-btn noresult"
-            title="Без результата"
+            title="Встреча без результата"
+            aria-label="Встреча без результата"
             onClick={(e) => {
               e.stopPropagation();
               onQuickStatus("no_result");
             }}
           >
-            🚫
+            ✕
           </button>
           <button
             className="meeting-icon-btn reschedule"
-            title="Перенести"
+            title="Перенести встречу"
+            aria-label="Перенести встречу"
             onClick={(e) => {
               e.stopPropagation();
               onQuickReschedule();
             }}
           >
-            📅
+            ⇢
           </button>
         </div>
       )}
@@ -155,7 +171,10 @@ export default function MeetingChip({
         title="Удалить встречу"
         onClick={(e) => {
           e.stopPropagation();
-          if (confirm(`Удалить встречу «${meeting.title}»?`)) onDelete();
+          void (async () => {
+            const yes = await ask.confirm({ question: `Удалить встречу «${meeting.title}»?`, okText: "Удалить", danger: true });
+            if (yes) onDelete();
+          })();
         }}
       >
         ×

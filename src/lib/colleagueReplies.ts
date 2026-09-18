@@ -230,11 +230,16 @@ export async function handleColleagueCallback(
         notifyOwner: `✅ ${colleague.name} будет на встрече «${meeting.title}» (${when})`,
       };
     }
+    // Организатору сразу говорится и то, что причины пока нет: иначе
+    // «не сможет» без объяснения выглядит как весь ответ целиком, и он либо
+    // идёт спрашивать сам, либо не спрашивает вовсе. Причина придёт вторым
+    // сообщением, а если человек промолчит — его спросят ещё раз вместе с
+    // напоминанием о встрече (см. cron/reminders).
     return {
-      toast: "Передал",
+      toast: "Передал. Напишите, почему",
       rewriteTo: `📅 ${meeting.title}\n${when}\n\n❌ Вы не сможете\nНапишите одним сообщением, почему — это увидит организатор.`,
       notifyTo: meeting.created_by,
-      notifyOwner: `❌ ${colleague.name} не сможет быть на встрече «${meeting.title}» (${when})`,
+      notifyOwner: `❌ ${colleague.name} не сможет быть на встрече «${meeting.title}» (${when})\nСпросил, почему — пришлю, как ответит.`,
     };
   }
 

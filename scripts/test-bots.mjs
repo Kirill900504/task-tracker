@@ -104,6 +104,57 @@ try {
   const { data: acceptedTask } = await admin.from("tasks").select("accepted_at").eq("id", taskId).maybeSingle();
   check("records «принял» on the task", !!acceptedTask?.accepted_at, acceptedTask);
 
+  // ---- Встреча: «Не смогу» и обязательная причина ----
+  //
+  // Причина спрашивается не вторым вопросом в очереди, а незаполненной
+  // строкой: нажатие пишет отказ с reason = null, и следующее сообщение из
+  // этого чата попадает именно туда, а не в обсуждение последней задачи. Без
+  // этой проверки отказ легко превратился бы в «не сможет» без объяснения —
+  // то есть в половину ответа.
+  const meetingId = "chkm" + Math.random().toString(36).slice(2, 8);
+  await admin.from("meetings").insert({
+    id: meetingId,
+    user_id: userId,
+    title: "Проверка встречи",
+    date: new Date(Date.now() + 86400_000).toISOString().slice(0, 10),
+    time: "10:00",
+    participants: ["Проверочный Коллега"],
+    status: "planned",
+  });
+  const refuse = await post(
+    "/api/telegram/webhook",
+    {
+      update_id: Math.floor(Math.random() * 1e9),
+      callback_query: { id: "cbq2", data: "m:no:" + meetingId, message: { chat: { id: colleagueChat }, message_id: 6 } },
+    },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("accepts «Не смогу» on a meeting", refuse.status === 200, refuse);
+  const { data: refused } = await admin
+    .from("meeting_participants")
+    .select("response, reason")
+    .eq("meeting_id", meetingId)
+    .eq("assignee_id", assignee.id)
+    .maybeSingle();
+  check("records the refusal and asks for the reason", refused?.response === "no" && refused?.reason === null, refused);
+
+  const why = await post(
+    "/api/telegram/webhook",
+    {
+      update_id: Math.floor(Math.random() * 1e9),
+      message: { chat: { id: colleagueChat }, text: "Буду в Севастополе на приёмке" },
+    },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("takes the next message as that reason", why.status === 200, why);
+  const { data: explained } = await admin
+    .from("meeting_participants")
+    .select("reason")
+    .eq("meeting_id", meetingId)
+    .eq("assignee_id", assignee.id)
+    .maybeSingle();
+  check("writes the reason to the meeting, not to a task", explained?.reason === "Буду в Севастополе на приёмке", explained);
+
   // ---- MAX ----
   console.log("\nMAX webhook:");
   // Секрет вебхука теперь живёт в базе — его придумывает /api/max/setup в

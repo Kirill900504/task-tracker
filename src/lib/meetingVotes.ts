@@ -69,6 +69,21 @@ export function voteTally(votes: MeetingVote[], round = 1): VoteTally {
   };
 }
 
+// Кто отказался и не сказал, почему.
+//
+// «Не смогу» без причины — это половина ответа: организатор узнаёт, что
+// человека не будет, и не узнаёт единственного, что он мог бы с этим
+// сделать. Бот спрашивает причину сразу после нажатия, но ответить на
+// вопрос можно и молчанием, поэтому тех, кто промолчал, спрашивают ещё раз
+// вместе с напоминанием о встрече (см. cron/reminders). Отказ при этом
+// остаётся отказом: держать человека «не ответившим», пока он не объяснится,
+// значило бы врать в списке ради воспитания.
+export function awaitingReason(votes: MeetingVote[], round = 1): string[] {
+  return votes
+    .filter((v) => mustVote(v) && isCurrent(v, round) && v.response === "no" && !(v.reason || "").trim())
+    .map((v) => v.name);
+}
+
 // C3: everyone votes again, including those who had already confirmed —
 // otherwise a "✅" from the old time silently stands in for an answer about
 // the new one. The old answers are not erased, they are simply left behind

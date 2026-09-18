@@ -5,8 +5,8 @@ import { moscowNow, dateStr, minutesOfDay } from "@/lib/taskLogic";
 import { isRussianWorkingDay } from "@/lib/workCalendar";
 import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
-import { dueReminder, minutesUntil, ownerReminder, participantReminder, recapAsk, recapDue } from "@/lib/meetingReminders";
-import { voteTally, type MeetingVote } from "@/lib/meetingVotes";
+import { dueReminder, minutesUntil, ownerReminder, participantReminder, reasonNudge, recapAsk, recapDue } from "@/lib/meetingReminders";
+import { awaitingReason, voteTally, type MeetingVote } from "@/lib/meetingVotes";
 import { chatsFor, meetingButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { buildManagerBrief, composeManagerBrief, managerBriefIsEmpty } from "@/lib/managerBrief";
@@ -323,29 +323,41 @@ export async function GET(req: Request) {
 
       // Кому именно писать: молчащим — вопрос, согласившимся — напоминание.
       const wanted = window.audience === "unanswered" ? tally.pending : tally.yes;
-      if (!wanted.length) continue;
+      // И отдельно — тем, кто отказался, не сказав почему. Причину
+      // спрашивают вместе с ранними напоминаниями (за сутки и за два часа):
+      // позже она уже ничего не меняет, а до тех пор организатор может и
+      // перенести встречу, если причина того стоит.
+      const silentRefusals = window.audience === "unanswered" ? awaitingReason(votes, round) : [];
+      const everyone = [...new Set([...wanted, ...silentRefusals])];
+      if (!everyone.length) continue;
 
       const { data: people } = await admin
         .from("assignees")
         .select("id, name, telegram_chat_id, max_user_id")
         .eq("user_id", userId)
-        .in("name", wanted);
+        .in("name", everyone);
 
       for (const person of (people || []) as ColleagueRow[]) {
         const target = chatsFor(person)[0];
         if (!target) continue;
+        const needsReason = silentRefusals.includes(person.name);
         // Дедупликация по человеку, а не по встрече: иначе первый же
-        // отправленный участник закроет окно для всех остальных.
-        const { error } = await admin
-          .from("telegram_notifications")
-          .insert({ user_id: userId, kind: window.kind, ref_id: `${m.id}:${person.id}`, notif_date: today });
+        // отправленный участник закроет окно для всех остальных. Вопрос про
+        // причину — свой ключ: это другое сообщение и другой повод.
+        const { error } = await admin.from("telegram_notifications").insert({
+          user_id: userId,
+          kind: window.kind,
+          ref_id: `${m.id}:${person.id}${needsReason ? ":why" : ""}`,
+          notif_date: today,
+        });
         if (error) continue;
         await sendToColleague(
           target,
-          participantReminder(window.kind, m.title, when, window.audience),
+          needsReason ? reasonNudge(m.title, when) : participantReminder(window.kind, m.title, when, window.audience),
           // Молчащему кнопки нужны: напоминание без них — это просьба
-          // ответить куда-то не сюда.
-          window.audience === "unanswered" ? meetingButtons(m.id) : undefined,
+          // ответить куда-то не сюда. Отказавшемуся они уже не нужны: от
+          // него ждут не нажатия, а одной строки текста.
+          !needsReason && window.audience === "unanswered" ? meetingButtons(m.id) : undefined,
         );
       }
     }

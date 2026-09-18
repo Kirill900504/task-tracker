@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  awaitingReason,
   canVoteNo,
   nextRound,
   voteLabel,
@@ -103,5 +104,37 @@ describe("a refusal has to say why", () => {
   it("rejects an empty reason", () => {
     expect(canVoteNo("  ")).toBe(false);
     expect(canVoteNo("совещание в банке")).toBe(true);
+  });
+});
+
+// Отказ обязан объяснять себя. Кнопку «Не смогу» человек нажимает в
+// мессенджере, причину пишет следующим сообщением — а если не пишет, его
+// спрашивают ещё раз вместе с напоминанием о встрече. Отсюда — список тех,
+// кого спрашивать.
+describe("кого переспросить про причину отказа", () => {
+  it("называет отказавшегося молча", () => {
+    const votes = [
+      vote("Аня", { response: "yes" }),
+      vote("Борис", { response: "no" }),
+      vote("Глеб", { response: "no", reason: "буду в Москве" }),
+      vote("Дина"),
+    ];
+    expect(awaitingReason(votes)).toEqual(["Борис"]);
+  });
+
+  it("пробел причиной не считает", () => {
+    expect(awaitingReason([vote("Борис", { response: "no", reason: "   " })])).toEqual(["Борис"]);
+  });
+
+  it("молчит про ответы о старом времени — после переноса их спросят заново", () => {
+    expect(awaitingReason([vote("Борис", { response: "no", round: 1 })], 2)).toEqual([]);
+  });
+
+  it("не трогает организатора и наблюдателей", () => {
+    const votes = [
+      vote("Кирилл", { role: "organizer", response: "no" }),
+      vote("Зоя", { role: "watcher", response: "no" }),
+    ];
+    expect(awaitingReason(votes)).toEqual([]);
   });
 });
