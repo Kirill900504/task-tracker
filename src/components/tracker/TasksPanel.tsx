@@ -298,7 +298,18 @@ export default function TasksPanel({
     removeSection(section.id);
   }
 
+  // Своя задача — та, которую поставил сам. У владельца свои все.
+  const isMine = (t: Task) => !myUserId || (t.createdBy || "") === myUserId;
+
   function toggleDone(t: Task) {
+    // Чужую задачу нельзя закрыть за постановщика — и, что важнее, нельзя
+    // сделать вид, что закрыл: база откажет молча, галочка проживёт до
+    // перезагрузки, а человек будет считать дело сделанным. Отчитаться по
+    // ней он может там, где это его дело, — в разделе «Что от вас ждут».
+    if (!isMine(t)) {
+      toasts.showToast("Это не ваша задача", "Отчитаться по ней можно в разделе «Что от вас ждут» — вверху страницы.");
+      return;
+    }
     if (t.status === "done") {
       actions.saveTask({ ...t, status: "in_progress", lastCompletedOn: "", completedAt: "" });
     } else {
@@ -368,6 +379,13 @@ export default function TasksPanel({
     if (!taskId) return;
     const dragged = tasks.find((t) => t.id === taskId);
     if (!dragged) return;
+    // Чужую задачу не переносят: срочность и порядок — свойства самой
+    // задачи, то есть правка, и база откажет молча. Карточка при этом уже
+    // «переехала» бы на экране и вернулась после перезагрузки.
+    if (!isMine(dragged)) {
+      toasts.showToast("Это не ваша задача", "Переносить её может только тот, кто поставил.");
+      return;
+    }
 
     const container = term === "short" ? shortColRef.current : longColRef.current;
     const after = container ? getDragAfterElement(container, e.clientY, ".task:not(.dragging)") : null;
@@ -422,18 +440,23 @@ export default function TasksPanel({
   }
 
   function menuItemsFor(t: Task): ActionMenuItem[] {
-    const items: ActionMenuItem[] = [
-      { id: "top", label: "Наверх списка", icon: "arrow-up", onSelect: () => moveWithinColumn(t, "top") },
-      { id: "bottom", label: "В конец списка", icon: "arrow-down", onSelect: () => moveWithinColumn(t, "bottom") },
-      {
-        id: "term",
-        // Moving between columns was also a drag; the modal has the same
-        // field, but this is one tap instead of four.
-        label: t.term === "short" ? "В долгосрочные" : "В краткосрочные",
-        icon: "arrow-right",
-        onSelect: () => actions.saveTask({ ...t, term: t.term === "short" ? "long" : "short", manualOrder: null }),
-      },
-    ];
+    // Порядок и срочность — свойства самой задачи, то есть правка. У чужой
+    // задачи остаётся только то, что правкой не является: показать её
+    // коллеге и собрать по ней встречу.
+    const items: ActionMenuItem[] = isMine(t)
+      ? [
+          { id: "top", label: "Наверх списка", icon: "arrow-up", onSelect: () => moveWithinColumn(t, "top") },
+          { id: "bottom", label: "В конец списка", icon: "arrow-down", onSelect: () => moveWithinColumn(t, "bottom") },
+          {
+            id: "term",
+            // Moving between columns was also a drag; the modal has the same
+            // field, but this is one tap instead of four.
+            label: t.term === "short" ? "В долгосрочные" : "В краткосрочные",
+            icon: "arrow-right",
+            onSelect: () => actions.saveTask({ ...t, term: t.term === "short" ? "long" : "short", manualOrder: null }),
+          },
+        ]
+      : [];
     // «Назначить встречу по задаче» переехала сюда из карточки: в самой
     // карточке заведённой задачи осталось только то, что перечислил Кирилл.
     // Состав берётся с задачи — собираются по ней обычно всем составом, а
@@ -675,7 +698,7 @@ export default function TasksPanel({
           key={modalTask?.id ?? "new"}
           // Своя задача — та, которую поставил сам. У владельца свои все:
           // пространство его, и колонка created_by у старых задач пуста.
-          canEdit={!myUserId || !modalTask || (modalTask.createdBy || "") === myUserId}
+          canEdit={!modalTask || isMine(modalTask)}
           task={modalTask}
           prefill={modalPrefill}
           sections={sections}
