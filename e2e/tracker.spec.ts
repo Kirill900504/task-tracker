@@ -243,7 +243,8 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   // Reopen it: the slot and the participant come back as chosen, so the
   // grid's selection really is what got saved and not just local state.
   await chip.click();
-  await expect(page.locator("#mTime")).toHaveValue("10:00");
+  // Выбранное время — это выбранная кнопка: поля «другое время» больше нет.
+  await expect(page.locator("#mTimeGrid .time-slot", { hasText: "10:00" })).toHaveClass(/selected/);
   await expect(page.locator("#mParticipants .participant-chip", { hasText: participant })).toHaveClass(/selected/);
 
   await page.fill("#mResult", "Договорились по срокам");
@@ -442,7 +443,10 @@ test("hotkeys open a task, a meeting and the idea field, Esc closes", async ({ p
   await page.keyboard.press("b");
   await expect(page.locator("#mTitle")).toBeVisible();
   // Dated, so the form is ready to save rather than complaining about a date.
-  await expect(page.locator("#mDate")).not.toHaveValue("");
+  // Дата теперь календарь, а не поле: выбранный день помечен в сетке, и
+  // само значение лежит на ней атрибутом.
+  await expect(page.locator("#mDate")).not.toHaveAttribute("data-value", "");
+  await expect(page.locator("#mDate .mini-cal-day.selected")).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(page.locator("#mTitle")).toHaveCount(0);
 
@@ -640,4 +644,36 @@ test("вопросы задаются окном трекера, а не бра�
   await expect(page.locator(".task", { hasText: title })).toHaveCount(0);
 
   expect(nativeDialogs).toBe(0);
+});
+
+// Встречу закрывают кнопкой прямо в списке — и тогда же спрашивают, чем она
+// кончилась. Раньше ✓ и ✕ закрывали её молча, с пустым итогом: назавтра
+// «Совещание по опту» отличалось от «Совещания по опту» только галочкой, а
+// итог — единственное, что от встречи остаётся.
+test("закрытие встречи из списка спрашивает итог", async ({ page }) => {
+  const title = `E2E итог ${Date.now()}`;
+
+  await login(page);
+  await page.click("#addMeetingBtn");
+  await page.fill("#mTitle", title);
+  await page.click("#meetingSaveBtn");
+  const chip = page.locator(".meeting-chip", { hasText: title });
+  await expect(chip).toBeVisible();
+
+  // Отмена в окне итога оставляет встречу в плане.
+  await chip.locator(".meeting-icon-btn.success").click();
+  await expect(page.locator(".ask-modal")).toBeVisible();
+  await page.click("#askCancelBtn");
+  await expect(chip).not.toHaveClass(/resolved/);
+
+  await chip.locator(".meeting-icon-btn.success").click();
+  await expect(page.locator(".ask-modal")).toBeVisible();
+  await page.fill("#askInput", "Договорились по срокам");
+  await page.click("#askOkBtn");
+  await expect(chip).toHaveClass(/resolved/);
+  await waitForSaved(page);
+
+  // Итог сохранён там же, где его потом читают, — в самой встрече.
+  await chip.click();
+  await expect(page.locator("#mResult")).toHaveValue("Договорились по срокам");
 });

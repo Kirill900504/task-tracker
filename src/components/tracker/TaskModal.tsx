@@ -11,13 +11,13 @@ import { useColleagues } from "@/hooks/useColleagues";
 import SendMenu from "./SendMenu";
 import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
-import { openPickerOnClick } from "@/lib/pickerInput";
 import TaskParticipants from "./TaskParticipants";
 import ItemChat from "./ItemChat";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import type { Participant, PendingParticipant, PersonOption } from "@/hooks/useTaskParticipants";
 import PeoplePicker, { type PickedPerson } from "./PeoplePicker";
 import ChipChoice from "./ChipChoice";
+import MiniCalendar from "./MiniCalendar";
 import MicButton from "./MicButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
@@ -482,19 +482,18 @@ export default function TaskModal({
 
         <div className="field">
           <label>Дедлайн / дата</label>
-          {/* Дата остаётся полем — календарь кнопками не заменить, — но
-              три срока, которые ставят чаще всего, стоят рядом кнопками: это
-              и есть «сегодня», «завтра» и «через неделю», ради которых
-              открывали календарь. */}
+          {/* Календарь показан сразу, а не спрятан за значком в поле
+              «дд.мм.гггг»: срок — это вопрос про день недели и про то,
+              сколько до него осталось, и на него отвечает сетка месяца, а не
+              восемь цифр. Тремя кнопками рядом ставятся сроки, которые
+              ставят чаще всего. */}
+          <MiniCalendar
+            id="fDeadline"
+            value={form.deadline}
+            onChange={(iso) => setForm((f) => ({ ...f, deadline: iso }))}
+            clearable
+          />
           <div className="deadline-row">
-            <input
-              type="date"
-              id="fDeadline"
-              className="date-input"
-              value={form.deadline}
-              onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))}
-              onClick={openPickerOnClick}
-            />
             {QUICK_DEADLINES.map((q) => (
               <button
                 key={q.label}

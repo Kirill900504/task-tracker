@@ -663,9 +663,30 @@
     font-family:var(--sans); font-size:13px; padding:6px 8px; border-radius:4px;
   }
   .date-popover-btn:hover{background:var(--paper-soft); color:var(--accent);}
-  /* Date sized to its own content instead of stretching the modal's width,
-     and clickable across the whole field (see MeetingModal's showPicker). */
-  .field input[type=date].date-input{width:auto; min-width:150px; cursor:pointer;}
+  /* Мини-календарь на месте поля даты (MiniCalendar). Тот же вид, что и у
+     большого календаря слева, только мельче: одна и та же сетка на экране
+     не должна выглядеть двумя разными. */
+  .mini-cal{border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px; background:var(--bg); max-width:300px;}
+  .mini-cal-head{display:flex; align-items:center; gap:6px; margin-bottom:6px;}
+  .mini-cal-month{flex:1; text-align:center; font-family:var(--display); font-weight:700; font-size:12.5px; color:var(--ink);}
+  .mini-cal-nav, .mini-cal-clear{
+    width:24px; height:24px; flex:none; border:1px solid var(--line); border-radius:6px;
+    background:var(--paper-soft); color:var(--ink-soft); cursor:pointer; font-size:12px; line-height:1; padding:0;
+  }
+  .mini-cal-nav:hover{color:var(--accent); border-color:var(--accent);}
+  .mini-cal-clear:hover{color:var(--high); border-color:var(--high);}
+  .mini-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px;}
+  .mini-cal-wd{text-align:center; font-family:var(--mono); font-size:10px; color:var(--ink-soft); padding-bottom:2px;}
+  .mini-cal-day{
+    aspect-ratio:1; min-height:28px; border:1px solid transparent; border-radius:6px;
+    background:none; color:var(--ink); cursor:pointer; font-family:var(--mono); font-size:12px; padding:0;
+    transition:background .12s ease, color .12s ease, border-color .12s ease;
+  }
+  .mini-cal-day:hover{background:var(--paper-soft); border-color:var(--accent); color:var(--accent);}
+  .mini-cal-day.other{color:var(--ink-soft); opacity:.45;}
+  .mini-cal-day.today{border-color:var(--ink-soft);}
+  .mini-cal-day.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:700;}
+  @media (max-width:768px){ .mini-cal{max-width:none;} .mini-cal-day{min-height:34px;} }
 
   /* Working-hours time picker: one tap per slot, wrapping over a few rows. */
   .time-grid{display:flex; flex-wrap:wrap; gap:5px;}
@@ -676,11 +697,10 @@
   }
   .time-slot:hover{border-color:var(--accent); color:var(--accent);}
   .time-slot.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:700;}
-  .time-other{display:flex; align-items:center; gap:8px; margin-top:8px; font-size:11px; color:var(--ink-soft); font-family:var(--mono);}
-  .field input[type=time].time-input{
-    width:auto; padding:4px 8px; border:1px solid var(--line); border-radius:6px;
-    background:var(--paper-soft); color:var(--ink); font-family:var(--sans); font-size:12px;
-  }
+  /* Время следующего этапа — те же кнопки, только помельче: строка переноса
+     и так стоит внизу карточки, среди итогов. */
+  .time-grid-compact{margin-top:8px;}
+  .time-grid-compact .time-slot{padding:4px 7px; font-size:11px;}
 
   /* Participants: tap-to-toggle chips over a few rows, no dropdown. */
   .participant-grid{display:flex; flex-wrap:wrap; gap:5px;}
@@ -705,7 +725,6 @@
      приглашение, поэтому пунктиром и в один ряд с полями. */
   .field-add{border-style:dashed; color:var(--ink-soft); margin-bottom:14px;}
   .deadline-row{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
-  .deadline-row .date-input{flex:0 0 auto;}
 
   .participants-field{position:relative;}
   .participants-trigger{

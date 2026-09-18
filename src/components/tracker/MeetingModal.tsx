@@ -13,8 +13,8 @@ import { addDaysIso } from "@/lib/calendarLogic";
 import { fmtDate } from "@/lib/taskDisplay";
 import { isSelfAssignee, sanitizeAssigneeList } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
-import { openPickerOnClick } from "@/lib/pickerInput";
 import MicButton from "./MicButton";
+import MiniCalendar from "./MiniCalendar";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
 import { sortNames } from "@/lib/peopleOrder";
@@ -139,18 +139,10 @@ export default function MeetingModal({
 
         <div className="field">
           <label>Дата</label>
-          {/* Sized to the date itself rather than stretched across the modal,
-              and clicking anywhere in the field opens the picker — not just
-              the little calendar glyph. showPicker() is Chromium/Safari; on
-              browsers without it the field still works as a normal input. */}
-          <input
-            type="date"
-            id="mDate"
-            className="date-input"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            onClick={openPickerOnClick}
-          />
+          {/* Сразу календарём, а не полем «дд.мм.гггг»: встречу назначают на
+              день недели («в четверг»), а не на число, и сетка месяца
+              отвечает на этот вопрос сама. */}
+          <MiniCalendar id="mDate" value={date} onChange={setDate} />
         </div>
 
         <div className="field">
@@ -163,10 +155,11 @@ export default function MeetingModal({
 
         <div className="field">
           <label>Время</label>
-          {/* One tap on the usual working-hours slots (09:00–18:00, every 30
-              minutes). Anything outside that range is still reachable through
-              the small input underneath, and shows up as its own selected
-              chip so an existing 20:15 meeting isn't silently rewritten. */}
+          {/* Рабочий день кнопками, 09:00–18:00 через полчаса — одно нажатие.
+              Поля «другое время» под ними больше нет: Кирилл сказал, что оно
+              неактуально, и за всё время им ставили разве что промах мимо
+              кнопки. Встреча, назначенная когда-то на 20:15, свою кнопку
+              сохраняет — время в ней не переписывается молча. */}
           <div className="time-grid" id="mTimeGrid">
             {TIME_SLOTS.map((slot) => (
               <button
@@ -183,10 +176,6 @@ export default function MeetingModal({
                 {time}
               </button>
             )}
-          </div>
-          <div className="time-other">
-            <span>другое время</span>
-            <input type="time" id="mTime" className="time-input" value={time} onChange={(e) => setTime(e.target.value)} onClick={openPickerOnClick} />
           </div>
         </div>
 
@@ -234,12 +223,31 @@ export default function MeetingModal({
                 </button>
               )}
             </div>
+            {/* Время следующего этапа — теми же кнопками, что и время самой
+                встречи: поле «выбрать любое время» убрано и здесь, иначе
+                правило действовало бы через строчку. */}
+            <MiniCalendar id="mRescheduleDate" value={rescheduleDate} onChange={setRescheduleDate} />
             <div className="reschedule-row">
-              <input type="date" id="mRescheduleDate" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} onClick={openPickerOnClick} />
-              <input type="time" id="mRescheduleTime" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} onClick={openPickerOnClick} />
               <button type="button" className="btn btn-small" id="rescheduleBtn" onClick={reschedule}>
                 📅 Перенести следующий этап
               </button>
+            </div>
+            <div className="time-grid time-grid-compact" id="mRescheduleTimeGrid">
+              {TIME_SLOTS.map((slot) => (
+                <button
+                  key={slot}
+                  type="button"
+                  className={"time-slot" + (rescheduleTime === slot ? " selected" : "")}
+                  onClick={() => setRescheduleTime(slot)}
+                >
+                  {slot}
+                </button>
+              ))}
+              {rescheduleTime && !TIME_SLOTS.includes(rescheduleTime) && (
+                <button type="button" className="time-slot selected" onClick={() => setRescheduleTime(rescheduleTime)}>
+                  {rescheduleTime}
+                </button>
+              )}
             </div>
           </div>
         )}

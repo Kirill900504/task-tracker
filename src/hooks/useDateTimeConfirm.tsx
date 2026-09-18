@@ -5,7 +5,16 @@
 // meeting reschedule flows. Same Promise-based call shape: ask() resolves
 // to {date, time} on OK, or null on cancel/closing without a date.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { openPickerOnClick } from "@/lib/pickerInput";
+import MiniCalendar from "@/components/tracker/MiniCalendar";
+
+// Тот же рабочий день, что и в карточке встречи: 09:00–18:00 через полчаса.
+const TIME_SLOTS: string[] = (() => {
+  const out: string[] = [];
+  for (let m = 9 * 60; m <= 18 * 60; m += 30) {
+    out.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+  }
+  return out;
+})();
 
 interface PendingAsk {
   question: string;
@@ -58,26 +67,36 @@ export function useDateTimeConfirm() {
         <p className="confirm-dt-question" id="confirmDateTimeQuestion">
           {pending.question}
         </p>
-        <div className="row2">
-          <div className="field">
-            <label>Дата</label>
-            <input
-              type="date"
-              id="confirmDateTimeDate"
-              value={pending.date}
-              onChange={(e) => setPending((p) => (p ? { ...p, date: e.target.value } : p))}
-              onClick={openPickerOnClick}
-            />
-          </div>
-          <div className="field">
-            <label>Время</label>
-            <input
-              type="time"
-              id="confirmDateTimeTime"
-              value={pending.time}
-              onChange={(e) => setPending((p) => (p ? { ...p, time: e.target.value } : p))}
-              onClick={openPickerOnClick}
-            />
+        {/* Календарь и часы — сразу, а не полями «дд.мм.гггг» и «--:--»:
+            то же правило, что и в карточках задачи и встречи. Перенос
+            перетаскиванием и так спрашивают на бегу, и попадание в значок
+            календаря внутри поля — последнее, чего здесь хочется. */}
+        <div className="field">
+          <label>Дата</label>
+          <MiniCalendar
+            id="confirmDateTimeDate"
+            value={pending.date}
+            onChange={(iso) => setPending((p) => (p ? { ...p, date: iso } : p))}
+          />
+        </div>
+        <div className="field">
+          <label>Время</label>
+          <div className="time-grid time-grid-compact" id="confirmDateTimeTime">
+            {TIME_SLOTS.map((slot) => (
+              <button
+                key={slot}
+                type="button"
+                className={"time-slot" + (pending.time === slot ? " selected" : "")}
+                onClick={() => setPending((p) => (p ? { ...p, time: slot } : p))}
+              >
+                {slot}
+              </button>
+            ))}
+            {pending.time && !TIME_SLOTS.includes(pending.time) && (
+              <button type="button" className="time-slot selected">
+                {pending.time}
+              </button>
+            )}
           </div>
         </div>
         <div className="modal-actions">

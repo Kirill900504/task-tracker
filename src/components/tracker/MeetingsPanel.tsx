@@ -15,6 +15,7 @@ import { linkTaskAndMeeting } from "@/lib/itemLink";
 import type { useToasts } from "@/hooks/useToasts";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
+import { useAsk } from "@/components/Ask";
 
 export default function MeetingsPanel({
   meetings,
@@ -64,6 +65,7 @@ export default function MeetingsPanel({
   // задач: и карточки, и форма читают отсюда.
   const votes = useMeetingVotes();
   const [ideaDragOver, setIdeaDragOver] = useState(false);
+  const ask = useAsk();
   const [modalState, setModalState] = useState<{ open: boolean; meeting: Meeting | null; prefill?: MeetingPrefill }>({ open: false, meeting: null });
 
   // See TasksPanel's identical pattern: an external open request from a
@@ -134,6 +136,35 @@ export default function MeetingsPanel({
     toasts.showToast(status === "planned" ? "Встреча возвращена в план" : "Итог встречи сохранён", m.title, () =>
       actions.saveMeeting({ ...m, ...prev }),
     );
+  }
+
+  // Закрыть встречу кнопкой прямо в списке — и сразу сказать, чем она
+  // кончилась.
+  //
+  // Раньше ✓ и ✕ на карточке закрывали встречу молча, с тем итогом, который
+  // был записан (то есть обычно с пустым), и назавтра «Совещание по опту»
+  // отличалось от «Совещания по опту» только галочкой. Итог — единственное,
+  // что от встречи остаётся: его спрашивает утренняя сводка, его читают в
+  // обсуждении, и он же отвечает на «а чем в прошлый раз кончили». Поэтому
+  // окно, а не тишина. Пустым оставить можно: бывают встречи, которые просто
+  // прошли, и заставлять выдумывать слова ради формы — худший способ
+  // получить осмысленный итог.
+  async function quickStatus(m: Meeting, status: "success" | "no_result") {
+    const text = await ask.ask({
+      title: status === "success" ? "Встреча прошла успешно" : "Встреча без результата",
+      question: "Итог встречи",
+      note:
+        status === "success"
+          ? "Кратко: что решили, что дальше. Это увидят участники и утренняя сводка."
+          : "Кратко: почему не вышло и что теперь. Без этого встреча выглядит просто отменённой.",
+      value: m.result || "",
+      multiline: true,
+      placeholder: "Например: договорились по срокам, Игорь готовит смету к пятнице",
+      okText: status === "success" ? "Завершить успешно" : "Закрыть без результата",
+    });
+    // Отмена — это отмена: встреча остаётся в плане.
+    if (text === null) return;
+    setStatus(m, status, text);
   }
 
   function reschedule(m: Meeting, newDate: string, newTime: string, resultNote: string) {
@@ -210,7 +241,7 @@ export default function MeetingsPanel({
               selectedDay={selectedDay}
               onOpen={() => setModalState({ open: true, meeting: m })}
               onDelete={() => deleteMeeting(m)}
-              onQuickStatus={(status) => setStatus(m, status, m.result)}
+              onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
               votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
               justCreated={justCreatedId === m.id}
