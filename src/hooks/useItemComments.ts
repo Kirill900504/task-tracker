@@ -201,7 +201,7 @@ export function useItemComments(kind: ItemKind, itemId: string) {
         attachments.push({ path, name: file.name, size: file.size, type: file.type });
       }
 
-      const { error } = await db.from("item_comments").insert({
+      const row = {
         item_kind: kind,
         item_id: itemId,
         body: text,
@@ -209,7 +209,31 @@ export function useItemComments(kind: ItemKind, itemId: string) {
         author_user_id: me?.user?.id || null,
         author_assignee_id: (member as { assignee_id?: string } | null)?.assignee_id || null,
         source: "app",
-      });
+      };
+      let { error } = await db.from("item_comments").insert(row);
+
+      // «comment references an item that does not exist» — это не поломка, а
+      // гонка, и до сих пор она вылезала на экран как есть: по-английски и
+      // словами про строки базы. Задача, написанная минуту назад, живёт
+      // сперва в браузере и уезжает в облако своим ходом (см. useTrackerData),
+      // а обсуждение ссылается на неё внешним ключом — пока строки нет,
+      // триггер отказывает. Правильный ответ здесь — не сообщение об ошибке,
+      // а подождать задачу и отправить ещё раз; человеку об этом знать
+      // незачем.
+      if (error && /does not exist/i.test(error.message)) {
+        const table = kind === "task" ? "tasks" : kind === "meeting" ? "meetings" : "ideas";
+        for (let i = 0; i < 12; i++) {
+          const { data: parent } = await db.from(table).select("id").eq("id", itemId).maybeSingle();
+          if (parent) break;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        ({ error } = await db.from("item_comments").insert(row));
+        if (error && /does not exist/i.test(error.message)) {
+          await reload();
+          throw new Error("Задача ещё не сохранилась в облаке — проверьте связь и отправьте сообщение ещё раз.");
+        }
+      }
+
       await reload();
       // Сообщение, которое не сохранилось, не должно исчезнуть молча: чаще
       // всего это задача, ещё не доехавшая до облака, и человеку надо дать
