@@ -4,6 +4,7 @@ import { BOT_CHANNELS, MAX_CHANNEL, TELEGRAM_CHANNEL } from "@/lib/botTransport"
 import { telegramTransport } from "@/lib/telegram";
 import { maxTransport, maxConfigured } from "@/lib/max";
 import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
+import { queueNotice, type Notice } from "@/lib/noticeQueue";
 
 // Where a message actually goes.
 //
@@ -63,7 +64,24 @@ export async function notifyAuthor(
   ownerId: string,
   createdBy: string | null,
   text: string,
+  // Вид события. Есть — строка идёт в очередь и выйдет одним письмом со
+  // своими соседями (см. noticeQueue и правило ниже); нет — уходит сразу,
+  // как уходило всегда.
+  //
+  // Почему так: постановщику за день приходит десяток сообщений от
+  // четырнадцати человек, и сплошной лентой их перестают читать целиком —
+  // вместе с «не могу» и «просрочено», ради которых всё затевалось.
+  // Исполнителю, наоборот, всё уходит сразу: там ждут ответа от него, и
+  // задержка стоит дороже порядка.
+  notice?: Notice,
 ): Promise<void> {
+  if (notice) {
+    const to = !createdBy || createdBy === ownerId ? null : createdBy;
+    // Очередь может быть недоступна (миграция ещё не применена) — тогда
+    // сообщение уходит по-старому, а не теряется.
+    if (await queueNotice(admin, ownerId, to, notice)) return;
+  }
+
   if (!createdBy || createdBy === ownerId) {
     await notifyOwner(admin, ownerId, text);
     return;

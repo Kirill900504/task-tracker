@@ -8,6 +8,7 @@ import { newTaskRow } from "@/lib/newTask";
 import { deliverComment } from "@/lib/commentDelivery";
 import { colleagueCommandsHelp, matchColleagueCommand, meetingCard, meetingRoster, replyForColleague, taskCard } from "@/lib/colleagueQueries";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
+import type { Notice } from "@/lib/noticeQueue";
 
 // What happens when a colleague presses a button under a task or a meeting.
 //
@@ -45,6 +46,9 @@ export type CallbackOutcome = {
   // обязаны делать одно и то же, а /api/workspace/report уже адресует
   // ответ постановщику.
   notifyTo?: string | null;
+  // Вид события для сводки: с ним строка ляжет в очередь и выйдет одним
+  // письмом вместе с соседними, а не отдельным сообщением в ленту.
+  notice?: Notice;
 };
 
 // Ответ бота на сообщение коллеги. Кнопки здесь потому же, почему они есть
@@ -55,6 +59,7 @@ export type ColleagueTextResult = {
   buttons?: BotButton[][];
   notifyOwner?: string;
   notifyTo?: string | null;
+  notice?: Notice;
 };
 
 // Куда направлен следующий текст этого человека.
@@ -213,6 +218,7 @@ export async function handleColleagueCallback(
         rewriteTo: `📋 ${task.title}\n\n✅ Принято в работу`,
         notifyTo: task.created_by,
         notifyOwner: `✅ ${colleague.name} принял в работу: «${task.title}»`,
+        notice: { kind: "accepted", item: task.title, who: colleague.name },
       };
     }
 
@@ -231,6 +237,7 @@ export async function handleColleagueCallback(
           toast: "Отмечено",
           rewriteTo: `📋 ${task.title}\n\n🏁 Отмечено выполненным.\nНапишите одним сообщением, что именно сделано — это увидит постановщик.`,
           notifyTo: task.created_by,
+          notice: { kind: closed ? "reported_all" : "reported", item: task.title, who: colleague.name },
           notifyOwner: closed
             ? `🏁 ${colleague.name} выполнил: «${task.title}» — отчитались все, задача ждёт вашей приёмки`
             : `🏁 ${colleague.name} выполнил свою часть: «${task.title}»`,
@@ -253,6 +260,7 @@ export async function handleColleagueCallback(
         rewriteTo: `📋 ${task.title}\n\n🏁 Выполнено`,
         notifyTo: task.created_by,
         notifyOwner: `🏁 ${colleague.name} выполнил: «${task.title}»`,
+        notice: { kind: "reported_all", item: task.title, who: colleague.name },
       };
     }
 
@@ -266,6 +274,7 @@ export async function handleColleagueCallback(
           rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
           notifyTo: task.created_by,
           notifyOwner: `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
+          notice: { kind: "declined", item: task.title, who: colleague.name },
         };
       }
       await admin
@@ -277,6 +286,7 @@ export async function handleColleagueCallback(
         rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
         notifyTo: task.created_by,
         notifyOwner: `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
+        notice: { kind: "declined", item: task.title, who: colleague.name },
       };
     }
 
@@ -382,6 +392,7 @@ export async function handleColleagueCallback(
         // без них оно не действует.
         rewriteButtons: meetingButtons(meeting.id as string),
         notifyTo: meeting.created_by,
+        notice: { kind: late ? "vote_late" : "vote_yes", item: meeting.title as string, who: colleague.name, what: when },
         notifyOwner: late
           ? `🕐 ${colleague.name} будет на встрече «${meeting.title}» (${when}), но опоздает`
           : `✅ ${colleague.name} будет на встрече «${meeting.title}» (${when})`,
@@ -401,6 +412,7 @@ export async function handleColleagueCallback(
       rewriteButtons: meetingButtons(meeting.id as string),
       notifyTo: meeting.created_by,
       notifyOwner: `❌ ${colleague.name} не сможет быть на встрече «${meeting.title}» (${when})\nСпросил, почему — пришлю, как ответит.`,
+      notice: { kind: "vote_no", item: meeting.title as string, who: colleague.name, what: `${when} — причину спросил` },
     };
   }
 
@@ -454,6 +466,7 @@ export async function handleColleagueCallback(
       rewriteTo: `💡 ${title}\n\n➕ Взято в работу — теперь это ваша задача`,
       notifyTo: idea.created_by,
       notifyOwner: `➕ ${colleague.name} взял мысль в работу: «${title}»`,
+      notice: { kind: "idea_taken", item: title, who: colleague.name },
     };
   }
 
@@ -564,6 +577,7 @@ export async function handleColleagueText(
       reply: `Передал: просите перенести «${title}»${to} — ${body}.\nСрок двигает постановщик, я скажу, когда он ответит.`,
       notifyTo: taskRef?.created_by ?? null,
       notifyOwner: `📅 ${colleague.name} просит перенести «${title}»${to}: ${body}`,
+      notice: { kind: "reschedule", item: title, who: colleague.name, what: `${to.trim() || "на другой срок"} — ${body}` },
     };
   }
 
@@ -581,6 +595,7 @@ export async function handleColleagueText(
       reply: `Записал по задаче «${title}»: ${body}`,
       notifyTo: taskRef?.created_by ?? null,
       notifyOwner: `🏁 ${colleague.name} по задаче «${title}»: ${body}`,
+      notice: { kind: "reported", item: title, who: colleague.name, what: body },
     };
   }
 
@@ -595,6 +610,7 @@ export async function handleColleagueText(
     reply: `Записал: не сможете «${title}» — ${body}`,
     notifyTo: taskRef?.created_by ?? null,
     notifyOwner: `⛔ ${colleague.name} не может «${title}»: ${body}`,
+    notice: { kind: "declined", item: title, who: colleague.name, what: body },
   };
 }
 
@@ -608,7 +624,7 @@ async function handleMeetingReason(
   admin: SupabaseClient,
   colleague: { id: string; name: string; user_id: string },
   body: string,
-): Promise<{ reply: string; notifyOwner?: string; notifyTo?: string | null } | null> {
+): Promise<ColleagueTextResult | null> {
   const { data } = await admin
     .from("meeting_participants")
     .select("id, response, reason, responded_at, meetings(title, date, time)")
@@ -635,6 +651,7 @@ async function handleMeetingReason(
   return {
     reply: `Записал: не будете на «${title}» — ${body}`,
     notifyOwner: `❌ ${colleague.name} не придёт на «${title}» (${when}): ${body}`,
+    notice: { kind: "vote_no", item: title, who: colleague.name, what: body },
   };
 }
 
@@ -773,7 +790,7 @@ async function handleChatMessage(
   colleague: { id: string; name: string; user_id: string },
   body: string,
   source: "telegram" | "max",
-): Promise<{ reply: string; notifyOwner?: string; notifyTo?: string | null } | null> {
+): Promise<ColleagueTextResult | null> {
   const { data } = await admin
     .from("task_participants")
     .select("task_id, created_at, tasks(title, status, deleted_at)")

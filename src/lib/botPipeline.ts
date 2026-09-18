@@ -388,7 +388,7 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       const answered = await handleColleagueText(ctx.admin, colleague, trimmed, ctx.channel.id);
       if (answered) {
         await ctx.transport.send(ctx.chatId, answered.reply, answered.buttons?.length ? { buttons: answered.buttons } : undefined);
-        if (answered.notifyOwner) await notifyAuthor(ctx.admin, colleague.user_id, answered.notifyTo ?? null, answered.notifyOwner);
+        if (answered.notifyOwner) await notifyAuthor(ctx.admin, colleague.user_id, answered.notifyTo ?? null, answered.notifyOwner, answered.notice);
         return;
       }
       // Ответить оказалось нечем — ни задачи, ни встречи, ни команды.

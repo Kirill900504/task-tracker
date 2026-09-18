@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { notifyOwner } from "@/lib/botDelivery";
+import { notifyAuthor, notifyOwner } from "@/lib/botDelivery";
+import { flushNotices } from "@/lib/noticeQueue";
 import { moscowNow, dateStr, minutesOfDay } from "@/lib/taskLogic";
 import { isRussianWorkingDay } from "@/lib/workCalendar";
 import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
@@ -101,6 +102,19 @@ export async function GET(req: Request) {
   await onceOnly(admin, { userId: userIds[0], kind: "bot_commands", refId: today, date: today }, async () => {
     await Promise.all([setTelegramCommands(), setMaxCommands()]);
   });
+
+  // Накопившиеся события — одним письмом каждому, кому они адресованы.
+  //
+  // Это и есть ответ на «сплошняк»: десять сообщений подряд превращаются в
+  // одну сводку, сгруппированную по смыслу, где сверху то, что требует
+  // решения. Крон ходит каждые несколько минут, так что задержка меньше
+  // той, за которую человек успевает дойти до телефона.
+  //
+  // Отправитель передаётся сюда, а не берётся внутри: очередь не должна
+  // знать про мессенджеры, а botDelivery уже умеет адресовать письмо и
+  // владельцу, и руководителю в его собственный чат. Без notice-аргумента
+  // notifyAuthor работает как работал — то есть шлёт сразу.
+  await flushNotices(admin, (userId, toUser, text) => notifyAuthor(admin, userId, toUser, text));
 
   for (const userId of userIds) {
 

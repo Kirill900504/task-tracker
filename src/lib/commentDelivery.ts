@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { chatsFor, replyButtons, type ColleagueRow } from "@/lib/colleagues";
 import { notifyOwner, sendToColleague } from "@/lib/botDelivery";
+import { queueNotice } from "@/lib/noticeQueue";
 
 // Кто должен услышать про сообщение в обсуждении.
 //
@@ -153,8 +154,17 @@ export async function deliverComment(admin: SupabaseClient, commentId: string): 
   // Владелец — всегда, если он не автор: он отвечает за пространство и
   // видит в нём всё. Постановщик-руководитель отдельной строкой не нужен —
   // он стоит участником в собственном итеме и получил сообщение выше.
+  //
+  // Ему это идёт строкой в сводку, а не отдельным сообщением: реплика в
+  // обсуждении — самое частое, что здесь происходит, и именно она первой
+  // превращает мессенджер в ленту. Участникам, наоборот, уходит сразу:
+  // разговор, ответ на который приходит через десять минут, — не разговор.
   if (comment.author_user_id !== comment.user_id) {
-    delivered += await notifyOwner(admin, comment.user_id, text);
+    if (await queueNotice(admin, comment.user_id, null, { kind: "comment", item: title, who: authorName, what: comment.body.trim() })) {
+      delivered++;
+    } else {
+      delivered += await notifyOwner(admin, comment.user_id, text);
+    }
   }
 
   return { delivered, skipped: delivered ? null : "no-audience" };

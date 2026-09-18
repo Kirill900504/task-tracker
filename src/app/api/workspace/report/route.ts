@@ -9,6 +9,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import { newTaskRow } from "@/lib/newTask";
 import { recordEvent } from "@/lib/itemHistory";
+import type { Notice } from "@/lib/noticeQueue";
 
 // Ответ руководителя: один путь для трекера и для мессенджера.
 //
@@ -189,13 +190,13 @@ export async function POST(req: Request) {
   const title = taskRef?.title || "";
   // Ответ адресован тому, кто поручил. Пока поручает только владелец, это
   // он и есть; как только поручит руководитель — узнает он, а не Кирилл.
-  const tell = (text: string) => notifyAuthor(admin, m.owner_id, taskRef?.created_by || null, text);
+  const tell = (text: string, notice?: Notice) => notifyAuthor(admin, m.owner_id, taskRef?.created_by || null, text, notice);
 
   if (body.action === "accept") {
     await admin.from("task_participants").update({ accepted_at: now }).eq("id", part.id);
     await admin.from("tasks").update({ accepted_at: now }).eq("id", part.task_id);
     await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `✅ ${myName} принял в работу` });
-    await tell(`✅ ${myName} принял в работу: «${title}»`);
+    await tell(`✅ ${myName} принял в работу: «${title}»`, { kind: "accepted", item: title, who: myName });
     return NextResponse.json({ ok: true });
   }
 
@@ -215,6 +216,7 @@ export async function POST(req: Request) {
       everyone
         ? `🏁 ${myName} по задаче «${title}»: ${comment}\n\nОтчитались все — задача ждёт вашей приёмки.`
         : `🏁 ${myName} по задаче «${title}»: ${comment}`,
+      { kind: everyone ? "reported_all" : "reported", item: title, who: myName, what: comment },
     );
     return NextResponse.json({ ok: true, awaitingReview: everyone });
   }
@@ -227,7 +229,7 @@ export async function POST(req: Request) {
       .update({ declined_at: now, decline_reason: reason, done_at: null, done_comment: null })
       .eq("id", part.id);
     await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `⛔ ${myName} не может: ${reason}` });
-    await tell(`⛔ ${myName} не может «${title}»: ${reason}`);
+    await tell(`⛔ ${myName} не может «${title}»: ${reason}`, { kind: "declined", item: title, who: myName, what: reason });
     return NextResponse.json({ ok: true });
   }
 
@@ -240,7 +242,7 @@ export async function POST(req: Request) {
       .eq("id", part.id);
     const to = body.date ? ` на ${fmtDate(body.date)}` : "";
     await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `📅 ${myName} просит перенос${to}: ${reason}` });
-    await tell(`📅 ${myName} просит перенести «${title}»${to}: ${reason}`);
+    await tell(`📅 ${myName} просит перенести «${title}»${to}: ${reason}`, { kind: "reschedule", item: title, who: myName, what: `${to.trim() || "на другой срок"} — ${reason}` });
     return NextResponse.json({ ok: true });
   }
 

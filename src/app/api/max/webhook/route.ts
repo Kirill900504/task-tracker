@@ -118,7 +118,7 @@ export async function POST(req: Request) {
     }
     if (outcome.notifyOwner) {
       const owner = await admin.from("assignees").select("user_id").eq("max_user_id", chatId).limit(1).maybeSingle();
-      if (owner.data?.user_id) await notifyAuthor(admin, owner.data.user_id as string, outcome.notifyTo ?? null, outcome.notifyOwner);
+      if (owner.data?.user_id) await notifyAuthor(admin, owner.data.user_id as string, outcome.notifyTo ?? null, outcome.notifyOwner, outcome.notice);
     }
     return NextResponse.json({ ok: true });
   }

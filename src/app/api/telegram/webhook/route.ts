@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     if (outcome.notifyOwner) {
       const colleagueOwner = await admin.from("assignees").select("user_id").eq("telegram_chat_id", pressedChatId).limit(1).maybeSingle();
       if (colleagueOwner.data?.user_id)
-        await notifyAuthor(admin, colleagueOwner.data.user_id as string, outcome.notifyTo ?? null, outcome.notifyOwner);
+        await notifyAuthor(admin, colleagueOwner.data.user_id as string, outcome.notifyTo ?? null, outcome.notifyOwner, outcome.notice);
     }
     return NextResponse.json({ ok: true });
   }
