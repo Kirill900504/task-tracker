@@ -155,6 +155,65 @@ try {
     .maybeSingle();
   check("writes the reason to the meeting, not to a task", explained?.reason === "Буду в Севастополе на приёмке", explained);
 
+  // ---- Вопрос коллеги, на который раньше не было ответа ----
+  //
+  // Команд у коллеги не было вовсе: «сегодня» и «просрочено» работали только
+  // у владельца, а написавший «мои задачи» молча дописывал свой вопрос в
+  // обсуждение чужой карточки. Проверяется поэтому не только ответ, но и то,
+  // что вопрос НЕ стал репликой: именно это и было поломкой.
+  const asked = await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "мои задачи" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("отвечает коллеге на «мои задачи»", asked.status === 200, asked);
+  const { data: notAComment } = await admin
+    .from("item_comments")
+    .select("id")
+    .eq("item_id", taskId)
+    .eq("body", "мои задачи")
+    .maybeSingle();
+  check("вопрос не превратился в реплику в обсуждении", notAComment === null, notAComment);
+
+  // ---- «Ответить» адресует следующее сообщение ----
+  //
+  // До этого текст уходил в «самую свежую открытую задачу» — угадывание,
+  // которое у человека с пятью задачами кладёт слова не в ту историю.
+  const aim = await post(
+    "/api/telegram/webhook",
+    {
+      update_id: Math.floor(Math.random() * 1e9),
+      callback_query: { id: "cbq3", data: "t:msg:" + taskId, message: { chat: { id: colleagueChat }, message_id: 7 } },
+    },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("принимает «Ответить»", aim.status === 200, aim);
+  const { data: aimed } = await admin
+    .from("assignees")
+    .select("pending_reply_kind, pending_reply_id")
+    .eq("id", assignee.id)
+    .maybeSingle();
+  check("запоминает, какой задаче адресован ответ", aimed?.pending_reply_id === taskId && aimed?.pending_reply_kind === "task", aimed);
+
+  const spoke = await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "Сделал половину, вторая к пятнице" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("принимает сообщение после «Ответить»", spoke.status === 200, spoke);
+  const { data: landed } = await admin
+    .from("item_comments")
+    .select("item_id, body, source")
+    .eq("item_id", taskId)
+    .eq("body", "Сделал половину, вторая к пятнице")
+    .maybeSingle();
+  check("сообщение легло в названную задачу", landed?.item_id === taskId && landed?.source === "telegram", landed);
+
+  const { data: cleared } = await admin.from("assignees").select("pending_reply_id").eq("id", assignee.id).maybeSingle();
+  // Направление действует на одно сообщение: иначе ответивший однажды писал
+  // бы в ту же задачу до скончания века.
+  check("направление снимается после одного сообщения", cleared?.pending_reply_id === null, cleared);
+
   // ---- MAX ----
   console.log("\nMAX webhook:");
   // Секрет вебхука теперь живёт в базе — его придумывает /api/max/setup в
