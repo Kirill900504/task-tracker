@@ -29,7 +29,6 @@ import type { Meeting, MeetingPrefill, Task, TaskPrefill } from "@/types/tracker
 import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
 import { mergeResult } from "@/lib/meetingLink";
 import SearchOverlay from "@/components/tracker/SearchOverlay";
-import ExportMenu from "@/components/tracker/ExportMenu";
 import TeamModal from "@/components/tracker/TeamModal";
 import MobileShell, { type MobileTab } from "@/components/tracker/MobileShell";
 import MobileHeader from "@/components/tracker/MobileHeader";
@@ -706,17 +705,14 @@ export default function NewTracker() {
                 <Icon name="reset" /> Сбросить расположение
               </button>
             )}
-            {/* «Команда» и выгрузка — админское: приглашения, отключение
-                доступа, отвязка мессенджера и весь архив пространства
-                принадлежат владельцу. Руководителю их не показывают, и
-                база отказала бы ему в них всё равно (миграции 0019, 0031). */}
+            {/* «Команда» — админское: приглашения, отключение доступа и
+                отвязка мессенджера принадлежат владельцу. Руководителю её
+                не показывают, и база отказала бы ему всё равно (миграции
+                0019, 0031). */}
             {isAdmin && (
-              <>
-                <button className="btn" id="teamBtn" title="Кто на связи в мессенджерах" onClick={() => setTeamOpen(true)}>
-                  <Icon name="users" /> Команда
-                </button>
-                <ExportMenu tasks={tasks} meetings={meetings} ideas={ideas} sections={sections} assignees={assignees} />
-              </>
+              <button className="btn" id="teamBtn" title="Кто на связи в мессенджерах" onClick={() => setTeamOpen(true)}>
+                <Icon name="users" /> Команда
+              </button>
             )}
             {botLink.needs.telegram && (
               <button className="btn" id="telegramLinkBtn" onClick={() => botLink.link("telegram")}>

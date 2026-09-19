@@ -89,10 +89,9 @@ test("«Готово, проверить» отвечает — и когда п
   await expect(page.locator(".ms-link")).toBeVisible({ timeout: 20_000 });
   await expect(page.locator("#newTaskBtn")).toHaveCount(1);
 
-  // А админского у него нет: «Команда» и выгрузка — владельцевы, и база
-  // отказала бы ему в них всё равно (миграции 0019 и 0031).
+  // А админского у него нет: «Команда» — владельцева, и база отказала бы
+  // ему в ней всё равно (миграции 0019 и 0031).
   await expect(page.locator("#teamBtn")).toHaveCount(0);
-  await expect(page.locator("#exportBtn")).toHaveCount(0);
   // Разделы он видит, но «+» рядом с ними — админская кнопка.
   await expect(page.locator("#addSectionTabBtn")).toHaveCount(0);
 
