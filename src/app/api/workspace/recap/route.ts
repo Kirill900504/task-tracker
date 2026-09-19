@@ -32,11 +32,19 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: row } = await admin
     .from("meetings")
-    .select("id, title, date, time, user_id, created_by")
+    .select("id, title, date, time, user_id, created_by, from_task_id")
     .eq("id", body.meetingId)
     .is("deleted_at", null)
     .maybeSingle();
-  const meeting = row as { id: string; title: string; date: string; time: string | null; user_id: string; created_by: string | null } | null;
+  const meeting = row as {
+    id: string;
+    title: string;
+    date: string;
+    time: string | null;
+    user_id: string;
+    created_by: string | null;
+    from_task_id: string | null;
+  } | null;
   if (!meeting) return NextResponse.json({ error: "Встреча не найдена" }, { status: 404 });
 
   // Рассылает тот, чья это встреча: владелец пространства или тот, кто её
@@ -70,5 +78,24 @@ export async function POST(req: Request) {
   }
 
   await recordEvent(admin, { userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `📝 Итог разослан участникам (${sent})` });
+
+  // Встреча, выросшая из задачи, возвращает в неё ответ.
+  //
+  // Ради этого задачу и «перекидывали во встречу»: собрались, чтобы
+  // сдвинуть её с места, — значит в самой задаче должно быть написано, чем
+  // кончилось. Раньше итог оставался во встрече, а человек, открывший
+  // задачу через неделю, видел только, что когда-то по ней собирались.
+  //
+  // Строкой в обсуждение, а не колонкой: история итема живёт там (правило
+  // в CLAUDE.md), и участники задачи получат её обычной рассылкой.
+  if (meeting.from_task_id) {
+    await recordEvent(admin, {
+      userId: meeting.user_id,
+      kind: "task",
+      itemId: meeting.from_task_id,
+      text: `📝 Итог встречи «${meeting.title}» (${when}): ${result}`,
+    });
+  }
+
   return NextResponse.json({ ok: true, sent });
 }

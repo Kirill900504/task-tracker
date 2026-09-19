@@ -202,7 +202,7 @@
     transition:box-shadow .15s ease;
   }
   .dash-panel-head{
-    display:flex; align-items:center; gap:8px; margin-bottom:10px;
+    display:flex; align-items:center; gap:8px; margin-bottom:8px;
   }
   .dash-panel-head .panel-title{margin:0; flex:1;}
   /* То, что поднято под курсор, когда это не карточка: мысль и встреча
@@ -285,9 +285,12 @@
   .check-wrap{display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-soft); white-space:nowrap;}
   .check-wrap input{width:15px; height:15px; cursor:pointer;}
 
+  /* Плотнее, чем было: 16 пикселей полей плюс 18 между панелями — это
+     полтора сантиметра пустоты на каждый блок, а блоков на экране пять.
+     «Хочу, чтобы каждый сантиметр использовался рационально». */
   .panel{
     background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
-    padding:16px; margin-bottom:18px; box-shadow:var(--shadow-1), var(--edge);
+    padding:12px 13px; margin-bottom:12px; box-shadow:var(--shadow-1), var(--edge);
   }
   .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
   /* Название блока. Прописные и разрядка остаются — они и делают строку
@@ -303,26 +306,32 @@
   /* gap вместо space-between: в строке теперь ещё и ручка перетаскивания
      слева, и «месяц» должен остаться посередине между стрелками, а не
      разъехаться вместе с ней. */
-  .cal-nav{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+  .cal-nav{display:flex; align-items:center; gap:6px; margin-bottom:7px;}
   .cal-nav .cal-month{flex:1; text-align:center;}
   .cal-month{font-family:var(--display); font-weight:700; font-size:14px;}
-  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
-  .cal-wd{font-size:11px; color:var(--ink-soft); text-align:center; font-family:var(--display); padding:2px 0;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px;}
+  .cal-wd{font-size:10.5px; color:var(--ink-soft); text-align:center; font-family:var(--display); padding:1px 0;}
+  /* Клетка ниже на треть: месяц из шести рядов занимал столько же, сколько
+     весь список встреч под ним. Цифра при этом не уменьшилась — ужалось
+     пустое место вокруг неё. */
   .cal-day{
-    position:relative; text-align:center; padding:8px 2px; border-radius:var(--radius-sm); font-size:13px;
-    cursor:pointer; border:1px solid transparent; color:var(--ink); transition:border-color .15s ease, background .15s ease;
+    position:relative; text-align:center; padding:5px 2px 4px; border-radius:var(--radius-sm); font-size:13px;
+    cursor:pointer; border:1px solid transparent; color:var(--ink); line-height:1.2;
+    transition:border-color .15s ease, background .15s ease;
   }
   .cal-day:hover{border-color:var(--accent);}
   .cal-day.other-month{color:#606366;}
   .cal-day.today{font-weight:700; border-color:var(--accent);}
-  .cal-day.selected{background:var(--accent); color:#F3F8FA; box-shadow:var(--shadow-1);}
-  .cal-dot{width:5px; height:5px; border-radius:50%; background:var(--med); display:inline-block; margin-top:3px;}
+  .cal-day.selected{background:var(--accent); color:#F3F8FA; box-shadow:var(--shadow-1); font-weight:700;}
+  /* Точка загруженности — крупнее и ближе к цифре: она отвечает на
+     «что в этот день», и увидеть её надо, не приглядываясь. */
+  .cal-dot{width:5px; height:5px; border-radius:50%; background:var(--med); display:inline-block; margin-top:1px;}
   .cal-dot.high{background:var(--high);}
   .cal-day.drag-over{border-color:var(--today); background:var(--today-bg);}
-  .cal-filter-note{display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--ink-soft); flex-wrap:wrap;}
+  .cal-filter-note{display:flex; align-items:center; gap:8px; margin-top:7px; font-size:12px; color:var(--ink-soft); flex-wrap:wrap;}
 
   /* Ideas */
-  .idea-add{display:flex; gap:6px; margin-bottom:10px;}
+  .idea-add{display:flex; gap:6px; margin-bottom:8px;}
   .idea-add{align-items:flex-start;}
   .idea-add input, .idea-add .auto-grow{flex:1; min-width:0;}
   .idea-add .auto-grow{
@@ -330,8 +339,8 @@
     font-family:var(--sans); font-size:13px; background:var(--paper-soft); color:var(--ink);
   }
   .idea-item{
-    border:1px solid var(--line-soft); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:7px;
-    display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px; align-items:flex-start; background:var(--paper-soft);
+    border:1px solid var(--line-soft); border-radius:var(--radius-md); padding:8px 10px; margin-bottom:5px;
+    display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; align-items:flex-start; background:var(--paper-soft);
     box-shadow:var(--edge);
   }
   /* «Отправляю Никита Козлов…» — четвёртый ребёнок этой же флекс-строки, и
@@ -340,8 +349,15 @@
      колонка. */
   .idea-item > .send-result{flex-basis:100%; margin-top:2px;}
   .idea-item:hover{border-color:var(--accent);}
-  .idea-text{white-space:pre-wrap; word-break:break-word; font-size:13px;}
-  .idea-meta{font-size:11px; color:var(--ink-soft); font-family:var(--display); margin-top:3px;}
+  /* Длинная мысль сворачивается до четырёх строк.
+     В правой колонке лежат надиктованные абзацы, и один такой занимал
+     треть экрана, оттесняя всё остальное вниз. Развернуть — нажатием на
+     сам текст (оно же открывает правку), так что ничего не теряется. */
+  .idea-text{
+    white-space:pre-wrap; word-break:break-word; font-size:13px; line-height:1.4;
+    display:-webkit-box; -webkit-line-clamp:4; line-clamp:4; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .idea-meta{font-size:10.5px; color:var(--ink-soft); font-family:var(--display); margin-top:2px; opacity:.85;}
   .idea-del{cursor:pointer; color:var(--ink-soft); background:none; border:none; font-size:15px; line-height:1; flex:none;}
   .idea-del:hover{color:var(--high);}
   /* No scrollbar of its own: the whole page scrolls instead (see the
@@ -953,9 +969,9 @@
   }
   .meeting-chip.dragging > *{visibility:hidden;}
   .meeting-chip{
-    display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:6px 10px;
+    display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:5px 9px;
     background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:var(--radius-md);
-    padding:9px 11px; margin-top:7px; font-size:12.5px; cursor:grab; box-shadow:var(--edge);
+    padding:7px 9px; margin-top:5px; font-size:12.5px; cursor:grab; box-shadow:var(--edge);
     transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
   }
   .meeting-chip:hover{border-color:var(--today); box-shadow:var(--shadow-1); transform:translateY(-1px);}
@@ -2254,3 +2270,13 @@
   .done-list-text:disabled{cursor:default;}
   .done-list-title{font-size:13.5px; color:var(--ink); line-height:1.35;}
   .done-list-note{font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
+
+  /* Встреча прошла, а итога нет. Отдельной группой наверху панели: это
+     единственные встречи в списке, которые чего-то ждут от смотрящего. */
+  .meetings-need-recap{margin-bottom:10px;}
+  .meetings-group-title{
+    font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--med); font-weight:700; margin-bottom:2px;
+  }
+  .meeting-chip.awaits-recap{border-color:var(--med); background:var(--med-bg);}
+  .pill-recap{background:var(--med-bg); color:var(--med); border:1px solid var(--med);}

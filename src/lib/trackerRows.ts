@@ -44,6 +44,7 @@ export type MeetingRow = {
   result: string;
   moved_to_date: string | null;
   resolved_at: string | null;
+  from_task_id?: string | null;
   vote_round?: number | null;
   created_by?: string | null;
   // Written by the bot only, like TaskRow.accepted_at.
@@ -151,6 +152,7 @@ export function meetingToRow(m: Meeting): MeetingRow {
     result: m.result || "",
     moved_to_date: m.movedToDate || null,
     resolved_at: m.resolvedAt || null,
+    from_task_id: m.fromTaskId || null,
   };
 }
 
@@ -165,6 +167,7 @@ export function meetingFromRow(r: MeetingRow): Meeting {
     result: r.result || "",
     movedToDate: r.moved_to_date || "",
     resolvedAt: r.resolved_at || "",
+    fromTaskId: r.from_task_id || "",
     confirmedBy: r.confirmed_by || [],
     voteRound: r.vote_round ?? 1,
     createdBy: r.created_by || "",

@@ -58,3 +58,30 @@ export function sortMeetingsForList(meetings: Meeting[], showResolved: boolean):
       return ak > bk ? -1 : ak < bk ? 1 : 0;
     });
 }
+
+// Встреча прошла, а итога нет.
+//
+// Четвёртое состояние, которого нет в базе и не должно быть: оно целиком
+// выводится из времени и пустого поля «итог». Слова Кирилла 19.09.2026 о
+// том, чего он ждёт от встречи: «автоматическим закрытием встреч с
+// комментарием ИТОГа, после проведения».
+//
+// Автоматически закрыть встречу, о которой никто ничего не сказал, нельзя
+// — это выдумать за людей, чем она кончилась. Поэтому «закрывается» она
+// вопросом: бот спрашивает организатора через два часа (см. recapDue), а
+// в трекере такая встреча отделяется от будущих и просит итог.
+//
+// Час после начала, а не минута в минуту: встреча, начавшаяся в 15:00,
+// в 15:05 ещё идёт, и просить у неё итог значит мешать.
+export const RECAP_GRACE_MINUTES = 60;
+
+export function awaitsRecap(meeting: Meeting, now: Date = new Date()): boolean {
+  if (meeting.status && meeting.status !== "planned") return false;
+  if (meeting.result) return false;
+  if (!meeting.date) return false;
+  const [hh, mm] = (meeting.time || "23:59").split(":").map(Number);
+  const start = new Date(meeting.date + "T00:00:00");
+  if (Number.isNaN(start.getTime())) return false;
+  start.setHours(Number.isNaN(hh) ? 23 : hh, Number.isNaN(mm) ? 59 : mm, 0, 0);
+  return now.getTime() - start.getTime() >= RECAP_GRACE_MINUTES * 60_000;
+}

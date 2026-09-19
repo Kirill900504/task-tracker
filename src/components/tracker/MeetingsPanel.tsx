@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
-import { addDaysIso, sortMeetingsForList } from "@/lib/calendarLogic";
+import { addDaysIso, awaitsRecap, sortMeetingsForList } from "@/lib/calendarLogic";
 import { fmtDate, todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import MeetingChip from "./MeetingChip";
@@ -155,7 +155,11 @@ export default function MeetingsPanel({
   // Список — только то, что впереди. Закрытые и перенесённые смотрят в
   // отдельном окне по иконке с галочкой: подмешанные сюда, они превращали
   // список встреч в архив, в котором ближайшая теряется.
-  const sorted = sortMeetingsForList(meetings, false);
+  const all = sortMeetingsForList(meetings, false);
+  // Прошедшие без итога — наверх и отдельно. Это единственные встречи в
+  // списке, которые чего-то ждут ОТ ВАС: остальные просто впереди.
+  const needRecap = all.filter((m) => awaitsRecap(m));
+  const sorted = all.filter((m) => !awaitsRecap(m));
   const resolved = sortMeetingsForList(meetings, true).filter((m) => m.status && m.status !== "planned" && m.status !== "proposed");
 
   function deleteMeeting(m: Meeting) {
@@ -266,7 +270,7 @@ export default function MeetingsPanel({
     <div className="panel dash-panel" id="meetingsPanel" data-panel-id="meetingsPanel">
       <div className="dash-panel-head">
         <div className="panel-title">
-          Встречи <span className="count">{sorted.length}</span>
+          Встречи <span className="count">{sorted.length + needRecap.length}</span>
         </div>
         {/* Иконка завершённых — рядом с «+», а не переключателем в
             шапке трекера: это вопрос к ЭТОЙ панели, и отвечать на него
@@ -287,6 +291,26 @@ export default function MeetingsPanel({
           +
         </button>
       </div>
+      {/* Что прошло и не закрыто — первым: пока итога нет, встреча не
+          закончилась, чем бы она ни закончилась на самом деле. */}
+      {needRecap.length > 0 && (
+        <div className="meetings-need-recap">
+          <div className="meetings-group-title">Нужен итог</div>
+          {needRecap.map((m) => (
+            <MeetingChip
+              key={m.id}
+              meeting={m}
+              selectedDay={selectedDay}
+              onOpen={() => setModalState({ open: true, meeting: m })}
+              onDelete={() => deleteMeeting(m)}
+              onQuickStatus={(status) => void quickStatus(m, status)}
+              onQuickReschedule={() => quickReschedule(m)}
+              votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
+            />
+          ))}
+        </div>
+      )}
+
       <div id="meetingsForDay" ref={setMeetingsDropRef} className={ideaOver ? "drag-over" : ""}>
         {sorted.length === 0 ? (
           <div className="empty">{meetings.length === 0 ? "Встреч пока нет" : "Нет запланированных встреч"}</div>

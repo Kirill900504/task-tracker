@@ -5,6 +5,7 @@ import { useDraggable } from "@dnd-kit/core";
 import PopLayer from "./PopLayer";
 import type { Meeting } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
+import { awaitsRecap } from "@/lib/calendarLogic";
 import { sanitizeAssigneeList } from "@/lib/trackerRows";
 import { useAsk } from "@/components/Ask";
 
@@ -45,6 +46,9 @@ export default function MeetingChip({
   // назначенная не должна — иначе её станут считать состоявшейся
   // договорённостью, каковой она не является.
   const proposed = meeting.status === "proposed";
+  // Прошла, а чем кончилась — не сказано. Пока итога нет, встреча не
+  // уходит из списка: она ещё требует одного действия.
+  const waitingRecap = awaitsRecap(meeting);
   const showQuickActions = !meeting.status || meeting.status === "planned";
 
   // Placed by writing to the DOM once it has been measured (its own size
@@ -73,6 +77,7 @@ export default function MeetingChip({
         "meeting-chip" +
         (meeting.date === selectedDay ? " selected-day" : "") +
         (meeting.status && meeting.status !== "planned" ? " resolved" : "") +
+        (waitingRecap ? " awaits-recap" : "") +
         (justCreated ? " just-created" : "") +
         (isDragging ? " dragging" : "")
       }
@@ -106,6 +111,7 @@ export default function MeetingChip({
           onMouseLeave={() => setPeopleAnchor(null)}
         >
           {proposed && <span className="pill pill-proposed">предложена</span>}
+          {waitingRecap && <span className="pill pill-recap">нужен итог</span>}
           👥 {votes ? `${votes.yes.length}/${participants.length}` : confirmed.length > 0 ? `${confirmed.length}/${participants.length}` : participants.length}
           {votes && votes.no.length > 0 && <span className="mpeople-no"> · {votes.no.length} не смогут</span>}
         </span>

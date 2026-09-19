@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Meeting } from "@/types/tracker";
-import { addDaysIso, getMonthGridDates, sortMeetingsForList } from "./calendarLogic";
+import { addDaysIso, getMonthGridDates, sortMeetingsForList, awaitsRecap } from "./calendarLogic";
 
 describe("addDaysIso", () => {
   it("adds days using local calendar fields, correctly crossing a month boundary", () => {
@@ -77,5 +77,45 @@ describe("sortMeetingsForList", () => {
     const original = list.slice();
     sortMeetingsForList(list, false);
     expect(list).toEqual(original);
+  });
+});
+
+describe("awaitsRecap", () => {
+  const base = {
+    id: "m1",
+    date: "2026-09-21",
+    time: "10:00",
+    title: "Планёрка",
+    participants: [],
+    status: "planned" as const,
+    result: "",
+    movedToDate: "",
+    resolvedAt: "",
+  };
+
+  it("через час после начала встреча просит итог", () => {
+    expect(awaitsRecap(base, new Date("2026-09-21T11:30:00"))).toBe(true);
+  });
+
+  it("пока она идёт — не просит", () => {
+    expect(awaitsRecap(base, new Date("2026-09-21T10:20:00"))).toBe(false);
+  });
+
+  it("и не просит у будущей", () => {
+    expect(awaitsRecap(base, new Date("2026-09-20T09:00:00"))).toBe(false);
+  });
+
+  it("написанный итог снимает вопрос", () => {
+    expect(awaitsRecap({ ...base, result: "решили переделать" }, new Date("2026-09-21T18:00:00"))).toBe(false);
+  });
+
+  it("как и закрытая встреча", () => {
+    expect(awaitsRecap({ ...base, status: "no_result" }, new Date("2026-09-21T18:00:00"))).toBe(false);
+  });
+
+  it("встреча без времени ждёт конца дня", () => {
+    const allDay = { ...base, time: "" };
+    expect(awaitsRecap(allDay, new Date("2026-09-21T18:00:00"))).toBe(false);
+    expect(awaitsRecap(allDay, new Date("2026-09-22T01:00:00"))).toBe(true);
   });
 });

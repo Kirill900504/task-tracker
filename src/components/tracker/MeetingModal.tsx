@@ -139,6 +139,11 @@ export default function MeetingModal({
       result: meeting ? result.trim() : "",
       movedToDate: meeting?.movedToDate ?? "",
       resolvedAt: meeting?.resolvedAt ?? "",
+      // Задача, ради которой собрались. Ставится один раз, при создании:
+      // встреча вырастает из задачи, а не переприсваивается ей потом.
+      // Ради этой колонки и была миграция 0037 — итог встречи должен
+      // дописаться в ту самую задачу, а не в найденную по тексту реплики.
+      fromTaskId: meeting?.fromTaskId ?? prefill?.fromTaskId ?? "",
     });
     onClose();
   }
