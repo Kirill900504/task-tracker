@@ -40,6 +40,10 @@ export async function updateSession(request: NextRequest) {
   const isJoinPage = request.nextUrl.pathname.startsWith("/join");
   const isJoinRoute = request.nextUrl.pathname.startsWith("/api/workspace/join");
   if (isJoinPage || isJoinRoute) return supabaseResponse;
+  // «Забыли пароль?» по определению нажимает тот, кто войти не может, — а
+  // значит сессии у него нет и быть не должно. Маршрут отвечает всем
+  // одинаково и сам решает, кому и куда слать ссылку.
+  if (request.nextUrl.pathname.startsWith("/api/workspace/forgot-password")) return supabaseResponse;
   // The messengers and the external cron pinger call these with their own
   // secret-token checks, not a browser session — never gate them behind
   // the login redirect. (A missed entry here does not fail loudly: the POST

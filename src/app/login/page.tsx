@@ -41,17 +41,28 @@ export default function LoginPage() {
     router.refresh();
   }
 
+  // Ссылка уходит В МЕССЕНДЖЕР, а не письмом.
+  //
+  // Письмом она уходила полгода и никуда не приводила: текст письма
+  // собирает сам Supabase, подставляя в него Site URL проекта, а он —
+  // http://localhost:3000. Нажавший «Забыли пароль?» получал письмо и
+  // упирался в пустую страницу на своей машине, а сказать об этом было
+  // некому: на экране трекера всё выглядело сработавшим. Починить Site URL
+  // можно только в чужой панели, а бот у людей и так привязан — и читают
+  // они его сегодня, а не когда доберутся до почты.
   async function handleForgotSubmit(e: FormEvent) {
     e.preventDefault();
     setResetError("");
     setResetLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
+    const res = await fetch("/api/workspace/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: resetEmail }),
     });
+    const data = await res.json().catch(() => null);
     setResetLoading(false);
-    if (error) {
-      setResetError("Не получилось отправить ссылку: " + error.message);
+    if (!res.ok || !data?.ok) {
+      setResetError(data?.error || "Не получилось отправить ссылку. Попробуйте ещё раз.");
       return;
     }
     setMode("sent");
@@ -70,10 +81,17 @@ export default function LoginPage() {
       <div className="auth-screen">
         <div className="auth-card">
           {brand}
-          <h1 className="auth-title">Письмо отправлено</h1>
+          <h1 className="auth-title">Ссылка отправлена</h1>
+          {/* Что делать, если не пришло, сказано здесь и сразу — иначе
+              человек, у которого мессенджер не привязан, остаётся перед
+              экраном «всё хорошо» и ждёт письма, которого не будет. */}
           <p className="auth-sub">
-            Если <b style={{ color: "var(--ink)" }}>{resetEmail}</b> зарегистрирована в трекере — на неё ушла ссылка для
-            смены пароля. Проверьте почту, в том числе папку «Спам».
+            Если <b style={{ color: "var(--ink)" }}>{resetEmail}</b> есть в трекере и к ней привязан Telegram или MAX —
+            ссылка уже там, в чате с ботом. Она действует час.
+          </p>
+          <p className="auth-sub">
+            Ничего не пришло? Значит мессенджер к этой почте не привязан — попросите ссылку у Кирилла: в «Команде»
+            напротив вашего имени есть кнопка «Ссылка ещё раз».
           </p>
           <button type="button" className="auth-btn auth-btn-quiet" onClick={() => setMode("signin")}>
             Назад ко входу
@@ -89,7 +107,7 @@ export default function LoginPage() {
         <div className="auth-card">
           {brand}
           <h1 className="auth-title">Восстановление пароля</h1>
-          <p className="auth-sub">Пришлём ссылку, по которой можно задать новый пароль.</p>
+          <p className="auth-sub">Пришлём ссылку в Telegram или MAX — в тот же чат с ботом, куда приходят задачи.</p>
 
           <form onSubmit={handleForgotSubmit}>
             {resetError && <div className="auth-error">{resetError}</div>}

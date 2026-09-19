@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { originOf, recoveryLink } from "@/lib/recoveryLink";
 
 // Возвращение доступа человеку, который УЖЕ вошёл когда-то.
 //
@@ -22,15 +23,6 @@ import { checkRateLimit } from "@/lib/rateLimit";
 // Почему это не «владелец задаёт пароль сам»: тогда пароль знали бы двое,
 // и любой отчёт «это писал не я» стал бы неразрешимым. Ссылка одноразовая,
 // пароль придумывает человек, а владелец остаётся тем, кто её передал.
-
-function originOf(req: Request): string {
-  // За прокси Vercel в request.url лежит внутренний адрес — человеку уедет
-  // тот, что в заголовках.
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto") || "https";
-  if (host) return `${proto}://${host}`;
-  return new URL(req.url).origin;
-}
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -84,25 +76,16 @@ export async function POST(req: Request) {
   }
   const email = member.user.email;
 
-  const { data: link, error: linkError } = await admin.auth.admin.generateLink({ type: "recovery", email });
-  if (linkError || !link?.properties?.hashed_token) {
-    return NextResponse.json({ error: "Не получилось создать ссылку: " + (linkError?.message || "") }, { status: 500 });
+  // Сборка ссылки — общая с «Забыли пароль?» (recoveryLink.ts): там же
+  // написано, почему она собирается на нашем домене, а не берётся у
+  // Supabase готовой.
+  const link = await recoveryLink(admin, email, originOf(req));
+  if ("error" in link) {
+    return NextResponse.json({ error: "Не получилось создать ссылку: " + link.error }, { status: 500 });
   }
 
-  // Ссылка собирается НА НАШ домен, а не берётся готовой (`action_link`).
-  //
-  // Готовая ведёт на `<проект>.supabase.co/auth/v1/verify?...&redirect_to=`,
-  // и redirect_to в ней Supabase молча заменяет своим Site URL, если наш
-  // адрес не внесён в его список разрешённых. В этом проекте он не внесён:
-  // проверка 19.09.2026 вернула `redirect_to=http://localhost:3000` — то
-  // есть человек, открывший такую ссылку, уехал бы на пустой localhost.
-  //
-  // Поэтому наружу отдаётся адрес трекера с одноразовым `token_hash`, а
-  // /reset-password меняет его на сессию сам (verifyOtp). Ничего в чужой
-  // панели настраивать для этого не нужно — и человек видит знакомый адрес
-  // трекера, а не незнакомый supabase.co.
   return NextResponse.json({
-    link: `${originOf(req)}/reset-password?token_hash=${encodeURIComponent(link.properties.hashed_token)}`,
+    link: link.link,
     email,
     name: assignee.name,
     disabled: membership.status === "disabled",
