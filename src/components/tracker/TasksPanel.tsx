@@ -25,6 +25,7 @@ import { uid } from "@/lib/uid";
 import { sortNames } from "@/lib/peopleOrder";
 import Icon from "./Icon";
 import { isMine } from "@/lib/ownership";
+import { useAuthors } from "@/hooks/useAuthors";
 
 type Term = "short" | "long";
 
@@ -134,12 +135,19 @@ export default function TasksPanel({
   // «Просрочено» — не сортировка и не раздел, а вопрос «что горит»: он
   // задаётся чаще всех прочих фильтров вместе взятых.
   const [onlyOverdue, setOnlyOverdue] = useState(false);
+  // «Только мои поручения». Нужен ровно тогда, когда постановщиков стало
+  // больше одного: иначе половина списка — чужая работа, о которой видно
+  // только то, что она есть.
+  const [onlyMine, setOnlyMine] = useState(false);
   const [filterSection, setFilterSection] = useState("all");
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
   const isMobile = useIsMobile();
   // Кто на задаче — один слой на всю панель: и карточки, и форма
   // читают отсюда, чтобы не заводить по подписке на каждую карточку.
   const participants = useTaskParticipants();
+  // Кто из логинов какой человек: карточка чужого поручения подписывается
+  // именем, а не идентификатором.
+  const authors = useAuthors();
   const ask = useAsk();
   // On a phone the four filter controls cost a third of the screen before
   // a single task is visible, and most days none of them is touched — so
@@ -213,12 +221,19 @@ export default function TasksPanel({
   // Цифра на кнопке считается по всем задачам, а не по отфильтрованным:
   // иначе, включив фильтр, она показывала бы сама себя.
   const overdueCount = tasks.filter((t) => isOverdue(t)).length;
+  // Есть ли вообще чужие поручения. Пока их нет, фильтр «мои» — кнопка,
+  // которая ничего не меняет.
+  const someoneElseAssigns = tasks.some((t) => !mine(t));
+  // Имя постановщика — только у чужого поручения. Своё подписывать своим же
+  // именем значит повторять на каждой карточке то, что и так известно.
+  const authorOf = (t: Task) => (mine(t) ? "" : authors[t.createdBy || ""] || "");
 
   const sectionById = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections]);
 
   const filtered = tasks.filter((t) => {
     if (filterAssignee !== "all" && t.assignee !== filterAssignee) return false;
     if (onlyOverdue && !isOverdue(t)) return false;
+    if (onlyMine && !mine(t)) return false;
     if (filterSection !== "all" && (t.sectionId || "") !== filterSection) return false;
     if (calendarFilterDate && !isTaskDueOnDate(t, new Date(calendarFilterDate + "T00:00:00"))) return false;
     return true;
@@ -505,6 +520,7 @@ export default function TasksPanel({
                 isDragging={draggingTaskId === t.id}
                 justCreated={justCreatedId === t.id}
                 menuItems={isMobile ? menuItemsFor(t) : undefined}
+                authorName={authorOf(t)}
                 dropIndicatorBefore={dropIndicator?.term === term && dropIndicator.beforeId === t.id}
                 onDragStart={(e) => {
                   e.dataTransfer.setData("application/x-task-id", t.id);
@@ -549,6 +565,7 @@ export default function TasksPanel({
                 onOpen={() => setModalState({ open: true, task: t })}
                 justCreated={justCreatedId === t.id}
                 menuItems={isMobile ? menuItemsFor(t) : undefined}
+                authorName={authorOf(t)}
               />
             ))
           )}
@@ -566,7 +583,7 @@ export default function TasksPanel({
       )}
       {extraBanner}
       {(() => {
-        const filtersActive = filterSection !== "all" || filterAssignee !== "all" || onlyOverdue;
+        const filtersActive = filterSection !== "all" || filterAssignee !== "all" || onlyOverdue || onlyMine;
         const collapsed = isMobile && !filtersOpen;
         return (
           // Строки с надписью «ЗАДАЧИ» над этой панелью больше нет: она
@@ -615,6 +632,20 @@ export default function TasksPanel({
               <Icon name="warning" size={14} /> Просрочено
               {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
             </button>
+            {/* Только там, где поручает не один человек: кнопка, которая
+                всегда ничего не меняет, — это кнопка, которую надо объяснять. */}
+            {someoneElseAssigns && (
+              <button
+                type="button"
+                className={"filter-pill" + (onlyMine ? " active" : "")}
+                id="filterMineBtn"
+                aria-pressed={onlyMine}
+                title="Показать только то, что поручили вы"
+                onClick={() => setOnlyMine((v) => !v)}
+              >
+                <Icon name="users" size={14} /> Мои поручения
+              </button>
+            )}
             <button
               type="button"
               className={"filter-pill done" + (showDone ? " active" : "")}

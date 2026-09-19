@@ -23,6 +23,7 @@ export default function TaskCard({
   justCreated,
   dropIndicatorBefore,
   menuItems,
+  authorName,
 }: {
   task: Task;
   section: Section | null;
@@ -43,6 +44,10 @@ export default function TaskCard({
   // a meeting. Shown only on a phone: with a mouse the drag is still there
   // and is faster.
   menuItems?: ActionMenuItem[];
+  // Имя постановщика, когда это НЕ смотрящий. Пусто, пока задачи ставит
+  // один человек, — и тогда пилюли нет вовсе: подпись, которая всегда
+  // одинакова, не говорит ничего.
+  authorName?: string;
 }) {
   const isMobile = useIsMobile();
   const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
@@ -86,6 +91,10 @@ export default function TaskCard({
         <div className="task-title">{task.title}</div>
         <div className="task-meta">
           {section && <span className={"pill pill-section" + (section.kind === "personal" ? " pill-section-personal" : "")}>{section.name}</span>}
+          {/* От кого поручение. Стоит ПЕРЕД исполнителем: «от Игоря →
+              Никите» читается как предложение, а обратный порядок — как
+              ребус. */}
+          {authorName && <span className="pill pill-author">от {authorName}</span>}
           {task.assignee && (
             <div className="task-assignee">
               <span className="arrow">→</span>

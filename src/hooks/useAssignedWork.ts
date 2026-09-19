@@ -31,6 +31,8 @@ export type AssignedTask = {
   rescheduleReason: string | null;
   approvalState: string;
   approvalComment: string;
+  // Кто поручил. Пусто — владелец: у всего, что завёл он, колонка пуста.
+  createdBy: string;
 };
 
 type Row = {
@@ -53,6 +55,7 @@ type Row = {
     approval_state: string | null;
     approval_comment: string | null;
     deleted_at: string | null;
+    created_by: string | null;
   } | null;
 };
 
@@ -77,6 +80,7 @@ function shape(rows: Row[]): AssignedTask[] {
       rescheduleReason: r.reschedule_reason,
       approvalState: r.tasks!.approval_state || "open",
       approvalComment: r.tasks!.approval_comment || "",
+      createdBy: r.tasks!.created_by || "",
     }));
 }
 
@@ -118,7 +122,7 @@ export function useAssignedWork(assigneeId: string) {
         .from("task_participants")
         .select(
           "id, task_id, role, accepted_at, done_at, done_comment, declined_at, decline_reason, reschedule_to, reschedule_reason, " +
-            "tasks(title, description, deadline, priority, status, approval_state, approval_comment, deleted_at)",
+            "tasks(title, description, deadline, priority, status, approval_state, approval_comment, deleted_at, created_by)",
         )
         .eq("assignee_id", assigneeId),
       // Прошедшие встречи руководителю не нужны: голосовать по ним поздно,

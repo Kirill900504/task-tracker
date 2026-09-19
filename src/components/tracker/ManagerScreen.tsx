@@ -14,6 +14,7 @@ import MessengerLink from "@/components/tracker/MessengerLink";
 import ManagerAnswer from "@/components/tracker/ManagerAnswer";
 import ItemChat from "@/components/tracker/ItemChat";
 import Icon from "./Icon";
+import { useAuthors } from "@/hooks/useAuthors";
 
 // Что видит руководитель, когда войдёт по приглашению.
 //
@@ -31,6 +32,7 @@ import Icon from "./Icon";
 export default function ManagerScreen({ assigneeId, name, embedded }: { assigneeId: string; name: string; embedded?: boolean }) {
   const { tasks, meetings, ideas, loading, accept, report, decline, askReschedule, vote, takeIdea } = useAssignedWork(assigneeId);
   const messenger = useMyMessenger(assigneeId);
+  const authors = useAuthors();
   return (
     <ManagerScreenInner
       embedded={embedded}
@@ -46,6 +48,7 @@ export default function ManagerScreen({ assigneeId, name, embedded }: { assignee
       vote={vote}
       takeIdea={(recipientId) => void takeIdea(recipientId)}
       messenger={messenger}
+      authors={authors}
     />
   );
 }
@@ -66,6 +69,7 @@ export function ManagerScreenInner({
   vote,
   takeIdea,
   messenger,
+  authors = {},
 }: {
   // Внутри трекера, а не вместо него: у руководителя теперь полноценный
   // трекер, и это — его раздел «что от меня ждут». Тогда лишними
@@ -89,6 +93,9 @@ export function ManagerScreenInner({
   // Необязателен: половина с логикой проверяется без базы, а подключение
   // мессенджера — это как раз база и сеть.
   messenger?: MessengerState;
+  // Логин постановщика → его имя. Пусто там, где поручает один человек:
+  // подпись, которая всегда одинакова, не говорит ничего.
+  authors?: Record<string, string>;
 }) {
   const router = useRouter();
   const [failed, setFailed] = useState("");
@@ -178,6 +185,10 @@ export function ManagerScreenInner({
           {t.deadline && <span className={"pill pill-date" + (overdue ? " overdue-text" : "")}>{(overdue ? "⚠ просрочено: " : "до ") + fmtDate(t.deadline)}</span>}
           {t.priority === "high" && <span className="pill pill-high">важно</span>}
           {t.role !== "executor" && <span className="pill">{t.role === "coexecutor" ? "соисполнитель" : "наблюдатель"}</span>}
+          {/* Кто поручил. Пока поручал один Кирилл, ответ был очевиден; с
+              четырнадцатью постановщиками «кто мне это дал» — первый вопрос
+              к списку, и отвечать на него молчанием нельзя. */}
+          {authors[t.createdBy] && <span className="pill pill-author">от {authors[t.createdBy]}</span>}
         </div>
 
         {t.approvalState === "returned" && t.approvalComment && (
