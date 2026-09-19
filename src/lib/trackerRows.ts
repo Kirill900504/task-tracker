@@ -223,7 +223,7 @@ export function sameLayout(a: PanelLayout | null | undefined, b: PanelLayout | n
 export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
   left: ["calPanel", "meetingsPanel"],
   center: ["mainCol"],
-  right: ["peoplePanel", "ideasPanel"],
+  right: ["weekPanel", "peoplePanel", "ideasPanel"],
 };
 
 // The owner is in the assignee list so that work can be put on himself —

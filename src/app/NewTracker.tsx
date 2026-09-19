@@ -37,6 +37,7 @@ import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import PeoplePanel from "@/components/tracker/PeoplePanel";
+import WeekPanel from "@/components/tracker/WeekPanel";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
@@ -491,6 +492,14 @@ export default function NewTracker() {
               showToast={toasts.showToast}
             />
           </div>
+        ),
+        weekPanel: (
+          <WeekPanel
+            tasks={tasks}
+            meetings={meetings}
+            onOpenTask={(t) => setOpenExistingTaskId(t.id)}
+            onOpenMeeting={(m) => setOpenExistingMeetingId(m.id)}
+          />
         ),
         peoplePanel: (
           <PeoplePanel tasks={tasks} assignees={assignees} selected={filterAssignee} onSelect={setFilterAssignee} />

@@ -1177,6 +1177,28 @@
   /* Ряд кнопок множественного выбора: те же отступы, что у ChipChoice,
      но выбор не один, поэтому своей разметкой. */
   .chip-row{display:flex; flex-wrap:wrap; gap:6px;}
+  /* Панель «Неделя»: семь дней подряд. Прошедшие гаснут, а не прячутся —
+     иначе в пятницу от недели остаётся огрызок. */
+  .week-day{padding:6px 0; border-bottom:1px solid var(--line-soft);}
+  .week-day:last-child{border-bottom:none;}
+  .week-day.past{opacity:.5;}
+  .week-day.today .week-day-name{color:var(--accent);}
+  .week-day-head{display:flex; align-items:baseline; gap:8px; margin-bottom:4px;}
+  .week-day-name{font-size:12px; font-weight:700; color:var(--ink);}
+  .week-day-date{font-size:11.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums;}
+  .week-day-empty{font-size:12px; color:var(--ink-soft); padding-left:2px;}
+  .week-item{
+    display:flex; align-items:baseline; gap:8px; width:100%; text-align:left;
+    padding:5px 8px; margin-bottom:3px; border:1px solid var(--line-soft);
+    border-radius:var(--radius-sm); background:var(--paper); cursor:pointer;
+    font-family:var(--sans); color:var(--ink); font-size:12.5px; line-height:1.35;
+  }
+  .week-item:hover{border-color:var(--accent);}
+  .week-item.meeting{border-left:3px solid var(--accent);}
+  .week-item.high{border-left:3px solid var(--high);}
+  .week-item-time{flex:none; color:var(--ink-soft); font-variant-numeric:tabular-nums;}
+  .week-item-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .week-item-who{flex:none; color:var(--ink-soft); font-size:11.5px;}
   /* Реплика в поиске: её текст — не заголовок задачи, и выглядеть как
      заголовок ей не надо. Обычным начертанием и в одну строку. */
   .search-hit.said .search-hit-title{font-weight:400; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
