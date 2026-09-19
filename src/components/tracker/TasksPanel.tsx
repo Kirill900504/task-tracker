@@ -218,6 +218,19 @@ export default function TasksPanel({
     if (openExistingTaskId) onOpenExistingHandled?.();
   }
 
+  // Своё или чужое — одно правило на весь трекер (см. lib/ownership).
+  //
+  // Объявлено ЗДЕСЬ, выше первого использования, и переносить ниже нельзя.
+  // Стояло на сто строк ниже, и почти всё сходило с рук: `mine` зовут из
+  // обработчиков и из разметки, а они выполняются, когда тело компонента
+  // уже дошло до конца. Одно-единственное место звало его ПРЯМО в теле —
+  // строка `tasks.some(...)` ниже, — и она падала с «Cannot access 'mine'
+  // before initialization» на каждом рендере, где есть хоть одна задача.
+  // У пустого списка `some` не вызывает обработчик ни разу, поэтому новый
+  // аккаунт работал ровно до первой задачи, а потом трекер не открывался
+  // вовсе. Ни типы, ни линтер этого не видели.
+  const mine = (t: Task | null) => isMine(t, myUserId);
+
   // Цифра на кнопке считается по всем задачам, а не по отфильтрованным:
   // иначе, включив фильтр, она показывала бы сама себя.
   const overdueCount = tasks.filter((t) => isOverdue(t)).length;
@@ -313,9 +326,6 @@ export default function TasksPanel({
     if (filterSection === section.id) setFilterSection("all");
     removeSection(section.id);
   }
-
-  // Своё или чужое — одно правило на весь трекер (см. lib/ownership).
-  const mine = (t: Task | null) => isMine(t, myUserId);
 
   function toggleDone(t: Task) {
     // Чужую задачу нельзя закрыть за постановщика — и, что важнее, нельзя
