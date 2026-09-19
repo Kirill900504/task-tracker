@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { readInput, reviewInput } from "@/lib/apiInput";
 import { chatsFor, replyButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { recordEvent } from "@/lib/itemHistory";
@@ -29,15 +30,9 @@ import { fmtDate } from "@/lib/taskDisplay";
 // TasksPanel) — но теперь обе стороны говорят одно и то же, а значит
 // перезаписать друг друга не могут.
 
-type Body = {
-  action: "approve" | "return" | "force" | "moved" | "kept" | "deadline";
-  taskId: string;
-  comment?: string;
-  // Только для решения по переносу: чью просьбу закрываем и какой срок
-  // поставили.
-  participantId?: string;
-  date?: string | null;
-};
+// Что принимает этот маршрут, описано схемой в lib/apiInput.ts: там же
+// живут и проверка, и тип. Отдельного `type Body` больше нет — два
+// описания одного и того же расходятся, это в проекте случалось трижды.
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -46,8 +41,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
 
-  const body = (await req.json().catch(() => null)) as Body | null;
-  if (!body?.action || !body.taskId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+  const { data: body, error: badInput } = await readInput(req, reviewInput);
+  if (badInput) return badInput;
 
   const admin = createAdminClient();
   const { data: taskRow } = await admin

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { accessLinkInput, readInput } from "@/lib/apiInput";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { originOf, recoveryLink } from "@/lib/recoveryLink";
 
@@ -36,9 +37,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Слишком много ссылок подряд, подождите немного" }, { status: 429 });
   }
 
-  const body = await req.json().catch(() => null);
-  const assigneeId = typeof body?.assigneeId === "string" ? body.assigneeId : "";
-  if (!assigneeId) return NextResponse.json({ error: "Не указан человек" }, { status: 400 });
+  const { data: body, error: badInput } = await readInput(req, accessLinkInput);
+  if (badInput) return badInput;
+  const assigneeId = body.assigneeId;
 
   // Через клиент ПОЛЬЗОВАТЕЛЯ: принадлежность человека доказывает RLS, а не
   // проверка, которую здесь можно однажды забыть дописать.

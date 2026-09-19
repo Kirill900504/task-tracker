@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { forgotPasswordInput, readInput } from "@/lib/apiInput";
 import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { originOf, recoveryLink } from "@/lib/recoveryLink";
@@ -35,9 +36,9 @@ const LIMIT = 5;
 const WINDOW_SECONDS = 900;
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-  if (!email) return NextResponse.json({ error: "Укажите почту" }, { status: 400 });
+  const { data: body, error: badInput } = await readInput(req, forgotPasswordInput);
+  if (badInput) return badInput;
+  const email = body.email;
 
   const admin = createAdminClient();
 

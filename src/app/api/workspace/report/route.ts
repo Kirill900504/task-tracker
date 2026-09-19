@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { readInput, reportInput } from "@/lib/apiInput";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { closeIfEveryoneReported } from "@/lib/colleagueReplies";
 import { canDecline, canReportDone } from "@/lib/taskProgress";
@@ -24,16 +25,6 @@ import type { Notice } from "@/lib/noticeQueue";
 // обязательная причина, переход на приёмку, письмо владельцу — живут в
 // одном месте, а не в двух, и не могут разойтись.
 
-type Body = {
-  action: "accept" | "done" | "decline" | "reschedule" | "vote" | "take_idea";
-  participantId?: string;
-  recipientId?: string;
-  comment?: string;
-  date?: string;
-  response?: "yes" | "no" | "late";
-  round?: number;
-};
-
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -41,8 +32,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
 
-  const body = (await req.json().catch(() => null)) as Body | null;
-  if (!body?.action) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+  const { data: body, error: badInput } = await readInput(req, reportInput);
+  if (badInput) return badInput;
 
   const admin = createAdminClient();
 

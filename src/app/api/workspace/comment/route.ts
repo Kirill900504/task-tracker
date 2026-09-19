@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { commentInput, readInput } from "@/lib/apiInput";
 import { deliverComment } from "@/lib/commentDelivery";
 
 // Сказать остальным, что в обсуждении появилось сообщение.
@@ -27,8 +28,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
 
-  const body = (await req.json().catch(() => null)) as { commentId?: string } | null;
-  if (!body?.commentId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+  const { data: body, error: badInput } = await readInput(req, commentInput);
+  if (badInput) return badInput;
 
   const admin = createAdminClient();
   // Автор берётся из базы, а не из запроса: иначе достаточно прислать чужой
