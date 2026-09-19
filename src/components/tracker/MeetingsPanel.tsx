@@ -4,10 +4,12 @@ import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso, sortMeetingsForList } from "@/lib/calendarLogic";
-import { todayStr } from "@/lib/taskDisplay";
+import { fmtDate, todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import MeetingChip from "./MeetingChip";
 import MeetingModal from "./MeetingModal";
+import DoneListModal from "./DoneListModal";
+import Icon from "./Icon";
 import { useMeetingVotes } from "@/hooks/useMeetingVotes";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import { voteTally } from "@/lib/meetingVotes";
@@ -24,7 +26,6 @@ export default function MeetingsPanel({
   meId = "",
   meetings,
   assignees,
-  showResolved,
   selectedDay,
   actions,
   toasts,
@@ -46,7 +47,6 @@ export default function MeetingsPanel({
   meId?: string;
   meetings: Meeting[];
   assignees: string[];
-  showResolved: boolean;
   selectedDay: string | null;
   actions: {
     saveMeeting: (m: Meeting) => void;
@@ -84,6 +84,8 @@ export default function MeetingsPanel({
   // Быстрый ⇢ в списке при этом никуда не делся: там переносят, ничего не
   // меняя, и два шага вместо одного были бы там потерей.
   const [movingFrom, setMovingFrom] = useState<Meeting | null>(null);
+  // Окно с прошедшими встречами.
+  const [doneOpen, setDoneOpen] = useState(false);
 
   // See TasksPanel's identical pattern: an external open request from a
   // sibling (the calendar's date popover) is treated as an alternate open
@@ -150,7 +152,11 @@ export default function MeetingsPanel({
     onIdeaDropped(ideaId);
   });
 
-  const sorted = sortMeetingsForList(meetings, showResolved);
+  // Список — только то, что впереди. Закрытые и перенесённые смотрят в
+  // отдельном окне по иконке с галочкой: подмешанные сюда, они превращали
+  // список встреч в архив, в котором ближайшая теряется.
+  const sorted = sortMeetingsForList(meetings, false);
+  const resolved = sortMeetingsForList(meetings, true).filter((m) => m.status && m.status !== "planned" && m.status !== "proposed");
 
   function deleteMeeting(m: Meeting) {
     actions.deleteMeeting(m.id);
@@ -262,6 +268,21 @@ export default function MeetingsPanel({
         <div className="panel-title">
           Встречи <span className="count">{sorted.length}</span>
         </div>
+        {/* Иконка завершённых — рядом с «+», а не переключателем в
+            шапке трекера: это вопрос к ЭТОЙ панели, и отвечать на него
+            должна она. */}
+        {resolved.length > 0 && (
+          <button
+            type="button"
+            className="panel-done-btn"
+            id="meetingsDoneBtn"
+            title="Прошедшие и отменённые встречи"
+            onClick={() => setDoneOpen(true)}
+          >
+            <Icon name="check" size={14} />
+            <span className="panel-done-count">{resolved.length}</span>
+          </button>
+        )}
         <button className="btn btn-primary btn-small" id="addMeetingBtn" title="Новая встреча (B)" onClick={() => setModalState({ open: true, meeting: null, prefill: { date: selectedDay ?? todayStr() } })}>
           +
         </button>
@@ -285,6 +306,23 @@ export default function MeetingsPanel({
           ))
         )}
       </div>
+
+      {doneOpen && (
+        <DoneListModal
+          title="Прошедшие встречи"
+          empty="Прошедших встреч пока нет."
+          restoreLabel="В план"
+          items={resolved.map((m) => ({
+            id: m.id,
+            title: m.title,
+            when: fmtDate(m.date) + (m.time ? ", " + m.time : ""),
+            note: m.status === "success" ? m.result || "прошла" : m.status === "no_result" ? "без результата" : m.movedToDate ? "перенесена на " + fmtDate(m.movedToDate) : "",
+            onOpen: () => setModalState({ open: true, meeting: m }),
+            onRestore: isMine(m, myUserId) ? () => setStatus(m, "planned", m.result) : undefined,
+          }))}
+          onClose={() => setDoneOpen(false)}
+        />
+      )}
 
       {modalOpen && (
         <MeetingModal

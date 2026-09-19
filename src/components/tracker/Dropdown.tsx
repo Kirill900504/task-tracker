@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 // Выпадающий список, нарисованный трекером.
 //
@@ -46,21 +47,17 @@ export default function Dropdown({
   const listId = useId();
   const current = options.find((o) => o.value === value);
 
-  // Escape закрывает — тот же уговор, что и у окна вопроса и у карточки
-  // задачи. Щелчок мимо закрывает подложкой (ниже), а не этим обработчиком:
-  // подложка ловит нажатие до того, как оно дойдёт до кнопки под ней, и
-  // список не успевает закрыться и открыться снова тем же щелчком.
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        setOpen(false);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [open]);
+  // Escape закрывает — общим хуком, а не своей копией обработчика. Своя
+  // копия делала то же самое и ровно поэтому была опасна: правило «Esc
+  // закрывает верхнее открытое» держится на том, что все слушают
+  // одинаково, в фазе перехвата и с остановкой события. Одно место,
+  // написавшее это по-своему, ломает всю стопку — а список стоит и внутри
+  // окон.
+  //
+  // Щелчок мимо закрывает подложкой (ниже), а не клавиатурой: подложка
+  // ловит нажатие до того, как оно дойдёт до кнопки под ней, и список не
+  // успевает закрыться и открыться снова тем же щелчком.
+  useEscapeToClose(() => setOpen(false), open);
 
   return (
     <div className={"dd-wrap" + (className ? " " + className : "")} ref={wrapRef}>

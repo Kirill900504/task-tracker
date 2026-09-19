@@ -118,8 +118,9 @@ export default function NewTracker() {
   // calOpen/ideasOpen). They are always on now: he never hid them, and the
   // two buttons were only taking room away from the header.
 
-  // "Показывать завершённые" is one shared toggle for done tasks AND
-  // resolved meetings — see TasksPanel's prop comment.
+  // Четвёртый столбец доски — «Завершённые». Раньше этот же флаг
+  // подмешивал закрытые встречи и вычеркнутые мысли в их панели; теперь у
+  // каждой из них своя иконка и своё окно, а здесь остался ровно столбец.
   const [showDone, setShowDone] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [openTaskRequest, setOpenTaskRequest] = useState<TaskPrefill | null>(null);
@@ -453,7 +454,6 @@ export default function NewTracker() {
             meId={identity.assigneeId}
             meetings={meetings}
             assignees={assignees}
-            showResolved={showDone}
             selectedDay={selectedDate}
             actions={actions}
             toasts={toasts}
@@ -533,7 +533,6 @@ export default function NewTracker() {
           <IdeasPanel
             myUserId={mineOnlyId}
             ideas={ideas}
-            showDone={showDone}
             highlightId={highlightIdeaId}
             actions={actions}
             toasts={toasts}
@@ -606,7 +605,7 @@ export default function NewTracker() {
             onSearch={() => setSearchOpen(true)}
             items={[
               ...(isOwner ? [{ id: "team", label: "👥 Команда", onSelect: () => setTeamOpen(true) }] : []),
-              { id: "done", label: showDone ? "🙈 Скрыть завершённые" : "👁 Показать завершённые", onSelect: () => setShowDone((v) => !v) },
+              { id: "done", label: showDone ? "🙈 Скрыть завершённые задачи" : "👁 Показать завершённые задачи", onSelect: () => setShowDone((v) => !v) },
               ...(notifications.permission !== "unsupported"
                 ? [
                     {

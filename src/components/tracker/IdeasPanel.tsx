@@ -7,6 +7,8 @@ import { isMine } from "@/lib/ownership";
 import { formatIdeaCreatedAt } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
 import IdeaItem from "./IdeaItem";
+import DoneListModal from "./DoneListModal";
+import Icon from "./Icon";
 import type { useToasts } from "@/hooks/useToasts";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
@@ -14,7 +16,6 @@ import MicButton from "./MicButton";
 export default function IdeasPanel({
   myUserId = "",
   ideas,
-  showDone,
   highlightId,
   actions,
   toasts,
@@ -24,7 +25,6 @@ export default function IdeasPanel({
   // Свой auth-id: чужую мысль прислали тебе, а не отдали.
   myUserId?: string;
   ideas: Idea[];
-  showDone: boolean;
   actions: {
     saveIdea: (idea: Idea) => void;
     deleteIdea: (id: string) => void;
@@ -40,7 +40,13 @@ export default function IdeasPanel({
   highlightId?: string | null;
 }) {
   const [text, setText] = useState("");
-  const visible = sortIdeasForList(ideas, showDone);
+  // Окно с вычеркнутыми мыслями.
+  const [doneOpen, setDoneOpen] = useState(false);
+  // В панели — только живые мысли. Вычеркнутые смотрят в отдельном окне
+  // по иконке с галочкой: перечёркнутые строки посреди списка мыслей —
+  // это шум там, где ищут, что записать дальше.
+  const visible = sortIdeasForList(ideas, false);
+  const done = ideas.filter((i) => i.done);
 
   function addText(raw: string) {
     const v = raw.trim();
@@ -63,6 +69,18 @@ export default function IdeasPanel({
         <div className="panel-title">
           Идеи и мысли <span className="count">{visible.length}</span>
         </div>
+        {done.length > 0 && (
+          <button
+            type="button"
+            className="panel-done-btn"
+            id="ideasDoneBtn"
+            title="Вычеркнутые мысли"
+            onClick={() => setDoneOpen(true)}
+          >
+            <Icon name="check" size={14} />
+            <span className="panel-done-count">{done.length}</span>
+          </button>
+        )}
       </div>
       <div className="idea-add">
         <AutoGrowTextarea
@@ -104,6 +122,21 @@ export default function IdeasPanel({
           ))
         )}
       </div>
+
+      {doneOpen && (
+        <DoneListModal
+          title="Вычеркнутые мысли"
+          empty="Вычеркнутых мыслей нет."
+          restoreLabel="Вернуть"
+          items={done.map((idea) => ({
+            id: idea.id,
+            title: idea.text,
+            when: idea.createdAt,
+            onRestore: isMine(idea, myUserId) ? () => actions.saveIdea({ ...idea, done: false, doneAt: "" }) : undefined,
+          }))}
+          onClose={() => setDoneOpen(false)}
+        />
+      )}
     </div>
   );
 }

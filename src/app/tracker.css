@@ -2223,3 +2223,34 @@
     font-size:15px; line-height:1; padding:2px 4px; min-height:24px;
   }
   .section-person-x:hover{color:var(--high);}
+
+  /* Иконка «завершённые» в шапке панели. Зелёная галочка, как просил
+     Кирилл, и цифра рядом — сколько там лежит. Появляется только когда
+     есть что показать: кнопка, открывающая пустоту, это обещание, которое
+     не сдержали. */
+  .panel-done-btn{
+    display:inline-flex; align-items:center; gap:5px; flex:none; cursor:pointer;
+    background:none; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
+    color:var(--success); font:inherit; font-size:12px; font-weight:700;
+    padding:4px 8px; min-height:30px;
+  }
+  .panel-done-btn:hover{border-color:var(--success); background:var(--paper-soft);}
+  .panel-done-count{color:var(--ink-soft); font-weight:600;}
+
+  /* Список завершённого в отдельном окне. */
+  .done-list-modal{max-width:560px;}
+  .done-list{display:flex; flex-direction:column; gap:2px; margin:12px 0 4px;}
+  .done-list-row{
+    display:flex; align-items:center; gap:10px;
+    padding:8px 10px; border-radius:var(--radius-sm);
+  }
+  .done-list-row:hover{background:var(--paper-soft);}
+  .done-list-mark{color:var(--success); display:inline-flex; flex:none;}
+  .done-list-text{
+    flex:1; min-width:0; text-align:left; cursor:pointer;
+    background:none; border:none; font:inherit; color:inherit; padding:0;
+    display:flex; flex-direction:column; gap:2px;
+  }
+  .done-list-text:disabled{cursor:default;}
+  .done-list-title{font-size:13.5px; color:var(--ink); line-height:1.35;}
+  .done-list-note{font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
