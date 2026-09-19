@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createClient } from "@supabase/supabase-js";
 import { pickAnyExecutor } from "./helpers";
 
 // The phone layout is a different tree, not a narrower one — its own header,
@@ -83,6 +84,18 @@ test("a task is finished by swiping the card to the right", async ({ page }) => 
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
 
+  // Дать карточке устояться, и это не перестраховка.
+  //
+  // Только что созданная задача ещё доезжает: сохраняется сама строка,
+  // следом заводится участие, следом приходит realtime и панель
+  // пересчитывает столбцы. Жест, попавший в эту секунду, теряется —
+  // карточку перерисовывают между «повёл» и «отпустил», и отпускание
+  // приходит узлу, которого уже нет в документе. Руке это почти не
+  // грозит (человек не свайпает через сотую долю секунды после
+  // сохранения), а тесту грозит всегда: он именно что мгновенный.
+  await expect(card).not.toHaveClass(/just-created/, { timeout: 10_000 });
+  await page.waitForTimeout(1200);
+
   // Playwright has no touch-drag, so the pointer sequence is dispatched
   // directly — the handlers under test are the ones a real finger reaches.
   await page.evaluate((taskTitle) => {
@@ -96,12 +109,27 @@ test("a task is finished by swiping the card to the right", async ({ page }) => 
     el.dispatchEvent(new PointerEvent("pointerup", { ...base, clientX: rect.left + 200, clientY: rect.top + 24 }));
   }, title);
 
-  // A finished task leaves the open list — that IS the visible result of the
-  // gesture. It is still there under «показать завершённые», now marked done.
+  // Задача уходит из столбца — это видимый результат жеста…
   await expect(card).toHaveCount(0);
-  await page.click("#mobileMoreBtn");
-  await page.click(".export-item:has-text('Показать завершённые')");
-  await expect(page.locator(".task", { hasText: title })).toHaveClass(/done/);
+
+  // …а закрыта ли она на самом деле, спрашивается у базы, а не у экрана.
+  // Раньше проверка шла через «Показать завершённые» и класс на карточке,
+  // и с четырьмя столбцами доски перестала что-либо значить: на телефоне
+  // виден один столбец, и найденная карточка могла оказаться какой
+  // угодно. Свайп отвечает за одно — что задача закрыта; где после этого
+  // рисуется её карточка, проверяют тесты доски.
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  await expect
+    .poll(
+      async () => {
+        const { data } = await admin.from("tasks").select("status").eq("title", title).maybeSingle();
+        return data?.status ?? "";
+      },
+      { timeout: 20_000, message: "свайп должен был закрыть задачу" },
+    )
+    .toBe("done");
 });
 
 test("a thought becomes a task from its own menu — the drag a finger cannot do", async ({ page }) => {
