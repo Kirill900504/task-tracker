@@ -75,7 +75,9 @@ npm run test:bots     # drives both messenger webhooks end to end
 npm run test:workspace  # owner + two throwaway managers against production:
                       # invite, join, a task on two people, review, return,
                       # refusal, meeting revote, idea→task, discussion,
-                      # access revoked, плюс граница миграции 0031. 89 проверок.
+                      # access revoked, граница миграции 0031, потерянный
+                      # доступ (ссылка на новый пароль и «забыли пароль»).
+                      # 101 проверка.
                       # Written 15.09.2026 because nothing covered any of this.
 node --env-file=.env.local scripts/check-assignments.mjs [--fix]
                       # tasks and meetings that LOOK assigned and are not.

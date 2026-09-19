@@ -532,6 +532,63 @@ try {
   const { data: forcedRow } = await admin.from("tasks").select("approval_state, force_closed_by, force_closed_reason, status").eq("id", stuckId).maybeSingle();
   check("и отмечено как волевое", forcedRow?.approval_state === "accepted" && !!forcedRow?.force_closed_by && !!forcedRow?.force_closed_reason, forcedRow);
   check("закрытая волевым — тоже закрыта", forcedRow?.status === "done", forcedRow);
+
+  // ── Потерянный доступ ──────────────────────────────────────────────────
+  //
+  // «Как дать ссылку повторно, если предыдущая утеряна» — вопрос Кирилла от
+  // 19.09.2026, и до того дня ответа на него не было: приглашение вошедшему
+  // отвечает 409 (иначе человек завёл бы себе второй аккаунт мимо своих же
+  // задач), а рядом со строкой «в трекере» не было ни одной кнопки. Здесь
+  // проверяется второй маршрут — тот, что выдаёт ссылку на новый пароль для
+  // ТОГО ЖЕ входа, — и главное в нём: что ссылка ведёт на адрес трекера и
+  // что по ней действительно можно сменить пароль и войти.
+  section("Потерянный доступ");
+
+  const lost = await post(owner, "/api/workspace/access-link", { assigneeId: personA.id });
+  check("владелец получает ссылку для вошедшего", lost.status === 200 && !!lost.body?.link, lost);
+  check("вместе с почтой, под которой человек входит", lost.body?.email === emailA, lost.body?.email);
+  check(
+    "ссылка ведёт на трекер, а не на supabase.co",
+    typeof lost.body?.link === "string" && lost.body.link.startsWith(base + "/reset-password?token_hash="),
+    lost.body?.link,
+  );
+
+  // Человек, у которого входа нет вовсе: ему нужна не эта ссылка, а обычное
+  // приглашение, и маршрут говорит именно это.
+  const { data: personC } = await owner.db.from("assignees").insert({ user_id: owner.id, name: "Тест Безлогинов" }).select("id").single();
+  const noLogin = await post(owner, "/api/workspace/access-link", { assigneeId: personC.id });
+  check("человеку без входа ссылка не выдаётся", noLogin.status === 409, noLogin);
+
+  // Выдавать доступ — право владельца. Руководитель видит людей
+  // пространства, и без явной проверки маршрут выдал бы ссылку любому.
+  const mgrTries = await post(mgrB, "/api/workspace/access-link", { assigneeId: personA.id });
+  check("руководитель ссылку на чужой вход не получает", mgrTries.status !== 200, mgrTries);
+
+  // Ссылка проверяется тем же способом, каким её открывает человек:
+  // одноразовый код меняется на сессию, сессией задаётся новый пароль.
+  const anon = createClient(url, anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const tokenHash = decodeURIComponent(new URL(lost.body.link).searchParams.get("token_hash") || "");
+  const { error: otpError } = await anon.auth.verifyOtp({ type: "recovery", token_hash: tokenHash });
+  check("код из ссылки меняется на сессию", !otpError, otpError?.message);
+  const newPass = "Ws-" + randomUUID().slice(0, 12) + "!Bb2";
+  const { error: setError } = await anon.auth.updateUser({ password: newPass });
+  check("по ней задаётся новый пароль", !setError, setError?.message);
+  const relogin = await createClient(url, anonKey, { auth: { persistSession: false } }).auth.signInWithPassword({
+    email: emailA,
+    password: newPass,
+  });
+  check("с новым паролем вход проходит", !relogin.error && relogin.data?.user?.id === mgrA.id, relogin.error?.message);
+
+  const spent = await anon.auth.verifyOtp({ type: "recovery", token_hash: tokenHash });
+  check("и второй раз та же ссылка не срабатывает", !!spent.error, spent.error?.message);
+
+  // «Забыли пароль?»: ответ обязан быть одинаковым, что бы ни нашлось, —
+  // иначе по нему перебирают, кто в трекере есть.
+  const unknown = await post(null, "/api/workspace/forgot-password", { email: `нет-такой-${Date.now()}@example.invalid` });
+  const known = await post(null, "/api/workspace/forgot-password", { email: emailA });
+  check("«забыли пароль» отвечает 200 незнакомой почте", unknown.status === 200 && unknown.body?.ok === true, unknown);
+  check("и ровно то же самое — знакомой", known.status === 200 && known.body?.message === unknown.body?.message, known);
+  check("без почты — отказ", (await post(null, "/api/workspace/forgot-password", {})).status === 400);
 } catch (e) {
   console.error("\nСценарий оборвался:", e.message);
   failures++;
