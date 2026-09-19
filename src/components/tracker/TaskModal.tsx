@@ -62,7 +62,7 @@ function emptyForm(task: Task | null, prefill?: TaskPrefill) {
     assignee: task?.assignee ?? prefill?.assignee ?? "",
     sectionId: task?.sectionId ?? "",
     priority: task?.priority ?? prefill?.priority ?? "med",
-    term: task?.term ?? prefill?.term ?? "short",
+    term: task?.term ?? "short",
     deadline: task?.deadline ?? prefill?.deadline ?? "",
     recur: task?.recur ?? "none",
     recurWeekday: task?.recurWeekday || "1",
@@ -608,18 +608,14 @@ export default function TaskModal({
               onSelect={(v) => setForm((f) => ({ ...f, priority: v as Task["priority"] }))}
             />
           </div>
-          <div className="field">
-            <label>Срочность</label>
-            <ChipChoice
-              id="fTerm"
-              value={form.term}
-              options={[
-                { value: "short", label: "Краткосрочная" },
-                { value: "long", label: "Долгосрочная" },
-              ]}
-              onSelect={(v) => setForm((f) => ({ ...f, term: v as Task["term"] }))}
-            />
-          </div>
+          {/* Поля «Срочность» здесь больше нет. Слова Кирилла 19.09.2026:
+              «долгосрочные и краткосрочные задачи соединить просто в
+              „Задачи“, критерий краткосрочности или долгосрочности вообще
+              удали». Он прав и по сути: срочность выставлялась руками,
+              задача с ней жила месяцами, и в итоге столбец говорил не о
+              работе, а о том, в каком настроении её заводили. Где задача
+              сейчас — теперь видно по доске, а это выводится из дела, а не
+              из ярлыка (lib/kanban). */}
         </div>
 
         {deadlineField}

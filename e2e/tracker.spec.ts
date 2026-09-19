@@ -335,7 +335,9 @@ test("задача переносится в соседний столбец и 
   await page.click("#saveTaskBtn");
 
   const card = page.locator(".task", { hasText: title });
-  await expect(page.locator("#colShort .task", { hasText: title })).toBeVisible();
+  // Задача поставлена на другого человека, значит она «Новая»: её ещё
+  // никто не взял.
+  await expect(page.locator("#col-new .task", { hasText: title })).toBeVisible();
   await waitForSaved(page);
 
   // В процессе: карточка поднята, на её месте силуэт, столбец-получатель
@@ -347,7 +349,7 @@ test("задача переносится в соседний столбец и 
   await page.mouse.down();
   await page.mouse.move(from.x + 75, from.y + 30, { steps: 5 });
   await page.waitForTimeout(150);
-  const target = (await page.locator("#colLong .task-column-body").boundingBox())!;
+  const target = (await page.locator("#col-work .task-column-body").boundingBox())!;
   await page.mouse.move(target.x + target.width / 2, target.y + 40, { steps: 12 });
   await page.waitForTimeout(300);
 
@@ -357,12 +359,13 @@ test("задача переносится в соседний столбец и 
 
   await page.mouse.up();
 
-  await expect(page.locator("#colLong .task", { hasText: title })).toBeVisible();
-  await expect(page.locator("#colShort .task", { hasText: title })).toHaveCount(0);
-  await waitForSaved(page);
-
-  await page.reload();
-  await expect(page.locator("#colLong .task", { hasText: title })).toBeVisible({ timeout: 20_000 });
+  // И вот главное отличие доски от трёх ящиков: перенос — это действие, а
+  // не перекладывание ярлыка. Взять задачу в работу может только её
+  // исполнитель; постановщик, сделавший это за него, отчитался бы за
+  // другого. Поэтому карточка остаётся на месте, а трекер говорит почему.
+  await expect(page.locator(".toast")).toContainText("Так нельзя");
+  await expect(page.locator("#col-new .task", { hasText: title })).toBeVisible();
+  await expect(page.locator("#col-work .task", { hasText: title })).toHaveCount(0);
 });
 
 // Перестановка ВНУТРИ столбца — и проверка, что экран при этом жив.
@@ -379,17 +382,14 @@ test("задача переставляется внутри столбца, и 
 
   await login(page);
   await page.setViewportSize({ width: 1600, height: 1000 });
-  // Заводятся ДОЛГОСРОЧНЫМИ нарочно: тестовый аккаунт один на весь прогон,
-  // и краткосрочный столбец к этому моменту полон задач соседних тестов —
-  // позиции в нём непредсказуемы, а карточки уходят за нижний край экрана,
-  // куда мышь вести уже нельзя. Долгосрочный трогает только этот тест.
+  // Все три — в столбец «Новые»: задача, поставленная на другого
+  // человека, до его ответа лежит именно там.
   for (const title of titles) {
     await page.click("#newTaskBtn");
     await page.fill("#fTitle", title);
-    await page.locator('#fTerm button[data-value="long"]').click();
     await pickAnyExecutor(page);
     await page.click("#saveTaskBtn");
-    await expect(page.locator("#colLong .task", { hasText: title })).toBeVisible();
+    await expect(page.locator("#col-new .task", { hasText: title })).toBeVisible();
   }
   await waitForSaved(page);
 
@@ -397,8 +397,8 @@ test("задача переставляется внутри столбца, и 
   // один, и в столбце лежат задачи соседних тестов. И порядок берётся
   // фактический, а не порядок создания: сортировка столбца — не «кто
   // раньше завёл», и тест, который это путает, ловит то вверх, то вниз.
-  const mineCard = (title: string) => page.locator("#colLong .task", { hasText: title });
-  const shown = await page.locator("#colLong .task .task-title").allTextContents();
+  const mineCard = (title: string) => page.locator("#col-new .task", { hasText: title });
+  const shown = await page.locator("#col-new .task .task-title").allTextContents();
   const mineShown = titles.slice().sort((x, y) => shown.indexOf(x) - shown.indexOf(y));
   const [upper, lower] = [mineShown[0], mineShown[1]];
 
@@ -427,7 +427,7 @@ test("задача переставляется внутри столбца, и 
 
   // Курсор стоит — значит и список обязан стоять. Если он шевелится сам,
   // это петля, и она уронит страницу через несколько десятков кругов.
-  const order = () => page.evaluate(() => [...document.querySelectorAll("#colLong .task .task-title")].map((el) => el.textContent).join("|"));
+  const order = () => page.evaluate(() => [...document.querySelectorAll("#col-new .task .task-title")].map((el) => el.textContent).join("|"));
   await page.waitForTimeout(400);
   const settled = await order();
   await page.waitForTimeout(600);
@@ -439,7 +439,7 @@ test("задача переставляется внутри столбца, и 
   // Карточка встаёт НА место соседки, а не перед ней: верхняя, брошенная
   // на нижнюю, оказывается ПОД ней. Сравниваются только свои две — чужие
   // задачи в столбце этому не мешают.
-  const after = await page.locator("#colLong .task .task-title").allTextContents();
+  const after = await page.locator("#col-new .task .task-title").allTextContents();
   expect(after.indexOf(lower), "нижняя должна была подняться над верхней").toBeLessThan(after.indexOf(upper));
   // И страница жива — ровно то, что переставало быть правдой.
   await expect(page.locator("#newTaskBtn")).toBeVisible();

@@ -219,3 +219,43 @@ export function refreshRecurringStatuses(tasks: Task[], now: Date = new Date()):
   });
   return { tasks: changed ? next : tasks, changed };
 }
+
+// Три РАБОЧИХ дня до срока — и на карточке появляется восклицательный знак.
+//
+// Просьба Кирилла 19.09.2026: «за три рабочих дня до попадания в просрочку
+// выводить маленькую иконку „восклицательного знака в правом верхнем углу“
+// (выглядеть должно аккуратно и не раздражающе)».
+//
+// Рабочих, а не календарных, и это не придирка: в пятницу «через три дня» —
+// это понедельник, то есть предупреждение приходит ровно тогда, когда
+// сделать уже нечего. Считаются будни между сегодня и сроком; выходные не
+// в счёт, потому что в них не работают.
+//
+// Уже просроченное сюда не попадает: у него свой, более громкий вид, и два
+// сигнала об одном и том же — это шум.
+export const SOON_WORKDAYS = 3;
+
+export function workdaysUntil(deadline: string, now: Date = new Date()): number {
+  if (!deadline) return Number.POSITIVE_INFINITY;
+  const due = new Date(deadline + "T00:00:00");
+  if (Number.isNaN(due.getTime())) return Number.POSITIVE_INFINITY;
+  const from = new Date(now);
+  from.setHours(0, 0, 0, 0);
+  if (due <= from) return 0;
+  let days = 0;
+  const cursor = new Date(from);
+  while (cursor < due) {
+    cursor.setDate(cursor.getDate() + 1);
+    const weekday = cursor.getDay();
+    if (weekday !== 0 && weekday !== 6) days++;
+  }
+  return days;
+}
+
+export function isDueSoon(task: Task, now: Date = new Date()): boolean {
+  if (task.status === "done") return false;
+  if (!task.deadline) return false;
+  if (isOverdue(task, now)) return false;
+  const left = workdaysUntil(task.deadline, now);
+  return left > 0 && left <= SOON_WORKDAYS;
+}

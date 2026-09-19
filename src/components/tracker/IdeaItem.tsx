@@ -31,7 +31,7 @@ export default function IdeaItem({
   // Turning a thought into work used to be a drag — onto a task column or
   // onto a calendar day. A finger cannot do that, so the same two
   // conversions are also a button; the drag still works with a mouse.
-  onConvertToTask: (term: "short" | "long") => void;
+  onConvertToTask: () => void;
   onConvertToMeeting: () => void;
   // Set when the global search sent you here — flashes the item the same
   // way a freshly created task flashes.
@@ -236,8 +236,7 @@ export default function IdeaItem({
           title="Во что превратить"
           onClose={() => setConvertAt(null)}
           items={[
-            { id: "short", label: "В задачи — краткосрочная", icon: "check", onSelect: () => onConvertToTask("short") },
-            { id: "long", label: "В задачи — долгосрочная", icon: "check", onSelect: () => onConvertToTask("long") },
+            { id: "task", label: "Сделать задачей", icon: "check", onSelect: () => onConvertToTask() },
             { id: "meeting", label: "Назначить встречу", icon: "calendar", onSelect: () => onConvertToMeeting() },
           ]}
         />

@@ -118,16 +118,22 @@ test("a thought becomes a task from its own menu — the drag a finger cannot do
   // On a phone the menu is a sheet along the bottom edge, not a dropdown
   // hanging off a 20px icon.
   await expect(page.locator(".action-sheet")).toBeVisible();
-  await page.click(".action-sheet .export-item:has-text('краткосрочная')");
+  await page.click(".action-sheet .export-item:has-text('Сделать задачей')");
 
   // The thought is consumed by the conversion, exactly as it is when it is
   // dragged into a column with a mouse.
   await expect(item).toHaveCount(0);
   await page.click('[data-tab="tasks"]');
-  await expect(page.locator("#colShort .task", { hasText: text })).toBeVisible();
+  await expect(page.locator("#col-new .task", { hasText: text })).toBeVisible();
 });
 
-test("a task is moved between columns and to the top of one from its card menu", async ({ page }) => {
+// Ручной порядок с телефона.
+//
+// Раньше это же меню умело переносить задачу между «краткосрочными» и
+// «долгосрочными». Столбцов с такими названиями больше нет, а столбец
+// доски — это состояние задачи: пунктом меню его не меняют, иначе
+// получилось бы «отчитаться за человека нажатием».
+test("a task is moved to the top of its column from the card menu", async ({ page }) => {
   const title = `E2E меню ${Date.now()}`;
 
   await login(page);
@@ -136,19 +142,12 @@ test("a task is moved between columns and to the top of one from its card menu",
   await page.fill("#fTitle", title);
   await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
-  const card = page.locator("#colShort .task", { hasText: title });
+  const card = page.locator("#col-new .task", { hasText: title });
   await expect(card).toBeVisible();
 
   await card.locator("[data-task-menu]").click();
-  await page.click(".action-sheet .export-item:has-text('В долгосрочные')");
-  await expect(page.locator("#colLong .task", { hasText: title })).toBeVisible();
-  await expect(page.locator("#colShort .task", { hasText: title })).toHaveCount(0);
-
-  // And the hand-ordering that used to need a drag: straight to the top of
-  // the column it now lives in.
-  await page.locator("#colLong .task", { hasText: title }).locator("[data-task-menu]").click();
   await page.click(".action-sheet .export-item:has-text('Наверх списка')");
-  await expect(page.locator("#colLong .task").first()).toContainText(title);
+  await expect(page.locator("#col-new .task").first()).toContainText(title);
 });
 
 test("a notification is closed by its cross on the phone too", async ({ page }) => {

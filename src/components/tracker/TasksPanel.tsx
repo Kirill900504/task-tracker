@@ -1,15 +1,21 @@
 "use client";
 
-// Port of the task columns + toolbar from public/legacy-tracker.js
-// (render(), matchesFilters(), sortFn/rankOf, the modal open/save/delete
-// flow, setupTaskDragDrop()/reorderColumn(), and the idea-drop handlers
-// for elListShort/elListLong).
+// Доска задач: четыре столбца-состояния, фильтры над ними и карточка
+// задачи.
+//
+// Столбцы «Краткосрочные» и «Долгосрочные» отсюда ушли вместе с самим
+// понятием срочности — «критерий краткосрочности или долгосрочности
+// вообще удали». Вместо них настоящий канбан, где столбец отвечает не на
+// «как это назвали», а на «где это сейчас»: правило живёт в lib/kanban.ts,
+// панель только показывает его и разбирает перетаскивание.
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isOverdue, isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
-import { insertBefore, moveWithin } from "@/lib/dndOrder";
-import { useDragState, useDropHandler, type DropTarget } from "./dnd/TrackerDnd";
+import { KANBAN_COLUMNS, columnOf, moveBetween, type KanbanColumn } from "@/lib/kanban";
+import { matchesView, myRoleOn, showsOverdue, type BoardView } from "@/lib/myRole";
+import { moveWithin } from "@/lib/dndOrder";
+import { useDropHandler, type DropTarget } from "./dnd/TrackerDnd";
 import { SortableTask, TaskColumnBody } from "./dnd/SortableTask";
 import TaskCard from "./TaskCard";
 import type { ActionMenuItem } from "./ActionMenu";
@@ -17,7 +23,7 @@ import TaskModal from "./TaskModal";
 import SendMenu from "./SendMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
-import { progressLabel, taskStage } from "@/lib/taskProgress";
+import { progressShort, taskStage } from "@/lib/taskProgress";
 import type { useToasts } from "@/hooks/useToasts";
 import SectionTabs from "./SectionTabs";
 import Dropdown from "./Dropdown";
@@ -27,34 +33,6 @@ import { sortNames } from "@/lib/peopleOrder";
 import Icon from "./Icon";
 import { isMine } from "@/lib/ownership";
 import { useAuthors } from "@/hooks/useAuthors";
-
-type Term = "short" | "long";
-
-// Спорит ли срок со столбцом, в который задачу только что перенесли.
-//
-// Дата и срочность — два разных ответа на «когда»: дата говорит, к какому
-// числу, срочность — в каком темпе этим заниматься. Обычно они согласованы,
-// и как раз поэтому расхождение стоит назвать вслух: долгосрочная задача со
-// сроком через три дня будет висеть в столбце, куда смотрят раз в неделю, а
-// краткосрочная со сроком через полгода — мозолить глаза каждый день.
-// Ничего не исправляется само: сказать — достаточно, решает Кирилл.
-const SOON_DAYS = 14;
-
-function deadlineNote(deadline: string, term: Term): string {
-  if (!deadline) return "";
-  const due = new Date(deadline + "T00:00:00");
-  if (Number.isNaN(due.getTime())) return "";
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const days = Math.round((due.getTime() - today.getTime()) / 86400000);
-  if (term === "long" && days <= SOON_DAYS) {
-    return days < 0 ? "Срок уже прошёл — проверьте, не пора ли его сдвинуть" : `Срок через ${days} дн. — короткий для долгосрочной`;
-  }
-  if (term === "short" && days > SOON_DAYS) {
-    return `Срок через ${days} дн. — долгий для краткосрочной`;
-  }
-  return "";
-}
 
 export default function TasksPanel({
   tasks,
@@ -109,7 +87,7 @@ export default function TasksPanel({
   // A dropped idea becomes a task in whichever column it landed on — the
   // idea's own removal/undo is handled by the parent (NewTracker), which
   // owns both tasks and ideas state.
-  onIdeaDropped: (ideaId: string, term: Term) => void;
+  onIdeaDropped: (ideaId: string) => void;
   // «Назначить встречу» from a card's menu — the phone's version of
   // dragging the task onto a calendar day.
   onTaskToMeeting?: (taskId: string) => void;
@@ -137,10 +115,10 @@ export default function TasksPanel({
   // «Просрочено» — не сортировка и не раздел, а вопрос «что горит»: он
   // задаётся чаще всех прочих фильтров вместе взятых.
   const [onlyOverdue, setOnlyOverdue] = useState(false);
-  // «Только мои поручения». Нужен ровно тогда, когда постановщиков стало
-  // больше одного: иначе половина списка — чужая работа, о которой видно
-  // только то, что она есть.
-  const [onlyMine, setOnlyMine] = useState(false);
+  // Чьи задачи показывает доска: то, что ждут от меня, то, что поручил я,
+  // или всё сразу. Начинается с «Мне» — открыв трекер, человек прежде
+  // всего отвечает за свою работу, а не проверяет чужую.
+  const [view, setView] = useState<BoardView>("mine");
   const [filterSection, setFilterSection] = useState("all");
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
   const isMobile = useIsMobile();
@@ -156,13 +134,15 @@ export default function TasksPanel({
   // they fold away, with a dot on the button when any is actually set.
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Collapsible columns, persisted per column exactly like legacy did
-  // (localStorage key kkt_collapsed_<colId>) so the choice survives reloads.
+  // Свёрнутый столбец помнится между загрузками: доска у каждого своя, и
+  // тот, кто не принимает работу, сворачивает «На приёмке» один раз.
   const [collapsedCols, setCollapsedCols] = useState<Record<string, boolean>>(() => {
     const empty: Record<string, boolean> = {};
     if (typeof localStorage === "undefined") return empty;
     try {
-      return { colShort: localStorage.getItem("kkt_collapsed_colShort") === "1", colLong: localStorage.getItem("kkt_collapsed_colLong") === "1" };
+      const out: Record<string, boolean> = {};
+      for (const c of KANBAN_COLUMNS) out[c.id] = localStorage.getItem("kkt_collapsed_" + c.id) === "1";
+      return out;
     } catch {
       return empty;
     }
@@ -182,10 +162,6 @@ export default function TasksPanel({
   // The card whose «кому отправить» menu is open (phone only — with a
   // mouse the same thing sits in the task's own form).
   const [sendTask, setSendTask] = useState<Task | null>(null);
-
-  // Что сейчас несут и над чем оно висит — отсюда берётся предпросмотр
-  // столбцов: место освобождается ДО того, как карточку отпустили.
-  const { active: dragActive, over: dragOver } = useDragState();
 
   // A sibling (the calendar's date popover) can also request opening the
   // "new task" modal for a specific date — treated as an alternate open
@@ -217,51 +193,69 @@ export default function TasksPanel({
   // вовсе. Ни типы, ни линтер этого не видели.
   const mine = (t: Task | null) => isMine(t, myUserId);
 
-  // Цифра на кнопке считается по всем задачам, а не по отфильтрованным:
-  // иначе, включив фильтр, она показывала бы сама себя.
-  const overdueCount = tasks.filter((t) => isOverdue(t)).length;
-  // Есть ли вообще чужие поручения. Пока их нет, фильтр «мои» — кнопка,
-  // которая ничего не меняет.
-  const someoneElseAssigns = tasks.some((t) => !mine(t));
+  // Моя роль в задаче — один ответ, которым пользуются и цвет карточки, и
+  // фильтр, и подсветка просрочки (см. lib/myRole).
+  const roleOn = (t: Task) => myRoleOn(participants.forTask(t.id), myMemberAssigneeId);
   // Имя постановщика — только у чужого поручения. Своё подписывать своим же
   // именем значит повторять на каждой карточке то, что и так известно.
   const authorOf = (t: Task) => (mine(t) ? "" : authors[t.createdBy || ""] || "");
+
+  // Цифра на кнопке считается по всем задачам, а не по отфильтрованным:
+  // иначе, включив фильтр, она показывала бы сама себя.
+  const overdueCount = tasks.filter((t) => isOverdue(t)).length;
+  // Сколько горит в том, что поручил я. Отдельная цифра, потому что
+  // отдельный вопрос: своё просроченное — «я не успел», чужое — «пора
+  // толкнуть». Стоит на переключателе, а не краской на карточках: у
+  // постановщика четырнадцати человек доска иначе краснеет целиком.
+  const assignedOverdue = tasks.filter((t) => mine(t) && isOverdue(t) && roleOn(t) === "none").length;
+  // Есть ли вообще чужие поручения. Пока их нет, переключатель вида — три
+  // кнопки, две из которых ничего не меняют.
+  const sharedBoard = tasks.some((t) => !mine(t) || roleOn(t) !== "none");
 
   const sectionById = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections]);
 
   const filtered = tasks.filter((t) => {
     if (filterAssignee !== "all" && t.assignee !== filterAssignee) return false;
     if (onlyOverdue && !isOverdue(t)) return false;
-    if (onlyMine && !mine(t)) return false;
+    if (!matchesView(view, t, roleOn(t), myUserId)) return false;
     if (filterSection !== "all" && (t.sectionId || "") !== filterSection) return false;
     if (calendarFilterDate && !isTaskDueOnDate(t, new Date(calendarFilterDate + "T00:00:00"))) return false;
     return true;
   });
-  // На приёмке — это не срок, а состояние, и потому третий столбец, а не
-  // метка внутри первых двух. Задача, по которой отчитались все, ждёт одного
-  // человека — постановщика; пока она лежит вперемешку с теми, которые
-  // делают другие, она теряется среди них, и «отчитался, а он не принял»
-  // становится обычным делом. Здесь у неё своё место, и видно, сколько их.
+
   const stageOf = (t: Task) => taskStage(participants.forTask(t.id), t.approvalState || "open");
-  const openTasks = filtered.filter((t) => t.status !== "done");
-  const onReview = openTasks.filter((t) => stageOf(t) === "awaiting_review").sort(taskSortFn);
-  const reviewIds = new Set(onReview.map((t) => t.id));
-  const shortOpen = openTasks.filter((t) => t.term === "short" && !reviewIds.has(t.id)).sort(taskSortFn);
-  const longOpen = openTasks.filter((t) => t.term === "long" && !reviewIds.has(t.id)).sort(taskSortFn);
-  // Most recently completed first — this list exists to reopen what was just
-  // closed, so closing order beats deadline order. Tasks closed before
-  // completedAt existed have no timestamp; they fall back to deadline and
-  // sort below everything that does have one.
-  const doneList = filtered
-    .filter((t) => t.status === "done")
-    .sort((a, b) => {
-      const ac = a.completedAt || "";
-      const bc = b.completedAt || "";
-      if (ac !== bc) return ac > bc ? -1 : 1;
-      const ad = a.deadline || "";
-      const bd = b.deadline || "";
-      return ad < bd ? 1 : ad > bd ? -1 : 0;
-    });
+
+  // Поставил ли человек эту задачу сам себе. Тогда столбца «Новые» для неё
+  // не существует (см. lib/kanban): ждать ответа не от кого.
+  //
+  // Сравниваются ИМЕНА, а не идентификаторы, и это единственный доступный
+  // здесь способ: автор — это логин (created_by), исполнитель — строка в
+  // списке людей, и связывает их только имя. У владельца created_by пуст,
+  // и его собственное имя — то, что помечено «(я)».
+  const selfName = participants.people.find((x) => x.name.trim().endsWith("(я)"))?.name || "";
+  const selfAssignedOn = (t: Task) => {
+    const executorNames = participants.forTask(t.id).filter((x) => x.role === "executor").map((x) => x.name);
+    if (executorNames.length !== 1) return false;
+    const authorName = t.createdBy ? authors[t.createdBy] || "" : selfName;
+    return !!authorName && authorName === executorNames[0];
+  };
+
+  // Задачи, разложенные по столбцам доски. Считается один раз на отрисовку:
+  // columnOf читает строки участия, и звать его по разу на столбец значило
+  // бы пройти список четырежды.
+  const byColumn: Record<KanbanColumn, Task[]> = { new: [], work: [], review: [], done: [] };
+  for (const t of filtered) byColumn[columnOf(t, participants.forTask(t.id), selfAssignedOn(t))].push(t);
+  for (const id of Object.keys(byColumn) as KanbanColumn[]) byColumn[id].sort(taskSortFn);
+  // Завершённые — свежими вперёд: этот столбец открывают, чтобы вернуть то,
+  // что только что закрыли, и порядок закрытия важнее порядка сроков.
+  byColumn.done.sort((a, b) => {
+    const ac = a.completedAt || "";
+    const bc = b.completedAt || "";
+    if (ac !== bc) return ac > bc ? -1 : 1;
+    const ad = a.deadline || "";
+    const bd = b.deadline || "";
+    return ad < bd ? 1 : ad > bd ? -1 : 0;
+  });
 
   // Новый раздел прямо из строки разделов — тот же вопрос, что и в карточке
   // задачи: сначала название, потом рабочий он или личный.
@@ -347,126 +341,112 @@ export default function TasksPanel({
     });
   }
 
-  // Куда встанет задача: цель говорит и столбец, и соседа, перед которым
-  // вставать. Одна и та же пара считается и для предпросмотра, и для
-  // записи, — иначе они разойдутся (см. lib/dndOrder.ts).
-  function columnTargetOf(target: DropTarget): { term: Term; beforeId: string | null } | null {
-    if (target.kind === "task-column") return { term: target.term as Term, beforeId: null };
-    if (target.kind === "task") return { term: target.term as Term, beforeId: target.id };
+  // Куда положили: столбец и сосед, перед которым вставать.
+  function columnTargetOf(target: DropTarget): { column: KanbanColumn; beforeId: string | null } | null {
+    if (target.kind === "task-column") return { column: target.column, beforeId: null };
+    if (target.kind === "task") return { column: target.column, beforeId: target.id };
     return null;
   }
 
-  function handleTaskDrop(taskId: string, target: DropTarget) {
+  // Перетаскивание на доске — это ДЕЙСТВИЕ, а не перекладывание ярлыка.
+  //
+  // В этом вся разница между доской, которая показывает работу, и доской,
+  // на которой её изображают. Перенести карточку в «В работе» значит
+  // принять задачу; в «На приёмке» — отчитаться; в «Завершённые» — принять
+  // работу. У каждого действия есть тот, кому оно позволено (см.
+  // lib/kanban.moveBetween), и отказ говорится словами, а не молчанием.
+  //
+  // Отчёт и приёмка требуют комментария — правило трекера, а не прихоть
+  // формы, — поэтому вместо мгновенной записи они открывают карточку на
+  // нужном месте. Перетаскивание тут доводит до двери, а не проходит за
+  // человека.
+  async function handleTaskDrop(taskId: string, target: DropTarget) {
     const spot = columnTargetOf(target);
     // Не наш случай: задачу могли бросить на день календаря — это разбирает
     // календарь, у него свой обработчик.
     if (!spot) return;
     const dragged = tasks.find((t) => t.id === taskId);
     if (!dragged) return;
-    // Чужую задачу не переносят: срочность и порядок — свойства самой
-    // задачи, то есть правка, и база откажет молча. Карточка при этом уже
-    // «переехала» бы на экране и вернулась после перезагрузки.
-    if (!mine(dragged)) {
-      toasts.showToast("Это не ваша задача", "Переносить её может только тот, кто поставил.");
+
+    const from = columnOf(dragged, participants.forTask(dragged.id), selfAssignedOn(dragged));
+    const to = spot.column;
+
+    // Внутри столбца — обычная перестановка: порядок принадлежит задаче, и
+    // менять его вправе тот, кто её поставил.
+    if (from === to) {
+      if (!mine(dragged)) {
+        toasts.showToast("Это не ваша задача", "Порядок в столбце меняет тот, кто её поставил.");
+        return;
+      }
+      const ids = byColumn[to].map((t) => t.id);
+      moveWithin(ids, taskId, spot.beforeId).forEach((id, i) => {
+        const t = tasks.find((x) => x.id === id);
+        if (!t || t.manualOrder === i) return;
+        actions.saveTask({ ...t, manualOrder: i });
+      });
       return;
     }
 
-    const term = spot.term;
-    const columnList = term === "short" ? shortOpen : longOpen;
-    const movedColumns = dragged.term !== term;
-    const ids = columnList.map((t) => t.id);
-    // Внутри столбца — перестановка на место соседа, в чужой столбец —
-    // вставка перед ним. Это разные вещи: см. lib/dndOrder.ts.
-    const siblingIds = movedColumns ? insertBefore(ids, taskId, spot.beforeId) : moveWithin(ids, taskId, spot.beforeId);
-
-    siblingIds.forEach((id, i) => {
-      const t = tasks.find((x) => x.id === id);
-      if (!t) return;
-      const changedTerm = id === taskId && t.term !== term;
-      if (t.manualOrder === i && !changedTerm) return;
-      actions.saveTask({ ...t, manualOrder: i, ...(changedTerm ? { term } : {}) });
-    });
-
-    // Смена столбца — с отменой, как и всё остальное, что меняет задачу
-    // одним движением. Промахнуться мышью мимо своего столбца легко, а
-    // понять, куда задача делась, и вернуть её обратно — это уже найти её
-    // глазами в соседнем списке и перетащить назад.
-    //
-    // Перестановка ВНУТРИ столбца тоста не получает: там видно, что
-    // произошло, и ничего не пропадает из виду.
-    if (movedColumns) {
-      const before = dragged;
-      toasts.showToast(
-        term === "long" ? "Задача теперь долгосрочная" : "Задача теперь краткосрочная",
-        // Срок не трогаем: дата — это договорённость с человеком, а не
-        // следствие того, в каком столбце лежит карточка, и молча сдвинуть
-        // её значило бы решить за Кирилла. Но если после переноса срок
-        // спорит со столбцом, об этом стоит сказать — именно это
-        // несоответствие потом читается как «почему долгосрочная горит».
-        deadlineNote(before.deadline, term) || before.title,
-        () => actions.saveTask(before),
-      );
+    const myRole = roleOn(dragged);
+    const move = moveBetween(from, to, { isAuthor: mine(dragged), isExecutor: myRole === "executor" });
+    if (!move) return;
+    if ("refused" in move) {
+      toasts.showToast("Так нельзя", move.refused);
+      return;
     }
+
+    const myRow = participants.forTask(dragged.id).find((p) => p.assigneeId === myMemberAssigneeId);
+
+    if (move.action === "accept") {
+      if (!myRow) return;
+      try {
+        await participants.acceptWork(myRow.id);
+        toasts.showToast("Взяли в работу", dragged.title);
+      } catch (e) {
+        toasts.showToast("Не получилось", e instanceof Error ? e.message : "");
+      }
+      return;
+    }
+
+    if (move.action === "reopen") {
+      // Вернуть закрытую в работу — единственный переход, который не
+      // требует ни слова: он ничего не сообщает людям, а только снимает
+      // галочку, которую сам же постановщик и поставил.
+      const before = dragged;
+      actions.saveTask({ ...dragged, status: "in_progress", lastCompletedOn: "", completedAt: "" });
+      toasts.showToast("Задача снова в работе", dragged.title, () => actions.saveTask(before));
+      return;
+    }
+
+    // «Сделал», «Принять работу», «Вернуть на доработку» — все три требуют
+    // комментария, и спрашивает его карточка. Открываем её: человек уже
+    // сказал, что хочет сделать, осталось сказать словами.
+    setModalState({ open: true, task: dragged });
+    toasts.showToast(
+      move.action === "report" ? "Отчёт — словами" : move.action === "approve" ? "Приёмка — словами" : "Возврат — с причиной",
+      move.action === "report"
+        ? "Напишите, что сделано, в открывшейся карточке."
+        : move.action === "approve"
+          ? "Подтвердите приёмку в открывшейся карточке."
+          : "Напишите, что доделать, в открывшейся карточке.",
+    );
   }
 
   // Мысль, брошенная в столбец задач, становится задачей — это разбирает
   // владелец мыслей, а сюда приходит уже готовым обработчиком.
   function handleIdeaDrop(ideaId: string, target: DropTarget) {
-    const spot = columnTargetOf(target);
-    if (!spot) return;
-    onIdeaDropped(ideaId, spot.term);
+    if (!columnTargetOf(target)) return;
+    onIdeaDropped(ideaId);
   }
 
-  useDropHandler("task", handleTaskDrop);
+  useDropHandler("task", (id, target) => void handleTaskDrop(id, target));
   useDropHandler("idea", handleIdeaDrop);
 
-  // Столбцы, какими их видно ПРЯМО СЕЙЧАС. Пока карточку несут, она уже
-  // стоит на новом месте, а соседи разъехались: это и есть «расступаются,
-  // уступая место», о котором просил Кирилл. Отпускание ничего не двигает
-  // на экране — оно лишь закрепляет то, что человек уже видит.
-  const preview = useMemo(() => {
-    const plain = { short: shortOpen, long: longOpen };
-    if (dragActive?.kind !== "task" || !dragOver) return plain;
-    const spot = dragOver.kind === "task-column" || dragOver.kind === "task" ? columnTargetOf(dragOver) : null;
-    if (!spot) return plain;
-
-    const dragged = tasks.find((t) => t.id === dragActive.id);
-    if (!dragged) return plain;
-
-    // ВНУТРИ своего столбца предпросмотр не трогает список вообще. Сдвиг
-    // соседей там рисует сам sortable — трансформацией, не перестановкой
-    // узлов.
-    //
-    // Это не оптимизация, а лечение зацикливания, от которого у Кирилла
-    // 19.09.2026 приложение падало в белый экран, стоило потянуть
-    // долгосрочную задачу. Петля такая: вставили карточку перед той, над
-    // которой курсор, — под курсором оказалась она сама, — «вставить перед
-    // собой» означает «в конец», карточка уехала вниз, под курсором снова
-    // прежняя соседка, и всё начинается заново. Каждый круг — перерисовка
-    // обоих столбцов, и рендерер умирает за секунды. У меня это не
-    // воспроизводилось ровно потому, что в тестовом столбце лежала одна
-    // карточка: петле не за что зацепиться.
-    if (spot.term === dragged.term) return plain;
-
-    // В ЧУЖОЙ столбец карточка тоже не перепрыгивает — и это второе, что
-    // пришлось исправить после живого опыта. Слова Кирилла: «перескакивает
-    // резко, нервно, когда перетягиваешь задачи между столбиками». Так и
-    // было: карточка исчезала из своего столбца и появлялась в конце
-    // чужого, оба столбца меняли высоту разом, и глазу не за что было
-    // зацепиться.
-    //
-    // Теперь на месте карточки остаётся её силуэт, а в чужом столбце
-    // ПЛАВНО раскрывается место (`.task-drop-slot`, см. TaskColumnBody).
-    // Ничего не переставляется до отпускания — двигается только высота, и
-    // движется она сама, переходом CSS.
-    return plain;
-  }, [shortOpen, longOpen, tasks, dragActive, dragOver]);
-
-  // Ordering by hand is a drag with a mouse, and a finger has no drag at
-  // all. Renumbering the whole column is exactly what handleDrop does, so
-  // both routes leave manualOrder in the same shape.
+  // Ручной порядок — та же перестановка, что мышью, но кнопкой: на телефоне
+  // перетаскивание есть, а точности в нём нет.
   function moveWithinColumn(t: Task, to: "top" | "bottom") {
-    const others = (t.term === "short" ? shortOpen : longOpen).filter((x) => x.id !== t.id).map((x) => x.id);
+    const column = columnOf(t, participants.forTask(t.id), selfAssignedOn(t));
+    const others = byColumn[column].filter((x) => x.id !== t.id).map((x) => x.id);
     const ids = to === "top" ? [t.id, ...others] : [...others, t.id];
     ids.forEach((id, i) => {
       const task = tasks.find((x) => x.id === id);
@@ -476,21 +456,19 @@ export default function TasksPanel({
   }
 
   function menuItemsFor(t: Task): ActionMenuItem[] {
-    // Порядок и срочность — свойства самой задачи, то есть правка. У чужой
-    // задачи остаётся только то, что правкой не является: показать её
-    // коллеге и собрать по ней встречу.
+    // Порядок — свойство самой задачи, то есть правка. У чужой задачи
+    // остаётся только то, что правкой не является: показать её коллеге и
+    // собрать по ней встречу.
+    //
+    // Пункта «в другой столбец» здесь больше нет, и это не пропуск. Столбец
+    // доски — состояние задачи, а не ярлык: перенести её в «В работе»
+    // значит принять, в «На приёмке» — отчитаться. Такие вещи делаются
+    // кнопками в самой карточке, где спрашивают комментарий и где видно,
+    // кому что позволено, а не пунктом меню, который сделал бы это молча.
     const items: ActionMenuItem[] = mine(t)
       ? [
           { id: "top", label: "Наверх списка", icon: "arrow-up", onSelect: () => moveWithinColumn(t, "top") },
           { id: "bottom", label: "В конец списка", icon: "arrow-down", onSelect: () => moveWithinColumn(t, "bottom") },
-          {
-            id: "term",
-            // Moving between columns was also a drag; the modal has the same
-            // field, but this is one tap instead of four.
-            label: t.term === "short" ? "В долгосрочные" : "В краткосрочные",
-            icon: "arrow-right",
-            onSelect: () => actions.saveTask({ ...t, term: t.term === "short" ? "long" : "short", manualOrder: null }),
-          },
         ]
       : [];
     // «Назначить встречу по задаче» переехала сюда из карточки: в самой
@@ -509,75 +487,47 @@ export default function TasksPanel({
     return items;
   }
 
-  function renderColumn(list: Task[], emptyText: string, countLabel: string, term: Term) {
-    const colId = term === "short" ? "colShort" : "colLong";
-    const collapsed = collapsedCols[colId];
+  function renderColumn(column: KanbanColumn) {
+    const meta = KANBAN_COLUMNS.find((c) => c.id === column)!;
+    const list = byColumn[column];
+    const collapsed = collapsedCols[column];
     return (
-      <div className={"column" + (collapsed ? " collapsed" : "")} id={colId}>
-        <div className="section-title" onClick={() => toggleCollapsed(colId)}>
-          {countLabel} <span className="count">{list.length}</span>
+      <div className={"column col-" + column + (collapsed ? " collapsed" : "")} id={"col-" + column} key={column}>
+        <div className="section-title" onClick={() => toggleCollapsed(column)}>
+          {meta.title} <span className="count">{list.length}</span>
           <span className="collapse-arrow">▾</span>
         </div>
-        <TaskColumnBody term={term} ids={list.map((t) => t.id)} empty={list.length === 0}>
+        <TaskColumnBody column={column} ids={list.map((t) => t.id)} empty={list.length === 0}>
           {list.length === 0 ? (
-            <div className="empty">{emptyText}</div>
+            <div className="empty">{meta.empty}</div>
           ) : (
-            list.map((t) => (
-              <SortableTask key={t.id} task={t} term={term} draggable={mine(t)}>
-                {(dragProps, isDragging) => (
-                  <TaskCard
-                    task={t}
-                    section={sectionById.get(t.sectionId) ?? null}
-                    progress={progressLabel(participants.forTask(t.id))}
-                    stage={taskStage(participants.forTask(t.id), t.approvalState || "open")}
-                    onToggleDone={() => toggleDone(t)}
-                    onOpen={() => setModalState({ open: true, task: t })}
-                    isDragging={isDragging}
-                    dragProps={dragProps}
-                    justCreated={justCreatedId === t.id}
-                    menuItems={isMobile ? menuItemsFor(t) : undefined}
-                    authorName={authorOf(t)}
-                  />
-                )}
-              </SortableTask>
-            ))
+            list.map((t) => {
+              const role = roleOn(t);
+              return (
+                <SortableTask key={t.id} task={t} column={column} draggable={mine(t) || role === "executor"}>
+                  {(dragProps, isDragging) => (
+                    <TaskCard
+                      task={t}
+                      section={sectionById.get(t.sectionId) ?? null}
+                      progress={progressShort(participants.forTask(t.id))}
+                      stage={stageOf(t)}
+                      role={role}
+                      outgoing={mine(t) && role === "none" && sharedBoard}
+                      dimOverdue={!showsOverdue(role, view === "assigned")}
+                      onToggleDone={() => toggleDone(t)}
+                      onOpen={() => setModalState({ open: true, task: t })}
+                      isDragging={isDragging}
+                      dragProps={dragProps}
+                      justCreated={justCreatedId === t.id}
+                      menuItems={isMobile ? menuItemsFor(t) : undefined}
+                      authorName={authorOf(t)}
+                    />
+                  )}
+                </SortableTask>
+              );
+            })
           )}
         </TaskColumnBody>
-      </div>
-    );
-  }
-
-  // Столбец приёмки — читать, а не перетаскивать. Перенести сюда карточку
-  // мышью нельзя нарочно: «на приёмке» означает, что все исполнители
-  // отчитались, и объявить это перетаскиванием значило бы отчитаться за них.
-  function renderReviewColumn() {
-    const collapsed = collapsedCols.colReview;
-    return (
-      <div className={"column column-review" + (collapsed ? " collapsed" : "")} id="colReview">
-        <div className="section-title" onClick={() => toggleCollapsed("colReview")}>
-          На приёмку <span className="count">{onReview.length}</span>
-          <span className="collapse-arrow">▾</span>
-        </div>
-        <div>
-          {onReview.length === 0 ? (
-            <div className="empty">Здесь появятся задачи, по которым отчитались все, — их ждёт ваше решение.</div>
-          ) : (
-            onReview.map((t) => (
-              <TaskCard
-                key={t.id}
-                task={t}
-                section={sectionById.get(t.sectionId) ?? null}
-                progress={progressLabel(participants.forTask(t.id))}
-                stage={stageOf(t)}
-                onToggleDone={() => toggleDone(t)}
-                onOpen={() => setModalState({ open: true, task: t })}
-                justCreated={justCreatedId === t.id}
-                menuItems={isMobile ? menuItemsFor(t) : undefined}
-                authorName={authorOf(t)}
-              />
-            ))
-          )}
-        </div>
       </div>
     );
   }
@@ -591,7 +541,7 @@ export default function TasksPanel({
       )}
       {extraBanner}
       {(() => {
-        const filtersActive = filterSection !== "all" || filterAssignee !== "all" || onlyOverdue || onlyMine;
+        const filtersActive = filterSection !== "all" || filterAssignee !== "all" || onlyOverdue || view !== "all";
         const collapsed = isMobile && !filtersOpen;
         return (
           // Строки с надписью «ЗАДАЧИ» над этой панелью больше нет: она
@@ -639,19 +589,39 @@ export default function TasksPanel({
               <Icon name="warning" size={14} /> Просрочено
               {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
             </button>
-            {/* Только там, где поручает не один человек: кнопка, которая
-                всегда ничего не меняет, — это кнопка, которую надо объяснять. */}
-            {someoneElseAssigns && (
-              <button
-                type="button"
-                className={"filter-pill" + (onlyMine ? " active" : "")}
-                id="filterMineBtn"
-                aria-pressed={onlyMine}
-                title="Показать только то, что поручили вы"
-                onClick={() => setOnlyMine((v) => !v)}
-              >
-                <Icon name="users" size={14} /> Мои поручения
-              </button>
+            {/* Мне / Я поручил / Все.
+
+                Это ответ на вопрос Кирилла о том, как выделять задачи, где
+                он постановщик, «среди всего аврала задач, при условии что
+                там будут 14 человек работать». Не цветом: цвет на карточке
+                уже занят ролью и сроком, а третий смысл превратил бы доску
+                в светофор. «Я поручил» — это не свойство задачи, а режим
+                взгляда на неё, и место такому — переключатель, а не краска.
+
+                Появляется только там, где работают вместе: пока поручает и
+                выполняет один человек, все три кнопки показывают одно и то
+                же. */}
+            {sharedBoard && (
+              <div className="view-switch" role="group" aria-label="Чьи задачи показывать">
+                {(
+                  [
+                    ["mine", "Мне"],
+                    ["assigned", "Я поручил"],
+                    ["all", "Все"],
+                  ] as [BoardView, string][]
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={"view-switch-btn" + (view === id ? " active" : "")}
+                    aria-pressed={view === id}
+                    onClick={() => setView(id)}
+                  >
+                    {label}
+                    {id === "assigned" && assignedOverdue > 0 && <span className="filter-pill-count">{assignedOverdue}</span>}
+                  </button>
+                ))}
+              </div>
             )}
             <button
               type="button"
@@ -661,6 +631,7 @@ export default function TasksPanel({
               onClick={() => onShowDoneChange(!showDone)}
             >
               <Icon name="check" size={14} /> Завершённые
+              {showDone && byColumn.done.length > 0 && <span className="filter-pill-count">{byColumn.done.length}</span>}
             </button>
           </div>
         );
@@ -690,36 +661,17 @@ export default function TasksPanel({
         }
       />
 
-      <div className="columns">
-        {renderColumn(preview.short, "Нет краткосрочных задач по текущим фильтрам", "Краткосрочные", "short")}
-        {renderColumn(preview.long, "Нет долгосрочных задач по текущим фильтрам", "Долгосрочные", "long")}
-        {renderReviewColumn()}
+      {/* Доска. Три столбца стоят всегда — это путь задачи, и прятать в
+          нём звено значит прятать шаг работы. Четвёртый, «Завершённые»,
+          открывается кнопкой: слова Кирилла — «тут я теперь хочу, чтобы
+          кнопка завершённые открывала только колонку кан-бана
+          „завершённые“». */}
+      <div className={"columns" + (showDone ? " with-done" : "")}>
+        {renderColumn("new")}
+        {renderColumn("work")}
+        {renderColumn("review")}
+        {showDone && renderColumn("done")}
       </div>
-
-      {showDone && (
-        <div className="done-wrap" id="doneWrap">
-          <div className="section-title">
-            Завершённые <span className="count">{doneList.length}</span>
-          </div>
-          <div>
-            {doneList.length === 0 ? (
-              <div className="empty">Нет завершённых задач по текущим фильтрам</div>
-            ) : (
-              doneList.map((t) => (
-                <TaskCard
-                  key={t.id}
-                  task={t}
-                  section={sectionById.get(t.sectionId) ?? null}
-                  progress={progressLabel(participants.forTask(t.id))}
-                  stage={taskStage(participants.forTask(t.id), t.approvalState || "open")}
-                  onToggleDone={() => toggleDone(t)}
-                  onOpen={() => setModalState({ open: true, task: t })}
-                />
-              ))
-            )}
-          </div>
-        </div>
-      )}
 
       {sendTask && (
         <SendMenu

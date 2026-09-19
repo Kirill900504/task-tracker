@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Task } from "@/types/tracker";
 import {
   isOverdue,
+  isDueSoon,
   isDueToday,
   isDueTodayHighlight,
   mostRecentOccurrence,
@@ -154,5 +155,53 @@ describe("последний срок повтора на датах, котор
   it("обычное число считается по-прежнему", () => {
     expect(mostRecentOccurrence(monthly(15), new Date(2026, 2, 5))).toBe("2026-02-15");
     expect(mostRecentOccurrence(yearly(1, 9), new Date(2026, 2, 5))).toBe("2025-09-01");
+  });
+});
+
+describe("isDueSoon", () => {
+  const base = {
+    id: "t",
+    title: "",
+    desc: "",
+    assignee: "",
+    sectionId: "",
+    priority: "med" as const,
+    term: "short" as const,
+    status: "in_progress" as const,
+    recur: "none" as const,
+    recurWeekday: "",
+    recurMonthday: "",
+    recurYearDay: "",
+    recurYearMonth: "",
+    lastCompletedOn: "",
+    manualOrder: null,
+    completedAt: "",
+  };
+
+  // Понедельник 21.09.2026 — точка отсчёта во всех проверках ниже.
+  const monday = new Date("2026-09-21T09:00:00");
+
+  it("предупреждает за три рабочих дня", () => {
+    expect(isDueSoon({ ...base, deadline: "2026-09-24" }, monday)).toBe(true);
+  });
+
+  it("молчит, когда до срока больше трёх рабочих дней", () => {
+    expect(isDueSoon({ ...base, deadline: "2026-09-25" }, monday)).toBe(false);
+  });
+
+  it("не считает выходные: в пятницу предупреждает о среде", () => {
+    // Пятница 25.09 → среда 30.09 это ровно три рабочих дня (пн, вт, ср),
+    // хотя календарных пять. Календарный счёт молчал бы до вторника.
+    const friday = new Date("2026-09-25T09:00:00");
+    expect(isDueSoon({ ...base, deadline: "2026-09-30" }, friday)).toBe(true);
+  });
+
+  it("не дублирует просрочку", () => {
+    expect(isDueSoon({ ...base, deadline: "2026-09-18" }, monday)).toBe(false);
+  });
+
+  it("молчит у сделанного и у бессрочного", () => {
+    expect(isDueSoon({ ...base, deadline: "2026-09-22", status: "done" }, monday)).toBe(false);
+    expect(isDueSoon({ ...base, deadline: "" }, monday)).toBe(false);
   });
 });

@@ -199,7 +199,7 @@ export default function NewTracker() {
   // Port of convertIdeaToTask()/convertIdeaToMeeting() — the idea's removal
   // and the new item's creation share ONE undo toast, matching legacy
   // exactly (undoing puts the idea back and removes the created item).
-  function convertIdeaToTask(ideaId: string, term: "short" | "long") {
+  function convertIdeaToTask(ideaId: string) {
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
     actions.deleteIdea(idea.id);
@@ -210,7 +210,10 @@ export default function NewTracker() {
       assignee: "",
       sectionId: "",
       priority: idea.important ? "high" : "med",
-      term,
+      // Колонка `term` в базе осталась, но смысла у неё больше нет:
+      // столбец задачи выводится из её состояния (lib/kanban). Пишем
+      // «short», чтобы не оставлять поле пустым в строке.
+      term: "short",
       status: "in_progress",
       deadline: "",
       recur: "none",
@@ -326,7 +329,6 @@ export default function NewTracker() {
         assignee: f.assignee,
         executors: f.executors || [],
         priority: f.priority,
-        term: f.term,
         deadline: f.deadline,
       }),
     prefillNewMeeting: (f) => setOpenMeetingRequest({ title: f.title, date: f.date, time: f.time, participants: f.participants }),

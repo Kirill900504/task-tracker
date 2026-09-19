@@ -47,18 +47,19 @@ import {
 } from "@dnd-kit/core";
 import type { DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import type { KanbanColumn } from "@/lib/kanban";
 
 // Что именно едет под курсором. `kind` — единственное, что маршрутизирует
 // обработку: элементы регистрируют его в `data`, а весь разбор живёт здесь,
 // а не размазан по шести компонентам, как было с dataTransfer.
 export type DragPayload =
-  | { kind: "task"; id: string; term: string }
+  | { kind: "task"; id: string; column: KanbanColumn }
   | { kind: "idea"; id: string; text: string }
   | { kind: "meeting"; id: string; title: string };
 
 export type DropTarget =
-  | { kind: "task-column"; term: string }
-  | { kind: "task"; id: string; term: string }
+  | { kind: "task-column"; column: KanbanColumn }
+  | { kind: "task"; id: string; column: KanbanColumn }
   | { kind: "day"; date: string }
   | { kind: "meetings" };
 
@@ -154,10 +155,10 @@ function trackerCollisions(args: Parameters<typeof pointerWithin>[0]) {
   if (!columnHit) return pointer;
 
   const columnTarget = targetOf(args.droppableContainers.find((c) => c.id === columnHit.id)?.data);
-  const term = columnTarget?.kind === "task-column" ? columnTarget.term : null;
+  const column = columnTarget?.kind === "task-column" ? columnTarget.column : null;
   const cards = args.droppableContainers.filter((c) => {
     const target = targetOf(c.data);
-    return c.id !== args.active.id && target?.kind === "task" && target.term === term;
+    return c.id !== args.active.id && target?.kind === "task" && target.column === column;
   });
   const nearestCard = cards.length ? closestCenter({ ...args, droppableContainers: cards }) : [];
   return nearestCard.length ? nearestCard : [columnHit];

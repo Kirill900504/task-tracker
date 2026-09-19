@@ -373,22 +373,27 @@
   /* Три столбца: срок, срок и состояние. Третий — «На приёмку»; он уже
      двух первых, потому что задача там долго не задерживается, а место
      нужна тем, где работа идёт. */
-  .columns{display:grid; grid-template-columns:1fr 1fr .8fr; gap:18px; align-items:start;}
+  /* Доска. Столбцы равны по ширине: у состояний нет старшинства, и
+     узкая «На приёмке» читалась как второстепенная, хотя ждёт она как раз
+     решения. Четвёртый столбец появляется вместе с «Завершёнными». */
+  .columns{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; align-items:start;}
+  .columns.with-done{grid-template-columns:repeat(4, minmax(0, 1fr));}
   /* Когда трём столбцам тесно, приёмка уходит вниз во всю ширину, а не
      жмётся третьей узкой колонкой под «Краткосрочные»: полоса во всю ширину
      читается как отдельный раздел, а четверть ширины — как обрезанный. */
-  @media (max-width:1150px){ .columns{grid-template-columns:1fr 1fr;} .column-review{grid-column:1 / -1;} }
-  @media (max-width:640px){ .columns{grid-template-columns:1fr;} }
+  @media (max-width:1150px){ .columns, .columns.with-done{grid-template-columns:1fr 1fr;} }
+  @media (max-width:640px){ .columns, .columns.with-done{grid-template-columns:1fr;} }
   /* Safety net for the panel constructor: if the Tasks panel is dragged
      into a narrow zone, fall back to one column based on the PANEL's own
      width rather than the viewport's — a container query, not a media
      query, is what makes that distinction possible. */
-  @container (max-width:480px){ .columns{grid-template-columns:1fr;} }
-  @container (max-width:760px){ .columns{grid-template-columns:1fr 1fr;} .column-review{grid-column:1 / -1;} }
+  @container (max-width:480px){ .columns, .columns.with-done{grid-template-columns:1fr;} }
+  @container (max-width:760px){ .columns, .columns.with-done{grid-template-columns:1fr 1fr;} }
   .column{min-width:0;}
   /* На приёмке ждут решения — столбец помечен тем же цветом, что и сама
      пометка на карточке, чтобы взгляд находил его без чтения заголовка. */
-  .column-review .section-title{color:var(--accent);}
+  .col-review .section-title{color:var(--accent);}
+  .col-done .section-title{color:var(--ink-soft);}
 
   /* Разделы — кнопками под панелью задач. Перенос из выпадающего списка:
      раздел переключают по многу раз подряд, и каждый раз это было открыть,
@@ -444,10 +449,14 @@
 
   .done-wrap{margin-top:26px;}
 
+  /* Кубик доски.
+     Плотнее прежнего: внутри осталось только то, что читают глазом на
+     ходу, — название, имя, срок. Всё остальное живёт в открытой карточке.
+     Отступ слева больше правого: там полоска раздела. */
   .task{
     background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
-    padding:13px 15px; margin-bottom:9px; display:flex; gap:12px; align-items:flex-start;
-    cursor:pointer; min-width:0; position:relative; box-shadow:var(--edge);
+    padding:10px 12px 10px 14px; margin-bottom:8px; display:flex; gap:10px; align-items:flex-start;
+    cursor:pointer; min-width:0; position:relative; box-shadow:var(--edge); overflow:hidden;
     transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
   }
   .task:hover{border-color:var(--accent); box-shadow:var(--shadow-1); transform:translateY(-1px);}
@@ -506,9 +515,54 @@
     .task.dragging{transform:none;}
   }
   .task.done{opacity:.5;}
-  .task.high{background:var(--accent-soft); border-color:var(--accent);}
-  .task.overdue{border-left:4px solid var(--high); background:var(--overdue-bg);}
-  .task.due-today{border-left:4px solid var(--today); background:var(--today-bg);}
+
+  /* ---------- Тон карточки = МОЯ РОЛЬ в задаче -------------------------
+     Слова Кирилла 19.09.2026: «выделенным фирменным цветом должны быть
+     выделены задачи где человек является исполнителем… обычным тёмным
+     тоном должны люди видеть свои задачи, где они соисполнители… и выбери
+     ещё более лёгкий сероватый тон — для задач, где человек просто
+     наблюдатель».
+
+     Приоритет при этом перестал красить карточку целиком: «Высокий» и
+     «моя задача» спорили за один и тот же фон, и выигрывал тот, кто позже
+     в файле. Теперь важность — точка в углу, а фон принадлежит роли.
+     ------------------------------------------------------------------ */
+  .task.role-executor{border-color:var(--accent); background:var(--accent-soft);}
+  .task.role-coexecutor{border-color:var(--line);}
+  .task.role-watcher{opacity:.72; border-color:var(--line-soft); background:var(--paper-soft);}
+  .task.role-watcher .task-title{color:var(--ink-soft); font-weight:600;}
+
+  /* Срок поверх роли — но только там, где он адресован этому человеку
+     (см. lib/myRole.showsOverdue): наблюдателю и постановщику чужая
+     просрочка карточку не красит. */
+  .task.overdue{border-left:3px solid var(--high); background:var(--overdue-bg);}
+  .task.due-today{border-left:3px solid var(--today); background:var(--today-bg);}
+
+  /* Раздел — полоска у самого края, во всю высоту кубика. */
+  .task-section-bar{
+    position:absolute; left:0; top:0; bottom:0; width:3px;
+    background:var(--section-work); border-radius:var(--radius-md) 0 0 var(--radius-md);
+  }
+  .task-section-bar.personal{background:var(--section-personal);}
+
+  /* Верхняя строка: галочка, название, маркеры. */
+  .task-head{display:flex; align-items:flex-start; gap:8px;}
+  .task-marks{display:inline-flex; align-items:center; gap:5px; flex:none; margin-left:auto;}
+  .task-mark{
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:800; line-height:1;
+  }
+  /* Важность — точка. Слово «Высокий» повторялось на каждом втором кубике
+     и стоило целой пилюли. */
+  .task-mark.hot{width:7px; height:7px; border-radius:50%; background:var(--high); margin-top:4px;}
+  .task-mark.outgoing{color:var(--ink-soft); font-size:12px;}
+  /* «!» за три рабочих дня до срока. Приглушённый кружок, а не красный
+     знак: Кирилл просил «аккуратно и не раздражающе», и предупреждение,
+     которое кричит, перестают замечать через неделю. */
+  .task-mark.soon{
+    width:15px; height:15px; border-radius:50%;
+    background:var(--med-bg); color:var(--med); border:1px solid var(--med);
+  }
   .check{
     width:18px; height:18px; border-radius:6px; border:1.5px solid var(--line);
     flex:none; margin-top:2px; cursor:pointer; display:flex; align-items:center; justify-content:center;
@@ -519,13 +573,32 @@
   .check:active{transform:scale(.88);}
   .check.checked{background:var(--accent); border-color:var(--accent);}
   .task-body{flex:1; min-width:0;}
-  .task-title{font-weight:600; font-size:14px; word-break:break-word; overflow-wrap:anywhere; color:var(--ink);}
-  .task.done .task-title{text-decoration:line-through; color:var(--ink-soft);}
-  .task-meta{display:flex; gap:8px; flex-wrap:wrap; margin-top:7px; align-items:center;}
-  .task-assignee{
-    font-size:13px; font-weight:700; color:var(--assignee); white-space:nowrap;
+  /* Название — до двух строк. Третья строка на кубике означает, что
+     название написано абзацем, и читать его всё равно придётся в
+     карточке. */
+  .task-title{
+    font-weight:600; font-size:13.5px; line-height:1.35; color:var(--ink);
+    word-break:break-word; overflow-wrap:anywhere;
+    display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
   }
-  .task-assignee .arrow{color:var(--ink-soft); font-weight:400; margin-right:2px;}
+  .task.done .task-title{text-decoration:line-through; color:var(--ink-soft);}
+  /* Нижняя строка кубика: имя, срок, «1/3». Одним размером и почти одним
+     цветом — это подписи, а не заголовки, и соревноваться им не за что. */
+  .task-meta{
+    display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; align-items:center;
+    font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);
+  }
+  .task-meta:empty{display:none;}
+  .task-assignee{font-weight:700; color:var(--assignee); white-space:nowrap;}
+  .task-from{color:var(--ink-soft);}
+  .task-due{white-space:nowrap;}
+  .task-due.overdue-text{color:var(--high); font-weight:700;}
+  .task-due.due-today-text{color:var(--today); font-weight:700;}
+  .task-recur{color:var(--ink-soft);}
+  .task-progress-short{font-weight:700; color:var(--ink);}
+  .task-state{font-weight:700;}
+  .task-state.blocked{color:var(--high);}
+  .task-state.returned{color:var(--med);}
   .pill{
     /* inline-flex, а не inline-block: в плашке рядом со словом стоит
        контурный значок, и выровнять его по центру строки может только
@@ -2108,3 +2181,22 @@
     color:var(--ink-soft); padding:6px 4px; min-height:32px;
   }
   .people-more:hover{color:var(--accent);}
+
+  /* Мне / Я поручил / Все — один сегментированный переключатель, а не три
+     отдельные кнопки: это один вопрос с тремя ответами, и выглядеть он
+     должен как один орган управления. */
+  .view-switch{
+    display:inline-flex; align-items:stretch; flex:none;
+    border:1px solid var(--line-soft); border-radius:var(--radius-sm);
+    background:var(--paper-soft); overflow:hidden;
+  }
+  .view-switch-btn{
+    cursor:pointer; background:none; border:none; font:inherit;
+    font-size:12.5px; font-weight:600; color:var(--ink-soft);
+    padding:0 11px; min-height:34px; display:inline-flex; align-items:center; gap:6px;
+    border-right:1px solid var(--line-soft);
+  }
+  .view-switch-btn:last-child{border-right:none;}
+  .view-switch-btn:hover{color:var(--ink);}
+  .view-switch-btn.active{background:var(--accent); color:#F3F8FA;}
+  .view-switch-btn.active .filter-pill-count{background:rgba(255,255,255,.22); color:#F3F8FA;}

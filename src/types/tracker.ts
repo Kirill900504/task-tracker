@@ -23,6 +23,12 @@ export interface Task {
   assignee: string;
   sectionId: string;
   priority: Priority;
+  // Колонка из тех времён, когда доска делилась на «краткосрочные» и
+  // «долгосрочные». Критерий убран 19.09.2026 («критерий краткосрочности
+  // или долгосрочности вообще удали»), столбец задачи теперь выводится из
+  // её состояния (lib/kanban). Поле оставлено, потому что колонка в базе
+  // объявлена not null: убирать её значило бы миграцией трогать каждую
+  // строку ради того, что уже никто не читает.
   term: Term;
   status: TaskStatus;
   deadline: string; // YYYY-MM-DD or ""
@@ -113,7 +119,6 @@ export interface TaskPrefill {
   // двоих — это одна задача (см. executors в quickAdd.ts).
   executors?: string[];
   priority?: Priority;
-  term?: Term;
   deadline?: string;
 }
 

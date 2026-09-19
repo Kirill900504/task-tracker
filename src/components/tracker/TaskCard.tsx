@@ -3,18 +3,45 @@
 import { useState } from "react";
 import type { CSSProperties, HTMLAttributes } from "react";
 import type { Section, Task } from "@/types/tracker";
-import { fmtDate, isDueTodayHighlight, isOverdue, priorityClass, priorityLabel, recurLabel } from "@/lib/taskDisplay";
+import { fmtDate, isDueSoon, isDueTodayHighlight, isOverdue, recurLabel } from "@/lib/taskDisplay";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSwipeComplete } from "@/hooks/useSwipeComplete";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
+import type { MyRole } from "@/lib/myRole";
 import type { TaskStage } from "@/lib/taskProgress";
-import Icon from "./Icon";
+
+// Кубик на доске.
+//
+// Переписан 19.09.2026 по разбору Кирилла: «вместо прямоугольников сделать
+// квадраты, убрать лишнюю бесполезную инфу из кубиков задач гуляющих по
+// канбану, подобрать размер шрифтов, маркеры важных пометок, чтоб
+// гармонично смотрелось, УБРАТЬ НЕНУЖНОЕ!»
+//
+// Что ушло и почему:
+//   «Высокий»/«Средний» словом — приоритет теперь точка в углу. Слово
+//     занимало пятую часть ширины, повторялось на каждой карточке и
+//     читалось дольше, чем цвет.
+//   «0 из 2 · ждём: Кирилл, Юра» — на доске осталось «0/2». Имена
+//     помещались через раз, а нужны они в тот момент, когда карточку уже
+//     открыли.
+//   Раздел пилюлей — теперь цветная полоска слева. Раздел важен как
+//     принадлежность, а не как текст: глазом он ищется по цвету.
+//   «на приёмке» пилюлей — столбец доски и так называется «На приёмке».
+//
+// Что добавилось:
+//   роль цветом (см. lib/myRole): исполнителю — фирменный, соисполнителю
+//     обычный тон, наблюдателю приглушённый;
+//   «!» в правом верхнем углу за три рабочих дня до срока;
+//   стрелка ↗ там, где поручение исходящее — моё, отданное другому.
 
 export default function TaskCard({
   task,
   section,
   progress,
   stage,
+  role = "none",
+  outgoing,
+  dimOverdue,
   onToggleDone,
   onOpen,
   isDragging,
@@ -25,11 +52,18 @@ export default function TaskCard({
 }: {
   task: Task;
   section: Section | null;
-  // «2 из 4 · сделали: … · ждём: …» — пусто, пока исполнитель один или
-  // не назначен никто. Считается в TasksPanel, потому что участники живут
-  // отдельным слоем (см. useTaskParticipants).
+  // «1/3» — и только когда исполнителей больше одного (progressShort).
   progress?: string;
+  // Где задача стоит: отсюда берутся «не может» и «на доработке».
   stage?: TaskStage;
+  // Моя роль в этой задаче: она решает, каким тоном нарисован кубик.
+  role?: MyRole;
+  // Это я поручил кому-то. Не цвет, а маленькая стрелка: цвет уже занят
+  // ролью и сроком, и третий смысл превратил бы доску в светофор.
+  outgoing?: boolean;
+  // Просрочка есть, но кричать о ней этому человеку не о чем: он
+  // наблюдатель, или это его собственное поручение другому.
+  dimOverdue?: boolean;
   onToggleDone: () => void;
   onOpen: () => void;
   isDragging?: boolean;
@@ -44,14 +78,10 @@ export default function TaskCard({
     listeners?: Record<string, unknown>;
   };
   justCreated?: boolean;
-  // Everything the card can do that a mouse would do by dragging it —
-  // moving it up the column, sending it to the other column, turning it into
-  // a meeting. Shown only on a phone: with a mouse the drag is still there
-  // and is faster.
+  // Всё, что мышь делает перетаскиванием: поднять карточку выше, собрать по
+  // ней встречу, отправить коллеге. Показывается только на телефоне.
   menuItems?: ActionMenuItem[];
-  // Имя постановщика, когда это НЕ смотрящий. Пусто, пока задачи ставит
-  // один человек, — и тогда пилюли нет вовсе: подпись, которая всегда
-  // одинакова, не говорит ничего.
+  // Имя постановщика, когда поручение пришло от другого человека.
   authorName?: string;
 }) {
   const isMobile = useIsMobile();
@@ -60,8 +90,9 @@ export default function TaskCard({
   // swipe to the right, and reopening it is the same swipe again.
   const swipe = useSwipeComplete(onToggleDone, isMobile);
 
-  const overdue = isOverdue(task);
-  const dueToday = !overdue && isDueTodayHighlight(task);
+  const overdue = isOverdue(task) && !dimOverdue;
+  const dueToday = !overdue && isDueTodayHighlight(task) && !dimOverdue;
+  const soon = !overdue && !dueToday && isDueSoon(task) && !dimOverdue;
 
   const card = (
     <div
@@ -72,7 +103,8 @@ export default function TaskCard({
         (overdue ? " overdue" : "") +
         (dueToday ? " due-today" : "") +
         (isDragging ? " dragging" : "") +
-        (justCreated ? " just-created" : "")
+        (justCreated ? " just-created" : "") +
+        " role-" + role
       }
       data-id={task.id}
       ref={dragProps?.ref}
@@ -85,57 +117,55 @@ export default function TaskCard({
       {...swipe.handlers}
       onClick={onOpen}
     >
-      <div
-        className={"check" + (task.status === "done" ? " checked" : "")}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleDone();
-        }}
-      >
-        {task.status === "done" ? "✓" : ""}
-      </div>
+      {/* Раздел — полоской слева, своим цветом. Текстом он повторялся на
+          каждом кубике и съедал строку. */}
+      {section && <span className={"task-section-bar" + (section.kind === "personal" ? " personal" : "")} title={section.name} />}
+
       <div className="task-body">
-        <div className="task-title">{task.title}</div>
+        <div className="task-head">
+          <div
+            className={"check" + (task.status === "done" ? " checked" : "")}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleDone();
+            }}
+          >
+            {task.status === "done" ? "✓" : ""}
+          </div>
+          <div className="task-title">{task.title}</div>
+          {/* Маркеры угла, в порядке важности. Их не бывает больше двух
+              сразу: «горит» и «просрочено» исключают друг друга. */}
+          <span className="task-marks">
+            {outgoing && <span className="task-mark outgoing" title="Вы поручили это другому">↗</span>}
+            {task.priority === "high" && <span className="task-mark hot" title="Высокий приоритет" />}
+            {soon && (
+              <span className="task-mark soon" title="Срок через три рабочих дня или меньше">
+                !
+              </span>
+            )}
+          </span>
+        </div>
+
         <div className="task-meta">
-          {section && <span className={"pill pill-section" + (section.kind === "personal" ? " pill-section-personal" : "")}>{section.name}</span>}
-          {/* От кого поручение. Стоит ПЕРЕД исполнителем: «от Игоря →
-              Никите» читается как предложение, а обратный порядок — как
-              ребус. */}
-          {authorName && <span className="pill pill-author">от {authorName}</span>}
-          {task.assignee && (
-            <div className="task-assignee">
-              <span className="arrow">→</span>
-              {task.assignee}
-            </div>
-          )}
+          {task.assignee && <span className="task-assignee">{task.assignee}</span>}
+          {authorName && <span className="task-from">от {authorName}</span>}
           {task.deadline && (
-            <span className={"pill pill-date" + (overdue ? " overdue-text" : "") + (dueToday ? " due-today-text" : "")}>
-              {(overdue ? "Просрочено: " : dueToday ? "Сегодня: " : "до ") + fmtDate(task.deadline)}
+            <span className={"task-due" + (overdue ? " overdue-text" : dueToday ? " due-today-text" : "")}>
+              {overdue ? "просрочено " : dueToday ? "сегодня" : ""}
+              {dueToday ? "" : fmtDate(task.deadline)}
             </span>
           )}
-          {!task.deadline && task.recur !== "none" && isDueTodayHighlight(task) && <span className="pill pill-date due-today-text">● Выполнить сегодня</span>}
-          <span className={"pill " + priorityClass(task.priority)}>{priorityLabel(task.priority)}</span>
-          {recurLabel(task) && <span className="pill pill-recur">{recurLabel(task)}</span>}
-          {/* Pressed «Принял» in Telegram — the answer to «взял в работу?»,
-              without having to ask. Dropped once the task is done, where it
-              would only be noise.
-
-              Only where there is one person to speak for. tasks.accepted_at
-              is set by whoever pressed first, so on a task standing on four
-              people this pill read «принял» after one of them — the exact
-              misreading («значит, взяли») that the progress line below is
-              there to prevent. Where that line exists, it is the truth and
-              this pill is not. */}
-          {task.acceptedAt && !progress && task.status !== "done" && <span className="pill pill-accepted"><Icon name="check" size={12} /> принял</span>}
-          {/* Стадия важнее, чем «принял»: «на приёмке» — это очередь
-              Кирилла, «кто-то не может» — остановка, о которой иначе
-              узнаёшь последним. */}
-          {stage === "awaiting_review" && task.status !== "done" && <span className="pill pill-review"><Icon name="eye" size={12} /> на приёмке</span>}
-          {stage === "blocked" && task.status !== "done" && <span className="pill pill-blocked"><Icon name="ban" size={12} /> не может</span>}
-          {stage === "returned" && task.status !== "done" && <span className="pill pill-returned">↩ на доработке</span>}
+          {!task.deadline && task.recur !== "none" && isDueTodayHighlight(task) && <span className="task-due due-today-text">сегодня</span>}
+          {recurLabel(task) && <span className="task-recur">{recurLabel(task)}</span>}
+          {progress && <span className="task-progress-short">{progress}</span>}
+          {/* Два состояния, которых не видно по столбцу: «В работе» стоит и
+              тот, кто взялся, и тот, кто отказался, и тот, кому вернули.
+              Разница между ними — это разница между «идёт» и «стоит». */}
+          {stage === "blocked" && <span className="task-state blocked">не может</span>}
+          {stage === "returned" && <span className="task-state returned">на доработке</span>}
         </div>
-        {progress && <div className="task-progress">{progress}</div>}
       </div>
+
       {isMobile && !!menuItems?.length && (
         <button
           className="task-menu-btn"

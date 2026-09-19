@@ -130,3 +130,18 @@ export function canReportDone(comment: string): boolean {
 export function canDecline(reason: string): boolean {
   return reason.trim().length > 0;
 }
+
+// «1/3» для доски.
+//
+// Полная строка («2 из 4 · сделали: … · ждём: …») осталась там, где задачу
+// читают целиком, — в её карточке. На доске она занимала третью строку и
+// перечисляла имена, которые всё равно не помещались. Кирилл о кубиках
+// канбана сказал прямо: «убрать лишнюю бесполезную инфу… УБРАТЬ НЕНУЖНОЕ!».
+//
+// Пусто, когда исполнитель один: «0/1» не говорит ничего, чего не говорит
+// сама задача, стоящая в столбце «Новые».
+export function progressShort(participants: TaskParticipant[]): string {
+  const p = taskProgress(participants);
+  if (p.total < 2) return "";
+  return `${p.doneCount}/${p.total}`;
+}

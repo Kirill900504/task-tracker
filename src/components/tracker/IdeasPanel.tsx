@@ -34,7 +34,7 @@ export default function IdeasPanel({
   // Conversions live in the parent, which owns both ideas and tasks — the
   // same handlers the drop targets call, so a button and a drag end up
   // doing exactly one thing, undo toast included.
-  onConvertToTask: (ideaId: string, term: "short" | "long") => void;
+  onConvertToTask: (ideaId: string) => void;
   onConvertToMeeting: (ideaId: string) => void;
   // The idea the global search just jumped to, briefly flashed.
   highlightId?: string | null;
@@ -97,7 +97,7 @@ export default function IdeasPanel({
               onToggleImportant={() => actions.saveIdea({ ...idea, important: !idea.important })}
               onEditText={(newText) => actions.saveIdea({ ...idea, text: newText })}
               onDelete={() => deleteIdea(idea)}
-              onConvertToTask={(term) => onConvertToTask(idea.id, term)}
+              onConvertToTask={() => onConvertToTask(idea.id)}
               onConvertToMeeting={() => onConvertToMeeting(idea.id)}
               highlighted={highlightId === idea.id}
             />

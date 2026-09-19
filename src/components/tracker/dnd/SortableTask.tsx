@@ -11,6 +11,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Task } from "@/types/tracker";
+import type { KanbanColumn } from "@/lib/kanban";
 import { useDragState } from "./TrackerDnd";
 
 export type TaskDragProps = {
@@ -21,18 +22,18 @@ export type TaskDragProps = {
 };
 
 export function TaskColumnBody({
-  term,
+  column,
   ids,
   empty,
   children,
 }: {
-  term: string;
+  column: KanbanColumn;
   ids: string[];
   empty: boolean;
   children: ReactNode;
 }) {
   const { active, over } = useDragState();
-  const { setNodeRef } = useDroppable({ id: "col:" + term, data: { target: { kind: "task-column", term } } });
+  const { setNodeRef } = useDroppable({ id: "col:" + column, data: { target: { kind: "task-column", column } } });
 
   // Подсвечивается столбец только тогда, когда в него ДЕЙСТВИТЕЛЬНО что-то
   // несут. Подсветка «просто потому, что курсор пролетел мимо» — это ровно
@@ -42,12 +43,12 @@ export function TaskColumnBody({
   // Считается по ЦЕЛИ, а не по собственному isOver: целью чаще оказывается
   // карточка внутри столбца, а не столбец сам — и столбец, который при этом
   // не подсвечен, говорит «сюда нельзя» ровно там, где можно.
-  const aiming = over?.kind === "task-column" ? over.term === term : over?.kind === "task" ? over.term === term : false;
+  const aiming = over?.kind === "task-column" ? over.column === column : over?.kind === "task" ? over.column === column : false;
   const welcoming = aiming && (active?.kind === "task" || active?.kind === "idea");
   // Место, которое раскрывается под то, что несут из другого столбца.
   // Своя задача его не получает: она и так здесь, и её место — силуэт на
   // прежнем месте.
-  const showSlot = welcoming && (active?.kind === "idea" || (active?.kind === "task" && active.term !== term));
+  const showSlot = welcoming && (active?.kind === "idea" || (active?.kind === "task" && active.column !== column));
 
   return (
     <div ref={setNodeRef} className={"task-column-body" + (welcoming ? " drag-over" : "") + (empty ? " is-empty" : "")}>
@@ -65,12 +66,12 @@ export function TaskColumnBody({
 
 export function SortableTask({
   task,
-  term,
+  column,
   draggable,
   children,
 }: {
   task: Task;
-  term: string;
+  column: KanbanColumn;
   // Чужую задачу перетаскивать нельзя — порядок и срочность её свойства, и
   // база откажет. Запрет стоит ЗДЕСЬ, а не в обработчике сброса: карточка,
   // которая поднимается и не ложится, объясняет ровно столько же, сколько
@@ -81,7 +82,7 @@ export function SortableTask({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     disabled: !draggable,
-    data: { payload: { kind: "task", id: task.id, term }, target: { kind: "task", id: task.id, term } },
+    data: { payload: { kind: "task", id: task.id, column }, target: { kind: "task", id: task.id, column } },
     // Соседи расступаются медленнее и мягче, чем по умолчанию (200 мс и
     // резковатая кривая): «перескакивает резко, нервно» — это в том числе
     // про них. Кривая с длинным хвостом выглядит как «отодвинулся», а не
