@@ -47,6 +47,14 @@ const SECURITY_HEADERS = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
 ];
 const nextConfig: NextConfig = {
+  // Какая это выкладка. Нужно ровно для одного: сообщение о поломке без
+  // версии оставляет открытым вопрос «а это уже с исправлением или ещё
+  // нет», и ответить на него можно только временем сборки на глаз. Vercel
+  // кладёт хеш коммита в переменную окружения сам; локально её нет, и это
+  // честно означает «собрано у себя».
+  env: {
+    NEXT_PUBLIC_RELEASE: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || "локальная сборка",
+  },
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

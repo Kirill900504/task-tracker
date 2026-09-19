@@ -44,6 +44,11 @@ export async function updateSession(request: NextRequest) {
   // значит сессии у него нет и быть не должно. Маршрут отвечает всем
   // одинаково и сам решает, кому и куда слать ссылку.
   if (request.nextUrl.pathname.startsWith("/api/workspace/forgot-password")) return supabaseResponse;
+  // Сообщение о поломке принимается всегда — в том числе от того, кто не
+  // вошёл: страница входа падает так же, как остальные, и именно про такое
+  // падение мы бы не узнали никогда. Маршрут сам разбирается, чья это
+  // сессия, и сам себя ограничивает по частоте.
+  if (request.nextUrl.pathname.startsWith("/api/client-error")) return supabaseResponse;
   // The messengers and the external cron pinger call these with their own
   // secret-token checks, not a browser session — never gate them behind
   // the login redirect. (A missed entry here does not fail loudly: the POST

@@ -401,14 +401,18 @@ test("задача переставляется внутри столбца, и 
   }
   await waitForSaved(page);
 
-  // Тянем СВОЮ карточку на место СВОЕЙ соседки, а не первую попавшуюся:
-  // аккаунт на весь прогон один, и в столбце лежат задачи соседних тестов.
-  // Соседка, а не третья: длинный столбец не помещается на экране целиком,
-  // а мышь не может вести карточку туда, чего не видно.
+  // Тянем СВОИ карточки, а не первые попавшиеся: аккаунт на весь прогон
+  // один, и в столбце лежат задачи соседних тестов. И порядок берётся
+  // фактический, а не порядок создания: сортировка столбца — не «кто
+  // раньше завёл», и тест, который это путает, ловит то вверх, то вниз.
   const mineCard = (title: string) => page.locator("#colShort .task", { hasText: title });
-  await mineCard(titles[0]).scrollIntoViewIfNeeded();
-  const a = (await mineCard(titles[0]).boundingBox())!;
-  const b = (await mineCard(titles[1]).boundingBox())!;
+  const shown = await page.locator("#colShort .task .task-title").allTextContents();
+  const mineShown = titles.slice().sort((x, y) => shown.indexOf(x) - shown.indexOf(y));
+  const [upper, lower] = [mineShown[0], mineShown[1]];
+
+  await mineCard(upper).scrollIntoViewIfNeeded();
+  const a = (await mineCard(upper).boundingBox())!;
+  const b = (await mineCard(lower).boundingBox())!;
 
   await page.mouse.move(a.x + 60, a.y + 20);
   await page.mouse.down();
@@ -431,13 +435,11 @@ test("задача переставляется внутри столбца, и 
   await page.mouse.up();
   await waitForSaved(page);
 
-  // Карточка встаёт НА место соседки, а не перед ней: тянули вниз, значит
-  // из A, B, C получается B, A, C. Проверяется порядок СВОИХ трёх между
-  // собой — чужие задачи в столбце этому не мешают.
+  // Карточка встаёт НА место соседки, а не перед ней: верхняя, брошенная
+  // на нижнюю, оказывается ПОД ней. Сравниваются только свои две — чужие
+  // задачи в столбце этому не мешают.
   const after = await page.locator("#colShort .task .task-title").allTextContents();
-  const place = (title: string) => after.indexOf(title);
-  expect(place(titles[1]), "B должна оказаться выше A").toBeLessThan(place(titles[0]));
-  expect(place(titles[0]), "A должна оказаться выше C").toBeLessThan(place(titles[2]));
+  expect(after.indexOf(lower), "нижняя должна была подняться над верхней").toBeLessThan(after.indexOf(upper));
   // И страница жива — ровно то, что переставало быть правдой.
   await expect(page.locator("#newTaskBtn")).toBeVisible();
 });

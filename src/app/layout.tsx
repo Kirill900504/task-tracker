@@ -3,6 +3,7 @@ import { Manrope } from "next/font/google";
 import "./globals.css";
 import "./tracker.css";
 import RegisterSW from "./registerSW";
+import CrashWatch from "./CrashWatch";
 import AskProvider from "@/components/Ask";
 
 // Self-hosted at build time by next/font (no runtime request, no layout
@@ -34,6 +35,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="ru" className={manrope.variable} suppressHydrationWarning>
       <body suppressHydrationWarning>
         <RegisterSW />
+        {/* Поломка, о которой знает только пострадавший, — это отсутствующий
+            орган чувств: см. lib/crashReport.ts. */}
+        <CrashWatch />
         {/* Вопросы задаёт трекер, а не браузер: окно живёт здесь, чтобы
             быть доступным на любой странице и рисоваться поверх всего. */}
         <AskProvider>{children}</AskProvider>
