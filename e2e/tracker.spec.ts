@@ -329,6 +329,43 @@ test("the layout reset button stays hidden when nothing was rearranged", async (
   await expect(page.locator("#resetLayoutBtn")).toHaveCount(0);
 });
 
+// Цитата в шапке подбирает себе кегль замером (HeaderQuote.tsx), и ошибается
+// этот замер молча: строка либо торчит за край, обрезанная на последнем
+// слове, либо сжимается до нечитаемых десяти пикселей — ровно это Кирилл и
+// прислал снимком 19.09.2026 («опять сжалась»). Ни то, ни другое не
+// обнаруживается ничем, кроме взгляда, поэтому проверяется здесь: на трёх
+// ширинах, где цитата стоит в ряду с кнопками, уходит на свою строку и
+// живёт рядом с переносом шапки.
+test("цитата в шапке не обрезается и не мельчает ни на одной ширине", async ({ page }) => {
+  await login(page);
+
+  for (const width of [1920, 1500, 1280]) {
+    await page.setViewportSize({ width, height: 1000 });
+    // Кегль пересчитывается через ResizeObserver, то есть на следующем
+    // кадре, а не в момент изменения размера.
+    await page.waitForTimeout(600);
+
+    const state = await page.evaluate(() => {
+      const box = document.querySelector(".header-quote");
+      const line = document.querySelector(".hqline");
+      if (!box || !line) return null;
+      return {
+        lineWidth: line.getBoundingClientRect().width,
+        boxWidth: box.clientWidth,
+        size: parseFloat(getComputedStyle(line).fontSize),
+        visible: getComputedStyle(line).visibility !== "hidden",
+      };
+    });
+
+    expect(state, `цитата пропала из шапки на ${width}`).not.toBeNull();
+    expect(state!.visible, `цитата спряталась на ${width}`).toBe(true);
+    // Пол-пикселя допуска: ширины дробные, и равенство «впритык» округляется
+    // в обе стороны.
+    expect(state!.lineWidth, `строка торчит за край на ${width}`).toBeLessThanOrEqual(state!.boxWidth + 0.5);
+    expect(state!.size, `кегль ушёл в нечитаемый на ${width}`).toBeGreaterThanOrEqual(15);
+  }
+});
+
 // Global search: "/" (or the button), type, click a hit — the item's own card
 // opens. Covers the wiring between the overlay and each panel's modal, which
 // is where a search that "finds but cannot open" would break.
