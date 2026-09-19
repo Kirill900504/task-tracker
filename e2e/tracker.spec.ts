@@ -412,7 +412,6 @@ test("задача переставляется внутри столбца, и 
 
   await mineCard(upper).scrollIntoViewIfNeeded();
   const a = (await mineCard(upper).boundingBox())!;
-  const b = (await mineCard(lower).boundingBox())!;
 
   await page.mouse.move(a.x + 60, a.y + 20);
   await page.mouse.down();
@@ -422,7 +421,17 @@ test("задача переставляется внутри столбца, и 
   // выглядит как «порядок не изменился» — и час уходит на поиски причины
   // не там.
   await expect(page.locator(".dnd-card-ghost"), "карточку не удалось взять").toBeVisible();
-  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 10 });
+  // Соседка измеряется ПОСЛЕ того, как карточку взяли: в длинном столбце
+  // (а в общем прогоне он полон задач соседних тестов) страница к этому
+  // моменту могла проехать автопрокруткой, и прямоугольник, снятый заранее,
+  // указывает в пустоту.
+  //
+  // Целимся в нижнюю её часть, а не в середину: пока карточку ведут, соседи
+  // отъезжают, и точка «ровно центр» оказывается там, где соседки уже нет.
+  const b = (await mineCard(lower).boundingBox())!;
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height * 0.8, { steps: 10 });
+  await page.waitForTimeout(200);
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height * 0.85);
 
   // Курсор стоит — значит и список обязан стоять. Если он шевелится сам,
   // это петля, и она уронит страницу через несколько десятков кругов.

@@ -47,6 +47,7 @@ import ManagerScreen from "@/components/tracker/ManagerScreen";
 import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
 import Icon from "@/components/tracker/Icon";
+import { withViewTransition } from "@/lib/viewTransition";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 function formatClock(d: Date): string {
@@ -642,7 +643,9 @@ export default function NewTracker() {
           />
           <MobileShell
             tab={mobileTab}
-            onTabChange={setMobileTab}
+            // Плавно, а не рывком: на телефоне смена вкладки — это весь
+            // экран целиком, и мгновенная подмена читается как перезагрузка.
+            onTabChange={(tab) => withViewTransition(() => setMobileTab(tab))}
             badges={{
               today: todayCount(buildToday(tasks, meetings)),
               meetings: meetings.filter((m) => !m.status || m.status === "planned").length,
