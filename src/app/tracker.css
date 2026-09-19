@@ -1527,7 +1527,11 @@
     /* Карточки под палец */
     .task{padding:14px 12px; margin-bottom:9px;}
     .task-title{font-size:15px;}
-    .check{width:26px; height:26px;}
+    /* Галочка на телефоне: видимая — 26px, а попасть по ней можно с
+       40px. Промах по ней открывает карточку, то есть ошибка стоит
+       окна, и правило «цель касания ≥36px» здесь именно про это. */
+    .check{width:26px; height:26px; position:relative;}
+    .check::before{content:""; position:absolute; inset:-7px;}
     .idea-item{padding:13px 12px;}
     .meeting-chip{padding:13px 12px;}
 
