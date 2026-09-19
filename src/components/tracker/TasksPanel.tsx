@@ -736,6 +736,7 @@ export default function TasksPanel({
       {sectionsOpen && isAdmin && (
         <SectionsModal
           sections={sections}
+          people={participants.people}
           ownerId={ownerId}
           onClose={() => setSectionsOpen(false)}
           onSave={actions.saveSection}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Section } from "@/types/tracker";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import { useSectionAssignees } from "@/hooks/useSectionAssignees";
-import { useTaskParticipants } from "@/hooks/useTaskParticipants";
+import type { PersonOption } from "@/hooks/useTaskParticipants";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
@@ -31,12 +31,20 @@ const ROLE_LABEL: Record<TaskParticipantRole, string> = {
 
 export default function SectionsModal({
   sections,
+  people,
   ownerId,
   onClose,
   onSave,
   onDelete,
 }: {
   sections: Section[];
+  // Список людей приходит пропсом, а не своим хуком, и это не мелочь:
+  // useTaskParticipants открывает realtime-канал с постоянным именем, а
+  // второй такой же канал Supabase не заводит — он падает словами
+  // «cannot add postgres_changes callbacks after subscribe()», и падает
+  // не тихо, а вместе со всем экраном. Панель задач этот хук уже держит;
+  // окну достаточно списка.
+  people: PersonOption[];
   // Чьё пространство: строка привязки заводится в нём, а не в том, откуда
   // нажали. У владельца это он сам.
   ownerId: string;
@@ -46,7 +54,6 @@ export default function SectionsModal({
 }) {
   const ask = useAsk();
   const links = useSectionAssignees();
-  const participants = useTaskParticipants();
   const [openFor, setOpenFor] = useState<string | null>(null);
   const [failed, setFailed] = useState("");
 
@@ -81,7 +88,7 @@ export default function SectionsModal({
   async function addPerson(section: Section) {
     const taken = new Set(links.forSection(section.id).map((r) => r.assigneeId));
     const free = sortByPeopleOrder(
-      participants.people.filter((p) => !taken.has(p.id)),
+      people.filter((p) => !taken.has(p.id)),
       (p) => p.name,
     );
     if (!free.length) {
@@ -122,7 +129,7 @@ export default function SectionsModal({
       {failed && <div className="ms-answer-error">{failed}</div>}
 
       {sorted.map((section) => {
-        const people = links.forSection(section.id);
+        const bound = links.forSection(section.id);
         const open = openFor === section.id;
         return (
           <div key={section.id} className="section-row">
@@ -130,7 +137,7 @@ export default function SectionsModal({
               <span className={"section-dot" + (section.kind === "personal" ? " personal" : "")} />
               <span className="section-row-name">{section.name}</span>
               <span className="section-row-count">
-                {people.length ? `${people.length} чел.` : "никого"}
+                {bound.length ? `${bound.length} чел.` : "никого"}
               </span>
               <button type="button" className="btn btn-small" onClick={() => setOpenFor(open ? null : section.id)}>
                 {open ? "Свернуть" : "Ответственные"}
@@ -148,8 +155,8 @@ export default function SectionsModal({
 
             {open && (
               <div className="section-row-people">
-                {people.map((row) => {
-                  const name = participants.people.find((p) => p.id === row.assigneeId)?.name || "—";
+                {bound.map((row) => {
+                  const name = people.find((p) => p.id === row.assigneeId)?.name || "—";
                   return (
                     <span key={row.id} className="section-person">
                       {name}

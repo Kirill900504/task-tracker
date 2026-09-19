@@ -146,7 +146,19 @@ export function useTaskParticipants() {
     // in the realtime publication.
     const db = createClient();
     const channel = db
-      .channel("task-participants")
+      // Имя канала уникально на каждый вызов хука, и это не украшение.
+      // Supabase отказывается добавлять подписку к каналу, который уже
+      // подписан, — и отказывается ИСКЛЮЧЕНИЕМ: «cannot add
+      // postgres_changes callbacks after subscribe()». Брошенное из
+      // эффекта, оно кладёт весь экран, а не только второе окно. Ровно так
+      // 19.09.2026 падал трекер, стоило открыть окно, которое позвало этот
+      // хук вторым.
+      //
+      // Два канала — не идеал (два потока об одном и том же), и хук
+      // по-прежнему стоит держать в одном месте на панель. Но разница
+      // между «лишняя подписка» и «белый экран» такая, что выбор
+      // очевиден.
+      .channel("task-participants:" + Math.random().toString(36).slice(2))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_participants" }, () => {
         fetchAll().then(({ grouped, people: list }) => {
           if (cancelled) return;
