@@ -2280,3 +2280,19 @@
   }
   .meeting-chip.awaits-recap{border-color:var(--med); background:var(--med-bg);}
   .pill-recap{background:var(--med-bg); color:var(--med); border:1px solid var(--med);}
+
+  /* Полоса столбцов на телефоне. Четыре списка в одну ленту означали бы,
+     что до «На приёмке» надо пролистать всё остальное; здесь виден один
+     столбец, а цифры на кнопках отвечают на «сколько где» сразу. */
+  .board-tabs{display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:8px; -webkit-overflow-scrolling:touch;}
+  .board-tab{
+    flex:none; cursor:pointer; white-space:nowrap; font:inherit;
+    display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 12px;
+    background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:999px;
+    color:var(--ink-soft); font-size:13px; font-weight:600;
+  }
+  .board-tab.active{background:var(--accent); border-color:var(--accent); color:#F3F8FA;}
+  .board-tab-count{font-variant-numeric:var(--nums); opacity:.8;}
+  .columns-single{grid-template-columns:1fr !important;}
+  /* Заголовок столбца на телефоне не нужен: его название уже на кнопке. */
+  @media (max-width:1000px){ .columns-single .section-title{display:none;} }

@@ -63,3 +63,7 @@ scripts/_*
 /desktop/node_modules
 /desktop/dist
 /desktop/smoke-*.png
+
+# Разовые проверочные скрипты: пишутся под конкретный вопрос и живут
+# ровно до ответа на него.
+scripts/.tmp/

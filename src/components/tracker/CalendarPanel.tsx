@@ -100,8 +100,7 @@ export default function CalendarPanel({
     <div className="panel dash-panel" id="calPanel" data-panel-id="calPanel">
       {/* Отдельной строки с надписью «КАЛЕНДАРЬ» больше нет: сетка месяца и
           так ни на что другое не похожа, а строка стоила высоты, которой в
-          рабочем поле всегда не хватает. Ручка перетаскивания переехала в
-          строку месяца — переставлять панели по-прежнему можно. */}
+          рабочем поле всегда не хватает. */}
       <div className="cal-nav">
         <button className="btn btn-small" id="calPrevBtn" onClick={() => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>
           ←

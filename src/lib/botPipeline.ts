@@ -86,7 +86,6 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
       description: String(input.description || ""),
       assignee: String(input.assignee || ""),
       priority: String(input.priority || ""),
-      term: String(input.term || ""),
       deadline: (input.deadline as string) || null,
     });
     const { error } = await ctx.admin.from("tasks").insert(row);

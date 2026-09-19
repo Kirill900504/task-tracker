@@ -459,6 +459,7 @@ export default function TaskModal({
         {task && myPart && (
           <TaskAnswer
             me={myPart}
+            closed={task.status === "done" || task.approvalState === "accepted"}
             deadline={task.deadline || ""}
             returnedComment={task.approvalState === "returned" ? task.approvalComment || "" : ""}
             onAccept={() => onAcceptWork?.(myPart.id) ?? Promise.resolve()}

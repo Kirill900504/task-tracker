@@ -43,7 +43,6 @@ function taskLine(t: TaskRow, today: string): string {
   if (t.deadline) bits.push(isOverdue(t, today) ? `ПРОСРОЧЕНО с ${t.deadline}` : `срок ${t.deadline}`);
   if (t.recur && t.recur !== "none") bits.push("повторяется");
   if ((t as TaskRow & { priority?: string }).priority === "high") bits.push("высокий приоритет");
-  if ((t as TaskRow & { term?: string }).term === "long") bits.push("долгосрочная");
   return `- ${t.title}${bits.length ? " (" + bits.join(", ") + ")" : ""}`;
 }
 

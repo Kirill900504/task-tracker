@@ -90,9 +90,15 @@ export default function TaskCard({
   // swipe to the right, and reopening it is the same swipe again.
   const swipe = useSwipeComplete(onToggleDone, isMobile);
 
-  const overdue = isOverdue(task) && !dimOverdue;
-  const dueToday = !overdue && isDueTodayHighlight(task) && !dimOverdue;
-  const soon = !overdue && !dueToday && isDueSoon(task) && !dimOverdue;
+  // Просрочка есть или нет — вопрос к задаче; кричать о ней этому
+  // человеку или нет — вопрос к его роли (см. lib/myRole). Поэтому две
+  // величины, а не одна: заливку получает тот, кого срок касается, а
+  // красную дату — все, потому что иначе «горит» ничем не отличается от
+  // «идёт».
+  const late = isOverdue(task);
+  const overdue = late && !dimOverdue;
+  const dueToday = !late && isDueTodayHighlight(task) && !dimOverdue;
+  const soon = !late && !dueToday && isDueSoon(task) && !dimOverdue;
 
   const card = (
     <div
@@ -150,8 +156,8 @@ export default function TaskCard({
           {task.assignee && <span className="task-assignee">{task.assignee}</span>}
           {authorName && <span className="task-from">от {authorName}</span>}
           {task.deadline && (
-            <span className={"task-due" + (overdue ? " overdue-text" : dueToday ? " due-today-text" : "")}>
-              {overdue ? "просрочено " : dueToday ? "сегодня" : ""}
+            <span className={"task-due" + (late ? " overdue-text" : dueToday ? " due-today-text" : "")}>
+              {late ? "просрочено " : dueToday ? "сегодня" : ""}
               {dueToday ? "" : fmtDate(task.deadline)}
             </span>
           )}

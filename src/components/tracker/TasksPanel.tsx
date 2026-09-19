@@ -122,12 +122,19 @@ export default function TasksPanel({
   // задаётся чаще всех прочих фильтров вместе взятых.
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   // Чьи задачи показывает доска: то, что ждут от меня, то, что поручил я,
-  // или всё сразу. Начинается с «Мне» — открыв трекер, человек прежде
-  // всего отвечает за свою работу, а не проверяет чужую.
-  const [view, setView] = useState<BoardView>("mine");
+  // или всё сразу.
+  //
+  // Начинается с «Все», и это не безразличие к порядку: у руководителя
+  // «все» и означает «моё и то, что я поручил» — больше ему база не
+  // покажет, — а у владельца доска, открывшаяся на «Мне», спрятала бы
+  // всё, что он поручил другим. Сужают взгляд по необходимости, а не по
+  // умолчанию.
+  const [view, setView] = useState<BoardView>("all");
   const [filterSection, setFilterSection] = useState("all");
   // Окно «Разделы»: названия, ответственные, удаление. Только у админа.
   const [sectionsOpen, setSectionsOpen] = useState(false);
+  // Какой столбец доски показан на телефоне.
+  const [mobileColumn, setMobileColumn] = useState<KanbanColumn>("new");
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
   const isMobile = useIsMobile();
   // Кто на задаче — один слой на всю панель: и карточки, и форма
@@ -228,7 +235,7 @@ export default function TasksPanel({
   const filtered = tasks.filter((t) => {
     if (filterAssignee !== "all" && t.assignee !== filterAssignee) return false;
     if (onlyOverdue && !isOverdue(t)) return false;
-    if (!matchesView(view, t, roleOn(t), myUserId)) return false;
+    if (sharedBoard && !matchesView(view, t, roleOn(t), myUserId)) return false;
     if (filterSection !== "all" && (t.sectionId || "") !== filterSection) return false;
     if (calendarFilterDate && !isTaskDueOnDate(t, new Date(calendarFilterDate + "T00:00:00"))) return false;
     return true;
@@ -499,6 +506,12 @@ export default function TasksPanel({
     return items;
   }
 
+  // «Завершённые» появляются в полосе только вместе с кнопкой, которая их
+  // открывает, — и если выбранный столбец исчез, показываем «Новые», а не
+  // пустоту от несуществующего столбца.
+  const visibleColumns: KanbanColumn[] = showDone ? ["new", "work", "review", "done"] : ["new", "work", "review"];
+  const shownColumn: KanbanColumn = visibleColumns.includes(mobileColumn) ? mobileColumn : "new";
+
   function renderColumn(column: KanbanColumn) {
     const meta = KANBAN_COLUMNS.find((c) => c.id === column)!;
     const list = byColumn[column];
@@ -525,7 +538,7 @@ export default function TasksPanel({
                       stage={stageOf(t)}
                       role={role}
                       outgoing={mine(t) && role === "none" && sharedBoard}
-                      dimOverdue={!showsOverdue(role, view === "assigned")}
+                      dimOverdue={!showsOverdue(role, !sharedBoard || view === "assigned")}
                       onToggleDone={() => toggleDone(t)}
                       onOpen={() => setModalState({ open: true, task: t })}
                       isDragging={isDragging}
@@ -558,7 +571,7 @@ export default function TasksPanel({
         return (
           // Строки с надписью «ЗАДАЧИ» над этой панелью больше нет: она
           // ничего не объясняла (задачи ни с чем не спутать) и стоила
-          // высоты. Ручка перетаскивания живёт здесь же, слева от кнопки.
+          // высоты.
           <div className={"toolbar" + (collapsed ? " collapsed" : "")}>
             <button className="btn btn-primary" id="newTaskBtn" title="Новая задача (N)" onClick={() => setModalState({ open: true, task: null })}>
               + Новая задача
@@ -677,13 +690,42 @@ export default function TasksPanel({
           нём звено значит прятать шаг работы. Четвёртый, «Завершённые»,
           открывается кнопкой: слова Кирилла — «тут я теперь хочу, чтобы
           кнопка завершённые открывала только колонку кан-бана
-          „завершённые“». */}
-      <div className={"columns" + (showDone ? " with-done" : "")}>
-        {renderColumn("new")}
-        {renderColumn("work")}
-        {renderColumn("review")}
-        {showDone && renderColumn("done")}
-      </div>
+          „завершённые“».
+
+          На телефоне столбцы не встают друг под друга: четыре списка в
+          одну ленту означают, что до «На приёмке» надо пролистать всё
+          остальное. Там доска показывает один столбец, выбранный полосой
+          кнопок, — и цифры на кнопках заодно отвечают на «сколько где»,
+          не открывая ничего. */}
+      {isMobile ? (
+        <>
+          <div className="board-tabs" role="group" aria-label="Столбец доски">
+            {visibleColumns.map((id) => {
+              const meta = KANBAN_COLUMNS.find((c) => c.id === id)!;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={"board-tab" + (mobileColumn === id ? " active" : "")}
+                  aria-pressed={mobileColumn === id}
+                  onClick={() => setMobileColumn(id)}
+                >
+                  {meta.title}
+                  <span className="board-tab-count">{byColumn[id].length}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="columns columns-single">{renderColumn(shownColumn)}</div>
+        </>
+      ) : (
+        <div className={"columns" + (showDone ? " with-done" : "")}>
+          {renderColumn("new")}
+          {renderColumn("work")}
+          {renderColumn("review")}
+          {showDone && renderColumn("done")}
+        </div>
+      )}
 
       {sectionsOpen && isAdmin && (
         <SectionsModal

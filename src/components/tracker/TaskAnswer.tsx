@@ -32,6 +32,7 @@ type Pending = "done" | "decline" | "move" | null;
 
 export default function TaskAnswer({
   me,
+  closed,
   deadline,
   returnedComment,
   onAccept,
@@ -41,6 +42,10 @@ export default function TaskAnswer({
 }: {
   // Моя строка участия в этой задаче. Пусто — меня на ней нет.
   me: Participant | null;
+  // Задача закрыта: работу приняли или закрыли принудительно. Отвечать
+  // больше не по чему, и кнопка «Сделал» на закрытой задаче — это
+  // предложение сделать то, о чём уже договорились.
+  closed?: boolean;
   deadline: string;
   // Комментарий постановщика, если задачу вернули на доработку: это первое,
   // что человек должен прочитать, открыв её снова.
@@ -55,6 +60,7 @@ export default function TaskAnswer({
   const [failed, setFailed] = useState("");
 
   if (!me || me.role !== "executor") return null;
+  if (closed && !me.doneAt && !me.declinedAt) return null;
 
   // Ответ может не уйти — сеть или отказ сервера. Промолчать здесь значит
   // оставить человека в уверенности, что он отчитался, а постановщика — в
@@ -150,7 +156,7 @@ export default function TaskAnswer({
         />
       )}
 
-      {!pending && !reported && (
+      {!pending && !reported && !closed && (
         <div className="ms-actions">
           {!me.acceptedAt && !declined && (
             <button type="button" className="btn btn-small btn-primary" disabled={busy} onClick={() => void run(onAccept)}>
