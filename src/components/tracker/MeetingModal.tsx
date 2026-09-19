@@ -7,6 +7,8 @@ import { useState } from "react";
 import { useColleagues } from "@/hooks/useColleagues";
 import SendMenu from "./SendMenu";
 import ItemChat from "./ItemChat";
+import MeetingAnswer from "./MeetingAnswer";
+import type { MeetingVoteRow } from "@/hooks/useMeetingVotes";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
 import { isSelfAssignee, sanitizeAssigneeList } from "@/lib/trackerRows";
@@ -50,6 +52,8 @@ export default function MeetingModal({
   canPropose = false,
   canConfirm = false,
   isMove,
+  myVote = null,
+  onAnswer,
 }: {
   meeting: Meeting | null;
   prefill?: MeetingPrefill;
@@ -75,6 +79,10 @@ export default function MeetingModal({
   // заголовок обязан подтвердить, что происходит именно это, — иначе
   // выглядит так, будто нажатие завело вторую встречу вдобавок к первой.
   isMove?: boolean;
+  // Моя строка голосования по этой встрече, если меня позвали. Пусто —
+  // встреча меня не касается, и отвечать не на что.
+  myVote?: MeetingVoteRow | null;
+  onAnswer?: (response: "yes" | "no" | "late", reason: string) => Promise<void>;
 }) {
   const isEditing = !!meeting;
   const [date, setDate] = useState(meeting?.date ?? prefill?.date ?? "");
@@ -168,6 +176,10 @@ export default function MeetingModal({
             «кто» здесь — факт, который читают, а меняются они переносом:
             перенос заводит НОВУЮ встречу, которую снова рассылают и снова
             голосуют, и вот в ней и время, и состав открыты. */}
+        {/* Первым — то, чего ждут от вас: ответить «буду» или «не смогу».
+            Ниже — всё остальное, что о встрече известно. */}
+        {isEditing && myVote && onAnswer && !resolved && <MeetingAnswer me={myVote} onAnswer={onAnswer} />}
+
         {isEditing ? (
           <div className="field meeting-facts">
             <label>Встреча</label>

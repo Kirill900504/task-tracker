@@ -38,6 +38,11 @@ export const reportInput = z.object({
   action: z.enum(["accept", "done", "decline", "reschedule", "vote", "take_idea"]),
   participantId: UUID.optional(),
   recipientId: UUID.optional(),
+  // «Взять в работу» из самого трекера знает мысль, а не строку рассылки:
+  // строк рассылки в трекере нет вовсе, их видит только бот. Сервер сам
+  // найдёт мою строку у этой мысли — и тем самым проверит, что её мне
+  // действительно присылали.
+  ideaId: ID.optional(),
   comment: z.string().max(4000).optional(),
   date: ISO_DATE.optional(),
   response: z.enum(["yes", "no", "late"]).optional(),

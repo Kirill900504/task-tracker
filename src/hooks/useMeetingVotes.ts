@@ -151,5 +151,29 @@ export function useMeetingVotes() {
 
   const forMeeting = useCallback((meetingId: string) => byMeeting[meetingId] || [], [byMeeting]);
 
-  return { forMeeting, sync, bumpRound, reload };
+  // Свой ответ на встречу: «буду», «опоздаю», «не смогу».
+  //
+  // Через тот же серверный маршрут, что и кнопки в мессенджере, и по той же
+  // причине: маршрут проверяет, что строка твоя, требует причину у отказа
+  // (миграция 0023 забрала это право у браузера) и говорит организатору.
+  // Раньше отвечать из трекера можно было только на отдельном экране «Что
+  // от вас ждут»; теперь — в самой встрече, где её и читают.
+  const answer = useCallback(
+    async (participantId: string, response: "yes" | "no" | "late", reason: string) => {
+      const res = await fetch("/api/workspace/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "vote", participantId, response, comment: reason }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.error) {
+        await reload();
+        throw new Error(data?.error || "Не получилось ответить");
+      }
+      await reload();
+    },
+    [reload],
+  );
+
+  return { forMeeting, sync, bumpRound, answer, reload };
 }

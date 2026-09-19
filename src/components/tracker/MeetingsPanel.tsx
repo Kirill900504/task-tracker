@@ -22,6 +22,7 @@ import { useDragState, useDropHandler } from "./dnd/TrackerDnd";
 
 export default function MeetingsPanel({
   myUserId = "",
+  meId = "",
   meetings,
   assignees,
   showResolved,
@@ -43,6 +44,9 @@ export default function MeetingsPanel({
   // это не право её закрывать, переносить и удалять — база откажет молча
   // (миграция 0019). Пусто у владельца: в его пространстве всё его.
   myUserId?: string;
+  // Моя строка в списке людей: по ней во встрече находится мой голос и
+  // появляются кнопки «Буду / Опоздаю / Не смогу».
+  meId?: string;
   meetings: Meeting[];
   assignees: string[];
   showResolved: boolean;
@@ -299,6 +303,18 @@ export default function MeetingsPanel({
           canEdit={isMine(modalMeeting, myUserId)}
           canPropose={!!myUserId}
           canConfirm={!myUserId}
+          // Моя строка голосования: по ней в карточке появляются «Буду /
+          // Опоздаю / Не смогу». Раньше они были только на отдельном экране.
+          myVote={modalMeeting ? votes.forMeeting(modalMeeting.id).find((v) => v.assigneeId === meId) || null : null}
+          onAnswer={(response, reason) =>
+            modalMeeting
+              ? votes.answer(
+                  votes.forMeeting(modalMeeting.id).find((v) => v.assigneeId === meId)?.id || "",
+                  response,
+                  reason,
+                )
+              : Promise.resolve()
+          }
           prefill={modalPrefill}
           assignees={assignees}
           onSave={handleModalSave}

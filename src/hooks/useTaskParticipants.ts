@@ -334,6 +334,50 @@ export function useTaskParticipants() {
     [load],
   );
 
+  // ---- Ответ исполнителя --------------------------------------------
+  //
+  // «Принял», «Сделал», «Не могу», «Прошу перенос» — то, что раньше жило на
+  // отдельном экране «Что от вас ждут». Экрана больше нет: отвечают там же,
+  // где задачу читают, — в её карточке. Слова Кирилла 19.09.2026 об этом
+  // экране: «супер не удобный для использования… у всех пользователей окно
+  // должно сразу быть как у меня».
+  //
+  // Маршрут тот же самый, что и у кнопок в мессенджере. Это не экономия
+  // кода: обязательный комментарий, обязательная причина, переход на
+  // приёмку и сообщение постановщику — правила, и вторая их копия разошлась
+  // бы с первой (так уже было, см. комментарий в самом маршруте).
+  const answer = useCallback(
+    async (payload: Record<string, unknown>) => {
+      const res = await fetch("/api/workspace/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.error) {
+        await load();
+        throw new Error(data?.error || "Не получилось отправить ответ");
+      }
+      await load();
+    },
+    [load],
+  );
+
+  const acceptWork = useCallback((participantId: string) => answer({ action: "accept", participantId }), [answer]);
+  const reportWork = useCallback(
+    (participantId: string, comment: string) => answer({ action: "done", participantId, comment }),
+    [answer],
+  );
+  const declineWork = useCallback(
+    (participantId: string, reason: string) => answer({ action: "decline", participantId, comment: reason }),
+    [answer],
+  );
+  const askReschedule = useCallback(
+    (participantId: string, to: string, reason: string) =>
+      answer({ action: "reschedule", participantId, date: to || null, comment: reason }),
+    [answer],
+  );
+
   const approve = useCallback((taskId: string, comment: string) => review("approve", taskId, comment), [review]);
   const returnForRework = useCallback((taskId: string, comment: string) => review("return", taskId, comment), [review]);
   const forceClose = useCallback((taskId: string, reason: string) => review("force", taskId, reason), [review]);
@@ -351,7 +395,45 @@ export function useTaskParticipants() {
   );
 
   return useMemo(
-    () => ({ loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, waitForPerson, decideReschedule, approve, returnForRework, forceClose, reload: load }),
-    [loading, people, forTask, availableFor, add, attachOnCreate, setRole, remove, waitForPerson, decideReschedule, approve, returnForRework, forceClose, load],
+    () => ({
+      loading,
+      people,
+      forTask,
+      availableFor,
+      add,
+      attachOnCreate,
+      setRole,
+      remove,
+      waitForPerson,
+      decideReschedule,
+      approve,
+      returnForRework,
+      forceClose,
+      acceptWork,
+      reportWork,
+      declineWork,
+      askReschedule,
+      reload: load,
+    }),
+    [
+      loading,
+      people,
+      forTask,
+      availableFor,
+      add,
+      attachOnCreate,
+      setRole,
+      remove,
+      waitForPerson,
+      decideReschedule,
+      approve,
+      returnForRework,
+      forceClose,
+      acceptWork,
+      reportWork,
+      declineWork,
+      askReschedule,
+      load,
+    ],
   );
 }

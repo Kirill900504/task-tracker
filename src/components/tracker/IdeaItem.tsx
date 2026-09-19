@@ -43,6 +43,7 @@ export default function IdeaItem({
   const [pickerAt, setPickerAt] = useState<DOMRect | null>(null);
   const [convertAt, setConvertAt] = useState<DOMRect | null>(null);
   const [sendNote, setSendNote] = useState("");
+  const [taking, setTaking] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(idea.text);
   // Мысль берут и несут: в столбец задач, на день календаря, в список
@@ -63,6 +64,26 @@ export default function IdeaItem({
   function noteResult(message: string) {
     setSendNote(message);
     if (!message.startsWith("Отправляю")) setTimeout(() => setSendNote(""), 4000);
+  }
+
+  // Присланная мысль становится задачей на меня. Ответ маршрута показывается
+  // здесь же, под самой мыслью: результат принадлежит той кнопке, которую
+  // нажали, а не низу панели.
+  async function takeIntoWork() {
+    setTaking(true);
+    try {
+      const res = await fetch("/api/workspace/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "take_idea", ideaId: idea.id }),
+      });
+      const data = await res.json().catch(() => null);
+      noteResult(!res.ok || !data || data.error ? data?.error || "Не получилось взять в работу" : "Готово — задача заведена на вас");
+    } catch {
+      noteResult("Не получилось взять в работу");
+    } finally {
+      setTaking(false);
+    }
   }
 
   function startEdit() {
@@ -175,6 +196,26 @@ export default function IdeaItem({
         >
           🚩
         </button>
+        {/* Чужая мысль, присланная мне: единственное, что с ней можно
+            сделать, — взять в работу. Заводить себе задачу из браузера
+            нельзя (в свою задачу исполнителем себя не впишешь — писать в
+            task_participants вправе владелец пространства), поэтому идёт
+            это тем же серверным маршрутом, что и кнопка под сообщением
+            бота. Раньше кнопка была только там и на экране «Что от вас
+            ждут», которого больше нет. */}
+        {!canEdit && !idea.done && (
+          <button
+            className="idea-take"
+            title="Завести себе задачу из этой мысли"
+            disabled={taking}
+            onClick={(e) => {
+              e.stopPropagation();
+              void takeIntoWork();
+            }}
+          >
+            {taking ? "…" : "＋ В работу"}
+          </button>
+        )}
         {canEdit && (
           <button
             className="idea-del"

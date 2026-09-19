@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { isSelfAssignee } from "@/lib/trackerRows";
 
 // Кто именно смотрит на трекер: владелец или руководитель.
 //
@@ -37,6 +38,14 @@ export type WorkspaceIdentity = {
   memberRole: MemberRole;
   // The assignees row this login is, inside the owner's workspace — the
   // bridge between "who is signed in" and "whose name is on the task".
+  //
+  // У владельца членства нет, и до сих пор здесь было пусто. Но задачи
+  // ставят и ему — с тех пор как руководители работают в паритете, это
+  // обычное дело, — а значит и ему нужно знать, какая строка в списке
+  // людей его собственная: без неё в карточке не появятся «Принял» и
+  // «Сделал». Его строка помечена «(я)»; она для того в списке и стоит.
+  // Ответ один на весь трекер и считается здесь, а не в каждой панели
+  // по-своему — по той же причине, по которой один ответ у isMine.
   assigneeId: string;
   name: string;
   ownerId: string;
@@ -90,12 +99,16 @@ export function useWorkspaceRole(): WorkspaceIdentity {
           role: string | null;
           assignees: { name: string } | { name: string }[] | null;
         } | null;
-        return { userId, member };
+        if (member) return { userId, member, selfAssigneeId: "" };
+        // Владелец: своя строка в списке людей — та, что помечена «(я)».
+        const { data: mine } = await db.from("assignees").select("id, name").eq("user_id", userId);
+        const self = (mine || []).find((r) => isSelfAssignee((r.name as string) || ""));
+        return { userId, member, selfAssigneeId: (self?.id as string) || "" };
       })
       .then((found) => {
         if (cancelled) return;
         if (found) {
-          const { userId, member } = found;
+          const { userId, member, selfAssigneeId } = found;
           if (member) {
             const a = member.assignees;
             // Роль, которой в базе нет или которой там быть не должно,
@@ -115,7 +128,15 @@ export function useWorkspaceRole(): WorkspaceIdentity {
             });
           } else {
             // Строки членства нет — это его собственное пространство.
-            setState((s) => ({ ...s, userId, ownerId: userId, isAdmin: true, isOwner: true, memberRole: "owner" }));
+            setState((s) => ({
+              ...s,
+              userId,
+              ownerId: userId,
+              assigneeId: selfAssigneeId,
+              isAdmin: true,
+              isOwner: true,
+              memberRole: "owner",
+            }));
           }
         }
         setLoading(false);

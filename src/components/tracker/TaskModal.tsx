@@ -11,6 +11,7 @@ import SendMenu from "./SendMenu";
 import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
 import TaskParticipants from "./TaskParticipants";
+import TaskAnswer from "./TaskAnswer";
 import ItemChat from "./ItemChat";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import type { Participant, PendingParticipant, PersonOption } from "@/hooks/useTaskParticipants";
@@ -94,6 +95,11 @@ export default function TaskModal({
   onRejectReschedule,
   onPersonAdded,
   canEdit = true,
+  myAssigneeId = "",
+  onAcceptWork,
+  onReportWork,
+  onDeclineWork,
+  onAskReschedule,
 }: {
   task: Task | null;
   prefill?: TaskPrefill;
@@ -126,10 +132,16 @@ export default function TaskModal({
   // списка до перезагрузки и вернулась после неё. Кнопка, ведущая к отказу,
   // хуже отсутствующей; здесь она ещё и обманывает.
   //
-  // Что остаётся у чужой задачи: прочитать и написать в обсуждение.
-  // Ответить по ней он может там, где это его дело, — в разделе «Что от
-  // вас ждут».
+  // Что остаётся у чужой задачи: прочитать, написать в обсуждение — и
+  // ответить по ней, если она поручена тебе (см. TaskAnswer ниже).
   canEdit?: boolean;
+  // Моя строка в списке людей. По ней карточка находит, стою ли я на этой
+  // задаче и чего от меня ждут (см. lib/ownership.myAssigneeId).
+  myAssigneeId?: string;
+  onAcceptWork?: (participantId: string) => Promise<void>;
+  onReportWork?: (participantId: string, comment: string) => Promise<void>;
+  onDeclineWork?: (participantId: string, reason: string) => Promise<void>;
+  onAskReschedule?: (participantId: string, to: string, reason: string) => Promise<void>;
 }) {
   const { colleagues } = useColleagues();
   const ask = useAsk();
@@ -164,6 +176,12 @@ export default function TaskModal({
   // Esc закрывает карточку — как и любое другое окно трекера.
 
   const isEditing = !!task;
+
+  // Моя собственная строка на этой задаче, если я на ней стою. Объявлена
+  // ЗДЕСЬ, выше первого использования, и переносить ниже нельзя: `const` в
+  // теле компонента, позванный выше своей строки, убивает весь экран (см.
+  // правило в CLAUDE.md — это стоило половины дня).
+  const myPart = myAssigneeId ? participants.find((p) => p.assigneeId === myAssigneeId) || null : null;
 
   // Кто сейчас на задаче — одинаково для новой и для сохранённой, чтобы
   // поле людей было одно и то же в обоих случаях. У новой это набранный
@@ -433,6 +451,21 @@ export default function TaskModal({
         <input type="hidden" id="taskId" value={task?.id ?? ""} readOnly />
 
         {isEditing && form.desc && <div className="task-card-desc">{form.desc}</div>}
+
+        {/* Первым — то, чего ждут ОТ ВАС: ради этого карточку и открывают,
+            когда задачу поручили вам. Ниже идёт всё остальное, что о ней
+            известно. */}
+        {task && myPart && (
+          <TaskAnswer
+            me={myPart}
+            deadline={task.deadline || ""}
+            returnedComment={task.approvalState === "returned" ? task.approvalComment || "" : ""}
+            onAccept={() => onAcceptWork?.(myPart.id) ?? Promise.resolve()}
+            onReport={(comment) => onReportWork?.(myPart.id, comment) ?? Promise.resolve()}
+            onDecline={(reason) => onDeclineWork?.(myPart.id, reason) ?? Promise.resolve()}
+            onAskReschedule={(to, reason) => onAskReschedule?.(myPart.id, to, reason) ?? Promise.resolve()}
+          />
+        )}
 
         {isEditing && !canEdit && (
           <div className="task-card-note">

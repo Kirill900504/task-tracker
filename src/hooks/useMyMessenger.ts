@@ -31,7 +31,7 @@ export type MessengerState = {
   loading: boolean;
   telegram: { connected: boolean; username: string };
   max: { connected: boolean; username: string; available: boolean };
-  // Ссылка и код на один экран — см. комментарий в ManagerScreen о том,
+  // Ссылка и код на один экран — см. комментарий в MessengerLink о том,
   // почему одной ссылки мало.
   connect: (channel: ColleagueChannel) => Promise<ConnectResult>;
   refresh: () => Promise<LinkedNow>;

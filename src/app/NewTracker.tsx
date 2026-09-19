@@ -43,7 +43,8 @@ import WeekPanel from "@/components/tracker/WeekPanel";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
-import ManagerScreen from "@/components/tracker/ManagerScreen";
+import MessengerLink from "@/components/tracker/MessengerLink";
+import { useMyMessenger } from "@/hooks/useMyMessenger";
 import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
 import Icon from "@/components/tracker/Icon";
@@ -100,6 +101,13 @@ export default function NewTracker() {
   const notifications = useNotifications({ tasks, meetings, saveTask: actions.saveTask, showToast: toasts.showToast, ready: !loading });
   const installPrompt = useInstallPrompt();
   const botLink = useBotLink();
+  // Свой мессенджер руководителя: у владельца эту роль играет botLink
+  // (его чат живёт в telegram_accounts), а у руководителя — собственная
+  // строка в списке людей, куда бот шлёт задачи и кнопки. С пустым id хук
+  // молчит, поэтому у владельца он ничего не стоит.
+  const myMessenger = useMyMessenger(identity.role === "manager" ? identity.assigneeId : "");
+  const messengerMissing =
+    identity.role === "manager" && !myMessenger.loading && !myMessenger.telegram.connected && !myMessenger.max.connected;
 
   const [clockText, setClockText] = useState(() => formatClock(new Date()));
   useEffect(() => {
@@ -453,6 +461,7 @@ export default function NewTracker() {
         meetingsPanel: (
           <MeetingsPanel
             myUserId={mineOnlyId}
+            meId={identity.assigneeId}
             meetings={meetings}
             assignees={assignees}
             showResolved={showDone}
@@ -476,6 +485,7 @@ export default function NewTracker() {
           <TasksPanel
             isAdmin={isAdmin}
             myUserId={mineOnlyId}
+            myMemberAssigneeId={identity.assigneeId}
             filterAssignee={filterAssignee}
             onFilterAssigneeChange={setFilterAssignee}
             tasks={tasks}
@@ -564,17 +574,16 @@ export default function NewTracker() {
           />
         ),
   };
-  // Руководитель попадает на свой экран, а не в трекер владельца с
-  // выключенными кнопками. Проверка стоит до loadError/loading владельца:
-  // его загрузка руководителя не касается, и её ошибка не должна
-  // показывать ему «не получилось загрузить данные».
-  // Раздел «Что от вас ждут» — только у руководителя, и внутри трекера, а
-  // не вместо него. У владельца его нет: задачи ставит он, и отдельный
-  // список «что мне поручили» у него всегда был бы пуст.
-  const assignedToMe =
-    identity.role === "manager" && identity.assigneeId ? (
-      <ManagerScreen embedded assigneeId={identity.assigneeId} name={identity.name} />
-    ) : null;
+  // Раздела «Что от вас ждут» здесь больше нет, и это решение Кирилла,
+  // сказанное прямо 19.09.2026: «этот первичный функционал думаю вообще
+  // убрать, он глупо построен и не продуман тобой… супер не удобный для
+  // использования, мне подключённые Козлов и Витовский сразу пожаловались…
+  // у всех пользователей окно должно сразу быть как у меня».
+  //
+  // Он был вторым местом, где живёт одна и та же работа: списком-обрубком
+  // наверху и настоящей карточкой в столбце. Теперь всё, что от человека
+  // ждут, стоит в самой задаче и в самой встрече — TaskAnswer и
+  // MeetingAnswer, — и трекер у всех действительно один и тот же.
 
   if (loadError) {
     // Not a dead end: the tracker keeps trying in the background and opens
@@ -662,10 +671,6 @@ export default function NewTracker() {
                 keeps scroll position and open editors, and the modals inside
                 them are portalled to <body>, so they show over the shell. */}
             <div hidden={mobileTab !== "today"}>
-              {/* У руководителя «Сегодня» начинается с того, чего ждут от
-                  него: на телефоне он чаще всего открывает трекер именно
-                  затем, чтобы ответить. */}
-              {assignedToMe}
               <TodayScreen
                 tasks={tasks}
                 meetings={meetings}
@@ -781,10 +786,16 @@ export default function NewTracker() {
           </div>
         </div>
       </header>
-      {/* Первым, до всего остального: это единственное на экране, чего
-          ждут ОТ НЕГО, а не он от других. Ниже — его собственный трекер,
-          такой же, как у Кирилла. */}
-      {assignedToMe}
+      {/* Мессенджер — первое, чего не хватает человеку, который вошёл по
+          приглашению: без него задачи, напоминания и кнопки «Принял /
+          Сделал» приходят только сюда, а сюда он заходит не каждый день.
+          Полоса исчезает сама, как только он подключился, и у владельца её
+          нет вовсе — у него для этого кнопки в шапке. */}
+      {messengerMissing && (
+        <div className="tracker-messenger-link">
+          <MessengerLink messenger={myMessenger} />
+        </div>
+      )}
       {/* Перетаскивание — одно на весь трекер: панели, задачи, мысли и
           встречи ездят в одном контексте, потому что ездят они друг в
           друга. Разбор «что куда бросили» живёт там же. */}

@@ -2083,3 +2083,43 @@
   .chat-pending-size{color:var(--ink-soft);}
   .chat-clip{min-width:40px; min-height:36px; font-size:15px; line-height:1;}
   .tp-meeting{margin:0 0 14px;}
+
+  /* Что от вас ждут — блоком в самой карточке.
+     Раньше это был отдельный экран над трекером; Кирилл попросил его
+     убрать, и ответ переехал туда, где человек читает саму задачу.
+     Выделен акцентной рамкой не ради красоты: в длинной карточке он
+     должен находиться взглядом сразу, потому что ради него её и открыли. */
+  .my-work{
+    margin:0 0 16px; padding:13px 14px; border-radius:var(--radius-md);
+    border:1px solid var(--accent); background:var(--accent-soft);
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .my-work-head{
+    display:flex; align-items:center; gap:7px;
+    font-size:var(--label-size); font-weight:var(--label-weight);
+    text-transform:uppercase; letter-spacing:.06em; color:var(--ink-label);
+  }
+  .my-work-said{font-size:13px; line-height:1.5; color:var(--ink); white-space:pre-wrap;}
+  .my-work-said.declined{color:var(--high);}
+  .my-work-returned{
+    font-size:13px; line-height:1.5; color:var(--high);
+    padding:8px 10px; border-radius:var(--radius-sm);
+    background:var(--overdue-bg); border:1px solid var(--high);
+  }
+  .my-work .ms-actions{margin-top:0;}
+
+  /* Полоса «подключите мессенджер» — только у того, у кого он не
+     подключён, и только на всю ширину над трекером: раньше она жила на
+     отдельном экране руководителя, которого больше нет. */
+  .tracker-messenger-link{margin:0 0 14px;}
+
+  /* «В работу» у присланной мысли: единственное действие, доступное тому,
+     кому мысль прислали. Узкая кнопка в том же ряду, что ✈ и 🚩. */
+  .idea-take{
+    cursor:pointer; flex:none; white-space:nowrap;
+    background:var(--accent-soft); color:var(--ink);
+    border:1px solid var(--accent); border-radius:var(--radius-sm);
+    font:inherit; font-size:12px; font-weight:600; padding:4px 8px; min-height:28px;
+  }
+  .idea-take:hover:not(:disabled){background:var(--accent); color:#F3F8FA;}
+  .idea-take:disabled{opacity:.6; cursor:default;}

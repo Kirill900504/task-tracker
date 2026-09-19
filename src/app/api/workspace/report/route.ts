@@ -10,6 +10,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import { newTaskRow } from "@/lib/newTask";
 import { recordEvent } from "@/lib/itemHistory";
+import { isSelfAssignee } from "@/lib/trackerRows";
 import type { Notice } from "@/lib/noticeQueue";
 
 // Ответ руководителя: один путь для трекера и для мессенджера.
@@ -45,9 +46,23 @@ export async function POST(req: Request) {
     .eq("member_id", user.id)
     .eq("status", "active")
     .maybeSingle();
-  if (!member) return NextResponse.json({ error: "Вы не участник этого трекера" }, { status: 403 });
 
-  const m = member as { owner_id: string; assignee_id: string; assignees: { name: string } | { name: string }[] | null };
+  type Member = { owner_id: string; assignee_id: string; assignees: { name: string } | { name: string }[] | null };
+  let m = member as Member | null;
+
+  // Владельцу тоже ставят задачи — и с тех пор, как руководители работают
+  // в паритете, это обычное дело, а не исключение. Строки членства у него
+  // нет и не будет (её отсутствие и ЕСТЬ признак владельца), поэтому его
+  // собственная строка в списке людей ищется по метке «(я)»: она для того
+  // в этом списке и стоит. Без этого «Сделал» по задаче, которую поставил
+  // ему Игорь, отвечало «Вы не участник этого трекера».
+  if (!m) {
+    const { data: mine } = await admin.from("assignees").select("id, name").eq("user_id", user.id);
+    const self = (mine || []).find((r) => isSelfAssignee((r.name as string) || ""));
+    if (self) m = { owner_id: user.id, assignee_id: self.id as string, assignees: { name: self.name as string } };
+  }
+  if (!m) return NextResponse.json({ error: "Вы не участник этого трекера" }, { status: 403 });
+
   const myName = (Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name) || "Коллега";
   const now = new Date().toISOString();
 
@@ -59,12 +74,16 @@ export async function POST(req: Request) {
   // вписать себя в чужую задачу). Из браузера получалась бы задача без
   // единого исполнителя, которую не видно даже тому, кто её взял.
   if (body.action === "take_idea") {
-    if (!body.recipientId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
-    const { data: rec } = await admin
+    if (!body.recipientId && !body.ideaId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+    // Из бота приходит строка рассылки (её знает кнопка под сообщением), из
+    // трекера — сама мысль: строк рассылки на экране нет. Оба пути сходятся
+    // в одну строку, и оба её проверяют — она должна быть моя.
+    const query = admin
       .from("idea_recipients")
-      .select("id, idea_id, assignee_id, converted_task_id, ideas(text, created_by)")
-      .eq("id", body.recipientId)
-      .maybeSingle();
+      .select("id, idea_id, assignee_id, converted_task_id, ideas(text, created_by)");
+    const { data: rec } = body.recipientId
+      ? await query.eq("id", body.recipientId).maybeSingle()
+      : await query.eq("idea_id", body.ideaId as string).eq("assignee_id", m.assignee_id).maybeSingle();
     type IdeaRef = { text: string; created_by: string | null };
     const recipient = rec as {
       id: string;

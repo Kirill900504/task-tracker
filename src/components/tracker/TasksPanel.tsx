@@ -75,6 +75,7 @@ export default function TasksPanel({
   onScheduleMeetingFor,
   isAdmin = true,
   myUserId = "",
+  myMemberAssigneeId = "",
   filterAssignee,
   onFilterAssigneeChange,
   justCreatedId,
@@ -123,6 +124,9 @@ export default function TasksPanel({
   // Свой auth-id: по нему отличается «моя задача» от «чужой, которую мне
   // видно». У владельца пусто — ему принадлежит всё в его пространстве.
   myUserId?: string;
+  // Моя строка в списке людей, если она названа членством. У владельца
+  // членства нет, и его строка находится по метке «(я)» в useWorkspaceRole.
+  myMemberAssigneeId?: string;
   // Фильтр по исполнителю живёт снаружи: тот же выбор делает панель
   // «Люди», и две копии одного состояния разошлись бы в первый же день.
   filterAssignee: string;
@@ -316,9 +320,9 @@ export default function TasksPanel({
     // Чужую задачу нельзя закрыть за постановщика — и, что важнее, нельзя
     // сделать вид, что закрыл: база откажет молча, галочка проживёт до
     // перезагрузки, а человек будет считать дело сделанным. Отчитаться по
-    // ней он может там, где это его дело, — в разделе «Что от вас ждут».
+    // ней он может там, где это его дело, — внутри самой задачи.
     if (!mine(t)) {
-      toasts.showToast("Это не ваша задача", "Отчитаться по ней можно в разделе «Что от вас ждут» — вверху страницы.");
+      toasts.showToast("Это не ваша задача", "Откройте её — там кнопки «Принял» и «Сделал».");
       return;
     }
     if (t.status === "done") {
@@ -775,6 +779,11 @@ export default function TasksPanel({
           onAddAssignee={actions.addAssignee}
           onAddSection={actions.saveSection}
           onRemoveSection={removeSection}
+          myAssigneeId={myMemberAssigneeId}
+          onAcceptWork={participants.acceptWork}
+          onReportWork={participants.reportWork}
+          onDeclineWork={participants.declineWork}
+          onAskReschedule={participants.askReschedule}
           participants={modalTask ? participants.forTask(modalTask.id) : []}
           availablePeople={participants.people}
           onPersonAdded={(name) => participants.waitForPerson(name)}
