@@ -1365,26 +1365,6 @@
   .proposed-text{flex:1; min-width:200px; font-size:12.5px; line-height:1.5; color:var(--ink-soft);}
   /* Панель «Неделя»: семь дней подряд. Прошедшие гаснут, а не прячутся —
      иначе в пятницу от недели остаётся огрызок. */
-  .week-day{padding:6px 0; border-bottom:1px solid var(--line-soft);}
-  .week-day:last-child{border-bottom:none;}
-  .week-day.past{opacity:.5;}
-  .week-day.today .week-day-name{color:var(--accent);}
-  .week-day-head{display:flex; align-items:baseline; gap:8px; margin-bottom:4px;}
-  .week-day-name{font-size:12px; font-weight:700; color:var(--ink);}
-  .week-day-date{font-size:11.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums;}
-  .week-day-empty{font-size:12px; color:var(--ink-soft); padding-left:2px;}
-  .week-item{
-    display:flex; align-items:baseline; gap:8px; width:100%; text-align:left;
-    padding:5px 8px; margin-bottom:3px; border:1px solid var(--line-soft);
-    border-radius:var(--radius-sm); background:var(--paper); cursor:pointer;
-    font-family:var(--sans); color:var(--ink); font-size:12.5px; line-height:1.35;
-  }
-  .week-item:hover{border-color:var(--accent);}
-  .week-item.meeting{border-left:3px solid var(--accent);}
-  .week-item.high{border-left:3px solid var(--high);}
-  .week-item-time{flex:none; color:var(--ink-soft); font-variant-numeric:tabular-nums;}
-  .week-item-title{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .week-item-who{flex:none; color:var(--ink-soft); font-size:11.5px;}
   /* Реплика в поиске: её текст — не заголовок задачи, и выглядеть как
      заголовок ей не надо. Обычным начертанием и в одну строку. */
   .search-hit.said .search-hit-title{font-weight:400; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -1869,26 +1849,12 @@
      he cannot see anyway.
      ---------------------------------------------------------------- */
   .ms{max-width:760px; margin:0 auto; padding:24px 16px 40px;}
-  .ms-head{margin-bottom:20px; display:flex; align-items:flex-start; justify-content:space-between; gap:16px;}
   .ms-exit{flex:none;}
-  .ms-title{font-family:var(--display); font-size:22px; font-weight:800; margin:0 0 6px; letter-spacing:-.015em;}
-  .ms-sub{color:var(--ink-soft); font-size:13px; line-height:1.5;}
   .ms-empty{
     color:var(--ink-soft); font-size:13.5px; line-height:1.6;
     padding:28px 20px; text-align:center;
     border:1px dashed var(--line); border-radius:var(--radius-md);
   }
-  .ms-group{margin-bottom:24px;}
-  .ms-card{
-    background:var(--paper); border:1px solid var(--line); border-left:3px solid var(--line);
-    border-radius:var(--radius-md); padding:14px 15px; margin-bottom:10px;
-    box-shadow:var(--shadow-1);
-  }
-  .ms-card.high{border-left-color:var(--high);}
-  .ms-card.overdue{border-left-color:var(--high); background:linear-gradient(0deg, var(--overdue-bg), var(--overdue-bg)) padding-box, var(--paper);}
-  .ms-card-title{font-size:15px; font-weight:600; color:var(--ink); line-height:1.35;}
-  .ms-card-desc{margin-top:6px; font-size:13px; color:var(--ink-soft); line-height:1.5; white-space:pre-wrap;}
-  .ms-card-meta{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:9px;}
   .ms-returned{
     margin-top:10px; padding:8px 10px; border-radius:var(--radius-sm);
     background:var(--med-bg); border:1px solid rgba(224,184,77,.35); color:#F0D9A8; font-size:12.5px;
@@ -2026,14 +1992,6 @@
     background:var(--high-bg); border:1px solid rgba(224,122,95,.4);
     color:#F2C9BC; font-size:12.5px;
   }
-  .ms-stats{
-    display:flex; gap:14px; flex-wrap:wrap; margin:0 0 20px;
-    padding:11px 13px; border:1px solid var(--line); border-radius:var(--radius-md);
-    background:var(--paper-soft);
-  }
-  .ms-stat{font-size:12.5px; color:var(--ink-soft);}
-  .ms-stat b{color:var(--ink); font-size:14px;}
-  .ms-stat-bad b{color:var(--high);}
   /* Подключение своего мессенджера. Пока его нет — это самое важное на
      экране, и выглядит соответственно; как только подключён, остаётся
      одной спокойной строкой и перестаёт бросаться в глаза. */
