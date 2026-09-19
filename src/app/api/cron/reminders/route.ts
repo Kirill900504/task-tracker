@@ -8,7 +8,7 @@ import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
 import { dueReminder, minutesUntil, ownerReminder, participantReminder, reasonNudge, recapAsk, recapDue } from "@/lib/meetingReminders";
 import { awaitingReason, voteTally, type MeetingVote } from "@/lib/meetingVotes";
-import { chatsFor, meetingButtons, type ColleagueRow } from "@/lib/colleagues";
+import { chatsFor, meetingButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { buildManagerBrief, composeManagerBrief, managerBriefIsEmpty } from "@/lib/managerBrief";
 import { personStats, composePeopleReview, composeMyWeek, buildParticipation } from "@/lib/peopleReview";
@@ -17,6 +17,7 @@ import { isSelfAssignee } from "@/lib/trackerRows";
 import { onceOnly } from "@/lib/onceOnly";
 import { findSilent, composeSilence } from "@/lib/silence";
 import { setMaxCommands, setTelegramCommands } from "@/lib/botCommands";
+import { alarmText, findStuck, nudgeText } from "@/lib/escalation";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -208,6 +209,47 @@ export async function GET(req: Request) {
 
         if (text) await notifyOwner(admin, userId, text);
       });
+    }
+
+    // Просроченное подаёт голос: три дня — человеку, семь — постановщику,
+    // четырнадцать — обоим и в последний раз.
+    //
+    // Раз в сутки и в рабочий день: напоминание, приходящее по выходным и
+    // дважды в день, перестаёт быть напоминанием. Каждая ступень
+    // срабатывает один раз за жизнь задачи — ключ onceOnly собран из
+    // задачи и ступени, а не из даты.
+    if (workingDay && nowMin >= BRIEF_FROM_MINUTES) {
+      const stuck = await findStuck(admin, userId, today);
+      for (const { task, step } of stuck) {
+        await onceOnly(admin, { userId, kind: "overdue_step", refId: task.taskId + ":" + step, date: today }, async () => {
+          const names = task.waiting.map((w) => w.name).filter(Boolean);
+
+          // Человеку — на третий и на четырнадцатый. На седьмой его не
+          // трогают: он уже слышал, и повторять то же самое через четыре
+          // дня значит приучить пролистывать.
+          if (step === 3 || step === 14) {
+            const { data: people } = await admin
+              .from("assignees")
+              .select("id, name, telegram_chat_id, max_user_id")
+              .in("id", task.waiting.map((w) => w.assigneeId));
+            for (const person of ((people || []) as ColleagueRow[])) {
+              const target = chatsFor(person)[0];
+              if (target) await sendToColleague(target, nudgeText(task, step), taskButtons(task.taskId, "executor"));
+            }
+          }
+
+          // Постановщику — на седьмой и четырнадцатый, строкой в сводке, а
+          // не отдельным сообщением: это не срочно, это накопительно.
+          if (step === 7 || step === 14) {
+            await notifyAuthor(admin, userId, task.createdBy, alarmText(task, step, names), {
+              kind: "other",
+              item: task.title,
+              who: names.join(", ") || "исполнитель",
+              what: "просрочена на " + step + " дн., ответа нет",
+            });
+          }
+        });
+      }
     }
 
     // Утренняя сводка каждому руководителю — та же услуга, что владельцу,
