@@ -8,12 +8,15 @@ import { moscowNow, dateStr, isDueToday, isOverdue, type TaskRow } from "@/lib/t
 // creating the task. Kept separate from the GigaChat quick-add path: these
 // are free (no LLM call) and can't misfire the way NLP classification can.
 
-export type QueryKind = "today" | "overdue" | "meetings" | "help";
+export type QueryKind = "today" | "overdue" | "meetings" | "crashes" | "help";
 
 const TRIGGERS: Record<QueryKind, string[]> = {
   today: ["/today", "сегодня", "что сегодня", "что на сегодня", "задачи на сегодня"],
   overdue: ["/overdue", "просрочено", "просроченные", "что просрочено", "просроченные задачи"],
   meetings: ["/meetings", "встречи", "какие встречи", "ближайшие встречи"],
+  // Журнал поломок. Раньше спросить об этом было негде: трекер падал, и
+  // единственным способом узнать подробности было пересказать их словами.
+  crashes: ["/errors", "ошибки", "поломки", "что сломалось", "сбои"],
   help: ["/help", "помощь", "команды", "что умеешь"],
 };
 
@@ -118,6 +121,50 @@ async function replyMeetings(admin: ReturnType<typeof createAdminClient>, userId
   return lines.join("\n");
 }
 
+// «Ошибки» — что ломалось за сутки.
+//
+// Отвечает на вопрос, который до 19.09.2026 задать было некому: трекер
+// падал, Кирилл писал «вылетает эта ошибка», и починка начиналась с
+// пересказа. Здесь та же информация, что в журнале (client_errors), но
+// свёрнутая до читаемого размера: одинаковые поломки — одной строкой со
+// счётчиком, потому что одна ошибка у четырнадцати человек остаётся одной
+// ошибкой.
+async function replyCrashes(admin: ReturnType<typeof createAdminClient>, userId: string): Promise<string> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await admin
+    .from("client_errors")
+    .select("message, url, release, fingerprint, created_at")
+    .eq("owner_id", userId)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const rows = data || [];
+  if (!rows.length) return "✅ За сутки трекер не ломался ни разу.";
+
+  const groups = new Map<string, { message: string; count: number; last: string; url: string | null; release: string | null }>();
+  for (const row of rows) {
+    const key = row.fingerprint;
+    const seen = groups.get(key);
+    if (seen) {
+      seen.count++;
+      continue;
+    }
+    groups.set(key, { message: row.message, count: 1, last: row.created_at, url: row.url, release: row.release });
+  }
+
+  const lines = ["⚠️ Поломки за сутки: " + rows.length + " (разных: " + groups.size + ")", ""];
+  for (const group of [...groups.values()].slice(0, 8)) {
+    const when = new Date(group.last).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });
+    lines.push("• " + group.message.split("\n")[0].slice(0, 160));
+    const where = (group.url || "").replace(/^https?:\/\/[^/]+/, "") || "—";
+    lines.push("  " + when + " · " + where + (group.release ? " · версия " + group.release : "") + (group.count > 1 ? " · повторов: " + group.count : ""));
+  }
+  if (groups.size > 8) lines.push("", "…и ещё " + (groups.size - 8) + " разных.");
+  lines.push("", "Полный текст с местом в коде лежит в журнале — покажите это сообщение мне, и я разберу.");
+  return lines.join("\n");
+}
+
 function replyHelp(): string {
   return [
     "Умею:",
@@ -125,6 +172,7 @@ function replyHelp(): string {
     "• «сегодня» / «что на сегодня» — задачи и встречи на сегодня",
     "• «просрочено» — список просроченных задач",
     "• «встречи» — ближайшие запланированные встречи",
+    "• «ошибки» — что ломалось за сутки: где, когда и на какой версии",
     "• Отмечать/удалять существующие — например «отметь звонок Сергею выполненным» или «удали встречу с поставщиком» (удаление всегда переспросит подтверждение)",
     "• Голосовые сообщения — распознаю и обработаю так же, как текст (первое сообщение после паузы может занять чуть дольше обычного)",
   ].join("\n");
@@ -135,5 +183,6 @@ export async function replyForQuery(kind: QueryKind, userId: string): Promise<st
   if (kind === "today") return replyToday(admin, userId);
   if (kind === "overdue") return replyOverdue(admin, userId);
   if (kind === "meetings") return replyMeetings(admin, userId);
+  if (kind === "crashes") return replyCrashes(admin, userId);
   return replyHelp();
 }

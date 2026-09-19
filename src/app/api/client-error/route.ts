@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyOwner } from "@/lib/botDelivery";
 import { crashNotice, fingerprintOf, shouldNotify, tooMany, WRITE_WINDOW_MS } from "@/lib/crashReport";
+import { createCrashIssue } from "@/lib/githubIssue";
 
 // Куда браузер сообщает, что упал.
 //
@@ -77,9 +78,15 @@ export async function POST(req: Request) {
 
   // Сообщение владельцу — один раз на поломку, а не на каждого, кто в неё
   // упёрся. Молчание при повторе не теряет ничего: строка в журнале есть.
-  if (ownerId && shouldNotify(previous?.created_at ?? null)) {
+  if (shouldNotify(previous?.created_at ?? null)) {
     const who = user?.email && user.id !== ownerId ? user.email : null;
-    await notifyOwner(admin, ownerId, crashNotice({ message, url: body?.url, release: body?.release, who })).catch(() => {});
+    if (ownerId) {
+      await notifyOwner(admin, ownerId, crashNotice({ message, url: body?.url, release: body?.release, who })).catch(() => {});
+    }
+    // И задача в репозитории — там, где починка и начинается. Молча
+    // пропускается, если GitHub не настроен: трекер не должен зависеть от
+    // чужого сервиса, а поломка уже записана.
+    await createCrashIssue({ message, stack: body?.stack, url: body?.url, release: body?.release, who, fingerprint }).catch(() => null);
   }
 
   return NextResponse.json({ ok: true });

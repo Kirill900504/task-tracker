@@ -80,6 +80,24 @@ try {
   );
   check("answers a query command", query.status === 200, query);
 
+  // «Ошибки» — журнал поломок. Проверяется отдельно, потому что это
+  // единственная команда, которая читает не задачи, а client_errors, и
+  // добраться до неё иначе нельзя: своего экрана у журнала нет.
+  await admin.from("client_errors").insert({
+    user_id: userId,
+    owner_id: userId,
+    message: "Проверочная поломка бота",
+    url: "https://example.invalid/",
+    release: "bot-check",
+    fingerprint: "bot-check-" + Date.now(),
+  });
+  const crashes = await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "ошибки" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("answers the crash log command", crashes.status === 200, crashes);
+
   // ---- Telegram: a colleague connects and presses a button ----
   const { data: assignee } = await admin.from("assignees").insert({ user_id: userId, name: "Проверочный Коллега" }).select("id").single();
   const colleagueChat = tgChat + 7;
