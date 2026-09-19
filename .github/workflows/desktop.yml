@@ -38,7 +38,29 @@ jobs:
       # and desktop/ has its own, separate from the site's.
       - run: npm ci
         working-directory: desktop
-      - run: npm run release
+
+      # Electron's binary (~100 MB) arrives through a postinstall script, and
+      # npm 11 does not run install scripts unless they are approved — the
+      # approval lives in package.json and is pinned to an exact version, so
+      # a lockfile refresh silently leaves the binary undownloaded. `npm ci`
+      # finishing in twelve seconds is what that looks like, and the failure
+      # surfaces much later, inside electron-builder. Running the installer
+      # ourselves costs nothing when the binary is already there.
+      - run: node node_modules/electron/install.js
         working-directory: desktop
+
+      # The build's own error has to reach somebody who cannot read the logs.
+      # Action logs need admin rights on this repository, so the last lines of
+      # stderr are echoed as an annotation, which the API serves publicly —
+      # the same trick ci.yml uses for the schema test.
+      - name: Build and publish the installer
+        working-directory: desktop
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          npm run release 2>&1 | tee build.log || {
+            echo "::error::$(tail -n 12 build.log | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          }
