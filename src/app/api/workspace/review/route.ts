@@ -30,7 +30,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 // перезаписать друг друга не могут.
 
 type Body = {
-  action: "approve" | "return" | "force" | "moved" | "kept";
+  action: "approve" | "return" | "force" | "moved" | "kept" | "deadline";
   taskId: string;
   comment?: string;
   // Только для решения по переносу: чью просьбу закрываем и какой срок
@@ -74,6 +74,46 @@ export async function POST(req: Request) {
   }
   if (body.action === "force" && !comment) {
     return NextResponse.json({ error: "Нужна причина" }, { status: 400 });
+  }
+
+  // Срок двинули — и об этом должны узнать те, кто по нему работает.
+  //
+  // До сих пор перенос срока не оставлял следа нигде: старая дата просто
+  // исчезала. Спросить «сколько раз эту задачу двигали» было нельзя, а это
+  // первый вопрос к задаче, которая тянется третий месяц. И, что хуже,
+  // человек не узнавал вовсе: он планировал неделю под прежнее число.
+  //
+  // Сам срок сюда не пишется — им владеет движок синхронизации, и запись
+  // мимо него откатится первой же открытой вкладкой. Здесь только строка в
+  // хронику и сообщение людям.
+  if (body.action === "deadline") {
+    const to = (body.date || "").trim();
+    const was = (body.comment || "").trim();
+    const moved = to ? (was ? "перенесён с " + fmtDate(was) + " на " + fmtDate(to) : "поставлен на " + fmtDate(to)) : "снят";
+    await recordEvent(admin, {
+      userId: task.user_id,
+      kind: "task",
+      itemId: task.id,
+      text: "📅 Срок " + moved,
+    });
+
+    const { data: parts } = await admin
+      .from("task_participants")
+      .select("assignee_id")
+      .eq("task_id", task.id)
+      .in("role", ["executor", "coexecutor"]);
+    const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
+    if (ids.length) {
+      const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+      const text = to
+        ? "📅 Новый срок по задаче «" + task.title + "»: " + fmtDate(to)
+        : "📅 С задачи «" + task.title + "» сняли срок";
+      for (const person of ((people || []) as ColleagueRow[])) {
+        const target = chatsFor(person)[0];
+        if (target) await sendToColleague(target, text, taskButtons(task.id, "executor"));
+      }
+    }
+    return NextResponse.json({ ok: true });
   }
 
   // Решение по просьбе о переносе.

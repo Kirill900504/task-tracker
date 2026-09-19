@@ -735,7 +735,23 @@ export default function TasksPanel({
           prefill={modalPrefill}
           sections={sections}
           onSave={(t, pending) => {
+            const wasDeadline = modalTask?.deadline || "";
             actions.saveTask(t);
+            // Срок двинули — об этом надо сказать тем, кто под него
+            // планировал, и оставить след в хронике задачи. Раньше старая
+            // дата просто исчезала: спросить «сколько раз её двигали» было
+            // нельзя, а человек узнавал о новом сроке только когда открывал
+            // трекер — если открывал.
+            //
+            // Только у уже заведённой задачи и только когда дата правда
+            // изменилась: у новой сообщать нечего, её ещё никто не видел.
+            if (modalTask && (t.deadline || "") !== wasDeadline) {
+              void fetch("/api/workspace/review", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "deadline", taskId: t.id, date: t.deadline || "", comment: wasDeadline }),
+              }).catch(() => {});
+            }
             // Задача только что создана — строки участия заводятся и по
             // имени из поля «Исполнитель», и по всем, кого добавили рядом.
             //
