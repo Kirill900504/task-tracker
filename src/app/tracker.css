@@ -191,48 +191,22 @@
      down, and there is never a scrollbar inside a scrollbar. */
   .dash-zone.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
 
-  /* ---------- Конструктор панелей ----------------------------------------
-     Панели переставляются перетаскиванием (dnd/TrackerDnd.tsx). Правило
-     здесь одно и оно про поведение, а не про украшения: место, которое
-     освободилось, и есть указатель, куда встанет блок. Никаких полосок
-     «сюда», никаких перечёркнутых кругов — соседи просто расступаются, а
-     на месте взятой панели остаётся её силуэт.
+  /* ---------- Панели ----------------------------------------------
+     Раскладка жёсткая: три колонки, порядок задан в DashboardLayout.
+     Конструктора здесь больше нет — «блоки должны быть статичны», и
+     вместе с ним ушли силуэт панели, раскрывающаяся пустая зона и ручка
+     перетаскивания в шапке каждой панели.
      ------------------------------------------------------------------- */
   .dash-panel{
     position:relative; min-width:0; container-type:inline-size;
     transition:box-shadow .15s ease;
   }
-  /* Силуэт вместо «почти прозрачной тени» (слова Кирилла про прежний вид).
-     Содержимое убирается целиком — полупрозрачная панель поверх соседей
-     читается как поломка, а пустая рамка честно говорит «место занято
-     тем, что у тебя в руке». */
-  .dash-slot.dragging{
-    border:1px dashed var(--accent); border-radius:var(--radius-md);
-    background:var(--accent-soft); overflow:hidden;
-  }
-  .dash-slot.dragging > *{visibility:hidden;}
-  /* Пока идёт перетаскивание, пустая боковая зона раскрывается из нуля в
-     полосу — иначе вернуть туда панель было бы нечем (ровно та беда, ради
-     которой держали кнопку «Сбросить расположение»). */
-  .layout-dragging .dash-zone{min-height:72px; outline:1px dashed var(--line-soft); outline-offset:6px; border-radius:10px;}
-  .layout-dragging .dash-zone.drag-over{outline-color:var(--accent); background:var(--accent-soft);}
   .dash-panel-head{
     display:flex; align-items:center; gap:8px; margin-bottom:10px;
   }
   .dash-panel-head .panel-title{margin:0; flex:1;}
-  .dash-drag-handle{
-    cursor:grab; color:var(--ink-soft); display:inline-flex; align-items:center;
-    line-height:1; padding:2px 2px 2px 0; flex:none; user-select:none;
-    /* Палец на ручке ведёт панель, а не прокручивает страницу; всё
-       остальное на экране прокручивается как обычно. */
-    touch-action:none;
-  }
-  .dash-drag-handle:hover{color:var(--accent);}
-  .dash-drag-handle:active{cursor:grabbing;}
-
-  /* Блок, поднятый под курсор. Это не копия панели (панель высотой в экран
-     закрыла бы собой место, куда её несут), а её имя на плашке — так же,
-     как это делают конструкторы интерфейсов. */
+  /* То, что поднято под курсор, когда это не карточка: мысль и встреча
+     едут плашкой со своим текстом. */
   .dnd-ghost{
     display:inline-flex; align-items:center; gap:8px;
     background:var(--paper); color:var(--ink);
@@ -241,7 +215,6 @@
     font-family:var(--display); font-weight:700; font-size:13px;
     padding:10px 14px; cursor:grabbing; pointer-events:none;
   }
-  .dnd-ghost-panel{color:var(--accent);}
 
   /* Mobile quick-add: a floating thumb-reachable button + bottom sheet
      replaces the toolbar bar (which needs scrolling up to reach), so hide
@@ -1340,17 +1313,21 @@
   /* Панель «Люди»: строка на человека, вся строка — кнопка-фильтр.
      Цифры справа в одну колонку и табличными цифрами, чтобы четырнадцать
      строк читались столбиком, а не лесенкой. */
+  /* Имя строкой, цифры со словами под ним. В строку они больше не
+     помещаются — «2 просрочено · 1 без ответа» длиннее, чем «⚠2 🔕1», и
+     это ровно та длина, которой не хватало, чтобы панель читалась без
+     расшифровки. */
   .people-row{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    display:flex; flex-direction:column; align-items:flex-start; gap:3px;
     width:100%; padding:8px 10px; margin-bottom:4px; text-align:left;
     border:1px solid transparent; border-radius:var(--radius-sm);
     background:none; cursor:pointer; font-family:var(--sans); color:var(--ink);
   }
   .people-row:hover{background:var(--paper-soft); border-color:var(--line-soft);}
   .people-row.selected{background:var(--accent-soft); border-color:var(--accent);}
-  .people-name{font-size:13px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .people-nums{display:flex; align-items:center; gap:8px; flex:none; font-variant-numeric:tabular-nums lining-nums;}
-  .people-num{font-size:12px; color:var(--ink-soft);}
+  .people-name{font-size:13px; font-weight:600; min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .people-nums{display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-variant-numeric:tabular-nums lining-nums;}
+  .people-num{font-size:12px; color:var(--ink-soft); display:inline-flex; align-items:center; gap:3px;}
   .people-num.bad{color:var(--high);}
   .people-num.warn{color:var(--ink-soft);}
   .people-num.ok{color:var(--accent);}
@@ -1525,7 +1502,6 @@
     /* Панель задач на телефоне: заголовок дублирует вкладку, ручка панелей
        не нужна — остаётся только то, чем пользуются. */
     .mobile-main #mainCol > .dash-panel-head{display:none;}
-    .mobile-main .dash-drag-handle{display:none;}
 
     .toolbar{gap:8px;}
     .toolbar #newTaskBtn{flex:1; min-height:46px; font-size:15px;}
@@ -2123,3 +2099,12 @@
   }
   .idea-take:hover:not(:disabled){background:var(--accent); color:#F3F8FA;}
   .idea-take:disabled{opacity:.6; cursor:default;}
+
+  /* «Ещё N — у кого всё идёт»: спокойные строки в «Загрузке» свёрнуты,
+     потому что четырнадцать ровных строк прячут две горящие. */
+  .people-more{
+    width:100%; text-align:left; cursor:pointer; margin-top:4px;
+    background:none; border:none; font:inherit; font-size:12px;
+    color:var(--ink-soft); padding:6px 4px; min-height:32px;
+  }
+  .people-more:hover{color:var(--accent);}

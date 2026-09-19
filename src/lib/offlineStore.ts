@@ -1,6 +1,6 @@
 "use client";
 
-import type { Idea, Meeting, PanelLayout, Section, Task } from "@/types/tracker";
+import type { Idea, Meeting, Section, Task } from "@/types/tracker";
 
 // A copy of the tracker in IndexedDB, so the app has something to show — and
 // something to send — when it starts without a connection.
@@ -31,7 +31,6 @@ export type Snapshot = {
   userId: string;
   live: TrackerLists;
   shadow: TrackerLists;
-  panelLayout: PanelLayout | null;
   savedAt: string;
 };
 
@@ -54,7 +53,7 @@ function openDb(): Promise<IDBDatabase> {
 // Every call below is best-effort: a browser with storage disabled (or a
 // private window that refuses IndexedDB) must not break the tracker, it just
 // loses the offline copy.
-export async function saveSnapshot(userId: string, live: TrackerLists, shadow: TrackerLists, panelLayout: PanelLayout | null): Promise<void> {
+export async function saveSnapshot(userId: string, live: TrackerLists, shadow: TrackerLists): Promise<void> {
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
@@ -66,7 +65,6 @@ export async function saveSnapshot(userId: string, live: TrackerLists, shadow: T
         userId,
         live: structuredClone(live),
         shadow: structuredClone(shadow),
-        panelLayout: panelLayout ? structuredClone(panelLayout) : null,
         savedAt: new Date().toISOString(),
       } satisfies Snapshot);
       tx.oncomplete = () => resolve();

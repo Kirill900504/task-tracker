@@ -15,7 +15,6 @@ import { isQuietHour } from "@/lib/quietHours";
 import { linkTaskAndMeeting } from "@/lib/itemLink";
 import type { useToasts } from "@/hooks/useToasts";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
-import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 import { useAsk } from "@/components/Ask";
 import { isMine } from "@/lib/ownership";
 import { useDragState, useDropHandler } from "./dnd/TrackerDnd";
@@ -37,8 +36,6 @@ export default function MeetingsPanel({
   onRequestedMeetingSaved,
   onIdeaDropped,
   justCreatedId,
-  dragHandleProps,
-  isDragging,
 }: {
   // Свой auth-id: чужую встречу видно, потому что тебя на неё позвали, но
   // это не право её закрывать, переносить и удалять — база откажет молча
@@ -71,7 +68,7 @@ export default function MeetingsPanel({
   onRequestedMeetingSaved?: (meeting: Meeting) => void;
   onIdeaDropped: (ideaId: string) => void;
   justCreatedId?: string | null;
-} & PanelDragProps) {
+}) {
   // Голосование по встречам — один слой на всю панель, как участники у
   // задач: и карточки, и форма читают отсюда.
   const votes = useMeetingVotes();
@@ -260,9 +257,8 @@ export default function MeetingsPanel({
   }
 
   return (
-    <div className={"panel dash-panel" + (isDragging ? " dragging" : "")} id="meetingsPanel" data-panel-id="meetingsPanel">
+    <div className="panel dash-panel" id="meetingsPanel" data-panel-id="meetingsPanel">
       <div className="dash-panel-head">
-        <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
         <div className="panel-title">
           Встречи <span className="count">{sorted.length}</span>
         </div>

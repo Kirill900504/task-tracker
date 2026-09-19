@@ -20,7 +20,7 @@ import MeetingsPanel from "@/components/tracker/MeetingsPanel";
 import CalendarPanel from "@/components/tracker/CalendarPanel";
 import IdeasPanel from "@/components/tracker/IdeasPanel";
 import ToastStack from "@/components/tracker/ToastStack";
-import DashboardLayout, { PANEL_TITLES } from "@/components/tracker/DashboardLayout";
+import DashboardLayout from "@/components/tracker/DashboardLayout";
 import TrackerDnd from "@/components/tracker/dnd/TrackerDnd";
 import TaskCard from "@/components/tracker/TaskCard";
 import type { DragPayload } from "@/components/tracker/dnd/TrackerDnd";
@@ -39,7 +39,6 @@ import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import PeoplePanel from "@/components/tracker/PeoplePanel";
-import WeekPanel from "@/components/tracker/WeekPanel";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
@@ -93,7 +92,7 @@ export default function NewTracker() {
     () => ({ ownerId: identity.ownerId, userId: identity.userId, isManager: identity.role === "manager" }),
     [identity.ownerId, identity.userId, identity.role],
   );
-  const { loading, loadError, tasks, meetings, ideas, sections, assignees, panelLayout, syncStatus, offline, actions } =
+  const { loading, loadError, tasks, meetings, ideas, sections, assignees, syncStatus, offline, actions } =
     useTrackerData({ enabled: ready, workspace });
   const isMobile = useIsMobile();
   const toasts = useToasts();
@@ -395,21 +394,9 @@ export default function NewTracker() {
     },
   };
 
-  // Built once and handed to whichever layout is on screen: the desktop's
-  // three-column constructor, or the phone's one-section-at-a-time shell.
-  // То, что едет под курсором. У панели это плашка с названием, а не сама
-  // панель: панель высотой в экран, поднятая под курсор, закрыла бы собой
-  // то место, куда её несут.
+  // То, что едет под курсором.
   const renderDragOverlay = (active: DragPayload) => {
-    if (active.kind === "panel") {
-      return (
-        <div className="dnd-ghost dnd-ghost-panel">
-          <Icon name="grip" size={14} />
-          {PANEL_TITLES[active.id] ?? active.title}
-        </div>
-      );
-    }
-    // Карточка, наоборот, поднимается целиком: она размером с то место,
+    // Карточка поднимается целиком: она размером с то место,
     // куда её несут, и человек видит ровно то, что кладёт. Участники и
     // прогресс сюда не передаются нарочно — они живут в панели задач, а
     // карточка едет доли секунды.
@@ -526,38 +513,16 @@ export default function NewTracker() {
             }
           />
         ),
-        // «Сегодня» был только на телефоне. Утром на компьютере первый
-        // взгляд упирался в три столбца, и сегодняшнее приходилось искать
-        // глазами — при том что экран, отвечающий на этот вопрос, уже
-        // написан. Панель, а не отдельная страница: её можно переставить
-        // или убрать, как любую другую.
-        todayPanel: (
-          <div className="panel dash-panel" data-panel-id="todayPanel">
-            <TodayScreen
-              tasks={tasks}
-              meetings={meetings}
-              sections={sections}
-              onToggleTask={(task) =>
-                actions.saveTask({
-                  ...task,
-                  status: task.status === "done" ? "in_progress" : "done",
-                  completedAt: task.status === "done" ? "" : new Date().toISOString(),
-                })
-              }
-              onOpenTask={(task) => setOpenExistingTaskId(task.id)}
-              onOpenMeeting={(meeting) => setOpenExistingMeetingId(meeting.id)}
-              showToast={toasts.showToast}
-            />
-          </div>
-        ),
-        weekPanel: (
-          <WeekPanel
-            tasks={tasks}
-            meetings={meetings}
-            onOpenTask={(t) => setOpenExistingTaskId(t.id)}
-            onOpenMeeting={(m) => setOpenExistingMeetingId(m.id)}
-          />
-        ),
+        // Панелей «Сегодня» и «Неделя» здесь больше нет.
+        //
+        // Кирилл о них 19.09.2026: «я вообще не понимаю смысловой
+        // нагрузки и зачем ты их сделал… объясни, как это должно помочь,
+        // если нету объяснений — удаляй». Объяснения не нашлось: обе
+        // отвечали на вопрос «что назначено на день», на который слева
+        // отвечает календарь, — и отвечали хуже, потому что показывали то
+        // же самое списком и занимали высоту правой колонки. «Сегодня»
+        // остался там, где он действительно нужен, — на телефоне,
+        // отдельной вкладкой: там трёх столбцов нет вовсе.
         peoplePanel: (
           <PeoplePanel tasks={tasks} assignees={assignees} selected={filterAssignee} onSelect={setFilterAssignee} />
         ),
@@ -750,16 +715,13 @@ export default function NewTracker() {
                 <Icon name="install" /> Установить
               </button>
             )}
-            {/* Кнопки «Сбросить расположение» здесь больше нет. Слова
-                Кирилла 19.09.2026: «не понимаю смысл кнопки… конструктор
+            {/* Ни кнопки «Сбросить расположение», ни самого расположения
+                здесь больше нет: раскладка жёсткая (см. DashboardLayout).
+                Сначала ушла кнопка — «не понимаю смысл кнопки… конструктор
                 должен легко меняться, чтобы эта кнопка вообще не
-                требовалась». Она и появилась как страховка от конструктора,
-                из которого трудно выбраться: панель бледнела, соседи не
-                двигались, пустая зона схлопывалась в ноль и вернуть в неё
-                панель было нечем. Чинить надо было конструктор, а не
-                подпирать его кнопкой отката — см. DashboardLayout и
-                dnd/TrackerDnd. Вернуть панель на место теперь ровно так же
-                просто, как её унести. */}
+                требовалась», — а следом и конструктор: «первым делом
+                убираем возможность переносить блоки, они всё же должны быть
+                статичны». */}
             {/* «Команда» — владельцева, и остаётся такой даже теперь, когда
                 администратором может быть кто-то ещё (миграция 0036):
                 приглашения, отключение доступа, отвязка мессенджера и
@@ -799,8 +761,8 @@ export default function NewTracker() {
       {/* Перетаскивание — одно на весь трекер: панели, задачи, мысли и
           встречи ездят в одном контексте, потому что ездят они друг в
           друга. Разбор «что куда бросили» живёт там же. */}
-      <TrackerDnd layout={panelLayout} onLayoutChange={actions.savePanelLayout} renderOverlay={renderDragOverlay}>
-        <DashboardLayout layout={panelLayout} panels={panels} />
+      <TrackerDnd renderOverlay={renderDragOverlay}>
+        <DashboardLayout panels={panels} />
       </TrackerDnd>
         </>
       )}

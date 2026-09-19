@@ -12,7 +12,6 @@ import type { Meeting, Task } from "@/types/tracker";
 import { dateStr, fmtDate, isTaskDueOnDate, todayStr } from "@/lib/taskDisplay";
 import { getMonthGridDates } from "@/lib/calendarLogic";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
-import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import { useDragState, useDropHandler, type DropTarget } from "./dnd/TrackerDnd";
 
@@ -30,8 +29,6 @@ export default function CalendarPanel({
   onIdeaDroppedOnDate,
   onTaskDroppedOnDate,
   dateTimeConfirm,
-  dragHandleProps,
-  isDragging,
 }: {
   tasks: Task[];
   meetings: Meeting[];
@@ -50,7 +47,7 @@ export default function CalendarPanel({
   onIdeaDroppedOnDate: (ideaId: string, date: string) => void;
   onTaskDroppedOnDate: (taskId: string, date: string) => void;
   dateTimeConfirm: ReturnType<typeof useDateTimeConfirm>;
-} & PanelDragProps) {
+}) {
   const [viewDate, setViewDate] = useState(() => new Date());
   // The popover is portalled to <body> and positioned from the clicked cell's
   // rect — a direct port of legacy's openDatePopover(). Rendering it inside the
@@ -100,13 +97,12 @@ export default function CalendarPanel({
   });
 
   return (
-    <div className={"panel dash-panel" + (isDragging ? " dragging" : "")} id="calPanel" data-panel-id="calPanel">
+    <div className="panel dash-panel" id="calPanel" data-panel-id="calPanel">
       {/* Отдельной строки с надписью «КАЛЕНДАРЬ» больше нет: сетка месяца и
           так ни на что другое не похожа, а строка стоила высоты, которой в
           рабочем поле всегда не хватает. Ручка перетаскивания переехала в
           строку месяца — переставлять панели по-прежнему можно. */}
       <div className="cal-nav">
-        <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
         <button className="btn btn-small" id="calPrevBtn" onClick={() => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>
           ←
         </button>

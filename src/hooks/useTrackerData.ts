@@ -26,7 +26,6 @@ import { diffAssignees, diffRows, removeById, snapshotList, upsertById } from "@
 import { refreshRecurringStatuses } from "@/lib/taskDisplay";
 import {
   DEFAULT_ASSIGNEES,
-  DEFAULT_PANEL_LAYOUT,
   ideaFromRow,
   ideaToRow,
   meetingFromRow,
@@ -40,7 +39,7 @@ import {
   type SectionRow,
   type TaskRow,
 } from "@/lib/trackerRows";
-import type { Idea, Meeting, PanelLayout, Section, Task } from "@/types/tracker";
+import type { Idea, Meeting, Section, Task } from "@/types/tracker";
 import { clearSnapshot, loadSnapshot, saveSnapshot, type Snapshot, type TrackerLists } from "@/lib/offlineStore";
 import { applyLocalChanges, applyLocalNameChanges, hasUnsyncedWork } from "@/lib/offlineMerge";
 import { cacheShell } from "@/lib/shellCache";
@@ -118,7 +117,6 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [assignees, setAssignees] = useState<string[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
-  const [panelLayout, setPanelLayoutState] = useState<PanelLayout>(DEFAULT_PANEL_LAYOUT);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ pending: false, lastError: null, everSaved: false });
   const [offline, setOffline] = useState(false);
 
@@ -148,7 +146,6 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
   const userIdRef = useRef<string | null>(null);
   const offlineRef = useRef(false);
   const realtimeReadyRef = useRef(false);
-  const panelLayoutRef = useRef<PanelLayout | null>(null);
   const snapshotWritingRef = useRef(false);
   const snapshotDirtyRef = useRef(false);
 
@@ -173,7 +170,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         return;
       }
       snapshotWritingRef.current = true;
-      void saveSnapshot(uid, liveRef.current as TrackerLists, shadowRef.current as TrackerLists, panelLayoutRef.current).then(() => {
+      void saveSnapshot(uid, liveRef.current as TrackerLists, shadowRef.current as TrackerLists).then(() => {
         snapshotWritingRef.current = false;
         if (snapshotDirtyRef.current) {
           snapshotDirtyRef.current = false;
@@ -387,26 +384,6 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       });
   }, []);
 
-  const savePanelLayout = useCallback((layout: PanelLayout) => {
-    setPanelLayoutState(layout);
-    panelLayoutRef.current = layout;
-    const db = dbRef.current;
-    if (!db) return;
-    pendingCountRef.current++;
-    setSyncStatus({ pending: true, lastError: null, everSaved: true });
-    syncChainRef.current = syncChainRef.current
-      .then(async () => {
-        const { error } = await db.from("user_prefs").upsert({ panel_layout: layout, updated_at: new Date().toISOString() });
-        if (error) throw error;
-      })
-      .catch((err: unknown) => {
-        console.error("Save layout error:", err);
-      })
-      .then(() => {
-        pendingCountRef.current = Math.max(0, pendingCountRef.current - 1);
-        setSyncStatus({ pending: pendingCountRef.current > 0, lastError: null, everSaved: true });
-      });
-  }, []);
 
   // ---- Generic "replace one list, keep the ref mirror in sync, persist"
   // helpers used by every per-entity action below. Each only closes over
@@ -513,7 +490,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
   }, [commitAssignees]);
 
   // ---- Sign out: waits for every queued write (persistAll's diffAndSync,
-  // plus softDeleteRow/restoreRow/savePanelLayout, all chained on the same
+  // plus softDeleteRow/restoreRow, all chained on the same
   // syncChainRef) to actually reach Supabase before navigating away. This is
   // the fix for "I edited something, signed out immediately, and it was
   // gone" — the browser aborts in-flight requests on navigation, so signing
@@ -711,17 +688,6 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       setAssignees(loadedAssignees);
       setSections(loadedSections);
 
-      try {
-        const prefsRes = await db.from("user_prefs").select("panel_layout").maybeSingle();
-        if (!cancelled) {
-          const layout = (prefsRes.data?.panel_layout as PanelLayout) || DEFAULT_PANEL_LAYOUT;
-          setPanelLayoutState(layout);
-          panelLayoutRef.current = layout;
-        }
-      } catch {
-        if (!cancelled) setPanelLayoutState(DEFAULT_PANEL_LAYOUT);
-      }
-
       setOffline(false);
       offlineRef.current = false;
       setLoadError(null);
@@ -768,10 +734,6 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       setIdeas(cached.live.ideas);
       setAssignees(cached.live.assignees);
       setSections(cached.live.sections);
-      if (cached.panelLayout) {
-        setPanelLayoutState(cached.panelLayout);
-        panelLayoutRef.current = cached.panelLayout;
-      }
       setOffline(true);
       offlineRef.current = true;
       setLoadError(null);
@@ -913,7 +875,6 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     ideas,
     assignees,
     sections,
-    panelLayout,
     syncStatus,
     offline,
     actions: {
@@ -929,7 +890,6 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       saveSection,
       deleteSection,
       addAssignee,
-      savePanelLayout,
       signOut,
     },
   };

@@ -316,19 +316,6 @@ test("a weekly recurring task keeps its rule across a reload", async ({ page }) 
   await expect(card).toHaveClass(/high/);
 });
 
-// "Сбросить расположение" kept reappearing on a fresh load even though
-// nothing had been rearranged: the saved layout was compared with
-// JSON.stringify, and Postgres reorders jsonb object keys, so the two were
-// never equal. It is only meant to show when the panels really have been
-// moved.
-test("the layout reset button stays hidden when nothing was rearranged", async ({ page }) => {
-  await login(page);
-  await expect(page.locator("#resetLayoutBtn")).toHaveCount(0);
-  await page.reload();
-  await expect(page.locator("#newTaskBtn")).toBeVisible();
-  await expect(page.locator("#resetLayoutBtn")).toHaveCount(0);
-});
-
 // Перенос задачи между столбцами — мышью, как человек.
 //
 // До 19.09.2026 это был HTML5 drag-and-drop, и проверить его настоящими

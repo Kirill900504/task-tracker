@@ -19,7 +19,6 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { progressLabel, taskStage } from "@/lib/taskProgress";
 import type { useToasts } from "@/hooks/useToasts";
-import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 import SectionTabs from "./SectionTabs";
 import Dropdown from "./Dropdown";
 import { useAsk } from "@/components/Ask";
@@ -81,8 +80,6 @@ export default function TasksPanel({
   justCreatedId,
   notifBanner,
   extraBanner,
-  dragHandleProps,
-  isDragging,
 }: {
   tasks: Task[];
   sections: Section[];
@@ -136,7 +133,7 @@ export default function TasksPanel({
   // Rendered under the notification banner, in the same slot legacy's
   // #syncErrorBanner occupied (see SyncErrorBanner).
   extraBanner?: ReactNode;
-} & PanelDragProps) {
+}) {
   // «Просрочено» — не сортировка и не раздел, а вопрос «что горит»: он
   // задаётся чаще всех прочих фильтров вместе взятых.
   const [onlyOverdue, setOnlyOverdue] = useState(false);
@@ -586,7 +583,7 @@ export default function TasksPanel({
   }
 
   return (
-    <div className={"main-col dash-panel" + (isDragging ? " dragging" : "")} id="mainCol" data-panel-id="mainCol">
+    <div className="main-col dash-panel" id="mainCol" data-panel-id="mainCol">
       {notifBanner && (
         <div className="notif-banner show" id="notifBanner">
           {notifBanner}
@@ -601,7 +598,6 @@ export default function TasksPanel({
           // ничего не объясняла (задачи ни с чем не спутать) и стоила
           // высоты. Ручка перетаскивания живёт здесь же, слева от кнопки.
           <div className={"toolbar" + (collapsed ? " collapsed" : "")}>
-            <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
             <button className="btn btn-primary" id="newTaskBtn" title="Новая задача (N)" onClick={() => setModalState({ open: true, task: null })}>
               + Новая задача
             </button>

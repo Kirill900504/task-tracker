@@ -8,7 +8,6 @@ import { formatIdeaCreatedAt } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
 import IdeaItem from "./IdeaItem";
 import type { useToasts } from "@/hooks/useToasts";
-import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
 
@@ -21,8 +20,6 @@ export default function IdeasPanel({
   toasts,
   onConvertToTask,
   onConvertToMeeting,
-  dragHandleProps,
-  isDragging,
 }: {
   // Свой auth-id: чужую мысль прислали тебе, а не отдали.
   myUserId?: string;
@@ -41,7 +38,7 @@ export default function IdeasPanel({
   onConvertToMeeting: (ideaId: string) => void;
   // The idea the global search just jumped to, briefly flashed.
   highlightId?: string | null;
-} & PanelDragProps) {
+}) {
   const [text, setText] = useState("");
   const visible = sortIdeasForList(ideas, showDone);
 
@@ -61,9 +58,8 @@ export default function IdeasPanel({
   }
 
   return (
-    <div className={"panel dash-panel" + (isDragging ? " dragging" : "")} id="ideasPanel" data-panel-id="ideasPanel">
+    <div className="panel dash-panel" id="ideasPanel" data-panel-id="ideasPanel">
       <div className="dash-panel-head">
-        <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
         <div className="panel-title">
           Идеи и мысли <span className="count">{visible.length}</span>
         </div>
