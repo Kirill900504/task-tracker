@@ -93,6 +93,13 @@ export type PersonStats = {
   doneThisWeek: number;
   // Среднее время до «принял», в часах. null — принимать было нечего.
   avgAcceptHours: number | null;
+  // Среднее время ОТ «принял» ДО «сделал». Вторая половина того же
+  // вопроса: первая цифра говорит, сколько человек думает, прежде чем
+  // взяться, вторая — сколько делает. Вместе они отвечают на «где затык»
+  // точнее, чем количество просроченных: две просрочки у того, кто берётся
+  // мгновенно и делает три недели, и у того, кто неделю не открывает
+  // задачу, — это разные разговоры.
+  avgWorkHours: number | null;
   // Доля закрытого в срок, 0..1. null — закрывать было нечего.
   onTimeShare: number | null;
 };
@@ -126,6 +133,14 @@ export function personStats(rows: ParticipationRow[], now: Date): PersonStats[] 
       .map((r) => hoursBetween(r.createdAt, r.acceptedAt!))
       .filter((h): h is number => h !== null);
 
+    // Считается только по тем, кто СНАЧАЛА принял, а потом отчитался.
+    // Отчёт без «принял» — это работа, о начале которой мы ничего не знаем,
+    // и приписывать ей нулевое время значило бы хвалить за молчание.
+    const workHours = list
+      .filter((r) => r.acceptedAt && r.doneAt)
+      .map((r) => hoursBetween(r.acceptedAt!, r.doneAt!))
+      .filter((h): h is number => h !== null);
+
     // «В срок» считается только по тем, у кого срок вообще был: закрыть
     // бессрочную задачу «вовремя» нельзя ни при каком старании.
     const closedWithDeadline = list.filter((r) => r.doneAt && r.deadline);
@@ -142,6 +157,7 @@ export function personStats(rows: ParticipationRow[], now: Date): PersonStats[] 
       declined: openRows.filter((r) => r.declinedAt).length,
       doneThisWeek: list.filter((r) => r.doneAt && r.doneAt >= weekAgo).length,
       avgAcceptHours: acceptHours.length ? acceptHours.reduce((a, b) => a + b, 0) / acceptHours.length : null,
+      avgWorkHours: workHours.length ? workHours.reduce((a, b) => a + b, 0) / workHours.length : null,
       onTimeShare: closedWithDeadline.length ? onTime.length / closedWithDeadline.length : null,
     });
   }
@@ -175,6 +191,7 @@ export function composePeopleReview(stats: PersonStats[]): string {
     if (s.declined) bits.push(`отказался от ${s.declined}`);
     if (s.doneThisWeek) bits.push(`закрыл ${s.doneThisWeek}`);
     if (s.avgAcceptHours !== null) bits.push(`принимает за ${hoursWord(s.avgAcceptHours)}`);
+    if (s.avgWorkHours !== null) bits.push(`делает за ${hoursWord(s.avgWorkHours)}`);
     if (s.onTimeShare !== null) bits.push(`в срок ${Math.round(s.onTimeShare * 100)}%`);
     const where = s.direction ? ` (${s.direction})` : "";
     lines.push(`• ${s.name}${where}: ${bits.join(", ")}`);
@@ -217,6 +234,7 @@ export function composeMyWeek(s: PersonStats): string {
   const marks: string[] = [];
   if (s.onTimeShare !== null) marks.push(`В срок: ${Math.round(s.onTimeShare * 100)}%`);
   if (s.avgAcceptHours !== null) marks.push(`Отвечаете в среднем за ${hoursWord(s.avgAcceptHours)}`);
+  if (s.avgWorkHours !== null) marks.push(`Делаете в среднем за ${hoursWord(s.avgWorkHours)}`);
   if (marks.length) lines.push("", marks.join(". ") + ".");
 
   if (s.silent) {
