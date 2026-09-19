@@ -92,6 +92,12 @@ E2E runs against a throwaway Supabase user created in `e2e/global-setup.ts`
 For local runs: `npm run build`, then `npx next start -p 3100`. Two known
 flakes, both environmental: `JWT issued at future` (sandbox clock skew) and
 Supabase auth rate limits after many logins — retry before investigating.
+Третьего не осталось: прогон идёт в ОДИН воркер (`playwright.config.ts`),
+потому что тестовый аккаунт на весь прогон один и параллельные тесты
+топтали строки друг друга. Пока не появится аккаунт на воркера,
+`workers: 1` — это не настройка скорости, а условие осмысленности: тест,
+падающий в общем прогоне и проходящий в одиночку, читается как регрессия и
+съедает час на её поиски.
 
 ## Where things are
 
