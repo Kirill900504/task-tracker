@@ -1,0 +1,58 @@
+{
+  "name": "rokas-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "РОКАС Трекер — настольное приложение",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "release": "electron-builder --win --publish always"
+  },
+  "devDependencies": {
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "build": {
+    "appId": "ru.rokas.tracker",
+    "productName": "ROKAS Tracker",
+    "copyright": "РОКАС",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "offline.html",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "artifactName": "ROKAS-Tracker-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "РОКАС Трекер",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Kirill900504",
+      "repo": "task-tracker",
+      "releaseType": "release"
+    }
+  },
+  "allowScripts": {
+    "electron@40.10.6": true,
+    "electron-winstaller@5.4.0": true
+  }
+}

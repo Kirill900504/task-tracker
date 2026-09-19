@@ -1,0 +1,44 @@
+name: Desktop app
+
+# Builds the Windows installer and publishes it as a GitHub release, which is
+# also where the installed app looks for its own updates (electron-updater
+# reads the latest release of this repository — it is public, so no token
+# travels with the app).
+#
+# It runs on a tag, not on every push, for two reasons: the wrapper changes a
+# few times a year while the tracker changes daily, and every run here costs a
+# 90 MB upload. Release like this:
+#
+#   git tag v1.0.1 && git push origin v1.0.1
+#
+# The tag has to match the version in desktop/package.json, or electron-builder
+# publishes into a release nobody is looking at.
+#
+# GitHub-hosted runners are used deliberately: building here needs no Rust, no
+# Visual Studio and nothing installed on anybody's machine — the whole point of
+# choosing Electron over Tauri for this project.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions:
+      # electron-builder creates the release and uploads the installer to it.
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # npm ci, not install: the lockfile is what makes a release reproducible,
+      # and desktop/ has its own, separate from the site's.
+      - run: npm ci
+        working-directory: desktop
+      - run: npm run release
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

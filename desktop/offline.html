@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>Нет связи</title>
+    <style>
+      /* Deliberately a copy of nothing: this page has to render with no
+         network at all, so it carries its own colours (--paper/--ink from
+         tracker.css) and the system font stack rather than Manrope. */
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex; align-items: center; justify-content: center;
+        background: #232b2e; color: #e8edef;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        text-align: center; padding: 24px;
+      }
+      .box { max-width: 460px; }
+      h1 { font-size: 22px; font-weight: 700; margin: 0 0 12px; }
+      p { font-size: 15px; line-height: 1.55; color: #a9b6bb; margin: 0 0 22px; }
+      button {
+        font: inherit; font-weight: 600; color: #232b2e; background: #6fd3c7;
+        border: 0; border-radius: 10px; padding: 11px 22px; cursor: pointer;
+      }
+      button:hover { background: #8ae0d6; }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h1>Нет связи</h1>
+      <p>
+        Трекер не открылся: интернет сейчас недоступен. Задачи и встречи на месте —
+        как только связь появится, всё откроется как обычно.
+      </p>
+      <button id="retry" type="button">Попробовать снова</button>
+    </div>
+    <script>
+      // The address comes from main.js as a query parameter: this file is
+      // loaded from disk and must not hard-code a deployment URL that a
+      // future move would leave pointing at nothing.
+      const target = new URLSearchParams(location.search).get("url");
+      document.getElementById("retry").addEventListener("click", () => {
+        if (target) location.href = target;
+      });
+    </script>
+  </body>
+</html>

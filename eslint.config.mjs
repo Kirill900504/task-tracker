@@ -34,6 +34,16 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    // `desktop/` — оболочка Electron: процесс Node, а не страница Next.
+    // Главный процесс здесь намеренно на CommonJS: ESM-точка входа работает
+    // только начиная с Electron 28 и добавляет способ сломаться ради
+    // ничего. Поэтому `require()` остаётся, а правило, написанное для
+    // TypeScript, для этой папки выключено. Остальные правила — в том числе
+    // то, что выше, — на неё распространяются.
+    files: ["desktop/**/*.js", "desktop/**/*.mjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ]);
 
 export default eslintConfig;

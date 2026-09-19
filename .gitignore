@@ -56,3 +56,10 @@ next-env.d.ts
 # Throwaway helper scripts used while testing (disposable Supabase accounts,
 # fixtures) — never part of the app.
 scripts/_*
+
+# desktop app: the wrapper's own dependencies, its built installers and the
+# screenshots its smoke run leaves behind. The installer is published as a
+# GitHub release, never committed — it is 91 MB of Electron.
+/desktop/node_modules
+/desktop/dist
+/desktop/smoke-*.png
