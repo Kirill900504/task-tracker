@@ -130,3 +130,29 @@ describe("rankOf / taskSortFn", () => {
     expect([med, high].sort((x, y) => taskSortFn(x, y, now)).map((t) => t.id)).toEqual(["b", "a"]);
   });
 });
+
+// Календарь — единственное место в трекере, где «примерно правильно»
+// означает «неправильно»: дат, которых не бывает, конструктор Date не
+// отвергает, а молча подменяет соседними. Эти четыре проверки написаны по
+// найденным ошибкам, а не по воображаемым.
+describe("последний срок повтора на датах, которых не в каждом месяце бывает", () => {
+  const monthly = (day: number) => ({ recur: "monthly", recurMonthday: day }) as never;
+  const yearly = (day: number, month: number) => ({ recur: "yearly", recurYearDay: day, recurYearMonth: month }) as never;
+
+  it("«каждое 31-е», взгляд 5 марта — это 31 января, а не 3 марта", () => {
+    expect(mostRecentOccurrence(monthly(31), new Date(2026, 2, 5))).toBe("2026-01-31");
+  });
+
+  it("«каждое 31-е» 31 числа — это сегодня", () => {
+    expect(mostRecentOccurrence(monthly(31), new Date(2026, 0, 31))).toBe("2026-01-31");
+  });
+
+  it("«29 февраля», взгляд в невисокосном 2026 — это 29 февраля 2024", () => {
+    expect(mostRecentOccurrence(yearly(29, 2), new Date(2026, 2, 10))).toBe("2024-02-29");
+  });
+
+  it("обычное число считается по-прежнему", () => {
+    expect(mostRecentOccurrence(monthly(15), new Date(2026, 2, 5))).toBe("2026-02-15");
+    expect(mostRecentOccurrence(yearly(1, 9), new Date(2026, 2, 5))).toBe("2025-09-01");
+  });
+});

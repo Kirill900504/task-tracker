@@ -70,8 +70,6 @@ export function isTaskDueOnDate(task: Task, d: Date): boolean {
 // used to decide whether a "done" recurring task's completion is stale
 // (from a previous period) and should reset to in_progress.
 export function mostRecentOccurrence(task: Task, ref: Date): string | null {
-  const y = ref.getFullYear();
-  const m = ref.getMonth();
   if (task.recur === "daily") return dateStr(ref);
   if (task.recur === "weekly") {
     const wd = ref.getDay();
@@ -86,17 +84,44 @@ export function mostRecentOccurrence(task: Task, ref: Date): string | null {
   if (task.recur === "monthly") {
     const day = Number(task.recurMonthday);
     if (!day) return null;
-    let candidate = new Date(y, m, day);
-    if (candidate.getTime() > ref.getTime()) candidate = new Date(y, m - 1, day);
-    return dateStr(candidate);
+    return lastDayBefore(ref, day, null);
   }
   if (task.recur === "yearly") {
     const yday = Number(task.recurYearDay);
     const ymonth = Number(task.recurYearMonth) - 1;
     if (!yday) return null;
-    let yc = new Date(y, ymonth, yday);
-    if (yc.getTime() > ref.getTime()) yc = new Date(y - 1, ymonth, yday);
-    return dateStr(yc);
+    return lastDayBefore(ref, yday, ymonth);
+  }
+  return null;
+}
+
+// Когда это число было в последний раз — считая назад и ПРОПУСКАЯ месяцы,
+// в которых его не бывает.
+//
+// Прежний расчёт строил дату конструктором и верил результату, а тот
+// переполняется молча: `new Date(2026, 1, 31)` — это 3 марта, а
+// `new Date(2026, 1, 29)` в невисокосном году — 1 марта. Обе подмены
+// выглядят как настоящие даты и попадали в ответ: задача «каждое 31-е»,
+// открытая 5 марта, считала последним сроком 3 марта (правильный ответ —
+// 31 января), а «29 февраля» — 1 марта вместо 29 февраля 2024.
+//
+// Стоило это того, что задача-повтор либо не сбрасывалась в работу, когда
+// пора, либо сбрасывалась зря: `mostRecentOccurrence` ровно для этого и
+// считается. Ошибка редкая по календарю и постоянная по последствиям —
+// такие и живут годами.
+//
+// Перебор назад, а не арифметика: 48 месяцев хватает и на 29 февраля
+// (високосный год не дальше четырёх лет назад), и на любое 31-е.
+function lastDayBefore(ref: Date, day: number, month: number | null): string | null {
+  const start = month === null ? ref.getMonth() : ref.getMonth() + 12;
+  for (let back = 0; back <= 48; back++) {
+    const y = ref.getFullYear();
+    const m = month === null ? start - back : month;
+    const year = month === null ? y : y - back;
+    const candidate = new Date(year, m, day);
+    // Конструктор переполнился — значит такого дня в этом месяце нет.
+    if (candidate.getDate() !== day) continue;
+    if (candidate.getTime() <= ref.getTime()) return dateStr(candidate);
   }
   return null;
 }
