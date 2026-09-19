@@ -1586,6 +1586,8 @@
        свёрнутой панели. */
     .toolbar.collapsed select,
     .toolbar.collapsed .toolbar-dd,
+    .toolbar.collapsed .filter-pill,
+    .toolbar.collapsed .view-switch,
     .toolbar.collapsed .check-wrap{display:none;}
     .toolbar select, .toolbar .dd-trigger{min-height:44px; font-size:16px;}
     .toolbar .check-wrap{min-height:40px;}
