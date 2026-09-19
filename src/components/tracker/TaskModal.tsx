@@ -60,7 +60,7 @@ function emptyForm(task: Task | null, prefill?: TaskPrefill) {
     title: task?.title ?? prefill?.title ?? "",
     desc: task?.desc ?? prefill?.desc ?? "",
     assignee: task?.assignee ?? prefill?.assignee ?? "",
-    sectionId: task?.sectionId ?? "",
+    sectionId: task?.sectionId ?? prefill?.sectionId ?? "",
     priority: task?.priority ?? prefill?.priority ?? "med",
     term: task?.term ?? "short",
     deadline: task?.deadline ?? prefill?.deadline ?? "",
@@ -160,14 +160,15 @@ export default function TaskModal({
   // «Исполнитель»: поле теперь одно, а имя первого исполнителя уходит в
   // tasks.assignee при сохранении (см. save).
   const [pending, setPending] = useState<PendingParticipant[]>(() => {
-    const names = [prefill?.assignee || "", ...(prefill?.executors || [])].map((n) => (n || "").trim()).filter(Boolean);
     const out: PendingParticipant[] = [];
-    for (const name of names) {
-      const person = availablePeople.find((p) => p.name === name);
-      if (person && !out.some((x) => x.assigneeId === person.id)) {
-        out.push({ assigneeId: person.id, name: person.name, role: "executor" });
-      }
-    }
+    const add = (name: string, role: PendingParticipant["role"]) => {
+      const person = availablePeople.find((p) => p.name === name.trim());
+      if (person && !out.some((x) => x.assigneeId === person.id)) out.push({ assigneeId: person.id, name: person.name, role });
+    };
+    // Разобранная фраза называет исполнителей и ничего не знает о ролях.
+    for (const name of [prefill?.assignee || "", ...(prefill?.executors || [])]) if (name.trim()) add(name, "executor");
+    // А правая кнопка по разделу приносит людей вместе с их ролями в нём.
+    for (const person of prefill?.people || []) add(person.name, person.role);
     return out;
   });
   // Описание раскрыто только там, где оно уже написано.

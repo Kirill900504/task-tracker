@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import ActionMenu from "./ActionMenu";
+import Icon from "./Icon";
 import type { Section } from "@/types/tracker";
 
 // Разделы кнопками под панелью задач: выбрать, завести новый, переставить.
@@ -33,8 +33,8 @@ export default function SectionTabs({
   onSelect,
   onAdd,
   onReorder,
-  onRename,
-  onDelete,
+  onNewTask,
+  onSettings,
   canEdit = true,
 }: {
   sections: Section[];
@@ -43,9 +43,17 @@ export default function SectionTabs({
   onAdd: () => void;
   // Новый порядок целиком — идентификаторы разделов слева направо.
   onReorder: (ids: string[]) => void;
-  // Правая кнопка мыши по разделу: переименовать или удалить.
-  onRename: (section: Section) => void;
-  onDelete: (section: Section) => void;
+  // Правая кнопка мыши по разделу — новая задача по этому разделу, с уже
+  // подставленными ответственными за него. Слова Кирилла 19.09.2026: «если
+  // тыкаешь левой кнопкой мыши, делался отбор по разделу, а если правой
+  // сразу вылазило окно создания новой задачи с уже выделенными
+  // исполнителями, ответственными за раздел».
+  //
+  // Переименование и удаление переехали в окно «Разделы» (шестерёнка в
+  // конце строки): правая кнопка досталась тому, что делают каждый день, а
+  // не тому, что делают раз в квартал.
+  onNewTask: (section: Section) => void;
+  onSettings: () => void;
   // Разделы — структура трекера, и меняет её владелец. Руководитель их
   // видит и выбирает ими, но не заводит, не переименовывает, не удаляет и
   // не переставляет: его в этом откажет и база (миграция 0031), а кнопка,
@@ -56,9 +64,6 @@ export default function SectionTabs({
   // из состояния приложения после отпускания.
   const [preview, setPreview] = useState<string[] | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  // Меню по правой кнопке: у раздела ровно два действия, и оба редкие —
-  // держать их кнопками в строке значило бы отдать им место постоянно.
-  const [menuFor, setMenuFor] = useState<{ section: Section; anchor: DOMRect } | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startAt = useRef<{ x: number; y: number } | null>(null);
   // Кнопка, на которой нажали, и чем нажали: пока перенос не начался, это
@@ -171,11 +176,10 @@ export default function SectionTabs({
               (value === s.id ? " active" : "") +
               (dragId === s.id ? " dragging" : "")
             }
-            title={canEdit ? `${s.name} — зажмите, чтобы переставить; правая кнопка — переименовать или удалить` : s.name}
+            title={`${s.name} — правая кнопка: новая задача по разделу${canEdit ? "; зажмите, чтобы переставить" : ""}`}
             onContextMenu={(e) => {
-              if (!canEdit) return;
               e.preventDefault();
-              setMenuFor({ section: s, anchor: e.currentTarget.getBoundingClientRect() });
+              onNewTask(s);
             }}
             onPointerDown={(e) => canEdit && onPointerDown(e, s.id)}
             onPointerMove={onPointerMove}
@@ -192,22 +196,22 @@ export default function SectionTabs({
       })}
 
       {canEdit && (
-        <button type="button" className="section-tab section-tab-add" id="addSectionTabBtn" title="Новый раздел" onClick={onAdd}>
-          +
-        </button>
+        <>
+          <button type="button" className="section-tab section-tab-add" id="addSectionTabBtn" title="Новый раздел" onClick={onAdd}>
+            +
+          </button>
+          <button
+            type="button"
+            className="section-tab section-tab-add"
+            id="sectionSettingsBtn"
+            title="Разделы: названия, ответственные, удаление"
+            onClick={onSettings}
+          >
+            <Icon name="users" size={14} />
+          </button>
+        </>
       )}
 
-      {menuFor && (
-        <ActionMenu
-          anchor={menuFor.anchor}
-          title={menuFor.section.name}
-          items={[
-            { id: "rename", label: "✎ Редактировать", onSelect: () => onRename(menuFor.section) },
-            { id: "delete", label: "🗑 Удалить", onSelect: () => onDelete(menuFor.section) },
-          ]}
-          onClose={() => setMenuFor(null)}
-        />
-      )}
     </div>
   );
 }

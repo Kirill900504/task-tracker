@@ -23,9 +23,11 @@ import TaskModal from "./TaskModal";
 import SendMenu from "./SendMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
+import { useSectionAssignees } from "@/hooks/useSectionAssignees";
 import { progressShort, taskStage } from "@/lib/taskProgress";
 import type { useToasts } from "@/hooks/useToasts";
 import SectionTabs from "./SectionTabs";
+import SectionsModal from "./SectionsModal";
 import Dropdown from "./Dropdown";
 import { useAsk } from "@/components/Ask";
 import { uid } from "@/lib/uid";
@@ -53,6 +55,7 @@ export default function TasksPanel({
   isAdmin = true,
   myUserId = "",
   myMemberAssigneeId = "",
+  ownerId = "",
   filterAssignee,
   onFilterAssigneeChange,
   justCreatedId,
@@ -102,6 +105,9 @@ export default function TasksPanel({
   // Моя строка в списке людей, если она названа членством. У владельца
   // членства нет, и его строка находится по метке «(я)» в useWorkspaceRole.
   myMemberAssigneeId?: string;
+  // Чьё это пространство: строка привязки «раздел → человек» заводится в
+  // нём, а не в том, откуда нажали.
+  ownerId?: string;
   // Фильтр по исполнителю живёт снаружи: тот же выбор делает панель
   // «Люди», и две копии одного состояния разошлись бы в первый же день.
   filterAssignee: string;
@@ -120,11 +126,16 @@ export default function TasksPanel({
   // всего отвечает за свою работу, а не проверяет чужую.
   const [view, setView] = useState<BoardView>("mine");
   const [filterSection, setFilterSection] = useState("all");
+  // Окно «Разделы»: названия, ответственные, удаление. Только у админа.
+  const [sectionsOpen, setSectionsOpen] = useState(false);
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
   const isMobile = useIsMobile();
   // Кто на задаче — один слой на всю панель: и карточки, и форма
   // читают отсюда, чтобы не заводить по подписке на каждую карточку.
   const participants = useTaskParticipants();
+  // Кто отвечает за раздел — отсюда берутся люди для задачи, заведённой
+  // правой кнопкой по разделу.
+  const sectionLinks = useSectionAssignees();
   // Кто из логинов какой человек: карточка чужого поручения подписывается
   // именем, а не идентификатором.
   const authors = useAuthors();
@@ -281,18 +292,19 @@ export default function TasksPanel({
     actions.saveSection({ id: uid(), name: name.trim(), kind: kind === "personal" ? "personal" : "work", sortOrder: sections.length });
   }
 
-  // Правая кнопка по разделу: переименовать или удалить. Задачи раздел не
-  // уносит с собой — они остаются, просто без него.
-  async function renameSection(section: Section) {
-    const name = await ask.ask({
-      title: "Раздел",
-      question: "Как он должен называться?",
-      value: section.name,
-      okText: "Сохранить",
-      required: "У раздела должно быть название.",
+  // Правая кнопка по разделу: новая задача, в которой уже стоят те, кто за
+  // этот раздел отвечает (миграция 0036). Ради этого привязку и заводили —
+  // одно нажатие вместо «открыть форму, выбрать раздел, выбрать троих».
+  function newTaskForSection(section: Section) {
+    const people = sectionLinks
+      .forSection(section.id)
+      .map((row) => ({ name: participants.people.find((x) => x.id === row.assigneeId)?.name || "", role: row.role }))
+      .filter((x) => x.name);
+    setModalState({
+      open: true,
+      task: null,
+      prefill: { sectionId: section.id, people },
     });
-    if (!name?.trim() || name.trim() === section.name) return;
-    actions.saveSection({ ...section, name: name.trim() });
   }
 
   async function deleteSectionAsked(section: Section) {
@@ -651,8 +663,8 @@ export default function TasksPanel({
         value={filterSection}
         onSelect={setFilterSection}
         onAdd={() => void addSection()}
-        onRename={(s) => void renameSection(s)}
-        onDelete={(s) => void deleteSectionAsked(s)}
+        onNewTask={(section) => newTaskForSection(section)}
+        onSettings={() => setSectionsOpen(true)}
         onReorder={(ids) =>
           ids.forEach((id, i) => {
             const s = sections.find((x) => x.id === id);
@@ -672,6 +684,16 @@ export default function TasksPanel({
         {renderColumn("review")}
         {showDone && renderColumn("done")}
       </div>
+
+      {sectionsOpen && isAdmin && (
+        <SectionsModal
+          sections={sections}
+          ownerId={ownerId}
+          onClose={() => setSectionsOpen(false)}
+          onSave={actions.saveSection}
+          onDelete={(section) => void deleteSectionAsked(section)}
+        />
+      )}
 
       {sendTask && (
         <SendMenu

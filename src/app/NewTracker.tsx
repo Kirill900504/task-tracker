@@ -475,6 +475,7 @@ export default function NewTracker() {
             isAdmin={isAdmin}
             myUserId={mineOnlyId}
             myMemberAssigneeId={identity.assigneeId}
+            ownerId={identity.ownerId}
             filterAssignee={filterAssignee}
             onFilterAssigneeChange={setFilterAssignee}
             tasks={tasks}

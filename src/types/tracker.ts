@@ -120,6 +120,12 @@ export interface TaskPrefill {
   executors?: string[];
   priority?: Priority;
   deadline?: string;
+  // Раздел и его люди — то, что подставляет правая кнопка по разделу
+  // (миграция 0036). Роль здесь та же, что у участника задачи: человек
+  // встанет исполнителем, соисполнителем или наблюдателем ровно так, как
+  // записано в привязке.
+  sectionId?: string;
+  people?: { name: string; role: "executor" | "coexecutor" | "watcher" }[];
 }
 
 export interface MeetingPrefill {
