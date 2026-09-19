@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { Idea, Meeting, Task } from "@/types/tracker";
 import { searchAll, KIND_LABELS, type SearchResult } from "@/lib/localSearch";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import { useCommentSearch } from "@/hooks/useCommentSearch";
 
 // Global search: "/" anywhere, type, ↑↓ to pick, Enter to open. Results come
 // from the data already in memory, so the list narrows on every keystroke
@@ -31,7 +32,16 @@ export default function SearchOverlay({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  const results = useMemo(() => searchAll(query, { tasks, meetings, ideas }), [query, tasks, meetings, ideas]);
+  const own = useMemo(() => searchAll(query, { tasks, meetings, ideas }), [query, tasks, meetings, ideas]);
+  // Реплики ищутся в базе и приезжают позже остальных: их тысячи, в память
+  // они не тянутся, и держать их там ради вопроса, который задают раз в
+  // неделю, значило бы платить памятью за удобство, которого никто не
+  // просил.
+  const { results: said, searching } = useCommentSearch(query);
+  // Один плоский список — чтобы стрелки работали одинаково по всему окну.
+  // Реплики идут последними: сначала то, что искали, потом то, что о нём
+  // говорили.
+  const results = useMemo(() => [...own, ...said.map((r) => ({ ...r, said: true }))], [own, said]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -87,16 +97,29 @@ export default function SearchOverlay({
         />
         <div className="search-results" ref={listRef}>
           {!query.trim() && <div className="search-empty">Начните печатать. ↑↓ — выбрать, Enter — открыть, Esc — закрыть.</div>}
-          {query.trim() && results.length === 0 && <div className="search-empty">Ничего не нашлось</div>}
+          {query.trim() && results.length === 0 && !searching && <div className="search-empty">Ничего не нашлось</div>}
+          {searching && results.length === 0 && <div className="search-empty">Ищу и в обсуждениях…</div>}
           {results.map((r, i) => {
             // One flat list keeps the keyboard cursor simple; a group header is
             // rendered wherever the kind changes.
-            const header = i === 0 || results[i - 1].kind !== r.kind ? KIND_LABELS[r.kind] : null;
+            // Заголовок группы — там, где меняется вид. У реплик он свой:
+            // это не задачи, и мешать их в один список значило бы заставлять
+            // читать «что это» на каждой строке.
+            const prev = results[i - 1] as (typeof results)[number] | undefined;
+            const isSaid = "said" in r && r.said;
+            const wasSaid = prev && "said" in prev && prev.said;
+            const header = isSaid
+              ? i === 0 || !wasSaid
+                ? "В обсуждениях"
+                : null
+              : i === 0 || prev!.kind !== r.kind
+                ? KIND_LABELS[r.kind]
+                : null;
             return (
-              <div key={r.kind + r.id}>
+              <div key={(isSaid ? "c" : "") + r.kind + r.id + i}>
                 {header && <div className="search-group">{header}</div>}
                 <div
-                  className={"search-hit" + (i === active ? " active" : "") + (r.done ? " done" : "")}
+                  className={"search-hit" + (i === active ? " active" : "") + (r.done ? " done" : "") + (isSaid ? " said" : "")}
                   onMouseEnter={() => setCursor(i)}
                   onClick={() => onOpenResult(r)}
                 >

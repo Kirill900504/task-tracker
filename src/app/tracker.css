@@ -1177,6 +1177,9 @@
   /* Ряд кнопок множественного выбора: те же отступы, что у ChipChoice,
      но выбор не один, поэтому своей разметкой. */
   .chip-row{display:flex; flex-wrap:wrap; gap:6px;}
+  /* Реплика в поиске: её текст — не заголовок задачи, и выглядеть как
+     заголовок ей не надо. Обычным начертанием и в одну строку. */
+  .search-hit.said .search-hit-title{font-weight:400; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .pill-author{color:var(--ink-soft); background:var(--paper-soft); border:1px solid var(--line-soft);}
   .pill-accepted{color:var(--success); background:rgba(63,169,104,.14); border:1px solid rgba(63,169,104,.5);}
 
