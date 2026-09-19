@@ -81,11 +81,10 @@ test("«Готово, проверить» отвечает — и когда п
   await page.fill("#password", manager.password);
   await page.click('button[type="submit"]');
 
-  // Руководитель видит СВОЙ раздел «что от вас ждут» и полноценный трекер
-  // под ним. Раньше здесь проверялось обратное — что трекера у него нет;
-  // это изменил Кирилл: «хочу, чтобы у моих коллег был такой же интерфейс
-  // работы с таск-трекером, как и у меня со всеми возможностями, НО ФУНКЦИЯ
-  // АДМИНИСТРАТОРА БЫЛА ТОЛЬКО У МЕНЯ».
+  // Руководитель видит ТОТ ЖЕ трекер, что и владелец. Отдельного экрана
+  // «Что от вас ждут» над ним больше нет — всё, чего ждут, стоит в самих
+  // задачах и встречах. Полоса подключения мессенджера остаётся, пока он
+  // не подключён: без неё задачи приходят только сюда.
   await expect(page.locator(".ms-link")).toBeVisible({ timeout: 20_000 });
   await expect(page.locator("#newTaskBtn")).toHaveCount(1);
 
@@ -94,6 +93,13 @@ test("«Готово, проверить» отвечает — и когда п
   await expect(page.locator("#teamBtn")).toHaveCount(0);
   // Разделы он видит, но «+» рядом с ними — админская кнопка.
   await expect(page.locator("#addSectionTabBtn")).toHaveCount(0);
+  // И окна «Разделы» у него нет: ответственные за раздел — структура
+  // пространства, её меняет владелец или тот, кому он дал права
+  // (миграция 0036).
+  await expect(page.locator("#sectionSettingsBtn")).toHaveCount(0);
+  // Кнопок привязки чата к учётной записи у него тоже нет: его чат живёт
+  // в строке человека, и подключается он полосой выше.
+  await expect(page.locator("#telegramLinkBtn")).toHaveCount(0);
 
   // Код выдаётся на собственную строку — это и есть «подключить себе бота».
   await page.getByRole("button", { name: "Подключить Telegram" }).click();
@@ -114,8 +120,11 @@ test("«Готово, проверить» отвечает — и когда п
     .eq("id", manager.assigneeId);
   expect(error).toBeNull();
 
-  // …и то же самое нажатие убирает код и показывает подключение.
+  // …и то же самое нажатие убирает полосу целиком: подключено — значит
+  // спрашивать больше не о чем, и место возвращается работе. Раньше на
+  // её месте оставалась строка «✓ Telegram», но она стояла на экране,
+  // который открывали ради задач, и говорила то, что уже не новость.
   await code.getByRole("button", { name: "Готово, проверить" }).click();
-  await expect(page.locator(".ms-link-code")).toHaveCount(0, { timeout: 20_000 });
-  await expect(page.locator(".ms-link-on")).toContainText("Telegram");
+  await expect(page.locator(".ms-link")).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.locator("#newTaskBtn")).toBeVisible();
 });
