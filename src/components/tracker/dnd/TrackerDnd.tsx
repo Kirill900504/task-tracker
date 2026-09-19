@@ -106,6 +106,20 @@ class CardPointerSensor extends PointerSensor {
       eventName: "onPointerDown" as const,
       handler: ({ nativeEvent: event }: { nativeEvent: PointerEvent }) => {
         if (!event.isPrimary || event.button !== 0) return false;
+        // Пальцем этот сенсор не работает, и это не упрощение.
+        //
+        // Порог здесь — шесть пикселей, то есть палец, проведённый по
+        // карточке, объявляется перетаскиванием почти сразу. А проведённый
+        // по карточке палец в этом трекере означает другое: свайп вправо
+        // закрывает задачу (useSwipeComplete), и это действие дня. Два
+        // обработчика на один жест кончаются тем, что не срабатывает ни
+        // один — dnd-kit забирает указатель себе, свайп не доводится до
+        // порога, а карточка никуда не переносится, потому что палец вёл
+        // её вбок, а не в другой столбец.
+        //
+        // На телефоне перетаскивание начинает TouchSensor — по удержанию в
+        // 220 мс, то есть заведомо позже свайпа и заведомо иначе.
+        if (event.pointerType === "touch") return false;
         const target = event.target as HTMLElement | null;
         return !target?.closest(INTERACTIVE);
       },
