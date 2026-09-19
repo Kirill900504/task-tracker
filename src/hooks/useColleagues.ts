@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { createSharedStore } from "@/lib/sharedStore";
+import type { MemberRole } from "@/hooks/useWorkspaceRole";
 
 // Who on the team is reachable in a messenger.
 //
@@ -35,6 +36,10 @@ export type Colleague = {
   max: boolean;
   username: string | null;
   member: MemberState;
+  // Что человеку позволено сверх собственной работы (миграция 0036).
+  // «owner» здесь не встречается: свою строку владелец в этом списке не
+  // видит вовсе.
+  role: MemberRole;
 };
 
 // Есть ли бот MAX — теперь вопрос к базе, а не к сборке: см. useMaxBot.
@@ -51,12 +56,15 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
   // and a deployment that is ahead of its database must still show the team
   // screen rather than an empty one. An error here means "nobody has a login
   // yet", which is the truth in that situation anyway.
-  const { data: members } = await db.from("workspace_members").select("assignee_id, status, direction");
+  const { data: members } = await db.from("workspace_members").select("assignee_id, status, direction, role");
   const memberOf = new Map<string, MemberState>();
   const directionOf = new Map<string, string>();
+  const roleOf = new Map<string, MemberRole>();
   for (const row of members || []) {
     memberOf.set(row.assignee_id as string, (row.status as MemberState) || "none");
     directionOf.set(row.assignee_id as string, (row.direction as string) || "");
+    const raw = row.role as string | null;
+    roleOf.set(row.assignee_id as string, raw === "admin" || raw === "developer" ? raw : "manager");
   }
 
   // The owner's own row is dropped here rather than in the team screen: a
@@ -75,6 +83,7 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
       username: ((r.telegram_username || r.max_username) as string) || null,
       member: memberOf.get(r.id as string) || "none",
       direction: directionOf.get(r.id as string) || "",
+      role: roleOf.get(r.id as string) || "manager",
     }));
 }
 
@@ -189,6 +198,18 @@ export function useColleagues() {
     [reload],
   );
 
+  // Права сверх собственной работы. Экран меняется сразу, база следом —
+  // как и всё остальное в этом хуке: нажатие не должно ждать сеть.
+  const setMemberRole = useCallback(
+    async (assigneeId: string, role: MemberRole) => {
+      team.update((list) => list.map((p) => (p.id === assigneeId ? { ...p, role } : p)));
+      const db = createClient();
+      await db.from("workspace_members").update({ role }).eq("assignee_id", assigneeId);
+      await reload();
+    },
+    [reload],
+  );
+
   const setTrackerAccess = useCallback(
     async (assigneeId: string, active: boolean) => {
       team.update((list) =>
@@ -229,7 +250,7 @@ export function useColleagues() {
     [reload],
   );
 
-  return { colleagues, loading: !loaded, reload, invite, inviteToTracker, accessLink, setDirection, setTrackerAccess, unlink };
+  return { colleagues, loading: !loaded, reload, invite, inviteToTracker, accessLink, setDirection, setMemberRole, setTrackerAccess, unlink };
 }
 
 export type SendResult = { sentTo: string[]; failed: string[] } | { error: string };

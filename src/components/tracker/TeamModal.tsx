@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useState } from "react";
 import { useColleagues, type ColleagueChannel } from "@/hooks/useColleagues";
+import { MEMBER_ROLE_LABELS, type MemberRole } from "@/hooks/useWorkspaceRole";
 import { useMaxBot } from "@/hooks/useMaxBot";
 import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
@@ -61,7 +62,7 @@ const MEMBER_LABEL: Record<string, string> = {
 };
 
 export default function TeamModal({ onClose }: { onClose: () => void }) {
-  const { colleagues, loading, reload, invite, inviteToTracker, accessLink, setDirection, setTrackerAccess, unlink } =
+  const { colleagues, loading, reload, invite, inviteToTracker, accessLink, setDirection, setMemberRole, setTrackerAccess, unlink } =
     useColleagues();
   const maxBot = useMaxBot();
   const ask = useAsk();
@@ -252,6 +253,11 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                         <span className={person.member === "active" ? "team-status linked" : "team-status"}>
                           {MEMBER_LABEL[person.member]}
                           {person.direction ? ` · ${person.direction}` : ""}
+                          {/* Роль называется только тогда, когда она не
+                              обычная: у тринадцати из четырнадцати строк
+                              слово «руководитель» повторялось бы, ничего не
+                              добавляя. */}
+                          {person.role !== "manager" ? ` · ${MEMBER_ROLE_LABELS[person.role].toLowerCase()}` : ""}
                         </span>
                         <button
                           className="btn btn-small"
@@ -274,6 +280,34 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                         >
                           Направление
                         </button>
+                        {/* Права. Только у того, кто уже вошёл: роль без
+                            входа ничего не значит — менять разделы можно
+                            только из трекера. */}
+                        {person.member === "active" && (
+                          <button
+                            className="btn btn-small"
+                            type="button"
+                            title="Что человеку позволено сверх своей работы"
+                            onClick={() =>
+                              void (async () => {
+                                const next = await ask.choose({
+                                  title: "Права",
+                                  question: `Что может ${person.name}?`,
+                                  note: "Руководитель ведёт свою работу. Администратор и разработчик вдобавок меняют разделы и ответственных за них. «Команда», приглашения и сами права остаются у вас при любой роли.",
+                                  options: [
+                                    { value: "manager", label: "Руководитель" },
+                                    { value: "admin", label: "Администратор" },
+                                    { value: "developer", label: "Разработчик" },
+                                  ],
+                                });
+                                if (next === null || next === person.role) return;
+                                await setMemberRole(person.id, next as MemberRole);
+                              })()
+                            }
+                          >
+                            Права
+                          </button>
+                        )}
                         {/* Та же кнопка и те же слова, что у приглашённого:
                             вопрос у Кирилла один — «дать ссылку ещё раз», —
                             и то, что внутри это другой маршрут (аккаунт уже

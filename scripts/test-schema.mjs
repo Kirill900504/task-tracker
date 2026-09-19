@@ -487,6 +487,85 @@ async function main() {
     check("и переписать настройки из браузера нельзя", denied);
   });
 
+  console.log("\nАдминистратор и ответственные за раздел (0036):");
+  // Раздел заводит владелец — с этого и начинается вся проверка: он же
+  // единственный, кто может это сделать до того, как кому-то дали права.
+  await db.query(
+    `insert into public.sections (id, user_id, name, kind, sort_order) values ('sec_test_service',$1,'Сервис','work',0)`,
+    [OWNER],
+  );
+
+  await as(db, MANAGER_A, async () => {
+    const { rows } = await db.query("select id from public.sections where id = 'sec_test_service'");
+    check("руководитель видит раздел владельца", rows.length === 1);
+    const { rowCount } = await db.query("update public.sections set name = 'Моё' where id = 'sec_test_service'");
+    check("но переименовать его не может", rowCount === 0);
+  });
+
+  // Отказ на INSERT приходит ошибкой, а не нулём изменённых строк: политика
+  // проверяет новую строку (WITH CHECK), а не находит существующую.
+  await as(db, MANAGER_A, async () => {
+    let denied = false;
+    try {
+      await db.query(
+        `insert into public.section_assignees (user_id, section_id, assignee_id, role)
+         values ($1,'sec_test_service',$2,'executor')`,
+        [OWNER, byName["Вера"]],
+      );
+    } catch {
+      denied = true;
+    }
+    check("и ответственных за раздел не назначает", denied);
+  });
+
+  // Тот же человек, получивший роль администратора, делает ровно то, в чём
+  // ему только что отказали. Это и есть вся суть миграции: право переехало
+  // с личности на роль.
+  await db.query("update public.workspace_members set role = 'admin' where member_id = $1", [MANAGER_A]);
+
+  await as(db, MANAGER_A, async () => {
+    const { rowCount } = await db.query("update public.sections set name = 'Сервис и ремонт' where id = 'sec_test_service'");
+    check("администратор переименовывает раздел", rowCount === 1);
+    const inserted = await db.query(
+      `insert into public.section_assignees (user_id, section_id, assignee_id, role)
+       values ($1,'sec_test_service',$2,'executor')`,
+      [OWNER, byName["Вера"]],
+    );
+    check("и назначает ответственного за раздел", inserted.rowCount === 1);
+  });
+
+  // Всё внутри as() откатывается вместе с транзакцией, поэтому строка, по
+  // которой проверяется видимость, заводится отдельно и служебно.
+  await db.query(
+    `insert into public.section_assignees (user_id, section_id, assignee_id, role)
+     values ($1,'sec_test_service',$2,'executor')`,
+    [OWNER, byName["Вера"]],
+  );
+
+  await as(db, MANAGER_B, async () => {
+    const { rows } = await db.query("select role from public.section_assignees where section_id = 'sec_test_service'");
+    check("ответственных видят все в пространстве", rows.length === 1 && rows[0].role === "executor");
+    const { rowCount } = await db.query("delete from public.section_assignees where section_id = 'sec_test_service'");
+    check("а снять их обычный руководитель не может", rowCount === 0);
+  });
+
+  try {
+    await db.query(
+      `insert into public.section_assignees (user_id, section_id, assignee_id, role) values ($1,'sec_test_service',$2,'executor')`,
+      [OWNER, byName["Вера"]],
+    );
+    check("один человек стоит в разделе один раз", false);
+  } catch {
+    check("один человек стоит в разделе один раз", true);
+  }
+
+  try {
+    await db.query("update public.workspace_members set role = 'начальник' where member_id = $1", [MANAGER_B]);
+    check("выдуманная роль отклоняется", false);
+  } catch {
+    check("выдуманная роль отклоняется", true);
+  }
+
   await db.end();
   console.log(failures ? `\n${failures} проверок не прошло` : "\nВсе проверки прошли");
   process.exit(failures ? 1 : 0);

@@ -71,7 +71,12 @@ export default function NewTracker() {
   // загрузить, ещё неизвестно, а тянуть «на всякий случай» значит писать
   // чужие данные от чужого имени.
   const ready = !identity.loading;
+  // Две разные границы, и путать их нельзя. isAdmin — структура трекера
+  // (разделы и ответственные за них); её Кирилл может кому-то отдать.
+  // isOwner — «Команда»: доступ в трекер, приглашения и раздача ролей,
+  // и это остаётся за ним одним.
   const isAdmin = identity.isAdmin;
+  const isOwner = identity.isOwner;
   // Пусто у владельца — и это не мелочь.
   //
   // Правило «своё» сравнивает created_by с этим id, а у всего, что завёл
@@ -600,7 +605,7 @@ export default function NewTracker() {
       <ToastStack toasts={toasts.toasts} onUndo={toasts.undo} onDismiss={toasts.dismiss} />
       {dateTimeConfirm.dialog}
       <QuickAdd provider={quickAddProvider} />
-      {teamOpen && isAdmin && <TeamModal onClose={() => setTeamOpen(false)} />}
+      {teamOpen && isOwner && <TeamModal onClose={() => setTeamOpen(false)} />}
       {searchOpen && (
         <SearchOverlay
           tasks={tasks}
@@ -623,7 +628,7 @@ export default function NewTracker() {
             clockText={clockText}
             onSearch={() => setSearchOpen(true)}
             items={[
-              ...(isAdmin ? [{ id: "team", label: "👥 Команда", onSelect: () => setTeamOpen(true) }] : []),
+              ...(isOwner ? [{ id: "team", label: "👥 Команда", onSelect: () => setTeamOpen(true) }] : []),
               { id: "done", label: showDone ? "🙈 Скрыть завершённые" : "👁 Показать завершённые", onSelect: () => setShowDone((v) => !v) },
               ...(notifications.permission !== "unsupported"
                 ? [
@@ -750,11 +755,12 @@ export default function NewTracker() {
                 подпирать его кнопкой отката — см. DashboardLayout и
                 dnd/TrackerDnd. Вернуть панель на место теперь ровно так же
                 просто, как её унести. */}
-            {/* «Команда» — админское: приглашения, отключение доступа и
-                отвязка мессенджера принадлежат владельцу. Руководителю её
-                не показывают, и база отказала бы ему всё равно (миграции
-                0019, 0031). */}
-            {isAdmin && (
+            {/* «Команда» — владельцева, и остаётся такой даже теперь, когда
+                администратором может быть кто-то ещё (миграция 0036):
+                приглашения, отключение доступа, отвязка мессенджера и
+                раздача самих ролей — это доступ в трекер, а его раздаёт тот,
+                чьё пространство. База отказала бы всё равно (миграция 0019). */}
+            {isOwner && (
               <button className="btn" id="teamBtn" title="Кто на связи в мессенджерах" onClick={() => setTeamOpen(true)}>
                 <Icon name="users" /> Команда
               </button>
