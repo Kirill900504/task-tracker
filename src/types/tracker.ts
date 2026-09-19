@@ -24,6 +24,12 @@ export interface Task {
   deadline: string; // YYYY-MM-DD or ""
   recur: RecurKind;
   recurWeekday: string; // "0"-"6"
+  // Дни недели, когда повтор не один: «по понедельникам и четвергам», «по
+  // будням». Пусто — читается recurWeekday (миграция 0032), потому что у
+  // задач, заведённых раньше, массива нет и не будет.
+  // Необязательное: у задач, заведённых до миграции 0032, его нет вовсе,
+  // и правило «сначала массив, если пуст — одиночный день» это учитывает.
+  recurWeekdays?: string[];
   recurMonthday: string;
   recurYearDay: string;
   recurYearMonth: string; // "1"-"12"

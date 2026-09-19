@@ -28,6 +28,7 @@ export type TaskRow = {
   deadline: string | null;
   recur: string;
   recur_weekday: number | null;
+  recur_weekdays?: number[] | null;
   recur_monthday: number | null;
   recur_year_day: number | null;
   recur_year_month: number | null;
@@ -36,7 +37,12 @@ export type TaskRow = {
 export function isDueToday(t: TaskRow, now: Date, today: string): boolean {
   if (t.recur === "none") return t.deadline === today;
   if (t.recur === "daily") return true;
-  if (t.recur === "weekly") return now.getUTCDay() === t.recur_weekday;
+  // Сначала массив, если пуст — старая колонка: то же правило, что в
+  // taskDisplay.recurDays, и по той же причине (миграция 0032).
+  if (t.recur === "weekly") {
+    const many = (t.recur_weekdays || []).filter((n) => Number.isInteger(n));
+    return many.length ? many.includes(now.getUTCDay()) : now.getUTCDay() === t.recur_weekday;
+  }
   if (t.recur === "monthly") return now.getUTCDate() === t.recur_monthday;
   if (t.recur === "yearly") return now.getUTCDate() === t.recur_year_day && now.getUTCMonth() + 1 === t.recur_year_month;
   return false;

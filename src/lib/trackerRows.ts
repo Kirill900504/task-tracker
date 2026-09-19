@@ -17,6 +17,7 @@ export type TaskRow = {
   deadline: string | null;
   recur: string;
   recur_weekday: number | null;
+  recur_weekdays?: number[] | null;
   recur_monthday: number | null;
   recur_year_day: number | null;
   recur_year_month: number | null;
@@ -98,6 +99,7 @@ export function taskToRow(t: Task): TaskRow {
     deadline: t.deadline || null,
     recur: t.recur || "none",
     recur_weekday: t.recurWeekday !== "" && t.recurWeekday != null ? Number(t.recurWeekday) : null,
+    recur_weekdays: (t.recurWeekdays || []).map(Number).filter((n) => Number.isInteger(n)),
     recur_monthday: t.recurMonthday !== "" && t.recurMonthday != null ? Number(t.recurMonthday) : null,
     recur_year_day: t.recurYearDay !== "" && t.recurYearDay != null ? Number(t.recurYearDay) : null,
     recur_year_month: t.recurYearMonth !== "" && t.recurYearMonth != null ? Number(t.recurYearMonth) : null,
@@ -123,6 +125,7 @@ export function taskFromRow(r: TaskRow): Task {
     deadline: r.deadline || "",
     recur: (r.recur as Task["recur"]) || "none",
     recurWeekday: r.recur_weekday != null ? String(r.recur_weekday) : "1",
+    recurWeekdays: (r.recur_weekdays || []).map(String),
     recurMonthday: r.recur_monthday != null ? String(r.recur_monthday) : "",
     recurYearDay: r.recur_year_day != null ? String(r.recur_year_day) : "",
     recurYearMonth: r.recur_year_month != null ? String(r.recur_year_month) : "1",

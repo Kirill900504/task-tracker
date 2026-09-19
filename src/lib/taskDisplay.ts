@@ -32,10 +32,22 @@ export function weekdayName(n: number): string {
   return WEEKDAY_NAMES[n];
 }
 
+// В какие дни недели повторяется задача.
+//
+// Сначала массив, если он пуст — старая одиночная колонка. Переносить
+// прежние задачи незачем: правило короче любого переноса и не может
+// ошибиться на данных, которых ещё не видело (миграция 0032).
+export function recurDays(task: Task): number[] {
+  const many = (task.recurWeekdays || []).map(Number).filter((n) => Number.isInteger(n));
+  if (many.length) return many;
+  const one = Number(task.recurWeekday);
+  return Number.isNaN(one) ? [] : [one];
+}
+
 export function isDueToday(task: Task, now: Date = new Date()): boolean {
   if (task.recur === "none") return task.deadline === todayStr(now);
   if (task.recur === "daily") return true;
-  if (task.recur === "weekly") return String(now.getDay()) === String(task.recurWeekday);
+  if (task.recur === "weekly") return recurDays(task).includes(now.getDay());
   if (task.recur === "monthly") return String(now.getDate()) === String(task.recurMonthday);
   if (task.recur === "yearly") {
     return String(now.getDate()) === String(task.recurYearDay) && String(now.getMonth() + 1) === String(task.recurYearMonth);
@@ -46,7 +58,7 @@ export function isDueToday(task: Task, now: Date = new Date()): boolean {
 export function isTaskDueOnDate(task: Task, d: Date): boolean {
   if (task.recur === "none") return task.deadline === dateStr(d);
   if (task.recur === "daily") return true;
-  if (task.recur === "weekly") return String(d.getDay()) === String(task.recurWeekday);
+  if (task.recur === "weekly") return recurDays(task).includes(d.getDay());
   if (task.recur === "monthly") return String(d.getDate()) === String(task.recurMonthday);
   if (task.recur === "yearly") {
     return String(d.getDate()) === String(task.recurYearDay) && String(d.getMonth() + 1) === String(task.recurYearMonth);
@@ -63,9 +75,12 @@ export function mostRecentOccurrence(task: Task, ref: Date): string | null {
   if (task.recur === "daily") return dateStr(ref);
   if (task.recur === "weekly") {
     const wd = ref.getDay();
-    const target = Number(task.recurWeekday);
-    if (Number.isNaN(target)) return null;
-    const diff = (wd - target + 7) % 7;
+    // Ближайший из назначенных дней, считая назад: у задачи «по
+    // понедельникам и четвергам», просмотренной в пятницу, последним был
+    // четверг, а не понедельник.
+    const diffs = recurDays(task).map((target) => (wd - target + 7) % 7);
+    if (!diffs.length) return null;
+    const diff = Math.min(...diffs);
     return dateStr(new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - diff));
   }
   if (task.recur === "monthly") {
@@ -109,7 +124,18 @@ export function priorityClass(p: Task["priority"]): string {
 export function recurLabel(t: Task): string {
   if (t.recur === "none") return "";
   if (t.recur === "daily") return "🔁 Ежедневно";
-  if (t.recur === "weekly") return "🔁 По " + weekdayName(Number(t.recurWeekday)).toLowerCase() + "м";
+  if (t.recur === "weekly") {
+    const days = recurDays(t);
+    // Пять рабочих дней подряд — это «по будням», и называть их списком
+    // значит заставлять читателя складывать их в голове самому.
+    const workweek = [1, 2, 3, 4, 5];
+    if (days.length === 5 && workweek.every((d) => days.includes(d))) return "🔁 По будням";
+    if (days.length === 7) return "🔁 Ежедневно";
+    // Порядок недельный, а не тот, в котором нажимали: «пн, чт» читается,
+    // «чт, пн» — спотыкает.
+    const sorted = [...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+    return "🔁 По " + sorted.map((d) => weekdayName(d).toLowerCase() + "м").join(", ");
+  }
   if (t.recur === "monthly") return "🔁 Каждое " + t.recurMonthday + " число";
   if (t.recur === "yearly") return "🔁 Ежегодно " + t.recurYearDay + "." + pad(Number(t.recurYearMonth));
   return "";

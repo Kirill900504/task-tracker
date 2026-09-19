@@ -1174,6 +1174,9 @@
      говорит «человек взял задачу». */
   /* «От Игоря» — чужое поручение. Приглушённая: это подпись, а не
      состояние, и спорить за внимание с «просрочено» ей незачем. */
+  /* Ряд кнопок множественного выбора: те же отступы, что у ChipChoice,
+     но выбор не один, поэтому своей разметкой. */
+  .chip-row{display:flex; flex-wrap:wrap; gap:6px;}
   .pill-author{color:var(--ink-soft); background:var(--paper-soft); border:1px solid var(--line-soft);}
   .pill-accepted{color:var(--success); background:rgba(63,169,104,.14); border:1px solid rgba(63,169,104,.5);}
 

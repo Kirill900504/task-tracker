@@ -66,6 +66,7 @@ function emptyForm(task: Task | null, prefill?: TaskPrefill) {
     deadline: task?.deadline ?? prefill?.deadline ?? "",
     recur: task?.recur ?? "none",
     recurWeekday: task?.recurWeekday || "1",
+    recurWeekdays: task?.recurWeekdays ?? [],
     recurMonthday: task?.recurMonthday ?? "",
     recurYearDay: task?.recurYearDay ?? "",
     recurYearMonth: task?.recurYearMonth || "1",
@@ -256,6 +257,7 @@ export default function TaskModal({
       deadline: form.deadline,
       recur: form.recur as RecurKind,
       recurWeekday: form.recurWeekday,
+      recurWeekdays: form.recurWeekdays,
       recurMonthday: form.recurMonthday,
       recurYearDay: form.recurYearDay,
       recurYearMonth: form.recurYearMonth,
@@ -335,8 +337,24 @@ export default function TaskModal({
       okText: "Прекратить",
     });
     if (!yes) return;
-    setForm((f) => ({ ...f, recur: "none", recurWeekday: "1", recurMonthday: "", recurYearDay: "", recurYearMonth: "1" }));
-    if (task) onSave({ ...task, recur: "none", recurWeekday: "1", recurMonthday: "", recurYearDay: "", recurYearMonth: "1" }, []);
+    setForm((f) => ({ ...f, recur: "none", recurWeekday: "1", recurWeekdays: [], recurMonthday: "", recurYearDay: "", recurYearMonth: "1" }));
+    if (task) onSave({ ...task, recur: "none", recurWeekday: "1", recurWeekdays: [], recurMonthday: "", recurYearDay: "", recurYearMonth: "1" }, []);
+  }
+
+  // Выбранные дни недели. Пустой массив у старой задачи означает «читай
+  // одиночный день» — то же правило, что в taskDisplay.recurDays.
+  const pickedDays = (form.recurWeekdays || []).length ? form.recurWeekdays : [form.recurWeekday];
+  const isWorkweek = ["1", "2", "3", "4", "5"].every((d) => pickedDays.includes(d)) && pickedDays.length === 5;
+
+  function toggleWeekday(value: string) {
+    setForm((f) => {
+      const current = (f.recurWeekdays || []).length ? f.recurWeekdays : [f.recurWeekday];
+      const next = current.includes(value) ? current.filter((d) => d !== value) : [...current, value];
+      // Последний день не снимается: повтор без дней не повторяется никогда,
+      // и задача молча перестала бы появляться.
+      if (!next.length) return f;
+      return { ...f, recurWeekdays: next, recurWeekday: next[0] };
+    });
   }
 
   const showStopRecur = isEditing && form.recur !== "none";
@@ -591,14 +609,46 @@ export default function TaskModal({
           />
 
           <div className={"recur-config" + (form.recur === "weekly" ? " open" : "")} id="recurWeekly">
-            <label>День недели</label>
-            <ChipChoice
-              id="fRecurWeekday"
-              compact
-              value={form.recurWeekday}
-              options={WEEKDAY_OPTIONS.map((o) => ({ value: o.value, label: o.short, title: o.label }))}
-              onSelect={(v) => setForm((f) => ({ ...f, recurWeekday: v }))}
-            />
+            <label>Дни недели</label>
+            {/* Несколько дней, а не один.
+
+                «Каждый понедельник и четверг» и «по будням» — половина
+                повторяющихся поручений, и до сих пор каждое из них
+                заводилось двумя задачами с одинаковым названием, которые
+                дальше жили порознь: одну закрыли, вторую забыли.
+
+                Кнопки те же, что были, только нажатие теперь добавляет и
+                снимает. Снять последний день нельзя: повтор без единого дня
+                не повторяется никогда, и задача молча перестала бы
+                появляться. */}
+            <div className="chip-row" id="fRecurWeekday">
+              {WEEKDAY_OPTIONS.map((o) => {
+                const on = pickedDays.includes(o.value);
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    className={"participant-chip" + (on ? " selected" : "")}
+                    data-value={o.value}
+                    aria-pressed={on}
+                    title={o.label}
+                    onClick={() => toggleWeekday(o.value)}
+                  >
+                    {o.short}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                className={"participant-chip" + (isWorkweek ? " selected" : "")}
+                data-value="workweek"
+                aria-pressed={isWorkweek}
+                title="Понедельник — пятница"
+                onClick={() => setForm((f) => ({ ...f, recurWeekdays: ["1", "2", "3", "4", "5"], recurWeekday: "1" }))}
+              >
+                Будни
+              </button>
+            </div>
           </div>
           <div className={"recur-config" + (form.recur === "monthly" ? " open" : "")} id="recurMonthly">
             <label>Число месяца</label>
