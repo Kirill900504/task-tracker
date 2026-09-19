@@ -378,6 +378,57 @@ test("задача переносится в соседний столбец и 
   await expect(page.locator("#colLong .task", { hasText: title })).toBeVisible({ timeout: 20_000 });
 });
 
+// Перестановка ВНУТРИ столбца — и проверка, что экран при этом жив.
+//
+// 19.09.2026 именно здесь трекер падал в белый экран «This page couldn't
+// load»: предпросмотр вставлял карточку перед соседкой, под курсором
+// оказывалась она сама, «перед собой» означало «в конец» — и список скакал
+// туда-сюда, пока React не сдавался с ошибкой #185 (превышена глубина
+// обновлений). Нужны минимум три карточки: на двух петле не за что
+// зацепиться, и поэтому её не поймал ни один из прежних тестов.
+test("задача переставляется внутри столбца, и список не идёт вразнос", async ({ page }) => {
+  const stamp = Date.now();
+  const titles = [`E2E порядок A ${stamp}`, `E2E порядок B ${stamp}`, `E2E порядок C ${stamp}`];
+
+  await login(page);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  for (const title of titles) {
+    await page.click("#newTaskBtn");
+    await page.fill("#fTitle", title);
+    await pickAnyExecutor(page);
+    await page.click("#saveTaskBtn");
+    await expect(page.locator("#colShort .task", { hasText: title })).toBeVisible();
+  }
+  await waitForSaved(page);
+
+  const cards = page.locator("#colShort .task");
+  const first = (await cards.first().boundingBox())!;
+  const third = (await cards.nth(2).boundingBox())!;
+
+  await page.mouse.move(first.x + 60, first.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(first.x + 70, first.y + 34, { steps: 5 });
+  await page.waitForTimeout(150);
+  await page.mouse.move(third.x + third.width / 2, third.y + third.height / 2, { steps: 10 });
+
+  // Курсор стоит — значит и список обязан стоять. Если он шевелится сам,
+  // это петля, и она уронит страницу через несколько десятков кругов.
+  const order = () => page.evaluate(() => [...document.querySelectorAll("#colShort .task .task-title")].map((el) => el.textContent).join("|"));
+  await page.waitForTimeout(400);
+  const settled = await order();
+  await page.waitForTimeout(600);
+  expect(await order(), "список переставляет себя сам — вернулась петля").toBe(settled);
+
+  await page.mouse.up();
+  await waitForSaved(page);
+
+  // Карточка встаёт НА место соседки, а не перед ней: тянули вниз.
+  const after = await page.locator("#colShort .task .task-title").allTextContents();
+  expect(after.indexOf(titles[0])).toBe(2);
+  // И страница жива — ровно то, что переставало быть правдой.
+  await expect(page.locator("#newTaskBtn")).toBeVisible();
+});
+
 // Цитата в шапке подбирает себе кегль замером (HeaderQuote.tsx), и ошибается
 // этот замер молча: строка либо торчит за край, обрезанная на последнем
 // слове, либо сжимается до нечитаемых десяти пикселей — ровно это Кирилл и

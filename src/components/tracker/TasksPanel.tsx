@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isOverdue, isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
-import { insertBefore } from "@/lib/dndOrder";
+import { insertBefore, moveWithin } from "@/lib/dndOrder";
 import { useDragState, useDropHandler, type DropTarget } from "./dnd/TrackerDnd";
 import { SortableTask, TaskColumnBody } from "./dnd/SortableTask";
 import TaskCard from "./TaskCard";
@@ -372,9 +372,11 @@ export default function TasksPanel({
 
     const term = spot.term;
     const columnList = term === "short" ? shortOpen : longOpen;
-    const siblingIds = insertBefore(columnList.map((t) => t.id), taskId, spot.beforeId);
-
     const movedColumns = dragged.term !== term;
+    const ids = columnList.map((t) => t.id);
+    // Внутри столбца — перестановка на место соседа, в чужой столбец —
+    // вставка перед ним. Это разные вещи: см. lib/dndOrder.ts.
+    const siblingIds = movedColumns ? insertBefore(ids, taskId, spot.beforeId) : moveWithin(ids, taskId, spot.beforeId);
 
     siblingIds.forEach((id, i) => {
       const t = tasks.find((x) => x.id === id);
@@ -430,11 +432,28 @@ export default function TasksPanel({
     const dragged = tasks.find((t) => t.id === dragActive.id);
     if (!dragged) return plain;
 
+    // ВНУТРИ своего столбца предпросмотр не трогает список вообще. Сдвиг
+    // соседей там рисует сам sortable — трансформацией, не перестановкой
+    // узлов.
+    //
+    // Это не оптимизация, а лечение зацикливания, от которого у Кирилла
+    // 19.09.2026 приложение падало в белый экран, стоило потянуть
+    // долгосрочную задачу. Петля такая: вставили карточку перед той, над
+    // которой курсор, — под курсором оказалась она сама, — «вставить перед
+    // собой» означает «в конец», карточка уехала вниз, под курсором снова
+    // прежняя соседка, и всё начинается заново. Каждый круг — перерисовка
+    // обоих столбцов, и рендерер умирает за секунды. У меня это не
+    // воспроизводилось ровно потому, что в тестовом столбце лежала одна
+    // карточка: петле не за что зацепиться.
+    if (spot.term === dragged.term) return plain;
+
+    // В ЧУЖОЙ столбец карточка показывается в конце — всегда, куда бы ни
+    // указывал курсор внутри него. Позиция, не зависящая от того, что под
+    // курсором, не может сама себя пересчитать; точное место всё равно
+    // решается в момент отпускания.
     const target = spot.term === "short" ? shortOpen : longOpen;
     const other = spot.term === "short" ? longOpen : shortOpen;
-    const ids = insertBefore(target.map((t) => t.id), dragged.id, spot.beforeId);
-    const byId = new Map([...target, ...other, dragged].map((t) => [t.id, t]));
-    const moved = ids.map((id) => byId.get(id)).filter((t): t is Task => !!t);
+    const moved = [...target.filter((t) => t.id !== dragged.id), dragged];
     const rest = other.filter((t) => t.id !== dragged.id);
     return spot.term === "short" ? { short: moved, long: rest } : { short: rest, long: moved };
   }, [shortOpen, longOpen, tasks, dragActive, dragOver]);
