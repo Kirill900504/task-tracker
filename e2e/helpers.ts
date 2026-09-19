@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 // Общие шаги для обоих наборов — настольного и телефонного.
 //
@@ -32,4 +32,45 @@ export async function pickAnyExecutor(page: Page) {
   // и попадает под тот же фильтр.
   await menu.locator(".export-item").filter({ hasText: /^Исполнитель/ }).click();
   await expect(chip).toHaveClass(/role-executor/);
+}
+
+// Перетаскивание — настоящими движениями мыши.
+//
+// dnd-kit слушает pointer-события, поэтому подделывать DragEvent больше не
+// нужно и нельзя: перенос начинается только после того, как указатель
+// сдвинулся на несколько пикселей с зажатой кнопкой (порог в TrackerDnd —
+// он же отличает «нажал» от «потянул»). Отсюда три шага вместо одного:
+// маленький сдвиг на месте, чтобы перетаскивание вообще началось, потом
+// движение к цели, и только потом отпускание. Паузы — чтобы React успел
+// перерисовать расступившиеся списки: без них отпускание приходит в тот
+// момент, когда цель ещё не знает, что над ней что-то висит.
+export async function dragOnto(page: Page, source: Locator, target: Locator) {
+  // Мышь не может взять то, чего нет на экране: boundingBox отдаёт
+  // координаты и для элемента ниже сгиба, а движение туда просто не
+  // попадёт ни во что. Человек в этом месте сначала прокручивает.
+  await source.scrollIntoViewIfNeeded();
+  const from = await source.boundingBox();
+  if (!from) throw new Error('не найден источник перетаскивания');
+
+  await page.mouse.move(from.x + Math.min(40, from.width / 2), from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + Math.min(40, from.width / 2) + 12, from.y + from.height / 2 + 8, { steps: 5 });
+  await page.waitForTimeout(150);
+
+  // Координаты цели берутся ПОСЛЕ начала перетаскивания, а не до: страница
+  // к этому моменту могла проехать (у dnd-kit есть автопрокрутка у краёв),
+  // и прямоугольник, измеренный заранее, указывает в пустоту. Именно на
+  // этом тест «мысль на день календаря» и падал молча.
+  const to = await target.boundingBox();
+  if (!to) throw new Error('не найдена цель перетаскивания');
+
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
+  await page.waitForTimeout(250);
+  await page.mouse.up();
+}
+
+// Клетка календаря по числу месяца — только текущего, соседние месяцы
+// показывают те же числа.
+export function dayCell(page: Page, day: number): Locator {
+  return page.locator(`.cal-day:not(.other-month):text-is("${day}")`).first();
 }

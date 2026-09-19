@@ -23,7 +23,6 @@ export default function PeoplePanel({
   onSelect,
   dragHandleProps,
   isDragging,
-  dropIndicatorBefore,
 }: {
   tasks: Task[];
   assignees: string[];
@@ -35,7 +34,7 @@ export default function PeoplePanel({
 
   return (
     <div
-      className={"panel dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")}
+      className={"panel dash-panel" + (isDragging ? " dragging" : "")}
       data-panel-id="peoplePanel"
     >
       <div className="dash-panel-head">

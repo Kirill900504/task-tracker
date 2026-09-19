@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { pickAnyExecutor } from "./helpers";
+import { dayCell, dragOnto, pickAnyExecutor } from "./helpers";
 
 // The one smoke test covering the actual "Definition of Done" checklist
 // (login, create task, complete task, create meeting, create idea,
@@ -164,20 +164,20 @@ test("dragging an idea onto a calendar day converts it into a meeting", async ({
   await page.reload();
   await expect(page.locator(".idea-item", { hasText: ideaText })).toBeVisible();
 
-  // HTML5 drag-and-drop isn't driven reliably by real mouse events in
-  // headless Chromium, so the drag is dispatched directly — the handlers
-  // under test are the same ones a real drag reaches.
-  await page.evaluate((text) => {
-    const idea = [...document.querySelectorAll(".idea-item")].find((el) => el.textContent?.includes(text));
-    const cell = [...document.querySelectorAll(".cal-day:not(.other-month)")].find(
-      (el) => el.firstChild?.textContent?.trim() === "15",
-    );
-    if (!idea || !cell) throw new Error("idea or calendar cell not found");
-    const dt = new DataTransfer();
-    idea.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: dt }));
-    cell.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
-    cell.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
-  }, ideaText);
+  // Окно пошире: мысль лежит в правой колонке, календарь — в левой, и
+  // перетащить одно в другое мышью можно только тогда, когда оба на экране
+  // одновременно. У человека с монитором так и есть.
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await expect(page.locator(".idea-item", { hasText: ideaText })).toBeVisible();
+
+  // Настоящей мышью, а не подделанными событиями.
+  //
+  // Раньше здесь рассылались DragEvent вручную — иначе headless-браузер не
+  // воспроизводил HTML5 drag-and-drop. С переходом на pointer-события
+  // (dnd-kit, см. dnd/TrackerDnd.tsx) подделывать больше нечего: перенос
+  // идёт теми же движениями мыши, что и у человека, и тест наконец
+  // проверяет ровно то, что происходит на экране.
+  await dragOnto(page, page.locator(".idea-item", { hasText: ideaText }), dayCell(page, 15));
 
   // The meeting modal opens pre-filled — the idea is still there until saved.
   await expect(page.locator("#meetingOverlay")).toBeVisible();
@@ -327,6 +327,55 @@ test("the layout reset button stays hidden when nothing was rearranged", async (
   await page.reload();
   await expect(page.locator("#newTaskBtn")).toBeVisible();
   await expect(page.locator("#resetLayoutBtn")).toHaveCount(0);
+});
+
+// Перенос задачи между столбцами — мышью, как человек.
+//
+// До 19.09.2026 это был HTML5 drag-and-drop, и проверить его настоящими
+// движениями было нельзя: приходилось рассылать поддельные события. Теперь
+// перенос идёт на pointer-событиях (dnd/TrackerDnd.tsx), и тест делает ровно
+// то же, что рука: берёт карточку, ведёт в соседний столбец, отпускает.
+// Проверяется и то, что видно в процессе, — поднятая карточка под курсором
+// и силуэт на её месте: ради этого вида всё и переписывалось.
+test("задача переносится в соседний столбец и остаётся там после перезагрузки", async ({ page }) => {
+  const title = `E2E перенос ${Date.now()}`;
+
+  await login(page);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+
+  const card = page.locator(".task", { hasText: title });
+  await expect(page.locator("#colShort .task", { hasText: title })).toBeVisible();
+  await waitForSaved(page);
+
+  // В процессе: карточка поднята, на её месте силуэт, столбец-получатель
+  // подсвечен. Проверяется до отпускания, потому что после него всё это
+  // исчезает — а именно это Кирилл и увидит глазами.
+  await card.scrollIntoViewIfNeeded();
+  const from = (await card.boundingBox())!;
+  await page.mouse.move(from.x + 60, from.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 75, from.y + 30, { steps: 5 });
+  await page.waitForTimeout(150);
+  const target = (await page.locator("#colLong .task-column-body").boundingBox())!;
+  await page.mouse.move(target.x + target.width / 2, target.y + 40, { steps: 12 });
+  await page.waitForTimeout(300);
+
+  await expect(page.locator(".dnd-card-ghost .task-title")).toHaveText(title);
+  await expect(page.locator(".task.dragging")).toHaveCount(1);
+  await expect(page.locator(".task-column-body.drag-over")).toHaveCount(1);
+
+  await page.mouse.up();
+
+  await expect(page.locator("#colLong .task", { hasText: title })).toBeVisible();
+  await expect(page.locator("#colShort .task", { hasText: title })).toHaveCount(0);
+  await waitForSaved(page);
+
+  await page.reload();
+  await expect(page.locator("#colLong .task", { hasText: title })).toBeVisible({ timeout: 20_000 });
 });
 
 // Цитата в шапке подбирает себе кегль замером (HeaderQuote.tsx), и ошибается

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { DragEvent } from "react";
+import type { CSSProperties, HTMLAttributes } from "react";
 import type { Section, Task } from "@/types/tracker";
 import { fmtDate, isDueTodayHighlight, isOverdue, priorityClass, priorityLabel, recurLabel } from "@/lib/taskDisplay";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -18,10 +18,8 @@ export default function TaskCard({
   onToggleDone,
   onOpen,
   isDragging,
-  onDragStart,
-  onDragEnd,
+  dragProps,
   justCreated,
-  dropIndicatorBefore,
   menuItems,
   authorName,
 }: {
@@ -35,10 +33,17 @@ export default function TaskCard({
   onToggleDone: () => void;
   onOpen: () => void;
   isDragging?: boolean;
-  onDragStart?: (e: DragEvent) => void;
-  onDragEnd?: () => void;
+  // Всё, чем dnd-kit делает карточку перетаскиваемой: ссылка на узел,
+  // слушатели указателя и сдвиг, которым соседи расступаются. Карточка сама
+  // ничего об этом не знает — её тянут и в панели задач, и в «Сегодня», где
+  // перетаскивания нет вовсе, поэтому хук вызывает тот, кто её показывает.
+  dragProps?: {
+    ref?: (element: HTMLElement | null) => void;
+    style?: CSSProperties;
+    attributes?: HTMLAttributes<HTMLElement>;
+    listeners?: Record<string, unknown>;
+  };
   justCreated?: boolean;
-  dropIndicatorBefore?: boolean;
   // Everything the card can do that a mouse would do by dragging it —
   // moving it up the column, sending it to the other column, turning it into
   // a meeting. Shown only on a phone: with a mouse the drag is still there
@@ -67,15 +72,17 @@ export default function TaskCard({
         (overdue ? " overdue" : "") +
         (dueToday ? " due-today" : "") +
         (isDragging ? " dragging" : "") +
-        (justCreated ? " just-created" : "") +
-        (dropIndicatorBefore ? " drag-indicator" : "")
+        (justCreated ? " just-created" : "")
       }
       data-id={task.id}
-      style={swipe.offset ? { transform: `translateX(${swipe.offset}px)`, transition: "none" } : undefined}
+      ref={dragProps?.ref}
+      // Свайп «сделано» на телефоне побеждает сдвиг перетаскивания: пока
+      // палец ведёт карточку вбок, она и должна ехать за пальцем, а не
+      // расступаться перед соседом.
+      style={swipe.offset ? { transform: `translateX(${swipe.offset}px)`, transition: "none" } : dragProps?.style}
+      {...dragProps?.attributes}
+      {...dragProps?.listeners}
       {...swipe.handlers}
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
       onClick={onOpen}
     >
       <div

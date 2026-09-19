@@ -24,7 +24,6 @@ export default function WeekPanel({
   onOpenMeeting,
   dragHandleProps,
   isDragging,
-  dropIndicatorBefore,
 }: {
   tasks: Task[];
   meetings: Meeting[];
@@ -36,7 +35,7 @@ export default function WeekPanel({
 
   return (
     <div
-      className={"panel dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")}
+      className={"panel dash-panel" + (isDragging ? " dragging" : "")}
       data-panel-id="weekPanel"
     >
       <div className="dash-panel-head">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useDroppable } from "@dnd-kit/core";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso, sortMeetingsForList } from "@/lib/calendarLogic";
 import { todayStr } from "@/lib/taskDisplay";
@@ -17,6 +18,7 @@ import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 import { useAsk } from "@/components/Ask";
 import { isMine } from "@/lib/ownership";
+import { useDragState, useDropHandler } from "./dnd/TrackerDnd";
 
 export default function MeetingsPanel({
   myUserId = "",
@@ -36,7 +38,6 @@ export default function MeetingsPanel({
   justCreatedId,
   dragHandleProps,
   isDragging,
-  dropIndicatorBefore,
 }: {
   // Свой auth-id: чужую встречу видно, потому что тебя на неё позвали, но
   // это не право её закрывать, переносить и удалять — база откажет молча
@@ -70,7 +71,6 @@ export default function MeetingsPanel({
   // Голосование по встречам — один слой на всю панель, как участники у
   // задач: и карточки, и форма читают отсюда.
   const votes = useMeetingVotes();
-  const [ideaDragOver, setIdeaDragOver] = useState(false);
   const ask = useAsk();
   const [modalState, setModalState] = useState<{ open: boolean; meeting: Meeting | null; prefill?: MeetingPrefill }>({ open: false, meeting: null });
   // Перенос, начатый из формы встречи: та встреча, которую надо закрыть как
@@ -138,6 +138,16 @@ export default function MeetingsPanel({
     // request is still open here and this only fires for requested opens.
     if (!modalState.open && openMeetingRequest !== null) onRequestedMeetingSaved?.(m);
   }
+
+  // Мысль, брошенная в список встреч, становится встречей. Список принимает
+  // только её: задачу сюда несут через день календаря, где спрашивают время.
+  const { active: dragActive } = useDragState();
+  const { setNodeRef: setMeetingsDropRef, isOver } = useDroppable({ id: "meetings", data: { target: { kind: "meetings" } } });
+  const ideaOver = isOver && dragActive?.kind === "idea";
+  useDropHandler("idea", (ideaId, target) => {
+    if (target.kind !== "meetings") return;
+    onIdeaDropped(ideaId);
+  });
 
   const sorted = sortMeetingsForList(meetings, showResolved);
 
@@ -246,7 +256,7 @@ export default function MeetingsPanel({
   }
 
   return (
-    <div className={"panel dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")} id="meetingsPanel" data-panel-id="meetingsPanel">
+    <div className={"panel dash-panel" + (isDragging ? " dragging" : "")} id="meetingsPanel" data-panel-id="meetingsPanel">
       <div className="dash-panel-head">
         <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
         <div className="panel-title">
@@ -256,25 +266,7 @@ export default function MeetingsPanel({
           +
         </button>
       </div>
-      <div
-        id="meetingsForDay"
-        className={ideaDragOver ? "drag-over" : ""}
-        onDragOver={(e) => {
-          if (!e.dataTransfer.types.includes("application/x-idea-id")) return;
-          e.preventDefault();
-          setIdeaDragOver(true);
-        }}
-        onDragLeave={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) setIdeaDragOver(false);
-        }}
-        onDrop={(e) => {
-          const ideaId = e.dataTransfer.getData("application/x-idea-id");
-          setIdeaDragOver(false);
-          if (!ideaId) return;
-          e.preventDefault();
-          onIdeaDropped(ideaId);
-        }}
-      >
+      <div id="meetingsForDay" ref={setMeetingsDropRef} className={ideaOver ? "drag-over" : ""}>
         {sorted.length === 0 ? (
           <div className="empty">{meetings.length === 0 ? "Встреч пока нет" : "Нет запланированных встреч"}</div>
         ) : (

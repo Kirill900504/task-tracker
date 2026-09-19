@@ -5,6 +5,8 @@
 // reschedule (dropping a meeting chip on a day) is a later phase — clicking
 // a day still opens the "+ Задача / + Встреча" popover as before.
 import { useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { useDroppable } from "@dnd-kit/core";
 import { createPortal } from "react-dom";
 import type { Meeting, Task } from "@/types/tracker";
 import { dateStr, fmtDate, isTaskDueOnDate, todayStr } from "@/lib/taskDisplay";
@@ -12,6 +14,7 @@ import { getMonthGridDates } from "@/lib/calendarLogic";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import PanelDragHandle, { resolveDragHandleProps, type PanelDragProps } from "./PanelDragHandle";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import { useDragState, useDropHandler, type DropTarget } from "./dnd/TrackerDnd";
 
 const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -29,7 +32,6 @@ export default function CalendarPanel({
   dateTimeConfirm,
   dragHandleProps,
   isDragging,
-  dropIndicatorBefore,
 }: {
   tasks: Task[];
   meetings: Meeting[];
@@ -57,7 +59,6 @@ export default function CalendarPanel({
   // scroll would clip it near the bottom of the list.
   const [popover, setPopover] = useState<{ date: string; anchor: DOMRect } | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
 
   // Placed by writing to the DOM once measured (its own size decides whether
   // it fits below the cell), then flipped above / pulled inside the viewport
@@ -78,8 +79,28 @@ export default function CalendarPanel({
   const today = todayStr();
   const gridDates = getMonthGridDates(viewDate);
 
+  // Что значит «бросить на день». Три разных ответа, и каждый принадлежит
+  // календарю: мысль и задача становятся встречей на эту дату, встреча —
+  // переезжает, спросив о времени.
+  useDropHandler("idea", (ideaId, target) => {
+    if (target.kind !== "day") return;
+    onIdeaDroppedOnDate(ideaId, target.date);
+  });
+  useDropHandler("task", (taskId, target) => {
+    if (target.kind !== "day") return;
+    onTaskDroppedOnDate(taskId, target.date);
+  });
+  useDropHandler("meeting", async (meetingId, target) => {
+    if (target.kind !== "day") return;
+    const meeting = meetings.find((m) => m.id === meetingId);
+    if (!meeting) return;
+    const result = await dateTimeConfirm.ask(`Перенести встречу «${meeting.title}» на:`, target.date, meeting.time || "10:00");
+    if (!result) return;
+    onRescheduleMeeting(meeting, result.date, result.time);
+  });
+
   return (
-    <div className={"panel dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")} id="calPanel" data-panel-id="calPanel">
+    <div className={"panel dash-panel" + (isDragging ? " dragging" : "")} id="calPanel" data-panel-id="calPanel">
       {/* Отдельной строки с надписью «КАЛЕНДАРЬ» больше нет: сетка месяца и
           так ни на что другое не похожа, а строка стоила высоты, которой в
           рабочем поле всегда не хватает. Ручка перетаскивания переехала в
@@ -108,57 +129,21 @@ export default function CalendarPanel({
           const hasHigh = dueTasks.some((t) => t.priority === "high");
           const dayMeetings = meetings.filter((m) => m.date === ds);
           return (
-            <div
+            <CalendarDay
               key={ds}
+              date={ds}
               className={
                 "cal-day" +
                 (cd.getMonth() !== viewDate.getMonth() ? " other-month" : "") +
                 (ds === today ? " today" : "") +
-                (ds === selectedDate ? " selected" : "") +
-                (dragOverDate === ds ? " drag-over" : "")
+                (ds === selectedDate ? " selected" : "")
               }
-              onClick={(e) => {
-                e.stopPropagation();
-                setPopover({ date: ds, anchor: e.currentTarget.getBoundingClientRect() });
-              }}
-              onDragOver={(e) => {
-                const t = e.dataTransfer.types;
-                if (!t.includes("text/plain") && !t.includes("application/x-idea-id") && !t.includes("application/x-task-id")) return;
-                e.preventDefault();
-                setDragOverDate(ds);
-              }}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverDate((cur) => (cur === ds ? null : cur));
-              }}
-              onDrop={async (e) => {
-                setDragOverDate(null);
-                const ideaId = e.dataTransfer.getData("application/x-idea-id");
-                if (ideaId) {
-                  e.preventDefault();
-                  onIdeaDroppedOnDate(ideaId, ds);
-                  return;
-                }
-                const taskId = e.dataTransfer.getData("application/x-task-id");
-                if (taskId) {
-                  e.preventDefault();
-                  onTaskDroppedOnDate(taskId, ds);
-                  return;
-                }
-                const meetingId = e.dataTransfer.getData("text/plain");
-                if (!meetingId) return;
-                e.preventDefault();
-                const meeting = meetings.find((m) => m.id === meetingId);
-                if (!meeting) return;
-                const result = await dateTimeConfirm.ask(`Перенести встречу «${meeting.title}» на:`, ds, meeting.time || "10:00");
-                if (!result) return;
-                onRescheduleMeeting(meeting, result.date, result.time);
-              }}
-              style={{ position: "relative" }}
+              onClick={(rect) => setPopover({ date: ds, anchor: rect })}
             >
               {cd.getDate()}
               {dueTasks.length > 0 && <div className={"cal-dot" + (hasHigh ? " high" : "")} />}
               {dayMeetings.length > 0 && <div className="cal-dot meeting" style={{ marginTop: dueTasks.length ? 2 : 3 }} />}
-            </div>
+            </CalendarDay>
           );
         })}
       </div>
@@ -212,6 +197,41 @@ export default function CalendarPanel({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// Клетка дня, принимающая сброс. Отдельным компонентом, потому что
+// useDroppable — хук: в теле цикла его не вызвать.
+function CalendarDay({
+  date,
+  className,
+  onClick,
+  children,
+}: {
+  date: string;
+  className: string;
+  onClick: (rect: DOMRect) => void;
+  children: ReactNode;
+}) {
+  const { active } = useDragState();
+  const { setNodeRef, isOver } = useDroppable({ id: "day:" + date, data: { target: { kind: "day", date } as DropTarget } });
+  // Подсветка — только когда несут то, что день умеет принять. Раньше
+  // подсвечивалось всё подряд, и «сюда можно» означало ровно столько же,
+  // сколько «сюда нельзя».
+  const welcoming = isOver && (active?.kind === "idea" || active?.kind === "task" || active?.kind === "meeting");
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={className + (welcoming ? " drag-over" : "")}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick(e.currentTarget.getBoundingClientRect());
+      }}
+      style={{ position: "relative" }}
+    >
+      {children}
     </div>
   );
 }

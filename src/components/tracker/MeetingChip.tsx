@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import { createPortal } from "react-dom";
 import type { Meeting } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
@@ -58,19 +59,26 @@ export default function MeetingChip({
     el.style.left = Math.max(8, peopleAnchor.right - el.offsetWidth) + "px";
   }, [peopleAnchor]);
 
+  // Встречу несут на день календаря — это перенос. Порядок в списке у встреч
+  // свой (по времени), переставлять их руками нечего, поэтому draggable, а
+  // не sortable.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: "meeting:" + meeting.id,
+    data: { payload: { kind: "meeting", id: meeting.id, title: meeting.title } },
+  });
+
   return (
     <div
       className={
         "meeting-chip" +
         (meeting.date === selectedDay ? " selected-day" : "") +
         (meeting.status && meeting.status !== "planned" ? " resolved" : "") +
-        (justCreated ? " just-created" : "")
+        (justCreated ? " just-created" : "") +
+        (isDragging ? " dragging" : "")
       }
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData("text/plain", meeting.id);
-        e.dataTransfer.effectAllowed = "move";
-      }}
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
       onClick={onOpen}
     >
       <div style={{ display: "flex", minWidth: 0, flex: "1 1 100%", gap: 8 }}>

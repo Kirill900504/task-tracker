@@ -4,11 +4,13 @@
 // (render(), matchesFilters(), sortFn/rankOf, the modal open/save/delete
 // flow, setupTaskDragDrop()/reorderColumn(), and the idea-drop handlers
 // for elListShort/elListLong).
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent, ReactNode, RefObject } from "react";
+import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isOverdue, isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
-import { getDragAfterElement } from "@/lib/dndDom";
+import { insertBefore } from "@/lib/dndOrder";
+import { useDragState, useDropHandler, type DropTarget } from "./dnd/TrackerDnd";
+import { SortableTask, TaskColumnBody } from "./dnd/SortableTask";
 import TaskCard from "./TaskCard";
 import type { ActionMenuItem } from "./ActionMenu";
 import TaskModal from "./TaskModal";
@@ -80,7 +82,6 @@ export default function TasksPanel({
   extraBanner,
   dragHandleProps,
   isDragging,
-  dropIndicatorBefore,
 }: {
   tasks: Task[];
   sections: Section[];
@@ -177,29 +178,13 @@ export default function TasksPanel({
     });
   }
 
-  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
-  // Сеть под тем же самым: перетаскивание кончается не только броском в
-  // столбец задач, но и броском на день календаря, мимо всего, и клавишей
-  // Escape. Во всех этих случаях карточка может успеть перерисоваться
-  // раньше, чем до неё дойдёт dragend, и тогда она остаётся прозрачной и
-  // повёрнутой. Событие на документе приходит всегда — оно не привязано к
-  // элементу, которого уже нет.
-  useEffect(() => {
-    const clear = () => setDraggingTaskId(null);
-    document.addEventListener("dragend", clear);
-    document.addEventListener("drop", clear);
-    return () => {
-      document.removeEventListener("dragend", clear);
-      document.removeEventListener("drop", clear);
-    };
-  }, []);
   // The card whose «кому отправить» menu is open (phone only — with a
   // mouse the same thing sits in the task's own form).
   const [sendTask, setSendTask] = useState<Task | null>(null);
-  const [dropIndicator, setDropIndicator] = useState<{ term: Term; beforeId: string | null } | null>(null);
-  const [ideaDragOverTerm, setIdeaDragOverTerm] = useState<Term | null>(null);
-  const shortColRef = useRef<HTMLDivElement | null>(null);
-  const longColRef = useRef<HTMLDivElement | null>(null);
+
+  // Что сейчас несут и над чем оно висит — отсюда берётся предпросмотр
+  // столбцов: место освобождается ДО того, как карточку отпустили.
+  const { active: dragActive, over: dragOver } = useDragState();
 
   // A sibling (the calendar's date popover) can also request opening the
   // "new task" modal for a specific date — treated as an alternate open
@@ -361,48 +346,20 @@ export default function TasksPanel({
     });
   }
 
-  function handleDragOver(e: DragEvent<HTMLDivElement>, term: Term) {
-    if (e.dataTransfer.types.includes("application/x-task-id")) {
-      e.preventDefault();
-      const container = term === "short" ? shortColRef.current : longColRef.current;
-      const after = container ? getDragAfterElement(container, e.clientY, ".task:not(.dragging)") : null;
-      setDropIndicator({ term, beforeId: after?.dataset.id ?? null });
-    } else if (e.dataTransfer.types.includes("application/x-idea-id")) {
-      e.preventDefault();
-      setIdeaDragOverTerm(term);
-    }
+  // Куда встанет задача: цель говорит и столбец, и соседа, перед которым
+  // вставать. Одна и та же пара считается и для предпросмотра, и для
+  // записи, — иначе они разойдутся (см. lib/dndOrder.ts).
+  function columnTargetOf(target: DropTarget): { term: Term; beforeId: string | null } | null {
+    if (target.kind === "task-column") return { term: target.term as Term, beforeId: null };
+    if (target.kind === "task") return { term: target.term as Term, beforeId: target.id };
+    return null;
   }
 
-  function handleDragLeave(e: DragEvent<HTMLDivElement>, term: Term) {
-    const container = term === "short" ? shortColRef.current : longColRef.current;
-    if (container && !container.contains(e.relatedTarget as Node)) {
-      setDropIndicator((cur) => (cur?.term === term ? null : cur));
-      setIdeaDragOverTerm((cur) => (cur === term ? null : cur));
-    }
-  }
-
-  function handleDrop(e: DragEvent<HTMLDivElement>, term: Term) {
-    e.preventDefault();
-    const ideaId = e.dataTransfer.getData("application/x-idea-id");
-    if (ideaId) {
-      setIdeaDragOverTerm(null);
-      onIdeaDropped(ideaId, term);
-      return;
-    }
-    const taskId = e.dataTransfer.getData("application/x-task-id");
-    setDropIndicator(null);
-    // Снимаем «перетаскивается» ЗДЕСЬ, а не только в onDragEnd карточки.
-    //
-    // Между столбцами карточка меняет term и перерисовывается в другом
-    // списке — то есть исходный элемент размонтируется раньше, чем браузер
-    // успеет послать ему dragend. Событие уходит в никуда, draggingTaskId
-    // остаётся заполненным, и задача на новом месте так и стоит с классом
-    // .dragging: полупрозрачная и повёрнутая на полградуса. Внутри одного
-    // столбца этого не видно — там элемент остаётся на месте и dragend
-    // приходит, — поэтому поломка выглядела как «переносится только вниз,
-    // а вбок ломается».
-    setDraggingTaskId(null);
-    if (!taskId) return;
+  function handleTaskDrop(taskId: string, target: DropTarget) {
+    const spot = columnTargetOf(target);
+    // Не наш случай: задачу могли бросить на день календаря — это разбирает
+    // календарь, у него свой обработчик.
+    if (!spot) return;
     const dragged = tasks.find((t) => t.id === taskId);
     if (!dragged) return;
     // Чужую задачу не переносят: срочность и порядок — свойства самой
@@ -413,12 +370,9 @@ export default function TasksPanel({
       return;
     }
 
-    const container = term === "short" ? shortColRef.current : longColRef.current;
-    const after = container ? getDragAfterElement(container, e.clientY, ".task:not(.dragging)") : null;
+    const term = spot.term;
     const columnList = term === "short" ? shortOpen : longOpen;
-    const siblingIds = columnList.filter((t) => t.id !== taskId).map((t) => t.id);
-    const insertAt = after ? siblingIds.indexOf(after.dataset.id as string) : -1;
-    siblingIds.splice(insertAt === -1 ? siblingIds.length : insertAt, 0, taskId);
+    const siblingIds = insertBefore(columnList.map((t) => t.id), taskId, spot.beforeId);
 
     const movedColumns = dragged.term !== term;
 
@@ -451,6 +405,39 @@ export default function TasksPanel({
       );
     }
   }
+
+  // Мысль, брошенная в столбец задач, становится задачей — это разбирает
+  // владелец мыслей, а сюда приходит уже готовым обработчиком.
+  function handleIdeaDrop(ideaId: string, target: DropTarget) {
+    const spot = columnTargetOf(target);
+    if (!spot) return;
+    onIdeaDropped(ideaId, spot.term);
+  }
+
+  useDropHandler("task", handleTaskDrop);
+  useDropHandler("idea", handleIdeaDrop);
+
+  // Столбцы, какими их видно ПРЯМО СЕЙЧАС. Пока карточку несут, она уже
+  // стоит на новом месте, а соседи разъехались: это и есть «расступаются,
+  // уступая место», о котором просил Кирилл. Отпускание ничего не двигает
+  // на экране — оно лишь закрепляет то, что человек уже видит.
+  const preview = useMemo(() => {
+    const plain = { short: shortOpen, long: longOpen };
+    if (dragActive?.kind !== "task" || !dragOver) return plain;
+    const spot = dragOver.kind === "task-column" || dragOver.kind === "task" ? columnTargetOf(dragOver) : null;
+    if (!spot) return plain;
+
+    const dragged = tasks.find((t) => t.id === dragActive.id);
+    if (!dragged) return plain;
+
+    const target = spot.term === "short" ? shortOpen : longOpen;
+    const other = spot.term === "short" ? longOpen : shortOpen;
+    const ids = insertBefore(target.map((t) => t.id), dragged.id, spot.beforeId);
+    const byId = new Map([...target, ...other, dragged].map((t) => [t.id, t]));
+    const moved = ids.map((id) => byId.get(id)).filter((t): t is Task => !!t);
+    const rest = other.filter((t) => t.id !== dragged.id);
+    return spot.term === "short" ? { short: moved, long: rest } : { short: rest, long: moved };
+  }, [shortOpen, longOpen, tasks, dragActive, dragOver]);
 
   // Ordering by hand is a drag with a mouse, and a finger has no drag at
   // all. Renumbering the whole column is exactly what handleDrop does, so
@@ -499,7 +486,7 @@ export default function TasksPanel({
     return items;
   }
 
-  function renderColumn(list: Task[], emptyText: string, countLabel: string, term: Term, ref: RefObject<HTMLDivElement | null>) {
+  function renderColumn(list: Task[], emptyText: string, countLabel: string, term: Term) {
     const colId = term === "short" ? "colShort" : "colLong";
     const collapsed = collapsedCols[colId];
     return (
@@ -508,43 +495,31 @@ export default function TasksPanel({
           {countLabel} <span className="count">{list.length}</span>
           <span className="collapse-arrow">▾</span>
         </div>
-        <div
-          ref={ref}
-          className={ideaDragOverTerm === term ? "drag-over" : dropIndicator?.term === term && dropIndicator.beforeId === null ? "drag-indicator-end" : ""}
-          onDragOver={(e) => handleDragOver(e, term)}
-          onDragLeave={(e) => handleDragLeave(e, term)}
-          onDrop={(e) => handleDrop(e, term)}
-        >
+        <TaskColumnBody term={term} ids={list.map((t) => t.id)} empty={list.length === 0}>
           {list.length === 0 ? (
             <div className="empty">{emptyText}</div>
           ) : (
             list.map((t) => (
-              <TaskCard
-                key={t.id}
-                task={t}
-                section={sectionById.get(t.sectionId) ?? null}
-                progress={progressLabel(participants.forTask(t.id))}
-                stage={taskStage(participants.forTask(t.id), t.approvalState || "open")}
-                onToggleDone={() => toggleDone(t)}
-                onOpen={() => setModalState({ open: true, task: t })}
-                isDragging={draggingTaskId === t.id}
-                justCreated={justCreatedId === t.id}
-                menuItems={isMobile ? menuItemsFor(t) : undefined}
-                authorName={authorOf(t)}
-                dropIndicatorBefore={dropIndicator?.term === term && dropIndicator.beforeId === t.id}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData("application/x-task-id", t.id);
-                  e.dataTransfer.effectAllowed = "move";
-                  setDraggingTaskId(t.id);
-                }}
-                onDragEnd={() => {
-                  setDraggingTaskId(null);
-                  setDropIndicator(null);
-                }}
-              />
+              <SortableTask key={t.id} task={t} term={term} draggable={mine(t)}>
+                {(dragProps, isDragging) => (
+                  <TaskCard
+                    task={t}
+                    section={sectionById.get(t.sectionId) ?? null}
+                    progress={progressLabel(participants.forTask(t.id))}
+                    stage={taskStage(participants.forTask(t.id), t.approvalState || "open")}
+                    onToggleDone={() => toggleDone(t)}
+                    onOpen={() => setModalState({ open: true, task: t })}
+                    isDragging={isDragging}
+                    dragProps={dragProps}
+                    justCreated={justCreatedId === t.id}
+                    menuItems={isMobile ? menuItemsFor(t) : undefined}
+                    authorName={authorOf(t)}
+                  />
+                )}
+              </SortableTask>
             ))
           )}
-        </div>
+        </TaskColumnBody>
       </div>
     );
   }
@@ -585,7 +560,7 @@ export default function TasksPanel({
   }
 
   return (
-    <div className={"main-col dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")} id="mainCol" data-panel-id="mainCol">
+    <div className={"main-col dash-panel" + (isDragging ? " dragging" : "")} id="mainCol" data-panel-id="mainCol">
       {notifBanner && (
         <div className="notif-banner show" id="notifBanner">
           {notifBanner}
@@ -694,8 +669,8 @@ export default function TasksPanel({
       />
 
       <div className="columns">
-        {renderColumn(shortOpen, "Нет краткосрочных задач по текущим фильтрам", "Краткосрочные", "short", shortColRef)}
-        {renderColumn(longOpen, "Нет долгосрочных задач по текущим фильтрам", "Долгосрочные", "long", longColRef)}
+        {renderColumn(preview.short, "Нет краткосрочных задач по текущим фильтрам", "Краткосрочные", "short")}
+        {renderColumn(preview.long, "Нет долгосрочных задач по текущим фильтрам", "Долгосрочные", "long")}
         {renderReviewColumn()}
       </div>
 

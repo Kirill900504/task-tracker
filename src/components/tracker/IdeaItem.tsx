@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import { useColleagues } from "@/hooks/useColleagues";
 import type { Idea } from "@/types/tracker";
 import ActionMenu from "./ActionMenu";
@@ -44,6 +45,14 @@ export default function IdeaItem({
   const [sendNote, setSendNote] = useState("");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(idea.text);
+  // Мысль берут и несут: в столбец задач, на день календаря, в список
+  // встреч. Сортировки внутри списка у мыслей нет, поэтому draggable, а не
+  // sortable — расступаться тут нечему.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: "idea:" + idea.id,
+    data: { payload: { kind: "idea", id: idea.id, text: idea.text } },
+  });
+
   const savedRef = useRef(false);
 
   const linked = colleagues.filter((c) => c.linked);
@@ -79,13 +88,17 @@ export default function IdeaItem({
 
   return (
     <div
-      className={"idea-item" + (idea.important ? " important" : "") + (idea.done ? " done" : "") + (highlighted ? " just-created" : "")}
+      className={
+        "idea-item" +
+        (idea.important ? " important" : "") +
+        (idea.done ? " done" : "") +
+        (highlighted ? " just-created" : "") +
+        (isDragging ? " dragging" : "")
+      }
       data-idea-id={idea.id}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData("application/x-idea-id", idea.id);
-        e.dataTransfer.effectAllowed = "move";
-      }}
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
     >
       <div
         className={"check idea-check" + (idea.done ? " checked" : "")}

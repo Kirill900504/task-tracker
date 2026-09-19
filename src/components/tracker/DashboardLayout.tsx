@@ -1,119 +1,117 @@
 "use client";
 
-// Port of the "panel constructor" from legacy-tracker.js (currentPanelLayout/
-// applyPanelLayout/savePanelLayout/getPanelAfterElement/updatePanelDropIndicator/
-// setupPanelZoneDrop) — dragging whole panels (by their PanelDragHandle)
-// between and within the three layout zones. Each managed child element
-// gets its drag-related props injected via cloneElement rather than
-// threaded through props by the caller, so NewTracker can build the
-// `panels` map without knowing about drag state at all.
-import { cloneElement, isValidElement, useRef, useState } from "react";
-import type { DragEvent, ReactElement, RefObject } from "react";
+// Конструктор панелей: три зоны, панели переставляются мышью и пальцем.
+//
+// Раньше это был HTML5 drag-and-drop со своими индикаторами: тонкая полоска
+// перед панелью показывала, куда встанет блок, сама панель бледнела, а
+// курсор рисовала операционная система. Теперь панели РАССТУПАЮТСЯ —
+// соседи разъезжаются и освобождают место, — а под курсором едет плашка с
+// названием (см. TrackerDnd). Отдельный индикатор после этого не нужен
+// вовсе: место, которое освободилось, и есть индикатор.
+//
+// Логика «куда встанет» живёт в TrackerDnd, здесь остаётся разметка: зона
+// принимает сброс, панель умеет быть сортируемой, порядок берётся из
+// предпросмотра, пока идёт перетаскивание.
+import { cloneElement, isValidElement } from "react";
+import type { ReactElement } from "react";
+import { useDroppable } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { PanelLayout } from "@/types/tracker";
-import { getDragAfterElement } from "@/lib/dndDom";
+import { ZONE_NAMES, usePreviewLayout } from "./dnd/TrackerDnd";
+import type { ZoneName } from "./dnd/TrackerDnd";
 import type { PanelDragProps } from "./PanelDragHandle";
 
-type ZoneName = keyof PanelLayout;
-const ZONE_NAMES: ZoneName[] = ["left", "center", "right"];
+// Названия панелей нужны одному месту — плашке, которая едет под курсором.
+// Взять их из самих панелей нельзя: у календаря в заголовке месяц, у задач
+// заголовка нет вовсе (на его месте кнопки и фильтры).
+export const PANEL_TITLES: Record<string, string> = {
+  calPanel: "Календарь",
+  meetingsPanel: "Встречи",
+  mainCol: "Задачи",
+  weekPanel: "Неделя",
+  peoplePanel: "Люди",
+  ideasPanel: "Идеи и мысли",
+};
+
+function SortablePanel({ id, zone, element }: { id: string; zone: ZoneName; element: ReactElement<PanelDragProps> }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    data: { payload: { kind: "panel", id, zone, title: PANEL_TITLES[id] ?? id }, target: { kind: "panel", id, zone } },
+  });
+
+  const injected: PanelDragProps = {
+    dragHandleProps: { attributes, listeners, setActivatorNodeRef },
+    isDragging,
+  };
+
+  return (
+    // Обёртка, а не сама панель: ref и сдвиг нужны на элементе, который
+    // двигается, а панели рисуют свой корневой div сами и ref не принимают.
+    // Отступы при этом остаются на панели, так что вёрстка не меняется.
+    <div
+      ref={setNodeRef}
+      className={"dash-slot" + (isDragging ? " dragging" : "")}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      data-panel-slot={id}
+    >
+      {isValidElement(element) ? cloneElement(element, injected) : null}
+    </div>
+  );
+}
+
+function Zone({ zone, ids, panels }: { zone: ZoneName; ids: string[]; panels: Record<string, ReactElement<PanelDragProps>> }) {
+  const { setNodeRef, isOver } = useDroppable({ id: "zone:" + zone, data: { target: { kind: "zone", zone } } });
+
+  return (
+    <div
+      ref={setNodeRef}
+      id={"zone" + zone[0].toUpperCase() + zone.slice(1)}
+      className={"dash-zone" + (isOver ? " drag-over" : "")}
+      data-zone={zone}
+    >
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        {ids.map((panelId) => {
+          const element = panels[panelId];
+          return element ? <SortablePanel key={panelId} id={panelId} zone={zone} element={element} /> : null;
+        })}
+      </SortableContext>
+    </div>
+  );
+}
 
 export default function DashboardLayout({
   layout,
-  onLayoutChange,
   panels,
 }: {
   layout: PanelLayout;
-  onLayoutChange: (next: PanelLayout) => void;
   panels: Record<string, ReactElement<PanelDragProps>>;
 }) {
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [indicator, setIndicator] = useState<{ zone: ZoneName; beforeId: string | null } | null>(null);
+  // Пока панель едет, порядок берётся из предпросмотра — именно он и
+  // заставляет соседей расступаться.
+  const shown = usePreviewLayout() ?? layout;
 
-  const leftRef = useRef<HTMLDivElement | null>(null);
-  const centerRef = useRef<HTMLDivElement | null>(null);
-  const rightRef = useRef<HTMLDivElement | null>(null);
-  const zoneRefs: Record<ZoneName, RefObject<HTMLDivElement | null>> = { left: leftRef, center: centerRef, right: rightRef };
-
-  function handleDragOver(e: DragEvent<HTMLDivElement>, zone: ZoneName) {
-    if (!e.dataTransfer.types.includes("application/x-panel-id")) return;
-    e.preventDefault();
-    const container = zoneRefs[zone].current;
-    const after = container ? getDragAfterElement(container, e.clientY, ".dash-panel:not(.dragging)") : null;
-    setIndicator({ zone, beforeId: after?.dataset.panelId ?? null });
-  }
-
-  function handleDragLeave(e: DragEvent<HTMLDivElement>, zone: ZoneName) {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIndicator((cur) => (cur?.zone === zone ? null : cur));
-    }
-  }
-
-  function handleDrop(e: DragEvent<HTMLDivElement>, zone: ZoneName) {
-    const id = e.dataTransfer.getData("application/x-panel-id");
-    setIndicator(null);
-    if (!id) return;
-    e.preventDefault();
-    const container = zoneRefs[zone].current;
-    const after = container ? getDragAfterElement(container, e.clientY, ".dash-panel:not(.dragging)") : null;
-
-    const next: PanelLayout = {
-      left: layout.left.filter((x) => x !== id),
-      center: layout.center.filter((x) => x !== id),
-      right: layout.right.filter((x) => x !== id),
-    };
-    const targetList = next[zone];
-    const insertAt = after ? targetList.indexOf(after.dataset.panelId as string) : -1;
-    targetList.splice(insertAt === -1 ? targetList.length : insertAt, 0, id);
-    onLayoutChange(next);
-  }
-
-  // Port of legacy's updateLayoutColumns(): a side zone with nothing in it
-  // collapses to 0px so the middle column takes the freed width instead of
-  // leaving a blank gutter.
   // Панель, которой нет в сохранённой раскладке, всё равно должна
   // показаться: раскладка лежит в настройках пользователя с прошлого года,
   // и новая панель иначе не появится ни у кого, кроме нового человека.
   // Добавляется в правый столбец — туда, где стоят панели-спутники.
-  const placed = new Set([...layout.left, ...layout.center, ...layout.right]);
+  const placed = new Set([...shown.left, ...shown.center, ...shown.right]);
   const unplaced = Object.keys(panels).filter((id) => !placed.has(id));
-  const zoneList = (zone: ZoneName) => (zone === "right" ? [...layout.right, ...unplaced] : layout[zone]);
+  const zoneList = (zone: ZoneName) => (zone === "right" ? [...shown.right, ...unplaced] : shown[zone]).filter((id) => panels[id]);
 
-  const visibleIn = (zone: ZoneName) => zoneList(zone).filter((id) => panels[id]);
-  const gridTemplateColumns = [visibleIn("left").length ? "300px" : "0px", "1fr", visibleIn("right").length ? "320px" : "0px"].join(" ");
+  // Пустая боковая зона схлопывается в ноль, чтобы середина забрала ширину,
+  // а не осталась пустая колонка. Но во время перетаскивания — нет: зона,
+  // схлопнувшаяся до нуля, не примет сброс, и панель некуда было бы
+  // вернуть. Это и был главный источник «перетащил и не могу вернуть», от
+  // которого спасала кнопка «Сбросить расположение».
+  const dragging = usePreviewLayout() !== null;
+  const width = (zone: ZoneName, size: string) => (zoneList(zone).length ? size : dragging ? "120px" : "0px");
+  const gridTemplateColumns = [width("left", "300px"), "1fr", width("right", "320px")].join(" ");
 
   return (
-    <div className="layout" id="layoutGrid" style={{ gridTemplateColumns }}>
+    <div className={"layout" + (dragging ? " layout-dragging" : "")} id="layoutGrid" style={{ gridTemplateColumns }}>
       {ZONE_NAMES.map((zone) => (
-        <div
-          key={zone}
-          ref={zoneRefs[zone]}
-          id={"zone" + zone[0].toUpperCase() + zone.slice(1)}
-          className={"dash-zone" + (indicator?.zone === zone && indicator.beforeId === null ? " drag-indicator-end" : "") + (indicator?.zone === zone ? " drag-over" : "")}
-          data-zone={zone}
-          onDragOver={(e) => handleDragOver(e, zone)}
-          onDragLeave={(e) => handleDragLeave(e, zone)}
-          onDrop={(e) => handleDrop(e, zone)}
-        >
-          {zoneList(zone).map((panelId) => {
-            const el = panels[panelId];
-            if (!el || !isValidElement(el)) return null;
-            const injectedProps: PanelDragProps = {
-              dragHandleProps: {
-                onDragStart: (e: DragEvent) => {
-                  e.dataTransfer.setData("application/x-panel-id", panelId);
-                  e.dataTransfer.effectAllowed = "move";
-                  setDraggingId(panelId);
-                },
-                onDragEnd: () => {
-                  setDraggingId(null);
-                  setIndicator(null);
-                },
-              },
-              isDragging: draggingId === panelId,
-              dropIndicatorBefore: indicator?.zone === zone && indicator.beforeId === panelId,
-            };
-            return cloneElement(el, { key: panelId, ...injectedProps });
-          })}
-        </div>
+        <Zone key={zone} zone={zone} ids={zoneList(zone)} panels={panels} />
       ))}
     </div>
   );

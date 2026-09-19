@@ -44,6 +44,7 @@ export type IconName =
   | "flag"
   | "eye"
   | "mailbox"
+  | "grip"
   | "warning";
 
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -199,6 +200,20 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M6 6 18 18" />
       <path d="M18 6 6 18" />
+    </>
+  ),
+  // Ручка перетаскивания: шесть точек, как принято везде, где блок можно
+  // взять и перенести. Точки — единственное место в наборе, где стоит
+  // заливка, и она уместна: контурный кружок радиусом полтора пикселя
+  // выглядит грязью, а не точкой.
+  grip: (
+    <>
+      <circle cx="9" cy="6" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="6" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="18" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="18" r="1.4" fill="currentColor" stroke="none" />
     </>
   ),
   warning: (

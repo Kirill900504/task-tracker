@@ -191,31 +191,57 @@
      down, and there is never a scrollbar inside a scrollbar. */
   .dash-zone.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
 
-  /* ---------- Panel constructor: drag panels between/within zones ---------- */
+  /* ---------- Конструктор панелей ----------------------------------------
+     Панели переставляются перетаскиванием (dnd/TrackerDnd.tsx). Правило
+     здесь одно и оно про поведение, а не про украшения: место, которое
+     освободилось, и есть указатель, куда встанет блок. Никаких полосок
+     «сюда», никаких перечёркнутых кругов — соседи просто расступаются, а
+     на месте взятой панели остаётся её силуэт.
+     ------------------------------------------------------------------- */
   .dash-panel{
     position:relative; min-width:0; container-type:inline-size;
-    transition:box-shadow .15s ease, transform .15s ease, opacity .15s ease;
+    transition:box-shadow .15s ease;
   }
-  .dash-panel.dragging{
-    opacity:.5; transform:scale(1.01) rotate(-.4deg);
-    box-shadow:0 14px 32px rgba(0,0,0,.4); border-color:var(--accent);
+  /* Силуэт вместо «почти прозрачной тени» (слова Кирилла про прежний вид).
+     Содержимое убирается целиком — полупрозрачная панель поверх соседей
+     читается как поломка, а пустая рамка честно говорит «место занято
+     тем, что у тебя в руке». */
+  .dash-slot.dragging{
+    border:1px dashed var(--accent); border-radius:var(--radius-md);
+    background:var(--accent-soft); overflow:hidden;
   }
-  .dash-panel.drag-indicator::before{
-    content:""; position:absolute; left:0; right:0; top:-11px; height:3px;
-    background:var(--accent); border-radius:2px;
-  }
-  .dash-zone.drag-indicator-end{box-shadow:inset 0 0 0 1px var(--accent), inset 0 -3px 0 0 var(--accent);}
+  .dash-slot.dragging > *{visibility:hidden;}
+  /* Пока идёт перетаскивание, пустая боковая зона раскрывается из нуля в
+     полосу — иначе вернуть туда панель было бы нечем (ровно та беда, ради
+     которой держали кнопку «Сбросить расположение»). */
+  .layout-dragging .dash-zone{min-height:72px; outline:1px dashed var(--line-soft); outline-offset:6px; border-radius:10px;}
+  .layout-dragging .dash-zone.drag-over{outline-color:var(--accent); background:var(--accent-soft);}
   .dash-panel-head{
     display:flex; align-items:center; gap:8px; margin-bottom:10px;
   }
   .dash-panel-head .panel-title{margin:0; flex:1;}
   .dash-drag-handle{
-    cursor:grab; color:var(--ink-soft); font-size:13px; letter-spacing:-2px;
+    cursor:grab; color:var(--ink-soft); display:inline-flex; align-items:center;
     line-height:1; padding:2px 2px 2px 0; flex:none; user-select:none;
+    /* Палец на ручке ведёт панель, а не прокручивает страницу; всё
+       остальное на экране прокручивается как обычно. */
+    touch-action:none;
   }
   .dash-drag-handle:hover{color:var(--accent);}
-  .dash-panel.dragging .dash-drag-handle{cursor:grabbing;}
-  @media (prefers-reduced-motion: reduce){ .dash-panel.dragging{transform:none;} }
+  .dash-drag-handle:active{cursor:grabbing;}
+
+  /* Блок, поднятый под курсор. Это не копия панели (панель высотой в экран
+     закрыла бы собой место, куда её несут), а её имя на плашке — так же,
+     как это делают конструкторы интерфейсов. */
+  .dnd-ghost{
+    display:inline-flex; align-items:center; gap:8px;
+    background:var(--paper); color:var(--ink);
+    border:1px solid var(--accent); border-radius:var(--radius-md);
+    box-shadow:0 18px 40px rgba(0,0,0,.45);
+    font-family:var(--display); font-weight:700; font-size:13px;
+    padding:10px 14px; cursor:grabbing; pointer-events:none;
+  }
+  .dnd-ghost-panel{color:var(--accent);}
 
   /* Mobile quick-add: a floating thumb-reachable button + bottom sheet
      replaces the toolbar bar (which needs scrolling up to reach), so hide
@@ -453,23 +479,31 @@
   }
   .task:hover{border-color:var(--accent); box-shadow:var(--shadow-1); transform:translateY(-1px);}
   .task{cursor:grab;}
+  /* Место взятой карточки. Не «полупрозрачная тень» (её Кирилл и назвал
+     колхозом), а пустая рамка ровно того же размера: карточка в этот момент
+     едет под курсором, а здесь показано, что место за ней сохранено. */
   .task.dragging{
-    opacity:.55; cursor:grabbing; transform:scale(1.02) rotate(-.6deg);
-    box-shadow:0 10px 28px rgba(0,0,0,.35); border-color:var(--accent);
+    background:var(--accent-soft); border:1px dashed var(--accent);
+    box-shadow:none; transform:none;
   }
-  #listShort, #listLong{border-radius:8px; transition:background .15s ease, box-shadow .15s ease;}
-  #listShort.drag-over, #listLong.drag-over{
-    background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);
+  .task.dragging:hover{transform:none;}
+  .task.dragging > *{visibility:hidden;}
+
+  /* Тело столбца. Пустой столбец обязан принимать сброс — иначе
+     единственную задачу нельзя перенести в опустевший соседний. */
+  .task-column-body{border-radius:10px; transition:background .15s ease, box-shadow .15s ease;}
+  .task-column-body.is-empty{min-height:96px;}
+  .task-column-body.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
+
+  /* Карточка, поднятая под курсор. Наклона нет намеренно: повёрнутая на
+     полградуса карточка читается как сбой отрисовки, а не как «взял в
+     руку». Работает подъём — тень и едва заметное увеличение. */
+  .dnd-card-ghost{width:min(420px, 80vw); cursor:grabbing; transform:scale(1.02);}
+  .dnd-card-ghost .task{
+    margin:0; cursor:grabbing; border-color:var(--accent);
+    box-shadow:0 22px 48px rgba(0,0,0,.5);
   }
-  /* Insertion line: shown on whichever card the dragged item would land
-     before, so the drop position is exact instead of "somewhere in here". */
-  .task.drag-indicator::before, .idea-item.drag-indicator::before{
-    content:""; position:absolute; left:0; right:0; top:-5px; height:3px;
-    background:var(--accent); border-radius:2px;
-  }
-  #listShort.drag-indicator-end, #listLong.drag-indicator-end{
-    box-shadow:inset 0 0 0 1px var(--accent), inset 0 -3px 0 0 var(--accent);
-  }
+  .dnd-card-ghost .task:hover{transform:none;}
   @keyframes card-flash{
     0%{box-shadow:0 0 0 0 var(--accent), inset 0 0 0 2px var(--accent);}
     100%{box-shadow:0 0 0 10px rgba(62,138,168,0), inset 0 0 0 2px rgba(62,138,168,0);}
@@ -776,10 +810,13 @@
 
   /* Ideas: flag + inline edit */
   .idea-item{position:relative; cursor:grab; transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;}
+  /* Силуэт на месте взятой мысли — та же логика, что у карточки задачи:
+     сама мысль в это время едет под курсором. */
   .idea-item.dragging{
-    opacity:.55; cursor:grabbing; transform:scale(1.02) rotate(-.6deg);
-    box-shadow:0 10px 28px rgba(0,0,0,.35); border-color:var(--accent);
+    background:var(--accent-soft); border:1px dashed var(--accent);
+    box-shadow:none; transform:none;
   }
+  .idea-item.dragging > *{visibility:hidden;}
   #ideaList{border-radius:8px; transition:background .15s ease, box-shadow .15s ease;}
   #ideaList.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
   @media (prefers-reduced-motion: reduce){ .idea-item.dragging{transform:none;} }
@@ -813,10 +850,16 @@
   .cal-filter-note{align-items:center;}
   #meetingsForDay{margin-top:2px; border-radius:8px; transition:background .15s ease, box-shadow .15s ease;}
   #meetingsForDay.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
+  /* Взятая встреча — тот же силуэт, что у задачи и у мысли. */
+  .meeting-chip.dragging{
+    background:var(--accent-soft); border-color:var(--accent); border-style:dashed;
+    box-shadow:none; transform:none;
+  }
+  .meeting-chip.dragging > *{visibility:hidden;}
   .meeting-chip{
     display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:6px 10px;
     background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:var(--radius-md);
-    padding:9px 11px; margin-top:7px; font-size:12.5px; cursor:pointer; box-shadow:var(--edge);
+    padding:9px 11px; margin-top:7px; font-size:12.5px; cursor:grab; box-shadow:var(--edge);
     transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
   }
   .meeting-chip:hover{border-color:var(--today); box-shadow:var(--shadow-1); transform:translateY(-1px);}

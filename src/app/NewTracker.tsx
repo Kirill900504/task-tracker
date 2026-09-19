@@ -20,11 +20,14 @@ import MeetingsPanel from "@/components/tracker/MeetingsPanel";
 import CalendarPanel from "@/components/tracker/CalendarPanel";
 import IdeasPanel from "@/components/tracker/IdeasPanel";
 import ToastStack from "@/components/tracker/ToastStack";
-import DashboardLayout from "@/components/tracker/DashboardLayout";
+import DashboardLayout, { PANEL_TITLES } from "@/components/tracker/DashboardLayout";
+import TrackerDnd from "@/components/tracker/dnd/TrackerDnd";
+import TaskCard from "@/components/tracker/TaskCard";
+import type { DragPayload } from "@/components/tracker/dnd/TrackerDnd";
 import { pad, todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import { assignExecutorsByName } from "@/lib/assignWork";
-import { DEFAULT_PANEL_LAYOUT, formatIdeaCreatedAt, sameLayout } from "@/lib/trackerRows";
+import { formatIdeaCreatedAt } from "@/lib/trackerRows";
 import type { Meeting, MeetingPrefill, Task, TaskPrefill } from "@/types/tracker";
 import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
 import { mergeResult } from "@/lib/meetingLink";
@@ -380,6 +383,45 @@ export default function NewTracker() {
 
   // Built once and handed to whichever layout is on screen: the desktop's
   // three-column constructor, or the phone's one-section-at-a-time shell.
+  // То, что едет под курсором. У панели это плашка с названием, а не сама
+  // панель: панель высотой в экран, поднятая под курсор, закрыла бы собой
+  // то место, куда её несут.
+  const renderDragOverlay = (active: DragPayload) => {
+    if (active.kind === "panel") {
+      return (
+        <div className="dnd-ghost dnd-ghost-panel">
+          <Icon name="grip" size={14} />
+          {PANEL_TITLES[active.id] ?? active.title}
+        </div>
+      );
+    }
+    // Карточка, наоборот, поднимается целиком: она размером с то место,
+    // куда её несут, и человек видит ровно то, что кладёт. Участники и
+    // прогресс сюда не передаются нарочно — они живут в панели задач, а
+    // карточка едет доли секунды.
+    if (active.kind === "task") {
+      const task = tasks.find((t) => t.id === active.id);
+      if (!task) return null;
+      return (
+        <div className="dnd-card-ghost">
+          <TaskCard
+            task={task}
+            section={sections.find((s) => s.id === task.sectionId) ?? null}
+            onToggleDone={() => {}}
+            onOpen={() => {}}
+          />
+        </div>
+      );
+    }
+    if (active.kind === "idea") {
+      return <div className="dnd-ghost dnd-ghost-idea">{active.text}</div>;
+    }
+    if (active.kind === "meeting") {
+      return <div className="dnd-ghost">{active.title}</div>;
+    }
+    return null;
+  };
+
   const panels = {
         calPanel: (
           <CalendarPanel
@@ -695,16 +737,16 @@ export default function NewTracker() {
                 <Icon name="install" /> Установить
               </button>
             )}
-            {!sameLayout(panelLayout, DEFAULT_PANEL_LAYOUT) && (
-              <button
-                className="btn"
-                id="resetLayoutBtn"
-                title="Панели вернутся на исходные места"
-                onClick={() => actions.savePanelLayout(DEFAULT_PANEL_LAYOUT)}
-              >
-                <Icon name="reset" /> Сбросить расположение
-              </button>
-            )}
+            {/* Кнопки «Сбросить расположение» здесь больше нет. Слова
+                Кирилла 19.09.2026: «не понимаю смысл кнопки… конструктор
+                должен легко меняться, чтобы эта кнопка вообще не
+                требовалась». Она и появилась как страховка от конструктора,
+                из которого трудно выбраться: панель бледнела, соседи не
+                двигались, пустая зона схлопывалась в ноль и вернуть в неё
+                панель было нечем. Чинить надо было конструктор, а не
+                подпирать его кнопкой отката — см. DashboardLayout и
+                dnd/TrackerDnd. Вернуть панель на место теперь ровно так же
+                просто, как её унести. */}
             {/* «Команда» — админское: приглашения, отключение доступа и
                 отвязка мессенджера принадлежат владельцу. Руководителю её
                 не показывают, и база отказала бы ему всё равно (миграции
@@ -734,11 +776,12 @@ export default function NewTracker() {
           ждут ОТ НЕГО, а не он от других. Ниже — его собственный трекер,
           такой же, как у Кирилла. */}
       {assignedToMe}
-      <DashboardLayout
-        layout={panelLayout}
-        onLayoutChange={actions.savePanelLayout}
-        panels={panels}
-      />
+      {/* Перетаскивание — одно на весь трекер: панели, задачи, мысли и
+          встречи ездят в одном контексте, потому что ездят они друг в
+          друга. Разбор «что куда бросили» живёт там же. */}
+      <TrackerDnd layout={panelLayout} onLayoutChange={actions.savePanelLayout} renderOverlay={renderDragOverlay}>
+        <DashboardLayout layout={panelLayout} panels={panels} />
+      </TrackerDnd>
         </>
       )}
     </>

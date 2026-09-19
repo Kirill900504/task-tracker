@@ -23,7 +23,6 @@ export default function IdeasPanel({
   onConvertToMeeting,
   dragHandleProps,
   isDragging,
-  dropIndicatorBefore,
 }: {
   // Свой auth-id: чужую мысль прислали тебе, а не отдали.
   myUserId?: string;
@@ -62,7 +61,7 @@ export default function IdeasPanel({
   }
 
   return (
-    <div className={"panel dash-panel" + (isDragging ? " dragging" : "") + (dropIndicatorBefore ? " drag-indicator" : "")} id="ideasPanel" data-panel-id="ideasPanel">
+    <div className={"panel dash-panel" + (isDragging ? " dragging" : "")} id="ideasPanel" data-panel-id="ideasPanel">
       <div className="dash-panel-head">
         <PanelDragHandle {...resolveDragHandleProps(dragHandleProps)} />
         <div className="panel-title">
