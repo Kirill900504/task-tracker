@@ -13,7 +13,16 @@
 // Bumped whenever what gets cached changes shape: activate() drops every
 // other cache, which is the only way to be rid of a bad entry an older
 // version stored.
-const CACHE = "rokas-shell-v3";
+// ЭТО ЖЕ ИМЯ СТОИТ В src/lib/shellCache.ts, и они обязаны совпадать. Саму
+// оболочку в кэш кладёт страница, а не воркер (причина — там же), а
+// activate() ниже удаляет ВСЕ остальные кэши. Значит расхождение в одну
+// цифру означает, что воркер стирает единственную офлайн-копию сразу после
+// того, как страница её записала, и трекер без связи не открывается вовсе.
+// Поднятая до v3 версия ровно это и сделала 19.09.2026 — и не дала ничего
+// взамен: сюда по построению не может попасть плохая запись, кладётся
+// только `response.ok` без перенаправления. Равенство имён держит тест в
+// src/lib/serviceWorker.test.ts.
+const CACHE = "rokas-shell-v2";
 // Deliberately without "/": at install time nobody is signed in yet, so
 // fetching it returns a redirect to /login — and a redirected response can
 // never be used to answer a navigation (the browser refuses it, and the

@@ -1,7 +1,12 @@
 "use client";
 
 // Must match CACHE in public/sw.js — the worker serves what is put here when
-// the network is gone.
+// the network is gone. Not a style rule: the worker's activate() deletes
+// every cache that is not its own, so a name that has drifted by one
+// character means it wipes this shell moments after the page writes it, and
+// the tracker stops opening offline at all. That happened on 19.09.2026,
+// from bumping the version on one side only. `serviceWorker.test.ts` reads
+// both files and fails if they disagree.
 const SHELL_CACHE = "rokas-shell-v2";
 
 // Puts the application shell into the service worker's cache, so the tracker

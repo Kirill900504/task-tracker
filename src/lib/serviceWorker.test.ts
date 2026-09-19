@@ -153,6 +153,22 @@ describe("сервис-воркер: ответ на навигацию", () => 
     expect(answer.body).toContain("трекер");
   });
 
+  it("зовёт свой кэш ровно так же, как его зовёт страница", async () => {
+    // Оболочку кладёт страница (shellCache.ts), а отдаёт воркер, и имя
+    // кэша написано в двух файлах. При этом activate() удаляет все кэши,
+    // кроме своего, — то есть расхождение в один символ означает, что
+    // воркер стирает офлайн-копию сразу после записи, и офлайна нет вовсе.
+    // Увидеть это можно было только прогоном e2e с отключённой сетью:
+    // юнит-тесты выше проходят при любом имени, лишь бы оно было одно
+    // внутри воркера.
+    const worker = readFileSync(resolve(__dirname, "../../public/sw.js"), "utf8");
+    const page = readFileSync(resolve(__dirname, "./shellCache.ts"), "utf8");
+    const nameIn = (source: string) => source.match(/"(rokas-shell-[^"]+)"/)?.[1];
+
+    expect(nameIn(worker)).toBeDefined();
+    expect(nameIn(page)).toBe(nameIn(worker));
+  });
+
   it("без сети и без кэша объясняет это по-русски, а не падает", async () => {
     worker.setFetch(async () => {
       throw new Error("сеть недоступна");
