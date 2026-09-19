@@ -16,6 +16,8 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const admin = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
 let failures = 0;
+// Пользователи, заведённые по ходу проверки: удаляются вместе с основным.
+const extraUsers = [];
 function check(name, ok, detail) {
   console.log(`  ${ok ? "ok  " : "FAIL"} ${name}${ok || detail === undefined ? "" : " — " + JSON.stringify(detail)}`);
   if (!ok) failures++;
@@ -314,6 +316,56 @@ try {
   );
   check("показывает, кто идёт", who.status === 200, who);
 
+  // ---- Руководитель диктует поручение прямо в бот ----
+  //
+  // Быстрый ввод был только у владельца, и, чтобы поставить одну задачу,
+  // руководителю приходилось открывать трекер. Право у него есть (миграция
+  // 0031), не хватало двери. Ничего не создаётся молча: фраза разбирается,
+  // показывается и ждёт «да» — модель может ошибиться и в имени, и в сроке.
+  //
+  // Членство делается настоящей строкой: без него человек — просто
+  // получатель сообщений, и заводить от его имени задачи было бы подлогом.
+  const { data: memberUser } = await admin.auth.admin.createUser({
+    email: `bot-mgr-${Date.now()}@example.invalid`,
+    password: "Mgr-" + Math.random().toString(36).slice(2) + "!Aa1",
+    email_confirm: true,
+  });
+  extraUsers.push(memberUser.user.id);
+  await admin.from("workspace_members").insert({
+    owner_id: userId,
+    member_id: memberUser.user.id,
+    assignee_id: assignee.id,
+    status: "active",
+    direction: "Проверка",
+  });
+
+  const dictated = await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "поручи Проверочному Коллеге собрать смету" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("принимает надиктованное поручение", dictated.status === 200, dictated);
+
+  const { data: waiting } = await admin.from("assignees").select("pending_action").eq("id", assignee.id).maybeSingle();
+  check("сначала спрашивает, а не создаёт молча", !!waiting?.pending_action, waiting);
+
+  const confirmed = await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "да" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  check("создаёт по «да»", confirmed.status === 200, confirmed);
+
+  const { data: madeTasks } = await admin
+    .from("tasks")
+    .select("id, title, created_by")
+    .eq("user_id", userId)
+    .eq("created_by", memberUser.user.id);
+  check("задача заведена от имени руководителя", (madeTasks || []).length === 1, madeTasks);
+
+  const { data: pendingGone } = await admin.from("assignees").select("pending_action").eq("id", assignee.id).maybeSingle();
+  check("память подтверждения освобождается", pendingGone?.pending_action === null, pendingGone);
+
   // ---- MAX ----
   console.log("\nMAX webhook:");
   // Секрет вебхука теперь живёт в базе — его придумывает /api/max/setup в
@@ -372,6 +424,7 @@ try {
   check("refuses a code issued for the other messenger", crossAccount === null, crossAccount);
   }
 } finally {
+  for (const id of extraUsers) await admin.auth.admin.deleteUser(id);
   await admin.auth.admin.deleteUser(userId);
   console.log(`\n${failures === 0 ? "ALL PASSED" : failures + " FAILURE(S)"}`);
   process.exit(failures === 0 ? 0 : 1);

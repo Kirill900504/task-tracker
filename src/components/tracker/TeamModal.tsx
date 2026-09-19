@@ -30,18 +30,29 @@ import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 const CHANNEL_LABEL: Record<ColleagueChannel, string> = { telegram: "Telegram", max: "MAX" };
 
-type InviteKind = ColleagueChannel | "tracker";
+// Четвёртый вид — «access» — не приглашение: он для того, кто в трекере уже
+// есть, а ссылку или пароль потерял. Приглашение ему выдать нельзя (оно
+// завело бы второй аккаунт мимо его же задач), и до появления этой кнопки
+// строка «в трекере» была тупиком: ни ссылки, ни даже почты, под которой
+// человек записан, нигде не видно.
+type InviteKind = ColleagueChannel | "tracker" | "access";
 
-const INVITE_LABEL: Record<InviteKind, string> = { telegram: "Telegram", max: "MAX", tracker: "трекер" };
+const INVITE_LABEL: Record<InviteKind, string> = { telegram: "Telegram", max: "MAX", tracker: "трекер", access: "трекер" };
 const INVITE_LIFETIME: Record<InviteKind, string> = {
   telegram: "действует 3 дня",
   max: "действует 3 дня",
   tracker: "действует 7 дней",
+  access: "действует час",
 };
 const INVITE_HINT: Record<InviteKind, string> = {
   telegram: "Отправьте ссылку человеку — он откроет её и нажмёт «Start».",
   max: "Отправьте ссылку человеку — он откроет её и нажмёт «Start».",
   tracker: "Отправьте ссылку человеку — он придумает себе пароль и сразу окажется в трекере.",
+  // Предупреждение не из вежливости: открытая у себя ссылка заменит вашу
+  // сессию на его — вы окажетесь в трекере под чужим именем и решите, что
+  // сломался трекер.
+  access:
+    "Отправьте ссылку человеку — он задаст новый пароль и войдёт под этой же почтой. Аккаунт и все его задачи остаются прежними. Сами её не открывайте: она входит в трекер за него.",
 };
 
 const MEMBER_LABEL: Record<string, string> = {
@@ -51,10 +62,19 @@ const MEMBER_LABEL: Record<string, string> = {
 };
 
 export default function TeamModal({ onClose }: { onClose: () => void }) {
-  const { colleagues, loading, reload, invite, inviteToTracker, setDirection, setTrackerAccess, unlink } = useColleagues();
+  const { colleagues, loading, reload, invite, inviteToTracker, accessLink, setDirection, setTrackerAccess, unlink } =
+    useColleagues();
   const maxBot = useMaxBot();
   const ask = useAsk();
-  const [inviteFor, setInviteFor] = useState<{ id: string; name: string; link: string; kind: InviteKind } | null>(null);
+  const [inviteFor, setInviteFor] = useState<{
+    id: string;
+    name: string;
+    link: string;
+    kind: InviteKind;
+    // Только у «access»: почта, под которой человек входит. Без неё ссылка
+    // на новый пароль — половина ответа, а больше эту почту взять негде.
+    email?: string;
+  } | null>(null);
   // Ошибка тоже привязана к человеку: «слишком много приглашений подряд»
   // внизу общего списка читается как поломка всего экрана, а не как ответ
   // на кнопку, которую только что нажали.
@@ -106,6 +126,20 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     }
     setCopied(false);
     setInviteFor({ id, name, link: result.link, kind: "tracker" });
+  }
+
+  // Человек уже в трекере, но ссылку потерял или забыл пароль. Направление
+  // здесь не спрашивается: оно уже задано, и вопрос посреди «мне надо
+  // вернуть человеку вход» — лишний шаг там, где и так авария.
+  async function handleAccessLink(id: string, name: string) {
+    setError(null);
+    const result = await accessLink(id);
+    if ("error" in result) {
+      setError({ id, text: result.error });
+      return;
+    }
+    setCopied(false);
+    setInviteFor({ id, name, link: result.link, kind: "access", email: result.email });
   }
 
   async function copyLink() {
@@ -242,6 +276,14 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                         >
                           Направление
                         </button>
+                        {/* Та же кнопка и те же слова, что у приглашённого:
+                            вопрос у Кирилла один — «дать ссылку ещё раз», —
+                            и то, что внутри это другой маршрут (аккаунт уже
+                            существует, заводить второй нельзя), его не
+                            касается. */}
+                        <button className="btn btn-small" type="button" onClick={() => void handleAccessLink(person.id, person.name)}>
+                          Ссылка ещё раз
+                        </button>
                         <button
                           className="btn btn-small"
                           type="button"
@@ -271,16 +313,25 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                   {inviteFor?.id === person.id && (
                     <div className="team-invite" id="inviteBlock" ref={revealInvite}>
                       <label>
-                        Ссылка в {INVITE_LABEL[inviteFor.kind]} для {inviteFor.name} — {INVITE_LIFETIME[inviteFor.kind]}
+                        {inviteFor.kind === "access"
+                          ? `Новый пароль для ${inviteFor.name} — ${INVITE_LIFETIME.access}`
+                          : `Ссылка в ${INVITE_LABEL[inviteFor.kind]} для ${inviteFor.name} — ${INVITE_LIFETIME[inviteFor.kind]}`}
                       </label>
+                      {/* Почта здесь единственный раз за весь трекер: войти
+                          без неё нельзя, а спросить её больше не у кого. */}
+                      {inviteFor.email && <div className="invite-link">Почта для входа: {inviteFor.email}</div>}
                       <div className="invite-link">{inviteFor.link}</div>
                       <div className="outcome-actions">
                         <button className="btn btn-small btn-primary" onClick={copyLink}>
                           {copied ? "Скопировано" : "Скопировать"}
                         </button>
-                        <button className="btn btn-small" onClick={() => void reload()}>
-                          Проверить, подключился ли
-                        </button>
+                        {/* У «access» спрашивать нечего: человек и так в
+                            трекере, меняется только его пароль. */}
+                        {inviteFor.kind !== "access" && (
+                          <button className="btn btn-small" onClick={() => void reload()}>
+                            Проверить, подключился ли
+                          </button>
+                        )}
                         <button className="btn btn-small" onClick={() => setInviteFor(null)}>
                           Скрыть
                         </button>

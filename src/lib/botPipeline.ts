@@ -358,6 +358,84 @@ export async function handleLinkCode(ctx: BotContext, rawCode: string, username:
 // MAX has no /start command to carry it, and in Telegram people paste it too.
 const CODE_SHAPE = /^[A-HJ-NP-Z2-9]{8}$/;
 
+// Память бота для человека без аккаунта: разобранная фраза, ждущая «да»
+// (миграция 0033). У владельца то же самое лежит в его строке аккаунта.
+async function pendingFor(admin: SupabaseClient, assigneeId: string): Promise<PendingAction | null> {
+  const { data } = await admin.from("assignees").select("pending_action").eq("id", assigneeId).maybeSingle();
+  return ((data as { pending_action?: PendingAction } | null)?.pending_action as PendingAction) || null;
+}
+
+async function clearPending(admin: SupabaseClient, assigneeId: string): Promise<void> {
+  await admin.from("assignees").update({ pending_action: null }).eq("id", assigneeId);
+}
+
+// Логин этого человека, если он вошёл в трекер. Пусто — он только получатель
+// сообщений, и поручать от его имени нечего.
+async function managerIdOf(admin: SupabaseClient, assigneeId: string): Promise<string | null> {
+  const { data } = await admin
+    .from("workspace_members")
+    .select("member_id, status")
+    .eq("assignee_id", assigneeId)
+    .eq("status", "active")
+    .maybeSingle();
+  return (data as { member_id: string | null } | null)?.member_id || null;
+}
+
+// Фраза руководителя, похожая на поручение: разобрать, показать и ждать «да».
+//
+// Ничего не создаётся молча. Это то же правило, по которому подтверждаются
+// задачи из надиктованного совещания: модель может ошибиться и в имени, и в
+// сроке, а поручение, появившееся у человека без ведома поручившего, —
+// худший вид ошибки в этом трекере.
+//
+// Возвращает false, если фраза поручением не была: тогда выше покажется
+// справка, как и раньше.
+async function offerTask(
+  ctx: BotContext,
+  colleague: { id: string; name: string; user_id: string },
+  memberId: string,
+  text: string,
+): Promise<boolean> {
+  const { data: assigneeRows } = await ctx.admin.from("assignees").select("name").eq("user_id", colleague.user_id);
+  const known = (assigneeRows || []).map((r) => r.name as string);
+
+  let items;
+  try {
+    ({ items } = await parseQuickAdd(text, known));
+  } catch {
+    // Модель не ответила — это не повод отвечать человеку ошибкой про JSON.
+    return false;
+  }
+
+  const tasks = items
+    .filter((it) => it.tool === "create_task")
+    .map((it) => ({
+      title: String(it.input.title || "").trim(),
+      assignee: String(it.input.assignee || "").trim(),
+      deadline: (it.input.deadline as string) || "",
+      priority: (String(it.input.priority || "") === "high" ? "high" : "med") as "high" | "med",
+    }))
+    .filter((t) => t.title);
+  if (!tasks.length) return false;
+
+  await ctx.admin
+    .from("assignees")
+    .update({ pending_action: { kind: "create_tasks", userId: colleague.user_id, createdBy: memberId, tasks } })
+    .eq("id", colleague.id);
+
+  const lines = tasks.map((t, i) => {
+    const bits = [t.assignee || "без исполнителя"];
+    if (t.deadline) bits.push("до " + fmtDate(t.deadline));
+    if (t.priority === "high") bits.push("важно");
+    return `${i + 1}) ${t.title} — ${bits.join(", ")}`;
+  });
+  await say(
+    ctx,
+    `Поручить?\n${lines.join("\n")}\n\nОтветьте «да» — любой другой ответ отменит.`,
+  );
+  return true;
+}
+
 export async function handleText(ctx: BotContext, text: string): Promise<void> {
   const trimmed = text.trim();
 
@@ -381,16 +459,45 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     }
     const colleague = await findColleagueByChat(ctx.admin, ctx.chatId, ctx.channel);
     if (colleague) {
+      // Отложенное подтверждение всегда старше всего остального: следующее
+      // сообщение — это «да» или отказ, а не новая просьба.
+      const waiting = await pendingFor(ctx.admin, colleague.id);
+      if (waiting) {
+        await clearPending(ctx.admin, colleague.id);
+        await say(ctx, await resolvePendingAction(waiting, trimmed));
+        return;
+      }
+
       // Раньше здесь был тупик: «это канал в одну сторону». Он и был им,
       // пока единственным ответом коллеги было нажатие кнопки. Теперь
       // кнопка «Сделал» просит сказать, что именно сделано, а «Не могу» —
       // почему, и вот этот текст и приходит сюда следующим сообщением.
-      const answered = await handleColleagueText(ctx.admin, colleague, trimmed, ctx.channel.id);
+      // Кто перед нами: руководитель со входом в трекер или человек,
+      // которому просто пишут. От этого зависит, чем считать его фразу.
+      const asManager = await managerIdOf(ctx.admin, colleague.id);
+      const answered = await handleColleagueText(ctx.admin, colleague, trimmed, ctx.channel.id, !!asManager);
       if (answered) {
         await ctx.transport.send(ctx.chatId, answered.reply, answered.buttons?.length ? { buttons: answered.buttons } : undefined);
         if (answered.notifyOwner) await notifyAuthor(ctx.admin, colleague.user_id, answered.notifyTo ?? null, answered.notifyOwner, answered.notice);
         return;
       }
+
+      // Руководитель может поручить отсюда же.
+      //
+      // Быстрый ввод был только у владельца, и, чтобы поставить одну задачу,
+      // руководителю приходилось открывать трекер — для человека, который
+      // весь день за рулём, это ровно та преграда, из-за которой поручение
+      // не становится задачей. Право у него есть (миграция 0031), не хватало
+      // двери.
+      //
+      // Только тому, у кого есть членство: коллега без входа в трекер — это
+      // человек, которому пишут, и заводить от его имени задачи в чужом
+      // пространстве было бы подлогом.
+      if (asManager) {
+        const offered = await offerTask(ctx, colleague, asManager, trimmed);
+        if (offered) return;
+      }
+
       // Ответить оказалось нечем — ни задачи, ни встречи, ни команды.
       // Справка идёт с кнопками списков: человеку, который ещё не знает, что
       // тут можно, показать это дешевле, чем рассказать.

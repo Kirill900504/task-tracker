@@ -23,6 +23,10 @@ export type PendingCreateTasks = {
   kind: "create_tasks";
   userId: string;
   tasks: { title: string; assignee: string; deadline: string; priority: "high" | "med" }[];
+  // Кто ставит. Пусто — владелец (так было всегда). Руководитель, диктующий
+  // задачу в бот, ставит её от своего имени: иначе отчёт по ней придёт не
+  // ему, и он не сможет её ни принять, ни вернуть.
+  createdBy?: string;
   // Set when the dictated recap was matched to a meeting still marked
   // "planned": the same "да" that creates the tasks also closes that meeting
   // and writes the recap into its card. Optional, so pending rows written
@@ -192,6 +196,7 @@ export async function resolvePendingAction(
         assignee: t.assignee || "",
         priority: t.priority,
         deadline: t.deadline || null,
+        createdBy: pending.createdBy || null,
       }),
     );
     const { error } = await admin.from("tasks").insert(rows);

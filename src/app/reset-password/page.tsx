@@ -28,6 +28,24 @@ export default function ResetPasswordPage() {
     } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") setReady(true);
     });
+
+    // Второй способ сюда попасть: ссылка, выданная владельцем в «Команде»
+    // (/api/workspace/access-link). В ней не код Supabase, а одноразовый
+    // token_hash, и меняет его на сессию эта страница — потому что ссылка
+    // через сам Supabase уводит на его Site URL (у нас — на localhost), а
+    // человеку нужен адрес трекера. Токен выкусывается из адреса сразу:
+    // перезагрузка страницы со сгоревшим токеном иначе выглядит как
+    // «ссылка не работает».
+    const tokenHash = new URLSearchParams(window.location.search).get("token_hash");
+    if (tokenHash) {
+      supabase.auth.verifyOtp({ type: "recovery", token_hash: tokenHash }).then(({ error }) => {
+        if (error) setError("Ссылка больше не действует — попросите новую.");
+        else setReady(true);
+        window.history.replaceState(null, "", window.location.pathname);
+      });
+      return () => subscription.unsubscribe();
+    }
+
     // Covers the case where the recovery session was already established by
     // the time this effect runs (event fired before the listener attached).
     supabase.auth.getSession().then(({ data }) => {
@@ -73,7 +91,12 @@ export default function ResetPasswordPage() {
 
         <h1 className="auth-title">Новый пароль</h1>
 
-        {!ready && !done && <p className="auth-sub" style={{ margin: 0 }}>Проверяю ссылку…</p>}
+        {/* Пока ссылка проверяется, полей ещё нет — и если она не подошла,
+            сказать об этом надо здесь же: единственное, что тут есть, это
+            строка «Проверяю ссылку…», и остаться с ней навсегда значит
+            остаться без объяснения. */}
+        {!ready && !done && error && <div className="auth-error">{error}</div>}
+        {!ready && !done && !error && <p className="auth-sub" style={{ margin: 0 }}>Проверяю ссылку…</p>}
 
         {ready && !done && (
           <>

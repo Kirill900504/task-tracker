@@ -502,6 +502,14 @@ export async function handleColleagueText(
   // Из какого мессенджера пришло: в обсуждении это видно строкой «из
   // Telegram», и подменять её на другую значит врать в записи.
   source: "telegram" | "max" = "telegram",
+  // Может ли этот человек поручать. У руководителя свободный текст — это
+  // поручение, как у владельца, а не реплика: чтобы написать в обсуждение,
+  // он нажимает «Ответить». У коллеги без входа в трекер наоборот —
+  // поручать ему нечего, и его слова идут в обсуждение.
+  //
+  // Развести это обязательно: иначе фраза «поручи Игорю смету» от
+  // руководителя молча ложилась бы репликой в последнюю открытую задачу.
+  canDictate = false,
 ): Promise<ColleagueTextResult | null> {
   const body = text.trim();
   if (!body) return null;
@@ -555,7 +563,12 @@ export async function handleColleagueText(
 
   // Причина отказа от встречи ждёт ответа ровно так же — незаполненная
   // строка и есть заданный вопрос.
-  if (!rows.length) return (await handleMeetingReason(admin, colleague, body)) ?? handleChatMessage(admin, colleague, body, source);
+  if (!rows.length) {
+    const meetingReason = await handleMeetingReason(admin, colleague, body);
+    if (meetingReason) return meetingReason;
+    // Угадывание обсуждения — только для тех, кто поручать не может.
+    return canDictate ? null : handleChatMessage(admin, colleague, body, source);
+  }
 
   // Самая свежая: человек отвечает на то, что нажал только что.
   const askedAt = (r: Row) => Date.parse(r.done_at || r.declined_at || r.reschedule_requested_at || "") || 0;
