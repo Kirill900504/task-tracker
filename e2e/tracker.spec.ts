@@ -269,18 +269,21 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   // no second Save step for it.
   await page.click("#markSuccessBtn");
   await expect(page.locator("#meetingOverlay")).toHaveCount(0);
-  await expect(chip).toHaveClass(/resolved/);
-  await expect(chip.locator(".mstatus.success")).toBeVisible();
+  // Закрытая встреча уходит из списка целиком: её место — окно с зелёной
+  // галочкой в шапке панели («…должны показываться удобным дизайнерским
+  // списком в дополнительном окне»).
+  await expect(chip).toHaveCount(0);
   await waitForSaved(page);
 
-  // And it is still closed, with its outcome, after a reload. "Показывать
-  // завершённые" is per-session, so it has to be turned back on first —
-  // resolved meetings are hidden by default.
+  // И после перезагрузки она там же, с итогом, который открывается прямо
+  // из этого окна.
   await page.reload();
   await expect(page.locator("#newTaskBtn")).toBeVisible();
-  await showDoneOn(page);
-  await expect(page.locator(".meeting-chip", { hasText: title })).toHaveClass(/resolved/);
-  await page.locator(".meeting-chip", { hasText: title }).click();
+  await page.click("#meetingsDoneBtn");
+  const row = page.locator(".done-list-row", { hasText: title });
+  await expect(row).toBeVisible({ timeout: 20_000 });
+  await expect(row).toContainText("Договорились по срокам");
+  await row.locator(".done-list-text").click();
   await expect(page.locator("#mResult")).toHaveValue("Договорились по срокам");
 });
 
@@ -310,10 +313,12 @@ test("a weekly recurring task keeps its rule across a reload", async ({ page }) 
   // и то, что он видел). Карточка говорит то же самое: пилюля повторения и
   // пилюля приоритета.
   const card = page.locator(".task", { hasText: title });
-  // «По срм» — как карточка пишет «по средам»: и повтор, и день недели
-  // одной пилюлей, то есть проверяются оба сохранённых поля сразу.
-  await expect(card.locator(".pill-recur")).toContainText("ср");
-  await expect(card).toHaveClass(/high/);
+  // «По срм» — как кубик пишет «по средам»: и повтор, и день недели
+  // одной подписью, то есть проверяются оба сохранённых поля сразу.
+  await expect(card.locator(".task-recur")).toContainText("ср");
+  // Важность на доске — точка в углу, а не слово: класс high остался, но
+  // читать его теперь надо вместе с маркером.
+  await expect(card.locator(".task-mark.hot")).toBeVisible();
 });
 
 // Перенос задачи между столбцами — мышью, как человек.
@@ -363,7 +368,10 @@ test("задача переносится в соседний столбец и 
   // не перекладывание ярлыка. Взять задачу в работу может только её
   // исполнитель; постановщик, сделавший это за него, отчитался бы за
   // другого. Поэтому карточка остаётся на месте, а трекер говорит почему.
-  await expect(page.locator(".toast")).toContainText("Так нельзя");
+  // Именно этот тост, а не «первый попавшийся»: рядом живёт ещё один —
+  // «сейчас ночь, задача уйдёт утренней сводкой», — и он приходит от
+  // создания задачи, а не от переноса.
+  await expect(page.locator(".toast", { hasText: "Так нельзя" })).toBeVisible();
   await expect(page.locator("#col-new .task", { hasText: title })).toBeVisible();
   await expect(page.locator("#col-work .task", { hasText: title })).toHaveCount(0);
 });
@@ -834,11 +842,13 @@ test("закрытие встречи из списка спрашивает и�
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.fill("#askInput", "Договорились по срокам");
   await page.click("#askOkBtn");
-  await expect(chip).toHaveClass(/resolved/);
+  // Закрытая встреча уходит из списка в окно завершённых.
+  await expect(chip).toHaveCount(0);
   await waitForSaved(page);
 
   // Итог сохранён там же, где его потом читают, — в самой встрече.
-  await chip.click();
+  await page.click("#meetingsDoneBtn");
+  await page.locator(".done-list-row", { hasText: title }).locator(".done-list-text").click();
   await expect(page.locator("#mResult")).toHaveValue("Договорились по срокам");
 });
 
@@ -922,8 +932,14 @@ test("разделы переставляются перетаскиванием
   await admin.from("sections").delete().in("id", ids);
 });
 
-// Правая кнопка по разделу — своё меню, а не браузерное.
-test("раздел переименовывается и удаляется правой кнопкой", async ({ page }) => {
+// Разделы: правая кнопка заводит задачу, а правятся они в своём окне.
+//
+// До 19.09.2026 правая кнопка открывала меню «переименовать / удалить».
+// Кирилл поменял это местами: «если тыкаешь правой сразу вылазило окно
+// создания новой задачи с уже выделенными исполнителями, ответственными
+// за раздел». Редкое действие ушло в окно «Разделы», частое получило
+// правую кнопку.
+test("правая кнопка по разделу заводит задачу, а переименование живёт в окне «Разделы»", async ({ page }) => {
   const stamp = Date.now().toString(36);
   const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -935,17 +951,26 @@ test("раздел переименовывается и удаляется пр
   const tab = page.locator("#sectionTabs .section-tab", { hasText: `Старое${stamp}` });
   await expect(tab).toBeVisible({ timeout: 20_000 });
 
+  // Правая кнопка — новая задача, и раздел в ней уже выбран.
   await tab.click({ button: "right" });
-  await page.locator(".export-menu .export-item", { hasText: "Редактировать" }).click();
+  await expect(page.locator("#fTitle")).toBeVisible();
+  await expect(page.locator(`#fSection [data-value="${id}"]`)).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#fTitle")).toHaveCount(0);
+
+  // А переименование — в окне «Разделы».
+  await page.click("#sectionSettingsBtn");
+  const row = page.locator(".section-row", { hasText: `Старое${stamp}` });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "Название" }).click();
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.fill("#askInput", `Новое${stamp}`);
   await page.click("#askOkBtn");
-  const renamed = page.locator("#sectionTabs .section-tab", { hasText: `Новое${stamp}` });
-  await expect(renamed).toBeVisible();
+  await expect(page.locator("#sectionTabs .section-tab", { hasText: `Новое${stamp}` })).toBeVisible();
   await waitForSaved(page);
 
-  await renamed.click({ button: "right" });
-  await page.locator(".export-menu .export-item", { hasText: "Удалить" }).click();
+  // И удаление — там же, рядом.
+  await page.locator(".section-row", { hasText: `Новое${stamp}` }).getByRole("button", { name: "Удалить" }).click();
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.click("#askOkBtn");
   await expect(page.locator("#sectionTabs .section-tab", { hasText: stamp })).toHaveCount(0);
@@ -1027,11 +1052,14 @@ test("время и состав встречи меняются только п
 
   // Новая встреча в плане и с новым временем; прежняя закрыта как
   // перенесённая (видна только при «показывать завершённые»).
-  await showDoneOn(page);
+  // В списке остаётся одна встреча — новая: прежняя закрыта как
+  // перенесённая и лежит в окне завершённых, вместе с датой, на которую
+  // её перенесли.
   const all = page.locator(".meeting-chip", { hasText: title });
-  await expect(all).toHaveCount(2);
+  await expect(all).toHaveCount(1);
   await expect(all.filter({ hasText: "15:30" })).toBeVisible();
-  await expect(all.filter({ has: page.locator(".mstatus.no_result") })).toBeVisible();
+  await page.click("#meetingsDoneBtn");
+  await expect(page.locator(".done-list-row", { hasText: title })).toHaveCount(1);
 });
 
 test("написанное в обсуждении появляется до того, как доедет до облака", async ({ page }) => {

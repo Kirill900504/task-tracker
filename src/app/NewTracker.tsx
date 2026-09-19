@@ -617,8 +617,11 @@ export default function NewTracker() {
                   ]
                 : []),
               ...(installPrompt.visible ? [{ id: "install", label: "📥 Установить приложение", onSelect: installPrompt.promptInstall }] : []),
-              ...(botLink.needs.telegram ? [{ id: "tg", label: "🔗 Подключить Telegram", onSelect: () => botLink.link("telegram") }] : []),
-              ...(botLink.needs.max ? [{ id: "max", label: "🔗 Подключить MAX", onSelect: () => botLink.link("max") }] : []),
+              // Привязка чата к учётной записи — владельцева. У руководителя
+              // свой путь, полосой над доской: его чат живёт в строке человека,
+              // а не в аккаунте (см. MessengerLink и useMyMessenger).
+              ...(isOwner && botLink.needs.telegram ? [{ id: "tg", label: "🔗 Подключить Telegram", onSelect: () => botLink.link("telegram") }] : []),
+              ...(isOwner && botLink.needs.max ? [{ id: "max", label: "🔗 Подключить MAX", onSelect: () => botLink.link("max") }] : []),
               { id: "signout", label: "Выйти", onSelect: () => actions.signOut() },
             ]}
           />
@@ -734,12 +737,14 @@ export default function NewTracker() {
                 <Icon name="users" /> Команда
               </button>
             )}
-            {botLink.needs.telegram && (
+            {/* Только владельцу: см. комментарий у того же условия в меню
+                телефона — руководителю эти кнопки привязали бы чат не туда. */}
+            {isOwner && botLink.needs.telegram && (
               <button className="btn" id="telegramLinkBtn" onClick={() => botLink.link("telegram")}>
                 <Icon name="link" /> Telegram
               </button>
             )}
-            {botLink.needs.max && (
+            {isOwner && botLink.needs.max && (
               <button className="btn" id="maxLinkBtn" onClick={() => botLink.link("max")}>
                 <Icon name="link" /> MAX
               </button>

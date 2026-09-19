@@ -653,7 +653,13 @@ export default function TasksPanel({
               className={"filter-pill done" + (showDone ? " active" : "")}
               id="showDoneCheckbox"
               aria-pressed={showDone}
-              onClick={() => onShowDoneChange(!showDone)}
+              onClick={() => {
+                const next = !showDone;
+                onShowDoneChange(next);
+                // На телефоне столбец один, и открыть четвёртый, не перейдя
+                // на него, — это кнопка, после которой ничего не произошло.
+                if (isMobile) setMobileColumn(next ? "done" : "new");
+              }}
             >
               <Icon name="check" size={14} /> Завершённые
               {showDone && byColumn.done.length > 0 && <span className="filter-pill-count">{byColumn.done.length}</span>}
