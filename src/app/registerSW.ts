@@ -31,9 +31,22 @@ export default function RegisterSW() {
       return;
     }
 
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      /* an unavailable worker only costs offline support, never the app */
-    });
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        // Ask for a fresh copy of the worker on every load. A worker that
+        // answers navigations wrongly breaks the INSTALLED app first — a
+        // standalone window with no address bar, no reload that helps and
+        // no way in — and the only way back in is a browser tab on the same
+        // origin, which shares this registration. Waiting for the browser's
+        // own once-a-day check would mean a day of «приложение не
+        // открывается» after a worker is fixed, which is what this costs
+        // nothing to prevent.
+        void registration.update().catch(() => {});
+      })
+      .catch(() => {
+        /* an unavailable worker only costs offline support, never the app */
+      });
     // The shell itself is cached from the tracker page once it has loaded —
     // see src/lib/shellCache.ts for why it cannot be done from here.
   }, []);
