@@ -150,6 +150,27 @@ export function useColleagues() {
     [reload],
   );
 
+  // Третий вид ссылки: не приглашение, а возвращение доступа тому, кто уже
+  // входил. Приглашение после «в трекере» отвечает отказом — и правильно,
+  // иначе человек завёл бы себе второй аккаунт мимо своих же задач. А
+  // ссылку теряют и пароль забывают, и до недавнего времени это был тупик:
+  // строка «в трекере» и ни одной кнопки рядом. Маршрут отдаёт почту, под
+  // которой человек записан (в интерфейсе её больше негде увидеть), и
+  // одноразовую ссылку на смену пароля для того же входа.
+  const accessLink = useCallback(
+    async (assigneeId: string): Promise<{ link: string; email: string } | { error: string }> => {
+      const res = await fetch("/api/workspace/access-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigneeId }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.error) return { error: data?.error || "Не получилось создать ссылку" };
+      return { link: data.link as string, email: data.email as string };
+    },
+    [],
+  );
+
   // Увольнение (A4): доступ выключается, данные остаются на месте. Строка
   // участия в задачах никуда не девается — иначе вместе с человеком из
   // трекера исчезло бы и то, что он делал, и задачи стали бы ничьими
@@ -208,7 +229,7 @@ export function useColleagues() {
     [reload],
   );
 
-  return { colleagues, loading: !loaded, reload, invite, inviteToTracker, setDirection, setTrackerAccess, unlink };
+  return { colleagues, loading: !loaded, reload, invite, inviteToTracker, accessLink, setDirection, setTrackerAccess, unlink };
 }
 
 export type SendResult = { sentTo: string[]; failed: string[] } | { error: string };
