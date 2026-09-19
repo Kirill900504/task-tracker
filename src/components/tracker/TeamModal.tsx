@@ -1,11 +1,10 @@
 "use client";
 
 import { Fragment, useCallback, useState } from "react";
-import { createPortal } from "react-dom";
 import { useColleagues, type ColleagueChannel } from "@/hooks/useColleagues";
 import { useMaxBot } from "@/hooks/useMaxBot";
 import { useAsk } from "@/components/Ask";
-import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Modal from "./Modal";
 
 // «Команда»: who can be written to, and how to connect the rest.
 //
@@ -84,7 +83,6 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
 
   // Esc закрывает — как и любое другое окно трекера. Раньше не закрывал:
   // обработчик каждое окно заводило себе само, и это его не завело.
-  useEscapeToClose(onClose);
 
   // Ссылка стоит прямо под строкой, но сама строка может оказаться у нижнего
   // края окна — тогда её всё равно не видно. Ref стабилен, поэтому прокрутка
@@ -163,8 +161,8 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     await unlink(id, channel);
   }
 
-  return createPortal(
-    <div className="overlay open" id="teamOverlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+  return (
+    <Modal id="teamOverlay" onClose={onClose}>
       <div className="modal">
         <h2>Команда</h2>
 
@@ -362,7 +360,6 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

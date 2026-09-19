@@ -447,15 +447,18 @@ export default function TasksPanel({
     // карточка: петле не за что зацепиться.
     if (spot.term === dragged.term) return plain;
 
-    // В ЧУЖОЙ столбец карточка показывается в конце — всегда, куда бы ни
-    // указывал курсор внутри него. Позиция, не зависящая от того, что под
-    // курсором, не может сама себя пересчитать; точное место всё равно
-    // решается в момент отпускания.
-    const target = spot.term === "short" ? shortOpen : longOpen;
-    const other = spot.term === "short" ? longOpen : shortOpen;
-    const moved = [...target.filter((t) => t.id !== dragged.id), dragged];
-    const rest = other.filter((t) => t.id !== dragged.id);
-    return spot.term === "short" ? { short: moved, long: rest } : { short: rest, long: moved };
+    // В ЧУЖОЙ столбец карточка тоже не перепрыгивает — и это второе, что
+    // пришлось исправить после живого опыта. Слова Кирилла: «перескакивает
+    // резко, нервно, когда перетягиваешь задачи между столбиками». Так и
+    // было: карточка исчезала из своего столбца и появлялась в конце
+    // чужого, оба столбца меняли высоту разом, и глазу не за что было
+    // зацепиться.
+    //
+    // Теперь на месте карточки остаётся её силуэт, а в чужом столбце
+    // ПЛАВНО раскрывается место (`.task-drop-slot`, см. TaskColumnBody).
+    // Ничего не переставляется до отпускания — двигается только высота, и
+    // движется она сама, переходом CSS.
+    return plain;
   }, [shortOpen, longOpen, tasks, dragActive, dragOver]);
 
   // Ordering by hand is a drag with a mouse, and a finger has no drag at

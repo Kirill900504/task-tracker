@@ -31,20 +31,34 @@ export function TaskColumnBody({
   empty: boolean;
   children: ReactNode;
 }) {
-  const { active } = useDragState();
-  const { setNodeRef, isOver } = useDroppable({ id: "col:" + term, data: { target: { kind: "task-column", term } } });
+  const { active, over } = useDragState();
+  const { setNodeRef } = useDroppable({ id: "col:" + term, data: { target: { kind: "task-column", term } } });
 
   // Подсвечивается столбец только тогда, когда в него ДЕЙСТВИТЕЛЬНО что-то
   // несут. Подсветка «просто потому, что курсор пролетел мимо» — это ровно
   // тот шум, из-за которого в прежнем виде было не понять, где окажется
   // карточка.
-  const welcoming = isOver && (active?.kind === "task" || active?.kind === "idea");
+  //
+  // Считается по ЦЕЛИ, а не по собственному isOver: целью чаще оказывается
+  // карточка внутри столбца, а не столбец сам — и столбец, который при этом
+  // не подсвечен, говорит «сюда нельзя» ровно там, где можно.
+  const aiming = over?.kind === "task-column" ? over.term === term : over?.kind === "task" ? over.term === term : false;
+  const welcoming = aiming && (active?.kind === "task" || active?.kind === "idea");
+  // Место, которое раскрывается под то, что несут из другого столбца.
+  // Своя задача его не получает: она и так здесь, и её место — силуэт на
+  // прежнем месте.
+  const showSlot = welcoming && (active?.kind === "idea" || (active?.kind === "task" && active.term !== term));
 
   return (
     <div ref={setNodeRef} className={"task-column-body" + (welcoming ? " drag-over" : "") + (empty ? " is-empty" : "")}>
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         {children}
       </SortableContext>
+      {/* Высота, а не перестановка. Перестановка — это скачок, и глазу
+          нечем его проследить; раскрывающееся место читается как «сюда
+          поместится», и делает это переходом CSS, без единого перерисованного
+          соседа. */}
+      <div className={"task-drop-slot" + (showSlot ? " open" : "")} aria-hidden />
     </div>
   );
 }
@@ -68,6 +82,11 @@ export function SortableTask({
     id: task.id,
     disabled: !draggable,
     data: { payload: { kind: "task", id: task.id, term }, target: { kind: "task", id: task.id, term } },
+    // Соседи расступаются медленнее и мягче, чем по умолчанию (200 мс и
+    // резковатая кривая): «перескакивает резко, нервно» — это в том числе
+    // про них. Кривая с длинным хвостом выглядит как «отодвинулся», а не
+    // как «дёрнулся».
+    transition: { duration: 260, easing: "cubic-bezier(.2,.8,.3,1)" },
   });
 
   const dragProps: TaskDragProps = {

@@ -7,7 +7,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { createPortal } from "react-dom";
+import PopLayer from "./PopLayer";
 import type { Meeting, Task } from "@/types/tracker";
 import { dateStr, fmtDate, isTaskDueOnDate, todayStr } from "@/lib/taskDisplay";
 import { getMonthGridDates } from "@/lib/calendarLogic";
@@ -148,8 +148,8 @@ export default function CalendarPanel({
         })}
       </div>
       {popover &&
-        createPortal(
-          <>
+        (
+          <PopLayer>
             <div style={{ position: "fixed", inset: 0, zIndex: 299 }} onClick={() => setPopover(null)} />
             <div
               ref={popoverRef}
@@ -183,8 +183,7 @@ export default function CalendarPanel({
                 + Встреча
               </button>
             </div>
-          </>,
-          document.body,
+          </PopLayer>
         )}
       {selectedDate && (
         <div className="cal-filter-note" id="calFilterNote" style={{ display: "flex" }}>

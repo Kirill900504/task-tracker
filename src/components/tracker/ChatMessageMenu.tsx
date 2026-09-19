@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import PopLayer from "./PopLayer";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 // Меню сообщения в обсуждении — правой кнопкой, как в мессенджере.
@@ -61,8 +61,8 @@ export default function ChatMessageMenu({
 
   useEscapeToClose(onClose);
 
-  return createPortal(
-    <>
+  return (
+    <PopLayer>
       <div className="chat-menu-backdrop" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
       <div
         className="chat-menu"
@@ -107,7 +107,6 @@ export default function ChatMessageMenu({
           </div>
         )}
       </div>
-    </>,
-    document.body,
+    </PopLayer>
   );
 }

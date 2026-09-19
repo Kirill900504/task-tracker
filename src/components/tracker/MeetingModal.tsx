@@ -4,7 +4,6 @@
 // meetingSaveBtn/deleteMeetingBtn/setMeetingStatus/performReschedule in
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { useColleagues } from "@/hooks/useColleagues";
 import SendMenu from "./SendMenu";
 import ItemChat from "./ItemChat";
@@ -17,7 +16,7 @@ import MiniCalendar from "./MiniCalendar";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
 import { sortNames } from "@/lib/peopleOrder";
-import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Modal from "./Modal";
 import Icon from "./Icon";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
@@ -89,7 +88,6 @@ export default function MeetingModal({
   const [result, setResult] = useState(meeting?.result ?? "");
 
   // Esc закрывает окно — как и любое другое окно трекера.
-  useEscapeToClose(onClose);
 
   // The account owner is the one scheduling, so he is not offered as
   // someone to add to his own meeting.
@@ -146,8 +144,8 @@ export default function MeetingModal({
   const resolved = isEditing && meeting.status && meeting.status !== "planned" && meeting.status !== "proposed";
   const proposed = isEditing && meeting.status === "proposed";
 
-  return createPortal(
-    <div className="overlay open" id="meetingOverlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+  return (
+    <Modal id="meetingOverlay" onClose={onClose}>
       <div className="modal">
         <h2 id="meetingModalTitle">{isEditing ? "Встреча" : isMove ? "Перенос встречи" : "Новая встреча"}</h2>
         {isMove && (
@@ -366,7 +364,6 @@ export default function MeetingModal({
           </div>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

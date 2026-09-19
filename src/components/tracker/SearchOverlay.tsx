@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { Idea, Meeting, Task } from "@/types/tracker";
 import { searchAll, KIND_LABELS, type SearchResult } from "@/lib/localSearch";
-import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Modal from "./Modal";
 import { useCommentSearch } from "@/hooks/useCommentSearch";
 
 // Global search: "/" anywhere, type, ↑↓ to pick, Enter to open. Results come
@@ -49,7 +48,6 @@ export default function SearchOverlay({
 
   // Esc from anywhere, not only from inside the box — a click on a result
   // row can take focus out of the input, and the key has to keep working.
-  useEscapeToClose(onClose);
 
   // A shorter list can leave the stored cursor pointing past the end;
   // clamping it where it is read keeps that from needing its own state
@@ -79,8 +77,8 @@ export default function SearchOverlay({
   }
 
 
-  return createPortal(
-    <div className="overlay open" id="searchOverlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+  return (
+    <Modal id="searchOverlay" onClose={onClose}>
       <div className="search-modal" onKeyDown={onKeyDown}>
         <input
           ref={inputRef}
@@ -131,7 +129,6 @@ export default function SearchOverlay({
           })}
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

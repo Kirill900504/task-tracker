@@ -6,7 +6,6 @@
 // #fTitle, #saveTaskBtn, etc.) so the existing e2e patterns keep working
 // against the new UI with minimal changes.
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { useColleagues } from "@/hooks/useColleagues";
 import SendMenu from "./SendMenu";
 import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
@@ -21,7 +20,7 @@ import MiniCalendar from "./MiniCalendar";
 import MicButton from "./MicButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
-import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Modal from "./Modal";
 import Icon from "./Icon";
 
 // Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
@@ -163,7 +162,6 @@ export default function TaskModal({
   const [descOpen, setDescOpen] = useState(() => !!(task?.desc || prefill?.desc));
 
   // Esc закрывает карточку — как и любое другое окно трекера.
-  useEscapeToClose(onClose);
 
   const isEditing = !!task;
 
@@ -410,8 +408,8 @@ export default function TaskModal({
     </div>
   );
 
-  return createPortal(
-    <div className="overlay open" id="overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+  return (
+    <Modal id="overlay" onClose={onClose}>
       <div className="modal">
         {/* Заведённая задача — не черновик.
 
@@ -749,7 +747,6 @@ export default function TaskModal({
           </div>
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

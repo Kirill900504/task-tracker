@@ -35,6 +35,7 @@ import {
   KeyboardSensor,
   PointerSensor,
   TouchSensor,
+  closestCenter,
   pointerWithin,
   useSensor,
   useSensors,
@@ -117,6 +118,57 @@ class CardPointerSensor extends PointerSensor {
       },
     },
   ];
+}
+
+// Чем считать «вот сюда».
+//
+// Для зон — по указателю: панели, дни календаря и списки большие, вложены
+// друг в друга, и пересечение прямоугольников выбрало бы самый крупный, а
+// не тот, куда смотрит курсор.
+//
+// Для карточки, которую переставляют в СВОЁМ столбце, по указателю нельзя:
+// соседи в этот момент сдвинуты трансформацией, силуэт карточки остаётся на
+// прежнем месте, и под курсором регулярно оказывается он сам — «перенеси
+// меня на меня же». Именно так перестановка внутри столбца молча
+// переставала работать. Здесь работает близость центров, считанная по
+// фактическим (уже сдвинутым) прямоугольникам, и только среди карточек и
+// столбцов — иначе ближайшим центром окажется клетка календаря.
+function trackerCollisions(args: Parameters<typeof pointerWithin>[0]) {
+  const pointer = pointerWithin(args);
+  const payload = payloadOf(args.active.data);
+  if (payload?.kind !== "task") return pointer;
+
+  // День календаря выигрывает, если курсор прямо над ним: задача,
+  // брошенная на дату, становится встречей.
+  const overDay = pointer.find((hit) => {
+    const container = args.droppableContainers.find((c) => c.id === hit.id);
+    return targetOf(container?.data)?.kind === "day";
+  });
+  if (overDay) return [overDay];
+
+  // Сначала решается СТОЛБЕЦ — по указателю, потому что столбец под
+  // курсором это ровно то, куда человек целится. И только внутри него
+  // ищется карточка, рядом с которой встать.
+  //
+  // Порядок именно такой, и оба шага обязательны. Если искать карточку
+  // сразу среди всех, ближайшей к курсору окажется соседка из ИСХОДНОГО
+  // столбца — и перенос в пустой столбец не сработает никогда. Если же
+  // брать только столбец, перестановка внутри списка перестанет работать:
+  // его центр всегда ближе, чем центр любой карточки.
+  const columnHit = pointer.find((hit) => {
+    const container = args.droppableContainers.find((c) => c.id === hit.id);
+    return targetOf(container?.data)?.kind === "task-column";
+  });
+  if (!columnHit) return pointer;
+
+  const columnTarget = targetOf(args.droppableContainers.find((c) => c.id === columnHit.id)?.data);
+  const term = columnTarget?.kind === "task-column" ? columnTarget.term : null;
+  const cards = args.droppableContainers.filter((c) => {
+    const target = targetOf(c.data);
+    return c.id !== args.active.id && target?.kind === "task" && target.term === term;
+  });
+  const nearestCard = cards.length ? closestCenter({ ...args, droppableContainers: cards }) : [];
+  return nearestCard.length ? nearestCard : [columnHit];
 }
 
 function payloadOf(data: unknown): DragPayload | null {
@@ -257,7 +309,7 @@ export default function TrackerDnd({
       // pointerWithin, а не «пересечение прямоугольников»: панели большие и
       // вложены друг в друга (карточка внутри колонки внутри панели), и
       // пересечение выбирало бы самый большой, а не тот, куда смотрит курсор.
-      collisionDetection={pointerWithin}
+      collisionDetection={trackerCollisions}
       // Автопрокрутка нужна (столбец задач длиннее экрана, и карточку носят
       // вниз), но по умолчанию она включается за четверть экрана до края —
       // то есть страница едет, когда человек всего лишь ведёт карточку из

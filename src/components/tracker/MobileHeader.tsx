@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import PopLayer from "./PopLayer";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import Icon from "./Icon";
 
@@ -62,8 +62,8 @@ export default function MobileHeader({
 
       {menuOpen &&
         anchor &&
-        createPortal(
-          <>
+        (
+          <PopLayer>
             <div className="export-backdrop" onClick={() => setMenuOpen(false)} />
             <div className="export-menu mobile-menu" id="mobileMoreMenu" style={{ top: anchor.bottom + 8 }}>
               {items.map((item) => (
@@ -80,8 +80,7 @@ export default function MobileHeader({
                 </button>
               ))}
             </div>
-          </>,
-          document.body,
+          </PopLayer>
         )}
     </header>
   );

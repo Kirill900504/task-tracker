@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import Modal from "@/components/tracker/Modal";
 
 // Все вопросы трекера — одним окном трекера.
 //
@@ -188,9 +188,9 @@ export default function AskProvider({ children }: { children: ReactNode }) {
       {children}
       {pending &&
         typeof document !== "undefined" &&
-        createPortal(
-          <div className="overlay open ask-overlay" onClick={(e) => e.target === e.currentTarget && cancel()}>
-            <div className="modal ask-modal" role="dialog" aria-modal="true">
+        (
+          <Modal variant="ask-overlay" onClose={cancel}>
+            <div className="modal ask-modal">
               <h2>{pending.title || defaultTitle(pending.kind)}</h2>
               <p className="ask-question">{pending.question}</p>
               {pending.note && <p className="ask-note">{pending.note}</p>}
@@ -270,8 +270,7 @@ export default function AskProvider({ children }: { children: ReactNode }) {
                 )}
               </div>
             </div>
-          </div>,
-          document.body,
+          </Modal>
         )}
     </AskContext.Provider>
   );

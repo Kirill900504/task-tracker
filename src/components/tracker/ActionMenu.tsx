@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import PopLayer from "./PopLayer";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import Icon, { type IconName } from "./Icon";
@@ -61,8 +61,8 @@ export default function ActionMenu({
     el.style.right = Math.max(8, window.innerWidth - anchor.right) + "px";
   }, [anchor, isMobile, items.length]);
 
-  return createPortal(
-    <>
+  return (
+    <PopLayer>
       <div className={"export-backdrop" + (isMobile ? " sheet-backdrop" : "")} onClick={onClose} />
       <div
         ref={menuRef}
@@ -90,7 +90,6 @@ export default function ActionMenu({
           </button>
         )}
       </div>
-    </>,
-    document.body,
+    </PopLayer>
   );
 }

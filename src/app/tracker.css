@@ -495,6 +495,23 @@
   .task-column-body.is-empty{min-height:96px;}
   .task-column-body.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
 
+  /* Место, которое раскрывается под карточку из другого столбца.
+     Кирилл сказал про прежний вид коротко: «перескакивает резко, нервно».
+     Так и было — карточка мгновенно исчезала слева и появлялась справа, оба
+     столбца меняли высоту разом. Теперь ничего не переставляется: просто
+     растёт высота, и растёт она сама, переходом. Дольше обычных 150 мс —
+     это движение крупное, и на быстром переходе глаз читает его как рывок. */
+  .task-drop-slot{
+    height:0; opacity:0; margin:0;
+    border:1px dashed var(--accent); border-radius:var(--radius-md);
+    background:var(--accent-soft);
+    transition:height .26s cubic-bezier(.2,.8,.3,1), opacity .2s ease, margin .26s cubic-bezier(.2,.8,.3,1);
+  }
+  .task-drop-slot.open{height:64px; opacity:1; margin-bottom:9px;}
+  @media (prefers-reduced-motion: reduce){
+    .task-drop-slot{transition:none;}
+  }
+
   /* Карточка, поднятая под курсор. Наклона нет намеренно: повёрнутая на
      полградуса карточка читается как сбой отрисовки, а не как «взял в
      руку». Работает подъём — тень и едва заметное увеличение. */
@@ -566,11 +583,33 @@
     border:1px dashed var(--line-soft); border-radius:var(--radius-md); background:rgba(255,255,255,.012);
   }
 
-  /* Modal */
+  /* Modal.
+     Окно — настоящий <dialog>, открытый через showModal (см. Modal.tsx):
+     фокус, Esc и недоступность фона достаются от браузера. Сбрасывается
+     здесь то, что браузер рисует у dialog по умолчанию, — рамка, отступ,
+     собственные max-width/max-height и белый фон; затемнение остаётся на
+     самом элементе, потому что он занимает весь экран. */
   .overlay{
     position:fixed; inset:0; background:rgba(15,19,21,.65); backdrop-filter:blur(3px); display:none;
     align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto; z-index:100;
+    border:0; max-width:none; max-height:none; width:100%; height:100%; color:inherit;
   }
+  /* Своя подложка не нужна: затемняет сам элемент. Убрать её важно —
+     иначе поверх нашего фона ляжет ещё и браузерная. */
+  .overlay::backdrop{background:transparent;}
+
+  /* Слой меню (PopLayer.tsx). Занимает весь экран, но сам по себе
+     прозрачен и не ловит мышь — ловят только то, что внутри. Сбрасывается
+     всё, что браузер рисует у [popover] по умолчанию: рамка, отступ, белый
+     фон и центрирование, из-за которого меню уехало бы в середину экрана
+     вместо своей кнопки. */
+  .pop-layer{
+    position:fixed; inset:0; margin:0; border:0; padding:0;
+    width:100%; height:100%; max-width:none; max-height:none;
+    background:transparent; overflow:visible; pointer-events:none;
+  }
+  .pop-layer:popover-open{display:block;}
+  .pop-layer > *{pointer-events:auto;}
   .overlay.open{display:flex; animation:overlay-in .15s ease-out;}
   @keyframes overlay-in{from{opacity:0;} to{opacity:1;}}
   .modal{

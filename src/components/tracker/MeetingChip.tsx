@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
-import { createPortal } from "react-dom";
+import PopLayer from "./PopLayer";
 import type { Meeting } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
 import { sanitizeAssigneeList } from "@/lib/trackerRows";
@@ -110,8 +110,8 @@ export default function MeetingChip({
           {votes && votes.no.length > 0 && <span className="mpeople-no"> · {votes.no.length} не смогут</span>}
         </span>
       )}
-      {peopleAnchor &&
-        createPortal(
+      {peopleAnchor && (
+        <PopLayer>
           <div ref={tooltipRef} id="peopleTooltip" className="people-tooltip" style={{ display: "block", top: -9999, left: -9999 }}>
             {/* Отказ и молчание — разные вещи, и именно эта разница нужна,
                 чтобы понимать, кого ещё спрашивать. */}
@@ -131,9 +131,9 @@ export default function MeetingChip({
                 </div>
               );
             })}
-          </div>,
-          document.body,
-        )}
+          </div>
+        </PopLayer>
+      )}
 
       {/* Три ответа на встречу — три одинаковые кнопки.
           Были три цветные картинки разного размера (✅ 🚫 📅): каждая рисуется
