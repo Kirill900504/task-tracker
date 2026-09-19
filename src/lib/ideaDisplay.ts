@@ -11,7 +11,14 @@ export function sortIdeasForList(ideas: Idea[], showDone: boolean): Idea[] {
     .reverse()
     .sort((a, b) => {
       if (a.done !== b.done) return a.done ? 1 : -1;
-      if (!a.done) return 0; // active ideas keep the newest-first order above
+      // Помеченные «важно» — наверх, внутри группы по-прежнему свежие
+      // первыми. При сорока мыслях флаг перестаёт работать как пометка:
+      // он виден, только если строку и так нашли глазами, а искать её
+      // приходится среди тех, что записаны позже и важными не помечены.
+      if (!a.done) {
+        if (!!a.important !== !!b.important) return a.important ? -1 : 1;
+        return 0; // остальные активные держат порядок «новые сверху»
+      }
       // Done ideas without a doneAt (ticked off before that column existed)
       // fall back to the reversed creation order rather than jumping ahead.
       const ad = a.doneAt || "";

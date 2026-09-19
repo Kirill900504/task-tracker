@@ -43,3 +43,26 @@ describe("sortIdeasForList", () => {
     expect(list).toEqual(original);
   });
 });
+
+describe("важные мысли", () => {
+  const idea = (id: string, extra: Partial<Idea> = {}): Idea => ({
+    id,
+    text: id,
+    important: false,
+    done: false,
+    createdAt: "",
+    doneAt: "",
+    ...extra,
+  });
+
+  it("поднимаются над остальными активными", () => {
+    // Порядок массива — как он приходит из базы: старые первыми.
+    const list = [idea("старая"), idea("важная", { important: true }), idea("свежая")];
+    expect(sortIdeasForList(list, false).map((i) => i.id)).toEqual(["важная", "свежая", "старая"]);
+  });
+
+  it("но вычеркнутые остаются внизу, важные они или нет", () => {
+    const list = [idea("готовая", { important: true, done: true, doneAt: "2026-09-19" }), idea("живая")];
+    expect(sortIdeasForList(list, true).map((i) => i.id)).toEqual(["живая", "готовая"]);
+  });
+});
