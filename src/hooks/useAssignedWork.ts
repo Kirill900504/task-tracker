@@ -148,7 +148,7 @@ export function useAssignedWork(assigneeId: string) {
     };
 
     const meetings = ((meetingRows as unknown as MRow[]) || [])
-      .filter((r) => r.meetings && !r.meetings.deleted_at && r.meetings.status === "planned" && r.meetings.date >= today)
+      .filter((r) => r.meetings && !r.meetings.deleted_at && (r.meetings.status === "planned" || r.meetings.status === "proposed") && r.meetings.date >= today)
       .map((r) => ({
         participantId: r.id,
         meetingId: r.meeting_id,

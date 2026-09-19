@@ -1177,6 +1177,11 @@
   /* Ряд кнопок множественного выбора: те же отступы, что у ChipChoice,
      но выбор не один, поэтому своей разметкой. */
   .chip-row{display:flex; flex-wrap:wrap; gap:6px;}
+  /* Предложенная встреча: она видна и по ней отвечают, но времени она ещё
+     не занимает — и выглядеть как назначенная не должна. */
+  .pill-proposed{color:var(--ink-soft); background:var(--paper-soft); border:1px solid var(--line-soft);}
+  .proposed-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .proposed-text{flex:1; min-width:200px; font-size:12.5px; line-height:1.5; color:var(--ink-soft);}
   /* Панель «Неделя»: семь дней подряд. Прошедшие гаснут, а не прячутся —
      иначе в пятницу от недели остаётся огрызок. */
   .week-day{padding:6px 0; border-bottom:1px solid var(--line-soft);}

@@ -32,7 +32,11 @@ export function getMonthGridDates(viewDate: Date): Date[] {
 // meeting just marked ✅/🚫 sits right under the live list and can be put
 // back into the plan without hunting for it.
 export function sortMeetingsForList(meetings: Meeting[], showResolved: boolean): Meeting[] {
-  const isPlanned = (m: Meeting) => !m.status || m.status === "planned";
+  // Предложенная встреча ещё впереди и в списке стоит вместе с
+  // назначенными: прятать её до подтверждения значит прятать то, на что
+  // ждут ответа. Время она при этом не занимает — календарь и напоминания
+  // спрашивают ровно "planned" (миграция 0034).
+  const isPlanned = (m: Meeting) => !m.status || m.status === "planned" || m.status === "proposed";
   return meetings
     .filter((m) => showResolved || isPlanned(m))
     .slice()

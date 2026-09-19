@@ -30,6 +30,7 @@ const TIME_SLOTS: string[] = (() => {
 })();
 
 function outcomeLabel(status: MeetingStatus): string {
+  if (status === "proposed") return "Предложена";
   // Без эмодзи: метка уже покрашена в свой цвет и обведена им же
   // (.outcome-badge), и наклейка поверх этого ничего не добавляет.
   if (status === "success") return "Успешно завершена";
@@ -47,6 +48,8 @@ export default function MeetingModal({
   onSetStatus,
   onReschedule,
   canEdit = true,
+  canPropose = false,
+  canConfirm = false,
   isMove,
 }: {
   meeting: Meeting | null;
@@ -64,6 +67,10 @@ export default function MeetingModal({
   // и удалять её вправе организатор. База откажет всё равно — и откажет
   // молча, поэтому кнопок здесь просто нет.
   canEdit?: boolean;
+  // Может только предлагать, а не назначать: руководитель.
+  canPropose?: boolean;
+  // Может назначить предложенное: владелец.
+  canConfirm?: boolean;
   // Эта новая встреча — перенос прежней. Форма та же, что у любой новой, но
   // называться «Новая встреча» она не должна: человек нажал «Перенести», и
   // заголовок обязан подтвердить, что происходит именно это, — иначе
@@ -119,7 +126,10 @@ export default function MeetingModal({
       time: isEditing ? meeting.time : time || "",
       title: isEditing ? meeting.title : trimmedTitle,
       participants: isEditing ? meeting.participants : sanitizeAssigneeList(participants),
-      status: meeting?.status ?? "planned",
+      // Новая встреча от руководителя — предложение: назначить значит
+      // занять чужое время, и такого права у него нет. У владельца всё как
+      // было.
+      status: meeting?.status ?? (canPropose ? "proposed" : "planned"),
       result: meeting ? result.trim() : "",
       movedToDate: meeting?.movedToDate ?? "",
       resolvedAt: meeting?.resolvedAt ?? "",
@@ -133,7 +143,8 @@ export default function MeetingModal({
     onClose();
   }
 
-  const resolved = isEditing && meeting.status && meeting.status !== "planned";
+  const resolved = isEditing && meeting.status && meeting.status !== "planned" && meeting.status !== "proposed";
+  const proposed = isEditing && meeting.status === "proposed";
 
   return createPortal(
     <div className="overlay open" id="meetingOverlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -248,6 +259,28 @@ export default function MeetingModal({
               </div>
             </div>
           </>
+        )}
+
+        {/* Предложенную встречу назначает владелец — то есть тот, чьё
+            право занимать чужое время не под вопросом. До этого она видна,
+            по ней можно ответить, но ни в календарь, ни в напоминания она
+            не попадает. */}
+        {proposed && canConfirm && (
+          <div className="field proposed-row">
+            <div className="proposed-text">
+              Встречу предложили, но ещё не назначили. Пока она не занимает время и не шлёт напоминаний.
+            </div>
+            <button type="button" className="btn btn-small btn-primary" id="confirmMeetingBtn" onClick={() => setStatus("planned")}>
+              <Icon name="check" size={15} /> Назначить
+            </button>
+          </div>
+        )}
+        {proposed && !canConfirm && (
+          <div className="field proposed-row">
+            <div className="proposed-text">
+              Это предложение: время оно не занимает, пока Кирилл его не назначит. Ответить по нему уже можно.
+            </div>
+          </div>
         )}
 
         {isEditing && canEdit && (

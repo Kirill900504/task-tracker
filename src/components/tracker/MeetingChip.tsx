@@ -40,6 +40,10 @@ export default function MeetingChip({
   // Who answered «Буду» in Telegram — shown against the participant count,
   // so a glance says how many are actually coming.
   const confirmed = (meeting.confirmedBy || []).filter((name) => participants.includes(name));
+  // Предложенная встреча времени ещё не занимает, и выглядеть как
+  // назначенная не должна — иначе её станут считать состоявшейся
+  // договорённостью, каковой она не является.
+  const proposed = meeting.status === "proposed";
   const showQuickActions = !meeting.status || meeting.status === "planned";
 
   // Placed by writing to the DOM once it has been measured (its own size
@@ -93,6 +97,7 @@ export default function MeetingChip({
           onMouseEnter={(e) => setPeopleAnchor(e.currentTarget.getBoundingClientRect())}
           onMouseLeave={() => setPeopleAnchor(null)}
         >
+          {proposed && <span className="pill pill-proposed">предложена</span>}
           👥 {votes ? `${votes.yes.length}/${participants.length}` : confirmed.length > 0 ? `${confirmed.length}/${participants.length}` : participants.length}
           {votes && votes.no.length > 0 && <span className="mpeople-no"> · {votes.no.length} не смогут</span>}
         </span>

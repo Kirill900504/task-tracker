@@ -8,7 +8,11 @@ export type Priority = "high" | "med";
 export type Term = "short" | "long";
 export type TaskStatus = "in_progress" | "done";
 export type RecurKind = "none" | "daily" | "weekly" | "monthly" | "yearly";
-export type MeetingStatus = "planned" | "success" | "no_result";
+// «Предложена» — то же место в жизни встречи, что «запланирована», просто
+// раньше него: она существует, её видно, по ней можно ответить, но время
+// она ещё не занимает. Календарь и напоминания спрашивают "planned" и
+// предложенную не видят — в этом и смысл (миграция 0034).
+export type MeetingStatus = "proposed" | "planned" | "success" | "no_result";
 export type SectionKind = "work" | "personal";
 export type ApprovalState = "open" | "awaiting_review" | "accepted" | "returned";
 

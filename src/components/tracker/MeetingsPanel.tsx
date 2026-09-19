@@ -305,6 +305,8 @@ export default function MeetingsPanel({
           // Своя встреча — та, которую собрал сам. Чужую видно, потому что
           // позвали; закрывать, переносить и удалять её вправе организатор.
           canEdit={isMine(modalMeeting, myUserId)}
+          canPropose={!!myUserId}
+          canConfirm={!myUserId}
           prefill={modalPrefill}
           assignees={assignees}
           onSave={handleModalSave}
