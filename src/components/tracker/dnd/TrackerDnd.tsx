@@ -133,6 +133,14 @@ function targetOf(data: unknown): DropTarget | null {
 // зону перед той панелью, над которой курсор (или в конец, если курсор над
 // пустым местом зоны).
 function movePanel(layout: PanelLayout, id: string, target: DropTarget): PanelLayout {
+  // Курсор над собственным силуэтом — значит панель уже там, где её несут,
+  // и двигать нечего. Без этой строки «вставить перед собой» превращалось в
+  // «в конец списка»: панель прыгала вниз, под курсором оказывалась
+  // соседка, и раскладка начинала пересчитывать себя по кругу. Ровно та
+  // петля, что роняла столбец задач в белый экран 19.09.2026, — здесь она
+  // просто ещё не успела никому попасться.
+  if (target.kind === "panel" && target.id === id) return layout;
+
   const zone: ZoneName | null = target.kind === "zone" ? target.zone : target.kind === "panel" ? target.zone : null;
   if (!zone) return layout;
 

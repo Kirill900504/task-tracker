@@ -401,15 +401,24 @@ test("задача переставляется внутри столбца, и 
   }
   await waitForSaved(page);
 
-  const cards = page.locator("#colShort .task");
-  const first = (await cards.first().boundingBox())!;
-  const third = (await cards.nth(2).boundingBox())!;
+  // Тянем СВОЮ карточку на место СВОЕЙ соседки, а не первую попавшуюся:
+  // аккаунт на весь прогон один, и в столбце лежат задачи соседних тестов.
+  // Соседка, а не третья: длинный столбец не помещается на экране целиком,
+  // а мышь не может вести карточку туда, чего не видно.
+  const mineCard = (title: string) => page.locator("#colShort .task", { hasText: title });
+  await mineCard(titles[0]).scrollIntoViewIfNeeded();
+  const a = (await mineCard(titles[0]).boundingBox())!;
+  const b = (await mineCard(titles[1]).boundingBox())!;
 
-  await page.mouse.move(first.x + 60, first.y + 20);
+  await page.mouse.move(a.x + 60, a.y + 20);
   await page.mouse.down();
-  await page.mouse.move(first.x + 70, first.y + 34, { steps: 5 });
+  await page.mouse.move(a.x + 70, a.y + 34, { steps: 5 });
   await page.waitForTimeout(150);
-  await page.mouse.move(third.x + third.width / 2, third.y + third.height / 2, { steps: 10 });
+  // Карточка должна быть в руке. Без этой проверки провалившийся захват
+  // выглядит как «порядок не изменился» — и час уходит на поиски причины
+  // не там.
+  await expect(page.locator(".dnd-card-ghost"), "карточку не удалось взять").toBeVisible();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 10 });
 
   // Курсор стоит — значит и список обязан стоять. Если он шевелится сам,
   // это петля, и она уронит страницу через несколько десятков кругов.
@@ -422,9 +431,13 @@ test("задача переставляется внутри столбца, и 
   await page.mouse.up();
   await waitForSaved(page);
 
-  // Карточка встаёт НА место соседки, а не перед ней: тянули вниз.
+  // Карточка встаёт НА место соседки, а не перед ней: тянули вниз, значит
+  // из A, B, C получается B, A, C. Проверяется порядок СВОИХ трёх между
+  // собой — чужие задачи в столбце этому не мешают.
   const after = await page.locator("#colShort .task .task-title").allTextContents();
-  expect(after.indexOf(titles[0])).toBe(2);
+  const place = (title: string) => after.indexOf(title);
+  expect(place(titles[1]), "B должна оказаться выше A").toBeLessThan(place(titles[0]));
+  expect(place(titles[0]), "A должна оказаться выше C").toBeLessThan(place(titles[2]));
   // И страница жива — ровно то, что переставало быть правдой.
   await expect(page.locator("#newTaskBtn")).toBeVisible();
 });
