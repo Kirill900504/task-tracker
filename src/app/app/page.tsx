@@ -24,7 +24,13 @@ import { createClient } from "@/lib/supabase/client";
 // секунду — и только если что-то пошло не так, становится страницей с
 // объяснением, а не пустым белым полем в окне без адресной строки.
 
-type Stage = { kind: "working" } | { kind: "failed"; message: string; canRetry: boolean };
+// `detail` — строка для меня, а не для человека: имена полей, которые
+// прислал мессенджер. Появилась 20.09.2026, когда вход не работал у всех
+// и выяснить причину было нечем: настоящую подпись Telegram на нашей
+// стороне не повторить, а отказ говорил только «не сходится». Показана
+// мелко и внизу — человеку с неё толку нет, но один снимок экрана
+// заменяет день переписки.
+type Stage = { kind: "working" } | { kind: "failed"; message: string; canRetry: boolean; detail?: string };
 
 type Launch = { channel: "telegram" | "max"; initData: string };
 
@@ -84,10 +90,17 @@ export default function MiniApp() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ initData: launch.initData }),
         });
-        const body = (await res.json().catch(() => null)) as { tokenHash?: string; error?: string } | null;
+        const body = (await res.json().catch(() => null)) as
+          | { tokenHash?: string; error?: string; fields?: string[] }
+          | null;
         if (!res.ok || !body?.tokenHash) {
           if (!cancelled) {
-            setStage({ kind: "failed", message: body?.error || "Не получилось войти.", canRetry: res.status >= 500 });
+            setStage({
+              kind: "failed",
+              message: body?.error || "Не получилось войти.",
+              canRetry: res.status >= 500,
+              detail: body?.fields?.length ? `${launch.channel}, поля: ${body.fields.join(", ")}` : undefined,
+            });
           }
           return;
         }
@@ -143,6 +156,9 @@ export default function MiniApp() {
               <button className="auth-btn" onClick={() => window.location.reload()}>
                 Попробовать ещё раз
               </button>
+            )}
+            {stage.detail && (
+              <p style={{ marginTop: 18, fontSize: 11, opacity: 0.45, wordBreak: "break-all" }}>{stage.detail}</p>
             )}
           </>
         )}

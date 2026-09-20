@@ -25,7 +25,13 @@ export type InitDataUser = { id: number; first_name?: string; last_name?: string
 
 export type InitDataCheck =
   | { ok: true; user: InitDataUser; authDate: number }
-  | { ok: false; error: string };
+  // `fields` — ИМЕНА пришедших полей, без значений. Нужны потому, что
+  // настоящую подпись Telegram здесь нельзя ни подделать, ни повторить:
+  // единственный способ увидеть, из чего она считалась, — посмотреть,
+  // что вообще пришло. Ровно на этом 20.09.2026 потерялся день —
+  // проверка отвергала всех, а сказать почему было нечем.
+  // Значения не отдаются никогда: в них имя, фото и идентификаторы.
+  | { ok: false; error: string; fields?: string[] };
 
 // Сколько живёт подпись. Мини-приложение открывают и сразу входят, так что
 // час — это с запасом; сутки означали бы, что перехваченная строка
@@ -40,26 +46,49 @@ export function checkInitData(initData: string, botToken: string, now = Date.now
   const hash = params.get("hash");
   if (!hash) return { ok: false, error: "Нет подписи" };
 
-  // Подпись считается по всем полям, КРОМЕ самой подписи, отсортированным
-  // по имени. `signature` тоже исключается: это отдельная подпись третьих
-  // сторон (Ed25519), в hash она не входит, и её появление в новых версиях
-  // Telegram ломало проверку у тех, кто перечислял поля вручную.
-  const pairs: string[] = [];
-  for (const [key, value] of [...params.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
-    if (key === "hash" || key === "signature") continue;
-    pairs.push(`${key}=${value}`);
-  }
-
+  // Подпись считается по ВСЕМ пришедшим полям, кроме самой подписи,
+  // отсортированным по имени. Документация Telegram: «a chain of all
+  // received fields, sorted alphabetically» — исключается только `hash`.
+  //
+  // Именно это место 20.09.2026 не пустило Кирилла в трекер, и ошибка
+  // поучительная. `signature` — вторая, отдельная подпись (Ed25519, для
+  // третьих сторон, которым нельзя давать токен бота), и её описание
+  // говорит «except hash and signature». Слова похожи, алгоритмы разные:
+  // в нашу, HMAC-проверку, `signature` ВХОДИТ как обычное поле. Я исключил
+  // его «за компанию» — и не заметил, потому что подписывал тестовые
+  // данные сам, тем же кодом: проверка сошлась с собственной ошибкой. В
+  // настоящих данных Telegram `signature` есть всегда, и вход отвечал
+  // «Подпись не сходится» у всех.
+  //
+  // Вывод, который дороже правки: проверку подписи нельзя испытывать
+  // данными, которые подписал ты сам. Сходится не подпись, а твоё
+  // представление о ней.
   const secret = createHmac("sha256", "WebAppData").update(botToken).digest();
-  const expected = createHmac("sha256", secret).update(pairs.join("\n")).digest("hex");
+  const sorted = [...params.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const dataCheckString = sorted.filter(([k]) => k !== "hash").map(([k, v]) => `${k}=${v}`).join("\n");
 
-  // Сравнение постоянного времени: обычное `===` выходит из цикла на
-  // первом несовпавшем байте, и по времени ответа подпись подбирается по
-  // одному символу. Длина сверяется отдельно — timingSafeEqual на буферах
-  // разной длины бросает исключение.
-  const a = Buffer.from(hash, "hex");
-  const b = Buffer.from(expected, "hex");
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return { ok: false, error: "Подпись не сходится" };
+  const given = Buffer.from(hash, "hex");
+  const matches = (candidate: string): boolean => {
+    const expected = Buffer.from(createHmac("sha256", secret).update(candidate).digest("hex"), "hex");
+    // Сравнение постоянного времени: обычное `===` выходит из цикла на
+    // первом несовпавшем байте, и по времени ответа подпись подбирается
+    // по одному символу. Длина сверяется отдельно — timingSafeEqual на
+    // буферах разной длины бросает исключение.
+    return given.length === expected.length && timingSafeEqual(given, expected);
+  };
+
+  let ok = matches(dataCheckString);
+  if (!ok && params.has("signature")) {
+    // Запасной расчёт — без `signature`. Так считают некоторые библиотеки,
+    // и так считал этот файл до сегодняшнего дня. Он оставлен не из
+    // нерешительности: обе строки одинаково требуют знания токена бота,
+    // то есть замок от этого не слабее ни на бит, — а цена ошибки
+    // несимметрична. Ошибись мы в другую сторону, и починка снова
+    // пойдёт через «Кирилл не может войти» и день ожидания, потому что
+    // настоящую подпись Telegram здесь не подделать и не проверить.
+    ok = matches(sorted.filter(([k]) => k !== "hash" && k !== "signature").map(([k, v]) => `${k}=${v}`).join("\n"));
+  }
+  if (!ok) return { ok: false, error: "Подпись не сходится", fields: sorted.map(([k]) => k) };
 
   // Свежесть. Строка со старой датой подписана честно — тем и опасна:
   // однажды перехваченная, она работала бы вечно.

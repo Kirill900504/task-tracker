@@ -79,13 +79,37 @@ describe("подпись мини-приложения", () => {
     expect(checkInitData(withExtra, TOKEN, NOW).ok).toBe(true);
   });
 
-  it("исключает из подписи поле signature, как это делает Telegram", () => {
-    // `signature` — отдельная подпись Telegram, в hash она не входит.
-    // Включи её в расчёт — и проверка развалится на настоящих данных.
-    const honest = sign({ auth_date: FRESH, user: USER });
-    const params = new URLSearchParams(honest);
-    params.set("signature", "whatever-telegram-put-here");
+  it("СЧИТАЕТ signature частью подписи — как настоящий Telegram", () => {
+    // Этот тест раньше утверждал обратное, и из-за него никто не вошёл.
+    //
+    // У Telegram две разных проверки. Наша, по hash, считается «по всем
+    // полученным полям» — `signature` в их числе. Вторая, для третьих
+    // сторон (Ed25519), считается «except hash and signature» — и вот её
+    // формулировку легко принять за общее правило. В настоящих данных
+    // `signature` есть всегда, поэтому ошибка не проявлялась ни в одном
+    // тесте и проявилась у всех сразу.
+    const signed = sign({ auth_date: FRESH, user: USER, signature: "Zm9vYmFyLXNpZ25hdHVyZQ" });
+    expect(checkInitData(signed, TOKEN, NOW).ok).toBe(true);
+  });
+
+  it("но принимает и подпись, посчитанную без signature", () => {
+    // Запасной расчёт: так считают некоторые библиотеки, и так считал
+    // этот файл до 20.09.2026. Обе строки требуют токена бота, значит
+    // замок не слабее; а цена ошибки в эту сторону — снова «не могу
+    // войти» и день на выяснение.
+    const fields = { auth_date: FRESH, user: USER, signature: "Zm9vYmFyLXNpZ25hdHVyZQ" };
+    const withoutSignature = sign({ auth_date: FRESH, user: USER });
+    const hash = new URLSearchParams(withoutSignature).get("hash")!;
+    const params = new URLSearchParams(fields);
+    params.set("hash", hash);
     expect(checkInitData(params.toString(), TOKEN, NOW).ok).toBe(true);
+  });
+
+  it("и всё равно не пускает, когда не сходится ни один из расчётов", () => {
+    // Два способа посчитать — не повод принять третий. Подделка обязана
+    // отлетать при любом из них.
+    const params = new URLSearchParams({ auth_date: FRESH, user: USER, signature: "x", hash: "00".repeat(32) });
+    expect(checkInitData(params.toString(), TOKEN, NOW).ok).toBe(false);
   });
 
   it("отказывает, когда токена бота нет", () => {

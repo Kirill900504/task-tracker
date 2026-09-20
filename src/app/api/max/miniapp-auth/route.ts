@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as { initData?: string } | null;
   const admin = createAdminClient();
   const result = await miniAppSession(admin, MAX_CHANNEL, settings.token, String(body?.initData || ""));
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  if (!result.ok) return NextResponse.json({ error: result.error, fields: result.fields }, { status: result.status });
 
   return NextResponse.json({ tokenHash: result.tokenHash, email: result.email });
 }

@@ -28,7 +28,10 @@ import { checkRateLimit } from "@/lib/rateLimit";
 
 export type MiniAppResult =
   | { ok: true; tokenHash: string; email: string }
-  | { ok: false; status: number; error: string };
+  // `fields` — только имена полей, пришедших от мессенджера, и только
+  // когда подпись не сошлась. Без них отказ ничего не объясняет, а
+  // повторить настоящую подпись на нашей стороне нельзя.
+  | { ok: false; status: number; error: string; fields?: string[] };
 
 export async function miniAppSession(
   admin: SupabaseClient,
@@ -37,7 +40,7 @@ export async function miniAppSession(
   initData: string,
 ): Promise<MiniAppResult> {
   const check = checkInitData(initData, botToken);
-  if (!check.ok) return { ok: false, status: 401, error: check.error };
+  if (!check.ok) return { ok: false, status: 401, error: check.error, fields: check.fields };
 
   const chatId = check.user.id;
 

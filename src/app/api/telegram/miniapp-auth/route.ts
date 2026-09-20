@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as { initData?: string } | null;
   const admin = createAdminClient();
   const result = await miniAppSession(admin, TELEGRAM_CHANNEL, token, String(body?.initData || ""));
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  if (!result.ok) return NextResponse.json({ error: result.error, fields: result.fields }, { status: result.status });
 
   // Наружу уходит только одноразовый код и своя же почта — она нужна
   // странице, чтобы сказать «вы вошли как …», если что-то пойдёт не так.
