@@ -988,16 +988,32 @@ test("разделы переставляются перетаскиванием
   const src = page.locator("#sectionTabs .section-tab", { hasText: `Гамма${stamp}` });
   const dst = page.locator("#sectionTabs .section-tab", { hasText: `Альфа${stamp}` });
   const a = (await src.boundingBox())!;
-  const b = (await dst.boundingBox())!;
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
-  // Никакой паузы: тянем сразу — и по обеим осям, потому что строка
-  // разделов переносится и цель может оказаться на другой строке.
-  const from = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
-  const to = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-  for (let i = 1; i <= 10; i++) {
-    await page.mouse.move(from.x + (to.x - from.x) * (i / 10), from.y + (to.y - from.y) * (i / 10), { steps: 2 });
+  // Порог в шесть пикселей — сначала преодолеть его, и только потом
+  // целиться: до него dnd-kit не считает это переносом вовсе.
+  await page.mouse.move(a.x + a.width / 2 - 10, a.y + a.height / 2, { steps: 4 });
+  await page.waitForTimeout(150);
+
+  // Ведём к САМОМУ НАЧАЛУ ряда, а не в середину Альфы, и целимся уже
+  // после начала переноса.
+  //
+  // Причина — та же, что записана в dragOnto (e2e/helpers.ts), только
+  // злее: пока рука идёт, соседи расступаются, и прямоугольник Альфы, где
+  // бы он ни был снят, к моменту отпускания уже не там. Раз за разом это
+  // давало сдвиг ровно на одну позицию — Гамма вставала ПОСЛЕ Альфы, — и
+  // выглядело как «перетаскивание не сработало». Левый край ряда никуда
+  // не уезжает вовсе, поэтому целью взят он: раздел, доведённый туда,
+  // встаёт первым, чего проверке и достаточно. Первая кнопка ряда —
+  // «Все», она не переставляется, так что попасть «мимо всех» нельзя.
+  const row = (await page.locator("#sectionTabs").boundingBox())!;
+  const b = (await dst.boundingBox())!;
+  const from = { x: a.x + a.width / 2 - 10, y: a.y + a.height / 2 };
+  const to = { x: row.x + 8, y: b.y + b.height / 2 };
+  for (let i = 1; i <= 12; i++) {
+    await page.mouse.move(from.x + (to.x - from.x) * (i / 12), from.y + (to.y - from.y) * (i / 12), { steps: 3 });
   }
+  await page.waitForTimeout(300);
   await page.mouse.up();
 
   await expect(tabs.filter({ hasText: stamp }).first()).toHaveText(`Гамма${stamp}`);
