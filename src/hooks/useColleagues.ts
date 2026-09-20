@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { me } from "@/lib/me";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { createSharedStore } from "@/lib/sharedStore";
 import type { MemberRole } from "@/hooks/useWorkspaceRole";
@@ -67,19 +68,30 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
     roleOf.set(row.assignee_id as string, raw === "admin" || raw === "developer" ? raw : "manager");
   }
 
-  // The owner's own row is dropped here rather than in the team screen: a
-  // bot cannot write to the person running it, so «пригласить самого себя»
-  // is an offer that could never work, wherever it appeared.
+  // Своя строка отсюда уходит — и только своя.
+  //
+  // Здесь стоял фильтр по метке «(я)», то есть по строке ВЛАДЕЛЬЦА, с
+  // объяснением «бот не может писать тому, кто им управляет». Для самого
+  // Кирилла это верно и сейчас: себя не приглашают и себе не отправляют.
+  // Для руководителя это означало, что владельца нет ни в списке «кому
+  // отправить», ни среди тех, кого касается задача, — то есть послать ему
+  // мысль или показать встречу было нельзя вовсе. Писать ему бот умеет
+  // (его чат живёт в учётной записи, см. lib/reach), и по той же причине
+  // его строка считается достижимой: подключён он или нет, из чужого
+  // браузера не видно — это знает сервер, и он же скажет, если не дошло.
+  const who = await me();
+  const iAmOwner = !who.userId || who.userId === who.workspaceId;
+
   // Порядок тот же, что и везде (peopleOrder.ts): «Команда» — это список
   // тех же людей, и читать его в другом порядке значит искать в нём заново.
   return sortByPeopleOrder(data, (r) => (r.name as string) || "")
-    .filter((r) => !isSelfAssignee((r.name as string) || ""))
+    .filter((r) => (iAmOwner ? !isSelfAssignee((r.name as string) || "") : (r.id as string) !== who.assigneeId))
     .map((r) => ({
       id: r.id as string,
       name: r.name as string,
       telegram: r.telegram_chat_id != null,
       max: r.max_user_id != null,
-      linked: r.telegram_chat_id != null || r.max_user_id != null,
+      linked: r.telegram_chat_id != null || r.max_user_id != null || isSelfAssignee((r.name as string) || ""),
       username: ((r.telegram_username || r.max_username) as string) || null,
       member: memberOf.get(r.id as string) || "none",
       direction: directionOf.get(r.id as string) || "",

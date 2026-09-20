@@ -4,6 +4,7 @@ import { useState } from "react";
 import ActionMenu from "./ActionMenu";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import type { PersonOption } from "@/hooks/useTaskParticipants";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // Кто на задаче — одним полем.
 //
@@ -110,9 +111,16 @@ export default function PeoplePicker({
                 if (role) onRemove({ id: person.id, name: person.name, role });
                 else setMenuFor({ person, anchor: e.currentTarget.getBoundingClientRect() });
               }}
-              title={role ? `${person.name} — ${ROLE_LABEL[role]}. Нажмите, чтобы снять` : `Выбрать: ${person.name}`}
+              title={
+                role
+                  ? `${withoutSelfMark(person.name)} — ${ROLE_LABEL[role]}. Нажмите, чтобы снять`
+                  : `Выбрать: ${withoutSelfMark(person.name)}`
+              }
             >
-              {person.name}
+              {/* Имя, а не строка базы: пометка «(я)» написана для одного
+                  человека, а список читают все. В задачу при этом уходит
+                  полное имя — там оно должно совпадать буква в букву. */}
+              {withoutSelfMark(person.name)}
               {role && role !== "executor" && <span className="chip-role"> · {ROLE_LABEL[role]}</span>}
             </button>
           );

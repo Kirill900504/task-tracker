@@ -10,6 +10,7 @@ function facts(patch: Partial<ManagerBriefFacts> = {}): ManagerBriefFacts {
     meetings: [],
     returned: [],
     discussed: [],
+    together: [],
     ...patch,
   };
 }
@@ -41,6 +42,25 @@ describe("утренняя сводка руководителю", () => {
       facts({ overdue: [{ title: "Смета", deadline: "2026-09-10" }], discussed: [{ title: "Остатки" }] }),
     );
     expect(text.indexOf("Просрочено")).toBeLessThan(text.indexOf("Писали в обсуждениях"));
+  });
+
+  // Задача на двоих закрывается, когда отчитались оба, — значит отказ
+  // напарника касается второго напрямую: он ждёт закрытия, которого не
+  // будет. Сообщением это не шлётся (задача на четверых дала бы каждому
+  // по три уведомления о чужих ответах), строкой в сводке — шлётся.
+  it("говорит, что сделали напарники по общим задачам", () => {
+    const text = composeManagerBrief(
+      facts({ together: [{ title: "Смета", note: "Черкашин отчитался; Петров не может" }] }),
+    );
+    expect(text).toContain("Вместе с вами");
+    expect(text).toContain("Черкашин отчитался; Петров не может");
+  });
+
+  it("общие задачи идут до обсуждений: это ещё работа, а не чтение", () => {
+    const text = composeManagerBrief(
+      facts({ together: [{ title: "Смета", note: "Черкашин отчитался" }], discussed: [{ title: "Остатки" }] }),
+    );
+    expect(text.indexOf("Вместе с вами")).toBeLessThan(text.indexOf("Писали в обсуждениях"));
   });
 
   it("сводка с одним лишь обсуждением всё-таки уходит", () => {

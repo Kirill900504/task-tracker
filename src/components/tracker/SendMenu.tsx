@@ -3,6 +3,7 @@
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
 import { sendToTelegram, useColleagues } from "@/hooks/useColleagues";
 import { sendResultText, sendTargets, unreachableNames } from "@/lib/sendTargets";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // «Кому отправить» — the one menu behind every ✈ in the tracker.
 //
@@ -47,12 +48,19 @@ export default function SendMenu({
   }
 
   const items: ActionMenuItem[] = [];
+  // Отправляем по полному имени строки, а показываем имя: пометка «(я)»
+  // написана для одного человека, а меню читают все (lib/actorName).
+  const shown = (name: string) => withoutSelfMark(name);
   // One tap for the usual case: everyone this meeting is actually about.
   if (suggested.length > 1) {
-    items.push({ id: "__all", label: `✈ Всем: ${suggested.join(", ")}`, onSelect: () => send(suggested) });
+    items.push({ id: "__all", label: `✈ Всем: ${suggested.map(shown).join(", ")}`, onSelect: () => send(suggested) });
   }
   for (const target of targets) {
-    items.push({ id: target.name, label: (target.suggested ? "✈ " : "→ ") + target.name, onSelect: () => send([target.name]) });
+    items.push({
+      id: target.name,
+      label: (target.suggested ? "✈ " : "→ ") + shown(target.name),
+      onSelect: () => send([target.name]),
+    });
   }
   if (!items.length) {
     items.push({

@@ -14,8 +14,15 @@ describe("sendTargets", () => {
     expect(sendTargets(["Аня"], ["Борис"])).toEqual([{ name: "Аня", suggested: false }]);
   });
 
-  it("never offers to send to yourself", () => {
-    expect(sendTargets(["Кирилл (я)", "Аня"], ["Кирилл (я)"])).toEqual([{ name: "Аня", suggested: false }]);
+  // Себя в этом списке нет, потому что его нет уже во входных данных:
+  // свою строку снимает useColleagues — и снимает именно СВОЮ. Здесь же
+  // фильтр стоял по метке «(я)», то есть вычёркивал владельца у всех
+  // остальных: руководитель не мог отправить ему ни мысль, ни встречу.
+  it("отдаёт владельца как обычного адресата — снимает себя тот, кто знает, кто я", () => {
+    expect(sendTargets(["Кирилл (я)", "Аня"], ["Кирилл (я)"])).toEqual([
+      { name: "Кирилл (я)", suggested: true },
+      { name: "Аня", suggested: false },
+    ]);
   });
 
   // Раньше эта половина списка шла в том порядке, в каком люди записаны во
@@ -36,8 +43,10 @@ describe("unreachableNames", () => {
     expect(unreachableNames(["Аня"], ["Аня", "Борис"])).toEqual(["Борис"]);
   });
 
-  it("does not count the owner as unreachable", () => {
-    expect(unreachableNames(["Аня"], ["Кирилл (я)"])).toEqual([]);
+  // Владелец достижим — просто его чат живёт не в строке, а в учётной
+  // записи (lib/reach), и `linked` для него ставит useColleagues.
+  it("владелец, которого касается итем, считается достижимым", () => {
+    expect(unreachableNames(["Аня", "Кирилл (я)"], ["Кирилл (я)"])).toEqual([]);
   });
 });
 

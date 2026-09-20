@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtDate } from "@/lib/taskDisplay";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // Утренняя сводка руководителю — та же услуга, что владелец получает с
 // самого начала, только про его собственные дела.
@@ -22,6 +23,17 @@ export type ManagerBriefFacts = {
   // четырнадцать переписок превращают мессенджер в ленту, которую
   // перестают читать вместе со «сделал» и «не могу».
   discussed: { title: string }[];
+  // Что сделали НАПАРНИКИ по общим задачам.
+  //
+  // Всё, что происходит с задачей, адресовано постановщику: отчитался,
+  // отказался, просит перенос. Между тем «отчитались все» считается по
+  // исполнителям, то есть отказ одного напрямую касается второго — он
+  // ждёт закрытия задачи, которого не будет. Сообщением это слать нельзя
+  // («если таким сплошняком инфа будет переть, я офигею это всё читать»):
+  // задача на четверых дала бы каждому по три уведомления о чужих
+  // ответах. Строкой в сводке — можно: она приходит раз в день и только
+  // когда есть о чём.
+  together: { title: string; note: string }[];
 };
 
 export function managerBriefIsEmpty(f: ManagerBriefFacts): boolean {
@@ -31,7 +43,8 @@ export function managerBriefIsEmpty(f: ManagerBriefFacts): boolean {
     !f.unanswered.length &&
     !f.meetings.length &&
     !f.returned.length &&
-    !f.discussed.length
+    !f.discussed.length &&
+    !f.together.length
   );
 }
 
@@ -49,6 +62,7 @@ export async function buildManagerBrief(
     meetings: [],
     returned: [],
     discussed: [],
+    together: [],
   };
 
   const { data: rows } = await admin
@@ -127,6 +141,38 @@ export async function buildManagerBrief(
       const title = titleOf.get(id);
       if (title) facts.discussed.push({ title });
     }
+
+    // Напарники по тем же задачам. Спрашивается это одним запросом по уже
+    // собранному списку задач: строк участия у четырнадцати человек много,
+    // а задач у одного — единицы.
+    const { data: mates } = await admin
+      .from("task_participants")
+      .select("task_id, assignee_id, done_at, declined_at, assignees(name)")
+      .eq("user_id", ownerId)
+      .eq("role", "executor")
+      .in("task_id", mine);
+
+    type Mate = {
+      task_id: string;
+      assignee_id: string;
+      done_at: string | null;
+      declined_at: string | null;
+      assignees: { name: string } | { name: string }[] | null;
+    };
+    const byTask = new Map<string, string[]>();
+    for (const m of ((mates || []) as unknown as Mate[])) {
+      if (m.assignee_id === assignee.id) continue;
+      // Только то, что человек СКАЗАЛ. «Ещё не ответил» сюда не идёт: это
+      // не событие, а тишина, и о ней спрашивает постановщик, а не сосед.
+      const name = withoutSelfMark((Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name) || "");
+      const said = m.declined_at ? `${name} не может` : m.done_at ? `${name} отчитался` : "";
+      if (!name || !said) continue;
+      byTask.set(m.task_id, [...(byTask.get(m.task_id) || []), said]);
+    }
+    for (const [taskId, notes] of byTask) {
+      const title = titleOf.get(taskId);
+      if (title) facts.together.push({ title, note: notes.join("; ") });
+    }
   }
 
   return facts;
@@ -156,6 +202,12 @@ export function composeManagerBrief(f: ManagerBriefFacts): string {
   if (f.meetings.length) {
     lines.push("", "Встречи сегодня:");
     for (const m of f.meetings) lines.push(`• ${m.time ? m.time + " — " : ""}${m.title}`);
+  }
+  // Общие задачи — перед обсуждениями: это ещё про работу, а не про
+  // чтение. «Отчитался» соседа означает, что задача ждёт одного вас.
+  if (f.together.length) {
+    lines.push("", "Вместе с вами:");
+    for (const t of f.together) lines.push(`• ${t.title} — ${t.note}`);
   }
   // Последним: это не то, что нужно сделать, а то, что стоит прочитать.
   if (f.discussed.length) {

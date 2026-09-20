@@ -1,4 +1,3 @@
-import { isSelfAssignee } from "@/lib/trackerRows";
 import { sortNames } from "@/lib/peopleOrder";
 
 // Who an item can be sent to, and how the answer reads afterwards.
@@ -18,7 +17,11 @@ export function sendTargets(linked: string[], concerns?: string[]): SendTarget[]
   // Внутри каждой половины — общий порядок людей (peopleOrder.ts): «кого
   // это касается» остаётся наверху, но и там, и ниже имена идут так же, как
   // во всех остальных списках трекера.
-  const reachable = sortNames(linked.filter((name) => name && !isSelfAssignee(name)));
+  // Своя строка сюда уже не приходит — её снимает useColleagues, и снимает
+  // именно СВОЮ, а не владельцеву. Второй фильтр по метке «(я)» стоял бы
+  // тут ровно затем, чтобы вычеркнуть владельца из списка адресатов у всех
+  // остальных: послать ему мысль было нельзя ни из одного места.
+  const reachable = sortNames(linked.filter(Boolean));
   const suggested = sortNames((concerns || []).filter((name) => reachable.includes(name)));
   return [
     ...suggested.map((name) => ({ name, suggested: true })),
@@ -30,7 +33,7 @@ export function sendTargets(linked: string[], concerns?: string[]): SendTarget[]
 // saying out loud: "отправлено: никому" reads like a failure of the tracker,
 // "Петров не подключён" reads like something you can fix.
 export function unreachableNames(linked: string[], concerns?: string[]): string[] {
-  return (concerns || []).filter((name) => name && !isSelfAssignee(name) && !linked.includes(name));
+  return (concerns || []).filter((name) => name && !linked.includes(name));
 }
 
 export function sendResultText(result: { sentTo: string[]; failed: string[] }): string {
