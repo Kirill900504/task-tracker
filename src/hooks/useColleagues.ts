@@ -38,9 +38,11 @@ export type Colleague = {
   username: string | null;
   member: MemberState;
   // Что человеку позволено сверх собственной работы (миграция 0036).
-  // «owner» здесь не встречается: свою строку владелец в этом списке не
-  // видит вовсе.
   role: MemberRole;
+  // Это я. Себе не отправляют и себя не приглашают, поэтому список читают
+  // с оглядкой на этот флаг; в «Команде» своя строка видна — иначе узнать,
+  // под каким именем тебя видят остальные, негде.
+  isMe: boolean;
 };
 
 // Есть ли бот MAX — теперь вопрос к базе, а не к сборке: см. useMaxBot.
@@ -81,12 +83,20 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
   // браузера не видно — это знает сервер, и он же скажет, если не дошло.
   const who = await me();
   const iAmOwner = !who.userId || who.userId === who.workspaceId;
+  const isMine = (r: Record<string, unknown>) =>
+    iAmOwner ? isSelfAssignee((r.name as string) || "") : (r.id as string) === who.assigneeId;
 
+  // Своя строка из списка НЕ выбрасывается, а помечается: «Команда» — это
+  // список людей пространства, и владелец в нём есть (он сам спросил, как
+  // его видят остальные, а увидеть это было негде). Отправлять себе и
+  // приглашать себя по-прежнему нельзя — это решают те, кто список
+  // читает, по полю `isMe`.
+  //
   // Порядок тот же, что и везде (peopleOrder.ts): «Команда» — это список
   // тех же людей, и читать его в другом порядке значит искать в нём заново.
   return sortByPeopleOrder(data, (r) => (r.name as string) || "")
-    .filter((r) => (iAmOwner ? !isSelfAssignee((r.name as string) || "") : (r.id as string) !== who.assigneeId))
     .map((r) => ({
+      isMe: isMine(r),
       id: r.id as string,
       name: r.name as string,
       telegram: r.telegram_chat_id != null,
@@ -262,7 +272,53 @@ export function useColleagues() {
     [reload],
   );
 
-  return { colleagues, loading: !loaded, reload, invite, inviteToTracker, accessLink, setDirection, setMemberRole, setTrackerAccess, unlink };
+  // Переименовать человека.
+  //
+  // Единственное действие здесь, которое НЕ пишет в базу из браузера, и
+  // причина существенная: имя написано ещё и на карточках задач и в
+  // составе встреч, а чужую задачу браузеру переписывать нельзя (и
+  // правильно). Маршрут делает три записи вместе — иначе имя и человек
+  // разойдутся, и задача станет «назначенной только на словах».
+  const rename = useCallback(
+    async (assigneeId: string, name: string): Promise<string> => {
+      const previous = colleagues.find((p) => p.id === assigneeId)?.name || "";
+      // Экран отвечает раньше облака: имя меняется сразу, запись идёт
+      // следом, и перечитывание случается только если она не прошла.
+      team.update((list) => list.map((p) => (p.id === assigneeId ? { ...p, name } : p)));
+      try {
+        const res = await fetch("/api/workspace/rename-person", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assigneeId, name }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok) {
+          team.update((list) => list.map((p) => (p.id === assigneeId ? { ...p, name: previous } : p)));
+          return data?.error || "Не получилось переименовать";
+        }
+        await reload();
+        return data.warning ? `Имя изменено, но не везде: ${data.warning}` : "";
+      } catch {
+        team.update((list) => list.map((p) => (p.id === assigneeId ? { ...p, name: previous } : p)));
+        return "Не удалось переименовать — проверьте связь";
+      }
+    },
+    [colleagues, reload],
+  );
+
+  return {
+    colleagues,
+    loading: !loaded,
+    reload,
+    invite,
+    inviteToTracker,
+    accessLink,
+    setDirection,
+    setMemberRole,
+    setTrackerAccess,
+    unlink,
+    rename,
+  };
 }
 
 export type SendResult = { sentTo: string[]; failed: string[] } | { error: string };

@@ -36,7 +36,9 @@ export default function SendMenu({
   onResult: (message: string) => void;
 }) {
   const { colleagues, loading } = useColleagues();
-  const linked = colleagues.filter((c) => c.linked).map((c) => c.name);
+  // Себе не отправляют — своя строка в списке есть (её видно в «Команде»),
+  // но адресатом быть не может.
+  const linked = colleagues.filter((c) => c.linked && !c.isMe).map((c) => c.name);
   const targets = sendTargets(linked, concerns);
   const suggested = targets.filter((t) => t.suggested).map((t) => t.name);
   const missing = unreachableNames(linked, concerns);

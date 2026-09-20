@@ -7,6 +7,7 @@ import { useMaxBot } from "@/hooks/useMaxBot";
 import { useAsk } from "@/components/Ask";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
 import Modal from "./Modal";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // «Команда»: who can be written to, and how to connect the rest.
 //
@@ -63,7 +64,7 @@ const MEMBER_LABEL: Record<string, string> = {
 };
 
 export default function TeamModal({ onClose }: { onClose: () => void }) {
-  const { colleagues, loading, reload, invite, inviteToTracker, accessLink, setDirection, setMemberRole, setTrackerAccess, unlink } =
+  const { colleagues, loading, reload, invite, inviteToTracker, accessLink, setDirection, setMemberRole, setTrackerAccess, unlink, rename } =
     useColleagues();
   const maxBot = useMaxBot();
   const ask = useAsk();
@@ -178,6 +179,28 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     await setDirection(person.id, next.trim());
   }
 
+  async function handleRename(person: Colleague) {
+    // Пометка «(я)» из поля убрана и обратно её ставит сервер: это часть
+    // имени СТРОКИ владельца, по которой трекер узнаёт её среди прочих, а
+    // не часть имени человека. Править её руками незачем и опасно.
+    const shown = withoutSelfMark(person.name);
+    const next = await ask.ask({
+      title: "Имя",
+      question: person.isMe ? "Как вас видят остальные?" : `Как записать: ${shown}?`,
+      note: "Это имя стоит в карточках задач, в составе встреч и в сообщениях бота — оно изменится везде сразу.",
+      value: shown,
+      placeholder: "Фамилия и имя",
+      okText: "Сохранить",
+    });
+    if (next === null) return;
+    if (!next.trim()) return;
+    setError(null);
+    const problem = await rename(person.id, next.trim());
+    // Ответ — у той строки, к которой он относится: список длинный, и
+    // сообщение внизу экрана к нажатой кнопке не относится ничем.
+    if (problem) setError({ id: person.id, text: problem });
+  }
+
   async function handleRole(person: Colleague) {
     const next = await ask.choose({
       title: "Права",
@@ -215,6 +238,17 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
   // значит, разделы меняют из трекера.
   function menuItemsFor(person: Colleague): ActionMenuItem[] {
     const items: ActionMenuItem[] = [];
+
+    // Первым — имя. Оно есть у каждой строки, включая свою, и до сих пор
+    // не менялось ниоткуда: опечатка, «Юра» вместо «Юрия», недостающая
+    // фамилия оставались навсегда. А имя видят все: по нему выбирают,
+    // кому поручить, и им же подписаны карточки и сообщения бота.
+    items.push({ id: "rename", label: "Имя", onSelect: () => void handleRename(person) });
+
+    // Своя строка на этом и заканчивается: приглашать себя некуда, вход у
+    // владельца есть, а мессенджер он подключает кнопкой в шапке — та
+    // привязывает чат к учётной записи, а не к строке (см. lib/reach).
+    if (person.isMe) return items;
 
     // Второй мессенджер — запасной канал для того, кто уже на связи в
     // одном, а не копия: что уходит, уходит в один из них (chatsFor).
@@ -289,13 +323,24 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                       пропало: они делаются раз в квартал, а место занимали в
                       каждой строке. */}
                   <div className="team-row">
-                    <span className="team-name">{person.name}</span>
+                    {/* Имя без пометки «(я)»: она часть строки в базе, а не
+                        часть имени, и на этом экране отвечает на вопрос
+                        «как меня видят остальные» — то есть должна быть
+                        показана ровно так, как её видят они. */}
+                    <span className="team-name">{withoutSelfMark(person.name)}</span>
 
                     {/* Одно состояние на человека, а не два рядом: сначала
                         где он на связи, потом что у него с трекером. */}
                     <span className="team-status">
-                      <span className={person.linked ? "linked" : ""}>
-                        {person.linked ? where + (person.username ? ` · @${person.username}` : "") : "не подключён"}
+                      {/* Своя строка — это вы, и приглашать себя некуда:
+                          мессенджер у владельца привязан к учётной записи
+                          (кнопки в шапке), а вход у него и так есть. */}
+                      <span className={person.isMe ? "linked" : person.linked ? "linked" : ""}>
+                        {person.isMe
+                          ? "это вы — так вас видят остальные"
+                          : person.linked
+                            ? where + (person.username ? ` · @${person.username}` : "")
+                            : "не подключён"}
                       </span>
                       {person.member !== "none" && (
                         <>
@@ -318,17 +363,17 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                     <div className="team-cell">
                       {/* Позвать туда, где человека ещё нет. Это и есть то,
                           ради чего окно открывают в первый раз. */}
-                      {!person.linked && (
+                      {!person.isMe && !person.linked && (
                         <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "telegram")}>
                           Telegram
                         </button>
                       )}
-                      {!person.linked && maxBot.available && (
+                      {!person.isMe && !person.linked && maxBot.available && (
                         <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "max")}>
                           MAX
                         </button>
                       )}
-                      {person.member === "none" && (
+                      {!person.isMe && person.member === "none" && (
                         <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name)}>
                           + В трекер
                         </button>

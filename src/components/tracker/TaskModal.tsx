@@ -234,7 +234,7 @@ export default function TaskModal({
   // It used to require the assignee to be connected, which made the ordinary
   // «покажи это Ане» impossible: the menu now offers the assignee first and
   // everyone else after (see SendMenu).
-  const linkedNames = colleagues.filter((c) => c.linked).map((c) => c.name);
+  const linkedNames = colleagues.filter((c) => c.linked && !c.isMe).map((c) => c.name);
   const canSend = isEditing && linkedNames.length > 0;
 
   function save() {

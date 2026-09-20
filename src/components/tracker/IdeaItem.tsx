@@ -56,7 +56,7 @@ export default function IdeaItem({
 
   const savedRef = useRef(false);
 
-  const linked = colleagues.filter((c) => c.linked);
+  const linked = colleagues.filter((c) => c.linked && !c.isMe);
 
   // The note under the thought clears itself: unlike a modal, this row
   // stays on screen, and yesterday's «Отправлено: Аня» would sit there for

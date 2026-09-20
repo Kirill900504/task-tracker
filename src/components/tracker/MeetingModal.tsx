@@ -183,7 +183,7 @@ export default function MeetingModal({
   // Same as the task modal: offered whenever anyone is connected, not only
   // when a participant is — a meeting is often worth showing to someone who
   // is not in it (see SendMenu, which puts the participants first anyway).
-  const linkedNames = colleagues.filter((c) => c.linked).map((c) => c.name);
+  const linkedNames = colleagues.filter((c) => c.linked && !c.isMe).map((c) => c.name);
   const canSend = isEditing && linkedNames.length > 0;
 
   function save() {

@@ -551,6 +551,39 @@ try {
     .eq("kind", "comment");
   check("постановщик узнаёт о реплике в своей задаче", (queued || []).length > 0, queued);
 
+  // ── Переименование человека ────────────────────────────────────────────
+  //
+  // Имя живёт в двух видах сразу: строка в `assignees` — это человек, а
+  // `tasks.assignee` и `meetings.participants` — имя, написанное на
+  // карточке. Переименовать одно и забыть другое значит развести их, и
+  // тогда задача становится «назначенной только на словах». Поэтому
+  // проверяется не ответ маршрута, а то, что имя изменилось ВЕЗДЕ.
+  section("Переименование человека");
+  // Переименовывается тот, чьё имя стоит в поле «Исполнитель» этой
+  // задачи, — иначе проверка «изменилось везде» ничего не проверяет.
+  const renamed = await post(owner, "/api/workspace/rename-person", { assigneeId: personA.id, name: "Тест Козлов-Новый" });
+  check("владелец переименовывает человека", renamed.status === 200, renamed);
+
+  const { data: afterRename } = await admin.from("assignees").select("name").eq("id", personA.id).maybeSingle();
+  check("имя изменилось в списке людей", afterRename?.name === "Тест Козлов-Новый", afterRename);
+
+  const { data: taskAfter } = await admin.from("tasks").select("assignee").eq("id", taskId).maybeSingle();
+  check("и на задаче, где это имя было написано", taskAfter?.assignee === "Тест Козлов-Новый", taskAfter);
+
+  const empty = await post(owner, "/api/workspace/rename-person", { assigneeId: personA.id, name: "   " });
+  check("пустое имя не проходит", empty.status === 400, empty);
+
+  const foreign = await post(mgrB, "/api/workspace/rename-person", { assigneeId: personA.id, name: "Чужой" });
+  check("руководитель переименовать людей не может", foreign.status === 403, foreign);
+
+  const clash = await post(owner, "/api/workspace/rename-person", { assigneeId: personA.id, name: "Тест Витковский" });
+  check("двух людей с одним именем не завести", clash.status === 400, clash);
+
+  // Возвращаем как было: дальше идут проверки, которые ищут этого человека
+  // по прежнему имени.
+  const back = await post(owner, "/api/workspace/rename-person", { assigneeId: personA.id, name: personA.name });
+  check("и обратно — имя снова прежнее", back.status === 200, back);
+
   // ── Отключение доступа ─────────────────────────────────────────────────
   section("Отключение доступа");
   await admin.from("workspace_members").update({ status: "disabled", disabled_at: new Date().toISOString() }).eq("member_id", mgrA.id);

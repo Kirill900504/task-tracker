@@ -60,6 +60,14 @@ export const reviewInput = z.object({
 
 export const commentInput = z.object({ commentId: UUID });
 
+// Переименование человека. Имя — это то, по чему его находят все: карточка,
+// бот, сводки, — поэтому пустое сюда не проходит, а длина ограничена так
+// же, как у остальных имён в трекере.
+export const renamePersonInput = z.object({
+  assigneeId: UUID,
+  name: z.string().trim().min(1, "имя не может быть пустым").max(120),
+});
+
 export const inviteInput = z.object({
   assigneeId: UUID,
   email: EMAIL.optional(),
