@@ -40,10 +40,19 @@ export async function ownerChats(admin: SupabaseClient, userId: string): Promise
 
 // The owner hears about something (a colleague pressed a button, a reminder
 // came due) in every messenger he has connected — he reads whichever is open.
-export async function notifyOwner(admin: SupabaseClient, userId: string, text: string): Promise<number> {
+export async function notifyOwner(
+  admin: SupabaseClient,
+  userId: string,
+  text: string,
+  // Кнопки под сообщением: правило шире одного места — каждое сообщение
+  // бота, после которого от человека чего-то ждут, обязано нести кнопку
+  // этого действия. Владельцу их до сих пор было не на что вешать: его
+  // нажатия никто не разбирал (см. lib/botCallback).
+  buttons?: BotButton[][],
+): Promise<number> {
   const chats = await ownerChats(admin, userId);
   for (const chat of chats) {
-    await transportFor(chat.channel).send(chat.chatId, text);
+    await transportFor(chat.channel).send(chat.chatId, text, buttons?.length ? { buttons } : undefined);
   }
   return chats.length;
 }

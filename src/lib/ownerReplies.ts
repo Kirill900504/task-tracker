@@ -6,6 +6,7 @@ import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
 import { ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, type OwnerReply } from "@/lib/ownerQueries";
 import { applyReview } from "@/lib/reviewWork";
 import { startNewTask, whenButtons } from "@/lib/ownerNewTask";
+import { closeMeeting } from "@/lib/meetingRecap";
 
 // Что происходит, когда владелец нажимает кнопку.
 //
@@ -179,6 +180,73 @@ export async function ownerTaskCard(admin: SupabaseClient, userId: string, taskI
   return { text: lines.join("\n"), buttons };
 }
 
+type MeetingRow = {
+  id: string;
+  title: string;
+  date: string;
+  time: string | null;
+  user_id: string;
+  from_task_id: string | null;
+  result: string | null;
+};
+
+async function loadMeeting(admin: SupabaseClient, userId: string, meetingId: string): Promise<MeetingRow | null> {
+  const { data } = await admin
+    .from("meetings")
+    .select("id, title, date, time, user_id, from_task_id, result")
+    .eq("id", meetingId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  return (data as MeetingRow | null) || null;
+}
+
+// Встреча глазами того, кто её собрал.
+//
+// «Как прошла?» бот спрашивал и раньше, но только текстом: ответить можно
+// было рассказом, а «прошла, обсудили, ничего не решили» — ровно тот
+// ответ, который не пишут. Встреча оставалась открытой месяцами. Теперь
+// под вопросом кнопки, а рассказ остаётся для случаев, когда есть что
+// рассказать.
+export async function ownerMeetingCard(admin: SupabaseClient, userId: string, meetingId: string): Promise<OwnerReply | null> {
+  const meeting = await loadMeeting(admin, userId, meetingId);
+  if (!meeting) return null;
+
+  const { data: votes } = await admin
+    .from("meeting_participants")
+    .select("response, late, reason, assignees(name)")
+    .eq("meeting_id", meetingId);
+  type Vote = { response: string; late: boolean | null; reason: string | null; assignees: { name: string } | { name: string }[] | null };
+  const rows = ((votes || []) as Vote[]).map((v) => ({
+    name: (Array.isArray(v.assignees) ? v.assignees[0]?.name : v.assignees?.name) || "",
+    response: v.response,
+    late: !!v.late,
+    reason: v.reason || "",
+  }));
+
+  const lines = [`📅 ${meeting.title}`, fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "")];
+  const yes = rows.filter((r) => r.response === "yes");
+  const no = rows.filter((r) => r.response === "no");
+  const silent = rows.filter((r) => r.response === "none");
+  if (yes.length) lines.push("", "✅ Будут: " + yes.map((r) => r.name + (r.late ? " (опоздает)" : "")).join(", "));
+  if (no.length) lines.push("❌ Не смогут: " + no.map((r) => (r.reason ? `${r.name} — ${r.reason}` : r.name)).join(", "));
+  if (silent.length) lines.push("❓ Молчат: " + silent.map((r) => r.name).join(", "));
+  if (meeting.result) lines.push("", "📝 " + meeting.result);
+
+  return {
+    text: lines.join("\n"),
+    buttons: [
+      [
+        { text: "✅ Прошла", data: encodeCallback("meeting", "mok", meetingId) },
+        { text: "⚪ Без результата", data: encodeCallback("meeting", "mno", meetingId) },
+      ],
+      [{ text: "📝 Записать итог", data: encodeCallback("meeting", "mrec", meetingId) }],
+      [{ text: "💬 Ответить", data: encodeCallback("meeting", "msg", meetingId) }],
+      ...ownerNav(),
+    ],
+  };
+}
+
 // Насколько двигаем срок. Те же четыре шага, что и у просьбы о переносе с
 // той стороны: разговор один и тот же, и мерить его надо одинаково.
 export const EXTEND_OPTIONS = [
@@ -286,6 +354,42 @@ export async function handleOwnerCallback(
       toast: "Что доделать?",
       askReturn: { taskId: task.id, title: task.title },
       say: `↩ «${task.title}»\n\nНапишите следующим сообщением, что именно доделать, — отправлю исполнителям.`,
+    };
+  }
+
+  // ——— Встреча: открыть, закрыть, записать итог.
+  if (action.action === "oshow" && action.kind === "meeting") {
+    const card = await ownerMeetingCard(admin, userId, action.id);
+    if (!card) return { toast: "Эта встреча не найдена" };
+    return { toast: "Открываю", say: card.text, sayButtons: card.buttons };
+  }
+
+  if ((action.action === "mok" || action.action === "mno") && action.kind === "meeting") {
+    const meeting = await loadMeeting(admin, userId, action.id);
+    if (!meeting) return { toast: "Эта встреча не найдена" };
+    const outcome = action.action === "mok" ? "success" : "no_result";
+    await closeMeeting(admin, meeting, outcome, "");
+    return {
+      toast: outcome === "success" ? "Закрыл" : "Без результата",
+      rewriteTo:
+        outcome === "success"
+          ? `✅ Встреча «${meeting.title}» закрыта.`
+          : `⚪ Встреча «${meeting.title}» закрыта без результата.`,
+      // Итог можно дописать и после: встреча закрыта, но «о чём
+      // договорились» остаётся вопросом, на который ждут ответа участники.
+      rewriteButtons: [[{ text: "📝 Записать итог", data: encodeCallback("meeting", "mrec", action.id) }], ...ownerNav()],
+    };
+  }
+
+  // «Записать итог» ждёт слов — тем же механизмом, что и возврат задачи на
+  // доработку: следующее сообщение станет итогом.
+  if (action.action === "mrec" && action.kind === "meeting") {
+    const meeting = await loadMeeting(admin, userId, action.id);
+    if (!meeting) return { toast: "Эта встреча не найдена" };
+    return {
+      toast: "Слушаю",
+      say: `📝 «${meeting.title}»\n\nЧто решили? Напишите или надиктуйте — запишу итогом и разошлю тем, кто был.`,
+      setPending: { kind: "meeting_recap", meetingId: meeting.id, title: meeting.title },
     };
   }
 

@@ -10,6 +10,9 @@
 // содержание: молчащего спрашивают ещё раз, согласившемуся просто
 // напоминают.
 
+import type { BotButton } from "@/lib/botTransport";
+import { encodeCallback } from "@/lib/colleagues";
+
 export type ReminderKind = "meeting_24h" | "meeting_2h" | "meeting_30m" | "meeting_soon" | "meeting_now";
 
 export type ReminderWindow = {
@@ -144,4 +147,20 @@ export function recapAsk(kind: RecapKind, title: string, when: string): string {
     );
   }
   return `📝 У встречи «${title}» (${when}) до сих пор нет итога. Что решили?`;
+}
+
+// Кнопки под вопросом «как прошла встреча».
+//
+// Вопрос бот задавал и раньше, но ответить на него можно было только
+// рассказом — а «прошла, ничего не решили» рассказом не пишут, и встреча
+// оставалась открытой. Три кнопки закрывают её одним нажатием, а
+// «Записать итог» остаётся для случаев, когда есть что записать.
+export function recapButtons(meetingId: string): BotButton[][] {
+  return [
+    [
+      { text: "✅ Прошла", data: encodeCallback("meeting", "mok", meetingId) },
+      { text: "⚪ Без результата", data: encodeCallback("meeting", "mno", meetingId) },
+    ],
+    [{ text: "📝 Записать итог", data: encodeCallback("meeting", "mrec", meetingId) }],
+  ];
 }

@@ -6,7 +6,7 @@ import { moscowNow, dateStr, minutesOfDay } from "@/lib/taskLogic";
 import { isRussianWorkingDay } from "@/lib/workCalendar";
 import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
-import { dueReminder, minutesUntil, ownerReminder, participantReminder, reasonNudge, recapAsk, recapDue } from "@/lib/meetingReminders";
+import { dueReminder, minutesUntil, ownerReminder, participantReminder, reasonNudge, recapAsk, recapButtons, recapDue } from "@/lib/meetingReminders";
 import { awaitingReason, voteTally, type MeetingVote } from "@/lib/meetingVotes";
 import { chatsFor, meetingButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
@@ -376,7 +376,9 @@ export async function GET(req: Request) {
             .insert({ user_id: userId, kind: recap, ref_id: m.id, notif_date: today });
           if (!recapTaken) {
             const whenPast = `${m.date.split("-").reverse().join(".")}, ${m.time}`;
-            await notifyOwner(admin, userId, recapAsk(recap, m.title, whenPast));
+            // С кнопками: «прошла, ничего не решили» — ровно тот ответ,
+            // который не пишут словами, и встреча висит открытой месяц.
+            await notifyOwner(admin, userId, recapAsk(recap, m.title, whenPast), recapButtons(m.id));
           }
         }
       }

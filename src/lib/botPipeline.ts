@@ -19,11 +19,22 @@ import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 import { newTaskRow } from "@/lib/newTask";
 import { ownerListReply, ownerMeetingsReply, ownerMenu } from "@/lib/ownerQueries";
 import { whoButtons, type NewTaskPending } from "@/lib/ownerNewTask";
+import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
 // мессенджере, а закрывает следующее сообщение владельца.
 type ReturnPending = { kind: "review_return"; taskId: string; title: string };
+type RecapPending = { kind: "meeting_recap"; meetingId: string; title: string };
+type MeetingRecapRow = {
+  id: string;
+  title: string;
+  date: string;
+  time: string | null;
+  user_id: string;
+  from_task_id: string | null;
+  result: string | null;
+};
 
 // What the bot DOES with a message — the whole of it, and none of the
 // business of getting that message off the wire.
@@ -549,6 +560,29 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       await say(ctx, done.ok ? `↩ Вернул «${task.title}» на доработку — исполнителям сказано.` : done.error);
       return;
     }
+    // Итог встречи, пришедший словами после кнопки «Записать итог».
+    // Правила — общие с трекером (lib/meetingRecap): разослать тем, кто
+    // был, записать в хронику и вернуть в задачу, если встреча выросла
+    // из неё.
+    if ((waiting as unknown as RecapPending).kind === "meeting_recap") {
+      const ask = waiting as unknown as RecapPending;
+      const { data: row } = await ctx.admin
+        .from("meetings")
+        .select("id, title, date, time, user_id, from_task_id, result")
+        .eq("id", ask.meetingId)
+        .eq("user_id", account.user_id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      const meeting = row as MeetingRecapRow | null;
+      if (!meeting) {
+        await say(ctx, "Эта встреча больше не найдена.");
+        return;
+      }
+      await closeMeeting(ctx.admin, meeting, "success", trimmed);
+      await say(ctx, "📝 Итог записан и разослан тем, кто был.");
+      return;
+    }
+
     // Первый шаг мастера «Поручить»: пришло название. Спрашиваем, кому, —
     // кнопками, потому что имя, набранное руками, промахивается мимо
     // списка людей, а имя, названное моделью, промахивается ещё чаще.

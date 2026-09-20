@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { chatsFor, replyButtons, type ColleagueRow } from "@/lib/colleagues";
-import { sendToColleague } from "@/lib/botDelivery";
-import { recordEvent } from "@/lib/itemHistory";
-import { fmtDate } from "@/lib/taskDisplay";
+import { deliverRecap } from "@/lib/meetingRecap";
 
 // Итог встречи — тем, кто на ней был.
 //
@@ -54,48 +51,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Это не ваша встреча" }, { status: 403 });
   }
 
-  const { data: parts } = await admin
-    .from("meeting_participants")
-    .select("assignee_id")
-    .eq("meeting_id", meeting.id);
-  const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
-  if (!ids.length) return NextResponse.json({ ok: true, sent: 0 });
-
-  const { data: people } = await admin
-    .from("assignees")
-    .select("id, name, telegram_chat_id, max_user_id")
-    .in("id", ids);
-
-  const when = fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "");
-  const text = `📝 Итог встречи «${meeting.title}» (${when}):\n\n${result}`;
-
-  let sent = 0;
-  for (const person of ((people || []) as ColleagueRow[])) {
-    const target = chatsFor(person)[0];
-    // Кнопка «Ответить» здесь не формальность: с итогом чаще всего и
-    // спорят, и уточнять его будут именно в этот момент.
-    if (target && (await sendToColleague(target, text, replyButtons("meeting", meeting.id))).ok) sent++;
-  }
-
-  await recordEvent(admin, { userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `📝 Итог разослан участникам (${sent})` });
-
-  // Встреча, выросшая из задачи, возвращает в неё ответ.
-  //
-  // Ради этого задачу и «перекидывали во встречу»: собрались, чтобы
-  // сдвинуть её с места, — значит в самой задаче должно быть написано, чем
-  // кончилось. Раньше итог оставался во встрече, а человек, открывший
-  // задачу через неделю, видел только, что когда-то по ней собирались.
-  //
-  // Строкой в обсуждение, а не колонкой: история итема живёт там (правило
-  // в CLAUDE.md), и участники задачи получат её обычной рассылкой.
-  if (meeting.from_task_id) {
-    await recordEvent(admin, {
-      userId: meeting.user_id,
-      kind: "task",
-      itemId: meeting.from_task_id,
-      text: `📝 Итог встречи «${meeting.title}» (${when}): ${result}`,
-    });
-  }
-
+  // Кому сказать, куда записать и что вернуть в задачу — правила, и
+  // живут они в lib/meetingRecap: те же итоги закрываются теперь кнопкой
+  // в мессенджере, и второй экземпляр этих правил разошёлся бы с первым.
+  const sent = await deliverRecap(
+    admin,
+    {
+      id: meeting.id,
+      title: meeting.title,
+      date: meeting.date,
+      time: meeting.time,
+      user_id: meeting.user_id,
+      from_task_id: meeting.from_task_id,
+    },
+    result,
+  );
   return NextResponse.json({ ok: true, sent });
 }
