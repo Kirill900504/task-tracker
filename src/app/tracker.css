@@ -2678,3 +2678,13 @@
     .skel-col:last-child{grid-column:1; grid-row:3;}
   }
   @media (max-width:800px){ .skel-board{grid-template-columns:1fr;} .skel-col:last-child{display:none;} }
+
+  /* Лента обсуждения, пока она едет. Та же мысль, что и у BootSkeleton:
+     ждать нормально, читать слово «Загрузка…» — нет. Полосы разной длины,
+     как реплики разной длины; пульсация общая с каркасом запуска. */
+  .chat-skeleton{display:flex; flex-direction:column; gap:9px; padding:10px 2px 6px;}
+  .chat-skel-line{
+    height:13px; border-radius:7px; background:var(--paper-soft);
+    animation:skel-pulse 1.4s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce){ .chat-skel-line{animation:none;} }

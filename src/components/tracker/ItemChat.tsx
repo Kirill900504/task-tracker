@@ -154,7 +154,19 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
         )}
       </div>
 
-      {loading && <div className="chat-empty">Загрузка…</div>}
+      {/* Пока лента едет — её форма, а не слово о ней.
+          Замер 20.09.2026: обсуждение открывается за 106 мс, а сообщения
+          приезжают через 830 — и всё это время в карточке стояло
+          «Загрузка…». То же самое, что было на старте трекера, только в
+          миниатюре: ждать нормально, читать о том, что ждёшь, — нет.
+          Три полосы разной длины, как реплики разной длины. */}
+      {loading && (
+        <div className="chat-skeleton" aria-hidden>
+          <div className="chat-skel-line" style={{ width: "62%" }} />
+          <div className="chat-skel-line" style={{ width: "44%" }} />
+          <div className="chat-skel-line" style={{ width: "71%" }} />
+        </div>
+      )}
 
       {!loading && comments.length === 0 && (
         <div className="chat-empty">
