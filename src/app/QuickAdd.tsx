@@ -16,7 +16,7 @@ export type TaskFields = {
   term: "short" | "long";
   deadline: string;
 };
-export type MeetingFields = { title: string; date: string; time: string; participants: string[] };
+export type MeetingFields = { title: string; date: string; time: string; participants: string[]; durationMin?: number };
 export type IdeaFields = { text: string; important: boolean };
 // One action item pulled out of dictated meeting notes, awaiting confirmation.
 export type ExtractedTask = { title: string; assignee: string; deadline: string };

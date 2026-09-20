@@ -252,6 +252,10 @@ export default function MeetingsPanel({
       id: uid(),
       date: newDate,
       time: newTime || m.time || "",
+      // Перенос сохраняет длительность: переносят ВСТРЕЧУ, а не только её
+      // начало, и часовая планёрка не должна стать получасовой оттого,
+      // что её сдвинули на день.
+      durationMin: m.durationMin || 30,
       title: m.title,
       participants: m.participants.slice(),
       status: "planned",
@@ -362,6 +366,10 @@ export default function MeetingsPanel({
           // старой встречи вместо предзаполненных.
           key={modalMeeting?.id ?? (movingFrom ? "move-" + movingFrom.id : "new")}
           meeting={modalMeeting}
+          // Чем заняты люди в этот день — считается из тех же встреч, что
+          // панель уже держит: ни одного лишнего запроса, а ответ на «кто
+          // свободен в 12:00» появляется прямо под сеткой времени.
+          dayMeetings={meetings}
           // Своя встреча — та, которую собрал сам. Чужую видно, потому что
           // позвали; закрывать, переносить и удалять её вправе организатор.
           canEdit={isMine(modalMeeting, myUserId)}

@@ -4,6 +4,7 @@
 // redesigned — the Telegram bot, cron jobs, and (until the cutover) the
 // legacy UI all read/write these same columns, so the shape has to match
 // exactly.
+import { normalizeDuration } from "@/lib/meetingTime";
 import type { Idea, Meeting, Section, Task } from "@/types/tracker";
 
 export type TaskRow = {
@@ -44,6 +45,7 @@ export type MeetingRow = {
   result: string;
   moved_to_date: string | null;
   resolved_at: string | null;
+  duration_min?: number | null;
   from_task_id?: string | null;
   vote_round?: number | null;
   created_by?: string | null;
@@ -152,6 +154,7 @@ export function meetingToRow(m: Meeting): MeetingRow {
     result: m.result || "",
     moved_to_date: m.movedToDate || null,
     resolved_at: m.resolvedAt || null,
+    duration_min: normalizeDuration(m.durationMin),
     from_task_id: m.fromTaskId || null,
   };
 }
@@ -167,6 +170,7 @@ export function meetingFromRow(r: MeetingRow): Meeting {
     result: r.result || "",
     movedToDate: r.moved_to_date || "",
     resolvedAt: r.resolved_at || "",
+    durationMin: normalizeDuration(r.duration_min),
     fromTaskId: r.from_task_id || "",
     confirmedBy: r.confirmed_by || [],
     voteRound: r.vote_round ?? 1,

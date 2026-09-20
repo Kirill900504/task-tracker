@@ -3,7 +3,7 @@
 // Port of the meeting modal from trackerMarkup.ts + openMeetingModal()/
 // meetingSaveBtn/deleteMeetingBtn/setMeetingStatus/performReschedule in
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useColleagues } from "@/hooks/useColleagues";
 import SendMenu from "./SendMenu";
 import ItemChat from "./ItemChat";
@@ -21,6 +21,7 @@ import { sortNames } from "@/lib/peopleOrder";
 import Modal from "./Modal";
 import Icon from "./Icon";
 import ChipChoice from "./ChipChoice";
+import { busyStarts, minutesOf, slotOf } from "@/lib/meetingTime";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS: string[] = (() => {
@@ -52,6 +53,7 @@ export default function MeetingModal({
   canEdit = true,
   canConfirm = false,
   isMove,
+  dayMeetings = [],
   myVote = null,
   onAnswer,
 }: {
@@ -79,6 +81,11 @@ export default function MeetingModal({
   isMove?: boolean;
   // Моя строка голосования по этой встрече, если меня позвали. Пусто —
   // встреча меня не касается, и отвечать не на что.
+  // Все встречи пространства — из них считается, кто уже занят в
+  // выбранный день. Приходят готовым списком: панель их и так держит,
+  // а запрос ради занятости означал бы ожидание там, где человек
+  // просто листает время.
+  dayMeetings?: Meeting[];
   myVote?: MeetingVoteRow | null;
   onAnswer?: (response: "yes" | "no" | "late", reason: string) => Promise<void>;
 }) {
@@ -102,6 +109,53 @@ export default function MeetingModal({
   // назначить?». Может. Но выбор остаётся — он и есть разница между
   // «в 15:00 у нас планёрка» и «давайте в 15:00, кто может?».
   const [asProposal, setAsProposal] = useState(false);
+  // Полчаса или час. Слова Кирилла 20.09.2026: «удобный способ выбирать
+  // 30 минут или час» — и это не украшение формы, а то, из чего считается
+  // занятость людей: час встречи вынимает из их дня час, а не точку.
+  const [durationMin, setDurationMin] = useState<number>(meeting?.durationMin || 30);
+
+  // Кто занят в этот день и в какие получасовки.
+  //
+  // Слова Кирилла 20.09.2026: «чтобы другие участники работы видели,
+  // что условно на 12:00 у Есиной, Мамаковой и Макарова варианта
+  // выбрать встречу нету, потому что у них уже запланирована встреча».
+  // Занятым человек считается по НАЗНАЧЕННОЙ встрече: предложение
+  // ничьего времени не занимает, пока на него не ответили (см.
+  // lib/meetingConfirm), и гасить из-за него слоты значило бы
+  // блокировать день тем, что ещё не состоялось.
+  //
+  // Своя же встреча из расчёта исключается: открыв её, человек видел бы
+  // собственное время занятым и не смог бы выбрать то, на котором и так
+  // стоит.
+  const busyByTime = useMemo(() => {
+    const out = new Map<number, string[]>();
+    if (!date) return out;
+    for (const m of dayMeetings) {
+      if (m.date !== date || m.status !== "planned" || m.id === meeting?.id) continue;
+      const slot = slotOf(m.time, m.durationMin);
+      if (!slot) continue;
+      for (const start of busyStarts([slot])) {
+        const names = out.get(start) || [];
+        for (const name of m.participants || []) if (!names.includes(name)) names.push(name);
+        out.set(start, names);
+      }
+    }
+    return out;
+  }, [dayMeetings, date, meeting?.id]);
+
+  // Заняты ли ВЫБРАННЫЕ люди в это время. Чужая занятость, никого из
+  // приглашённых не касающаяся, — не повод гасить кнопку: в трекере
+  // четырнадцать человек, и при таком правиле свободных слотов не
+  // осталось бы вовсе.
+  const busyNamesAt = (slotTime: string): string[] => {
+    const start = minutesOf(slotTime);
+    if (start === null || !participants.length) return [];
+    const taken = new Set<string>();
+    for (let t = start; t < start + durationMin; t += 30) {
+      for (const name of busyByTime.get(t) || []) if (participants.includes(name)) taken.add(name);
+    }
+    return [...taken];
+  };
 
   // Esc закрывает окно — как и любое другое окно трекера.
 
@@ -138,6 +192,10 @@ export default function MeetingModal({
       // запрет перестал существовать молча. Меняется это переносом.
       date: isEditing ? meeting.date : date,
       time: isEditing ? meeting.time : time || "",
+      // Длительность назначенной встречи не меняется вместе с остальным:
+      // о ней уже сказали людям, и час, ставший получасом, развёл бы то,
+      // что у них в календаре, и то, что записано. Меняется переносом.
+      durationMin: isEditing ? meeting.durationMin || 30 : durationMin,
       title: isEditing ? meeting.title : trimmedTitle,
       participants: isEditing ? meeting.participants : sanitizeAssigneeList(participants),
       // Назначена или предложена — как выбрал тот, кто собирает. Раньше
@@ -244,16 +302,24 @@ export default function MeetingModal({
                   кнопки. Встреча, назначенная когда-то на 20:15, свою кнопку
                   сохраняет — время в ней не переписывается молча. */}
               <div className="time-grid" id="mTimeGrid">
-                {TIME_SLOTS.map((slot) => (
+                {TIME_SLOTS.map((slot) => {
+                  const busy = busyNamesAt(slot);
+                  return (
                   <button
                     key={slot}
                     type="button"
-                    className={"time-slot" + (time === slot ? " selected" : "")}
+                    // Занятое время не запрещено, а помечено. Запрет был бы
+                    // неправдой: планёрку иногда и правда ставят поверх
+                    // другой, решив, что та подождёт. Неправдой было бы и
+                    // молчание — именно его Кирилл и просил убрать.
+                    className={"time-slot" + (time === slot ? " selected" : "") + (busy.length ? " busy" : "")}
+                    title={busy.length ? "Заняты: " + busy.join(", ") : undefined}
                     onClick={() => setTime(slot)}
                   >
                     {slot}
                   </button>
-                ))}
+                  );
+                })}
                 {time && !TIME_SLOTS.includes(time) && (
                   <button type="button" className="time-slot selected" onClick={() => setTime(time)}>
                     {time}
@@ -290,6 +356,24 @@ export default function MeetingModal({
                 ручаешься: оно ничьего дня не занимает, а как только все
                 ответят «буду», встреча назначается сама и всем об этом
                 говорят (lib/meetingConfirm). */}
+            <div className="field">
+              <label>Сколько займёт</label>
+              <ChipChoice
+                id="mDuration"
+                value={durationMin === 60 ? "60" : "30"}
+                onSelect={(v) => setDurationMin(v === "60" ? 60 : 30)}
+                options={[
+                  { value: "30", label: "30 минут" },
+                  { value: "60", label: "1 час" },
+                ]}
+              />
+              <div className="field-hint">
+                {durationMin === 60
+                  ? "Час выпадает из дня у всех, кого зовёте: другие встречи на это время им уже не поставят незаметно."
+                  : "Полчаса — обычная планёрка. Занятое время видно остальным при выборе."}
+              </div>
+            </div>
+
             <div className="field">
               <label>Как собираем</label>
               <ChipChoice

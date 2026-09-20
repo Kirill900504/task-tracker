@@ -292,6 +292,9 @@ export default function NewTracker() {
       date: result.date,
       time: result.time || "",
       title: idea.text,
+      // Получас по умолчанию: мысль, ставшая встречей, не несёт с собой
+      // длительности, а сетка времени идёт получасом.
+      durationMin: 30,
       participants: [],
       status: "planned",
       result: "",
@@ -370,6 +373,7 @@ export default function NewTracker() {
         id: uid(),
         date: f.date,
         time: f.time || "",
+        durationMin: f.durationMin || 30,
         title: f.title,
         participants: f.participants,
         status: "planned",

@@ -19,6 +19,8 @@ import { onceOnly } from "@/lib/onceOnly";
 import { findSilent, composeSilence } from "@/lib/silence";
 import { setMaxCommands, setTelegramCommands, syncTelegramAppButtons } from "@/lib/botCommands";
 import { alarmText, findStuck, nudgeText } from "@/lib/escalation";
+import { endsAt, normalizeDuration, warnBefore } from "@/lib/meetingTime";
+import { endingSoonText, timeIsUpText } from "@/lib/meetingNudges";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -52,6 +54,30 @@ type VoteRow = {
   round: number;
   assignees: { name: string } | { name: string }[] | null;
 };
+
+// Сказать всем, кто на встрече: тем, кого позвали, и тому, кто собрал.
+//
+// Участники берутся из строк голосования, а не из текстового списка
+// имён: список — то, что видно на карточке, строки — то, кому трекер
+// умеет написать. Организатор добавляется отдельно, потому что своей
+// строки голосования у него нет (он идёт по определению).
+async function tellMeetingPeople(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  meeting: { id: string; title: string },
+  text: string,
+): Promise<void> {
+  const { data: parts } = await admin.from("meeting_participants").select("assignee_id").eq("meeting_id", meeting.id);
+  const ids = ((parts || []) as { assignee_id: string }[]).map((r) => r.assignee_id);
+  if (ids.length) {
+    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+    for (const person of ((people || []) as ColleagueRow[])) {
+      const target = chatsFor(person)[0];
+      if (target) await sendToColleague(target, text);
+    }
+  }
+  await notifyOwner(admin, userId, text);
+}
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -370,7 +396,7 @@ export async function GET(req: Request) {
     // Сегодняшние и завтрашние: за сутки напоминают именно накануне.
     const { data: meetings } = await admin
       .from("meetings")
-      .select("id,title,date,time,participants,status,vote_round,result")
+      .select("id,title,date,time,participants,status,vote_round,result,duration_min")
       .eq("user_id", userId)
       .in("date", [yesterday, today, tomorrow])
       .is("deleted_at", null);
@@ -398,6 +424,38 @@ export async function GET(req: Request) {
             // который не пишут словами, и встреча висит открытой месяц.
             await notifyOwner(admin, userId, recapAsk(recap, m.title, whenPast), recapButtons(m.id));
           }
+        }
+      }
+
+      // Время встречи кончается — и это говорится вслух.
+      //
+      // Просьба Кирилла 20.09.2026: «если встреча была назначена на 1
+      // час, а он уже прошёл, люди не продолжали собрание, а шли
+      // работать». Два сигнала: предупреждение (за десять минут у
+      // часовой, за пять у получасовой) и сам конец времени.
+      //
+      // Только сегодняшние: вчерашняя встреча, до которой крон дошёл
+      // наутро, сказала бы «время вышло» через сутки после того, как
+      // все разошлись. Оба сигнала — ровно по одному разу на встречу
+      // (onceOnly по её id), иначе каждые пять минут крона повторяли бы
+      // одно и то же тем, кто и так уже встал из-за стола.
+      if (m.date === today) {
+        const minutes = normalizeDuration((m as { duration_min?: number }).duration_min);
+        const finish = startMinutes + minutes;
+        const sinceWarn = nowMin - (finish - warnBefore(minutes));
+        const sinceEnd = nowMin - finish;
+
+        // Окно в четверть часа, а не точная минута: крон ходит раз в
+        // несколько минут и на точное совпадение не попадёт никогда.
+        if (sinceWarn >= 0 && sinceWarn < 15) {
+          await onceOnly(admin, { userId, kind: "meeting_ending", refId: m.id, date: today }, async () => {
+            await tellMeetingPeople(admin, userId, m, endingSoonText(m.title, endsAt(m.time, minutes), m.id));
+          });
+        }
+        if (sinceEnd >= 0 && sinceEnd < 15) {
+          await onceOnly(admin, { userId, kind: "meeting_over", refId: m.id, date: today }, async () => {
+            await tellMeetingPeople(admin, userId, m, timeIsUpText(m.title, m.id));
+          });
         }
       }
 

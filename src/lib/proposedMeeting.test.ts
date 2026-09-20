@@ -8,6 +8,7 @@ function meeting(patch: Partial<Meeting>): Meeting {
     id: Math.random().toString(36).slice(2),
     date: "2026-09-23",
     time: "10:00",
+    durationMin: 30,
     title: "Планёрка",
     participants: [],
     status: "planned",

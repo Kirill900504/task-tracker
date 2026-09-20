@@ -1286,6 +1286,15 @@
   }
   .time-slot:hover{border-color:var(--accent); color:var(--accent);}
   .time-slot.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:700;}
+  /* Время, в которое кто-то из приглашённых уже занят.
+     Приглушённое и с полоской, а НЕ запрещённое: поставить встречу поверх
+     другой иногда и правда решают, а вот не знать об этом — нельзя.
+     Выбранное состояние сильнее занятого: человек уже согласился. */
+  .time-slot.busy{
+    color:var(--ink-label); border-style:dashed; opacity:.75;
+    background:repeating-linear-gradient(135deg, var(--paper-soft), var(--paper-soft) 4px, var(--line-soft) 4px, var(--line-soft) 5px);
+  }
+  .time-slot.busy.selected{opacity:1; color:#F3F8FA; background:var(--accent); border-style:solid;}
   /* Время следующего этапа — те же кнопки, только помельче: строка переноса
      и так стоит внизу карточки, среди итогов. */
   .time-grid-compact{margin-top:8px;}

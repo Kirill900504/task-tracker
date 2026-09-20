@@ -30,6 +30,7 @@ function meeting(over: Partial<Meeting>): Meeting {
     id: "m1",
     date: "2026-09-04",
     time: "10:00",
+    durationMin: 30,
     title: "Встреча",
     participants: [],
     status: "planned",

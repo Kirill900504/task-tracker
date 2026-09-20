@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
-import { encodeCallback, type CallbackAction } from "@/lib/colleagues";
+import { chatsFor, encodeCallback, type CallbackAction, type ColleagueRow } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
 import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
 import { ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, personReply, type OwnerReply } from "@/lib/ownerQueries";
@@ -10,6 +10,8 @@ import { closeMeeting } from "@/lib/meetingRecap";
 import { recordEvent } from "@/lib/itemHistory";
 import { actorName } from "@/lib/actorName";
 import { actorScope, type BotActor } from "@/lib/botActor";
+import { latecomerText } from "@/lib/meetingNudges";
+import { sendToColleague } from "@/lib/botDelivery";
 
 // Что происходит, когда ПОСТАНОВЩИК нажимает кнопку.
 //
@@ -283,6 +285,17 @@ export async function ownerMeetingCard(admin: SupabaseClient, actor: BotActor, m
         [{ text: "📝 Записать итог", data: encodeCallback("meeting", "mrec", meetingId) }],
       ];
 
+  // Поторопить тех, кого ещё нет. Просьба Кирилла 20.09.2026 — «сделай
+  // возможность организатору прям в мессенджере тегать опаздунов», — и
+  // кнопка показывается только когда есть кого торопить: тем, кто
+  // сказал «опоздаю», и тем, кто не ответил вовсе. Отказавшихся она не
+  // трогает: человек уже ответил, и звать его второй раз — не шутка, а
+  // невнимательность.
+  const latecomers = rows.filter((r) => r.response === "none" || (r.response === "yes" && r.late));
+  if (!proposed && latecomers.length) {
+    actions.push([{ text: "🙋 Поторопить (" + latecomers.length + ")", data: encodeCallback("meeting", "mlate", meetingId) }]);
+  }
+
   return {
     text: lines.join("\n"),
     buttons: [
@@ -551,6 +564,48 @@ export async function handleOwnerCallback(
   // Назначить предложенное — право того, кто собирал: время занимают у
   // людей, которые могут отказаться, и это та же симметрия, что у
   // задач. Владелец здесь ничем не отличается от остальных.
+  // «Поторопить» — сообщение тем, кого ждут. Шутка в нём про время, а
+  // не про человека (см. lib/meetingNudges): «опять ты» от бота звучит
+  // обиднее, чем от человека, и обижает четырнадцать раз подряд.
+  if (action.action === "mlate" && action.kind === "meeting") {
+    const meeting = await loadMeeting(admin, actor, action.id);
+    if (!meeting) return { toast: "Эта встреча не найдена" };
+    const { data: rows } = await admin
+      .from("meeting_participants")
+      .select("assignee_id, response, late, assignees(name, telegram_chat_id, max_user_id)")
+      .eq("meeting_id", action.id);
+    type Row = {
+      assignee_id: string;
+      response: "none" | "yes" | "no";
+      late: boolean | null;
+      assignees: ColleagueRow | ColleagueRow[] | null;
+    };
+    const waiting = ((rows || []) as Row[]).filter((r) => r.response === "none" || (r.response === "yes" && r.late));
+    if (!waiting.length) return { toast: "Ждать некого — все ответили" };
+
+    const text = latecomerText(meeting.title, meeting.id);
+    let sent = 0;
+    const names: string[] = [];
+    for (const row of waiting) {
+      const person = (Array.isArray(row.assignees) ? row.assignees[0] : row.assignees) as ColleagueRow | null;
+      if (!person) continue;
+      names.push(person.name);
+      const target = chatsFor(person)[0];
+      if (target && (await sendToColleague(target, text)).ok) sent++;
+    }
+    // Кому не дошло — говорится вслух: у половины людей мессенджера
+    // нет вовсе, и молчаливое «готово» означало бы, что организатор
+    // ждёт реакции, которой не будет.
+    const missed = names.length - sent;
+    return {
+      toast: sent ? "Поторопил: " + sent : "Никому не дошло",
+      say:
+        (sent ? `🙋 Поторопил: ${names.slice(0, 5).join(", ")}` : "Никого не получилось поторопить") +
+        (missed ? `\n📭 Без мессенджера: ${missed} — им не дошло` : ""),
+      sayButtons: [[{ text: "📅 Открыть встречу", data: encodeCallback("meeting", "oshow", action.id) }], ...ownerNav()],
+    };
+  }
+
   if (action.action === "mset" && action.kind === "meeting") {
     const meeting = await loadMeeting(admin, actor, action.id);
     if (!meeting) return { toast: "Эта встреча не найдена" };
