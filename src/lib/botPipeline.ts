@@ -21,11 +21,25 @@ import { ownerListReply, ownerMeetingsReply, ownerMenu } from "@/lib/ownerQuerie
 import { whenButtons, whoButtons, type NewTaskPending } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
+import { deliverComment } from "@/lib/commentDelivery";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
 // мессенджере, а закрывает следующее сообщение владельца.
 type ReturnPending = { kind: "review_return"; taskId: string; title: string };
 type RecapPending = { kind: "meeting_recap"; meetingId: string; title: string };
+// Куда адресован следующий текст постановщика: кнопка «💬 Ответить» под
+// карточкой. Без неё его свободный текст — поручение, а не реплика, и
+// написать в обсуждение из мессенджера было бы нечем.
+type OwnerReplyPending = { kind: "owner_reply"; replyKind: "task" | "meeting"; itemId: string; title: string; at: string };
+
+// Столько живёт направленный ответ — как и у получателя задачи
+// (colleagueReplies): нажал, отвлёкся, написал о другом — и это другое
+// должно уйти туда, куда ушло бы без нажатия.
+const AIM_LIFETIME_MS = 2 * 60 * 60 * 1000;
+
+function isOwnerReply(p: unknown): p is OwnerReplyPending {
+  return !!p && (p as OwnerReplyPending).kind === "owner_reply";
+}
 type MeetingRecapRow = {
   id: string;
   title: string;
@@ -70,6 +84,37 @@ function droppedNote(dropped: string[]): string {
 
 function say(ctx: BotContext, text: string) {
   return ctx.transport.send(ctx.chatId, text);
+}
+
+// Реплика постановщика в обсуждение — после нажатой кнопки «💬 Ответить».
+//
+// Вставку делает служебный ключ, поэтому автор проставляется руками:
+// `author_user_id` — это и есть «писал сам постановщик», по нему рассылка
+// отличает его слова от чужих и не шлёт ему же копию. Пространство
+// подставит триггер (миграция 0019), а разослать надо через ту же
+// commentDelivery, что и трекер: правило «кому дошло» одно на все двери.
+async function writeOwnerComment(
+  ctx: BotContext,
+  userId: string,
+  aim: OwnerReplyPending,
+  body: string,
+): Promise<string> {
+  const { data: inserted, error } = await ctx.admin
+    .from("item_comments")
+    .insert({
+      item_kind: aim.replyKind,
+      item_id: aim.itemId,
+      body,
+      author_user_id: userId,
+      source: ctx.channel.id === "max" ? "max" : "telegram",
+    })
+    .select("id")
+    .maybeSingle();
+  // Молчать нельзя: человек считает, что написал, а его слов нигде нет.
+  if (error || !inserted) return "Не получилось записать сообщение — попробуйте ещё раз.";
+
+  await deliverComment(ctx.admin, (inserted as { id: string }).id);
+  return `💬 Записал в обсуждение ${aim.replyKind === "task" ? "задачи" : "встречи"} «${aim.title}» — участники получат.`;
 }
 
 // Remembers something for the NEXT message from this chat — a clarifying
@@ -583,6 +628,24 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       return;
     }
 
+    // Реплика в обсуждение — после кнопки «💬 Ответить».
+    //
+    // Для владельца это единственный способ написать в задачу из
+    // мессенджера: его свободный текст здесь — поручение, а не реплика.
+    // Живёт намерение два часа и ровно одно сообщение, как и у коллеги
+    // (takeAim в colleagueReplies): нажал, отвлёкся, написал о другом —
+    // и это другое должно уйти туда, куда ушло бы без нажатия.
+    // Остывшее намерение не съедает сообщение: оно обрабатывается как
+    // обычный текст владельца, то есть как поручение, — ровно так же, как
+    // если бы кнопку не нажимали вовсе.
+    if (isOwnerReply(waiting)) {
+      const fresh = Date.now() - (Date.parse(waiting.at || "") || 0) < AIM_LIFETIME_MS;
+      if (fresh) {
+        await say(ctx, await writeOwnerComment(ctx, account.user_id, waiting, trimmed));
+        return;
+      }
+    }
+
     // Первый шаг мастера «Поручить»: пришло название. Спрашиваем, кому, —
     // кнопками, потому что имя, набранное руками, промахивается мимо
     // списка людей, а имя, названное моделью, промахивается ещё чаще.
@@ -621,8 +684,13 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       return;
     }
 
-    await say(ctx, await resolvePendingAction(waiting as PendingAction, trimmed));
-    return;
+    // Остывшее «💬 Ответить» сюда не адресовано: resolvePendingAction
+    // разбирает подтверждения («да»), и незнакомая ему память ответила бы
+    // «Отменено, „undefined“ не тронул».
+    if (!isOwnerReply(waiting)) {
+      await say(ctx, await resolvePendingAction(waiting as PendingAction, trimmed));
+      return;
+    }
   }
 
   // «Меню» — то же, что кнопка «☰ Меню», только словом. Человек, открывший

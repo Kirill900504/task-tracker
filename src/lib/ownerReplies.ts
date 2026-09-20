@@ -295,6 +295,34 @@ export async function handleOwnerCallback(
     return { toast: "Открываю", say: reply.text, sayButtons: reply.buttons };
   }
 
+  // «💬 Ответить» — единственный способ владельцу написать в обсуждение.
+  //
+  // Его свободный текст в боте — поручение, а не реплика (правило про
+  // руководителя в CLAUDE.md), и эта кнопка ровно для того и есть: она
+  // говорит, КУДА адресован следующий текст. Кнопка стояла под каждой
+  // карточкой с самого начала, а разбора у неё не было — нажатие
+  // отвечало «эта кнопка не для вас», и написать в задачу из мессенджера
+  // было нельзя вовсе. Замечено сквозной диагностикой 20.09.2026.
+  if (action.action === "msg" && (action.kind === "task" || action.kind === "meeting")) {
+    const table = action.kind === "task" ? "tasks" : "meetings";
+    const { data } = await admin
+      .from(table)
+      .select("id, title")
+      .eq("id", action.id)
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    const item = data as { id: string; title: string } | null;
+    if (!item) return { toast: action.kind === "task" ? "Эта задача не найдена" : "Эта встреча не найдена" };
+    return {
+      toast: "Пишите — отправлю в обсуждение",
+      say: `💬 Следующее сообщение уйдёт в обсуждение ${action.kind === "task" ? "задачи" : "встречи"} «${item.title}».\nЕго увидят все участники.`,
+      // Живёт это там же, где остальные незакрытые вопросы бота, и по тем
+      // же правилам: два часа и одно сообщение (см. takeAim у коллеги).
+      setPending: { kind: "owner_reply", replyKind: action.kind, itemId: item.id, title: item.title, at: new Date().toISOString() },
+    };
+  }
+
   if (action.action === "oshow" && action.kind === "task") {
     const card = await ownerTaskCard(admin, userId, action.id);
     if (!card) return { toast: "Эта задача не найдена" };
