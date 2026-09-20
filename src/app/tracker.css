@@ -1558,7 +1558,7 @@
      кнопке. Строки одной высоты потому, что высоту задаёт сетка, а не
      самый длинный элемент в ряду. */
   .team-row{
-    display:grid; grid-template-columns:minmax(120px,1fr) auto auto; align-items:center;
+    display:grid; grid-template-columns:minmax(110px,1fr) minmax(0,auto) auto; align-items:center;
     gap:8px 12px; padding:10px 0; border-bottom:1px solid var(--line-soft);
   }
   .team-row:last-child{border-bottom:0;}
@@ -1576,14 +1576,32 @@
      «+ В трекер» стояли рядом разной величины, потому что высоту каждой
      задавал её собственный текст. */
   .team-row .btn-small{min-height:30px; display:inline-flex; align-items:center;}
-  .team-status{font-family:var(--display); font-size:11.5px; color:var(--ink-soft); flex:none; white-space:nowrap;}
+  /* Состояние — одна подпись на человека: где он на связи и что у него с
+     трекером. Переносится (nowrap распирал бы строку до горизонтальной
+     полосы у «в трекере · Автоматизация · администратор»), но остаётся
+     тихой: это ответ на вопрос «что с ним», а не заголовок. */
+  .team-status{
+    font-family:var(--display); font-size:11.5px; color:var(--ink-soft);
+    min-width:0; text-align:right; line-height:1.45; overflow-wrap:anywhere;
+  }
+  /* Кнопка «ещё действия» — та же, что у карточки задачи, и тем же
+     размером: всё редкое у человека живёт за ней. */
+  .team-more{
+    flex:none; width:30px; height:30px; border:0; background:none; color:var(--ink-soft);
+    font-size:18px; line-height:1; cursor:pointer; border-radius:var(--radius-sm);
+  }
+  .team-more:hover{color:var(--ink); background:var(--paper-soft);}
   /* На узком экране три колонки не помещаются никак: имя занимает свою
      строку целиком, а группы встают под ним — по-прежнему каждая целиком. */
   @media (max-width:560px){
     .team-row{grid-template-columns:1fr; gap:8px;}
     .team-cell{justify-content:flex-start;}
+    .team-status{text-align:left;}
   }
-  .team-status.linked{color:var(--long-border);}
+  /* Зелёным — то, что уже работает: человек на связи, человек в трекере.
+     Класс висит на куске подписи, а не на ней целиком: у одного и того же
+     человека мессенджер может быть подключён, а вход отключён. */
+  .team-status .linked{color:var(--long-border);}
   /* Ссылка приглашения живёт под своей строкой, а не под всем списком:
      нажали у шестого человека — ответ там же, где нажали. Отступ слева и
      подложка говорят, что это ответ на кнопку выше, а не новый раздел. */

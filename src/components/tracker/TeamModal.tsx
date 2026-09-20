@@ -1,10 +1,11 @@
 "use client";
 
 import { Fragment, useCallback, useState } from "react";
-import { useColleagues, type ColleagueChannel } from "@/hooks/useColleagues";
+import { useColleagues, type Colleague, type ColleagueChannel } from "@/hooks/useColleagues";
 import { MEMBER_ROLE_LABELS, type MemberRole } from "@/hooks/useWorkspaceRole";
 import { useMaxBot } from "@/hooks/useMaxBot";
 import { useAsk } from "@/components/Ask";
+import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
 import Modal from "./Modal";
 
 // «Команда»: who can be written to, and how to connect the rest.
@@ -79,6 +80,8 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
   // внизу общего списка читается как поломка всего экрана, а не как ответ
   // на кнопку, которую только что нажали.
   const [error, setError] = useState<{ id: string; text: string } | null>(null);
+  // Открытое меню ⋮: чьё оно и от какой кнопки висит.
+  const [menuFor, setMenuFor] = useState<{ id: string; name: string; anchor: DOMRect } | null>(null);
 
   const [copied, setCopied] = useState(false);
 
@@ -162,6 +165,97 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     await unlink(id, channel);
   }
 
+  async function handleDirection(person: Colleague) {
+    const next = await ask.ask({
+      title: "Направление",
+      question: `Какое направление ведёт ${person.name}?`,
+      note: "По направлениям собирается понедельничная сводка.",
+      value: person.direction,
+      placeholder: "Например: Продажи",
+      okText: "Сохранить",
+    });
+    if (next === null) return;
+    await setDirection(person.id, next.trim());
+  }
+
+  async function handleRole(person: Colleague) {
+    const next = await ask.choose({
+      title: "Права",
+      question: `Что может ${person.name}?`,
+      note: "Руководитель ведёт свою работу. Администратор и разработчик вдобавок меняют разделы и ответственных за них. «Команда», приглашения и сами права остаются у вас при любой роли.",
+      options: [
+        { value: "manager", label: "Руководитель" },
+        { value: "admin", label: "Администратор" },
+        { value: "developer", label: "Разработчик" },
+      ],
+    });
+    if (next === null || next === person.role) return;
+    await setMemberRole(person.id, next as MemberRole);
+  }
+
+  async function handleAccessToggle(person: Colleague) {
+    const turnOff = person.member === "active";
+    if (turnOff) {
+      const yes = await ask.confirm({
+        question: `Отключить доступ ${person.name} в трекер?`,
+        note: "Задачи и его отчёты останутся на месте — исчезнет только вход.",
+        okText: "Отключить вход",
+        danger: true,
+      });
+      if (!yes) return;
+    }
+    await setTrackerAccess(person.id, !turnOff);
+  }
+
+  // Что у человека можно сделать помимо «позвать туда, где его ещё нет».
+  //
+  // Список собирается по состоянию, а не рисуется весь: пункт, ведущий к
+  // отказу, хуже отсутствующего (то же правило, что у кнопок бота). Права
+  // спрашиваются только у того, кто уже вошёл, — роль без входа ничего не
+  // значит, разделы меняют из трекера.
+  function menuItemsFor(person: Colleague): ActionMenuItem[] {
+    const items: ActionMenuItem[] = [];
+
+    // Второй мессенджер — запасной канал для того, кто уже на связи в
+    // одном, а не копия: что уходит, уходит в один из них (chatsFor).
+    if (person.linked && !person.telegram) {
+      items.push({ id: "add-tg", label: "Позвать в Telegram", onSelect: () => void handleInvite(person.id, person.name, "telegram") });
+    }
+    if (person.linked && maxBot.available && !person.max) {
+      items.push({ id: "add-max", label: "Позвать в MAX", onSelect: () => void handleInvite(person.id, person.name, "max") });
+    }
+    if (person.member === "invited") {
+      items.push({
+        id: "invite-again",
+        label: "Ссылка в трекер ещё раз",
+        onSelect: () => void handleTrackerInvite(person.id, person.name, person.direction),
+      });
+    }
+    if (person.member === "active" || person.member === "disabled") {
+      items.push({ id: "direction", label: "Направление", onSelect: () => void handleDirection(person) });
+      if (person.member === "active") {
+        items.push({ id: "role", label: "Права", onSelect: () => void handleRole(person) });
+      }
+      // Та же подпись, что у приглашённого: вопрос у Кирилла один — «дать
+      // ссылку ещё раз», — а то, что внутри это другой маршрут (аккаунт уже
+      // есть, заводить второй нельзя), его не касается.
+      items.push({ id: "access-link", label: "Ссылка на новый пароль", onSelect: () => void handleAccessLink(person.id, person.name) });
+      items.push({
+        id: "access",
+        label: person.member === "active" ? "Отключить вход" : "Вернуть вход",
+        onSelect: () => void handleAccessToggle(person),
+      });
+    }
+    if (person.linked && (person.telegram || person.max)) {
+      items.push({
+        id: "unlink",
+        label: `Отключить от ${person.telegram ? "Telegram" : "MAX"}`,
+        onSelect: () => void handleUnlink(person.id, person.name, person.telegram ? "telegram" : "max"),
+      });
+    }
+    return items;
+  }
+
   return (
     <Modal id="teamOverlay" onClose={onClose} dismissOnBackdrop={false}>
       <div className="modal">
@@ -177,168 +271,79 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
               const where = [person.telegram ? "Telegram" : "", person.max ? "MAX" : ""].filter(Boolean).join(" · ");
               return (
                 <Fragment key={person.id}>
-                  {/* Строка человека — сетка из трёх ячеек, а не общий ряд,
-                      в который свалены все кнопки подряд.
-                      Раньше имя, состояние мессенджера, кнопки мессенджера,
-                      состояние доступа и кнопки доступа были соседями в одном
-                      flex-wrap: как только строка переставала помещаться — а
-                      она перестаёт на каждом втором человеке, — перенос рвал
-                      её в произвольном месте, и кнопки вставали то под
-                      именем, то посреди чужой подписи. У четырнадцати человек
-                      подряд это и выглядело «кнопки гуляют как хотят».
-                      Теперь мессенджер и доступ — две отдельные ячейки: они
-                      переносятся целиком и всегда остаются рядом со своей
-                      подписью. */}
+                  {/* Строка человека — сетка из трёх мест: имя, состояние,
+                      действия. Раньше состояний и наборов кнопок было два
+                      (мессенджер и доступ), и они стояли рядом: у того, кто
+                      уже и в мессенджере, и в трекере, строка занимала ТРИ
+                      яруса — «Telegram» и «MAX» разъезжались по разным
+                      строкам, четыре кнопки доступа вставали в два ряда, а
+                      подписи отрывались от своих кнопок. При четырнадцати
+                      людях это тот же «кнопки гуляют как хотят», от которого
+                      сетку и заводили: места в 580 пикселях окна на шесть
+                      кнопок нет и не будет.
+                      Поэтому в строке осталось только то, чего у человека
+                      ЕЩЁ НЕТ (позвать в мессенджер, позвать в трекер), а всё
+                      остальное — направление, права, повторная ссылка,
+                      отключение входа и отвязка мессенджера — живёт в меню
+                      по ⋮, как у карточки задачи. Ни одно действие не
+                      пропало: они делаются раз в квартал, а место занимали в
+                      каждой строке. */}
                   <div className="team-row">
                     <span className="team-name">{person.name}</span>
+
+                    {/* Одно состояние на человека, а не два рядом: сначала
+                        где он на связи, потом что у него с трекером. */}
+                    <span className="team-status">
+                      <span className={person.linked ? "linked" : ""}>
+                        {person.linked ? where + (person.username ? ` · @${person.username}` : "") : "не подключён"}
+                      </span>
+                      {person.member !== "none" && (
+                        <>
+                          {" · "}
+                          <span className={person.member === "active" ? "linked" : ""}>
+                            {MEMBER_LABEL[person.member]}
+                            {person.direction ? ` · ${person.direction}` : ""}
+                            {/* Роль называется только тогда, когда она не
+                                обычная: у тринадцати из четырнадцати строк
+                                слово «руководитель» повторялось бы, ничего
+                                не добавляя. */}
+                            {person.member === "active" && person.role !== "manager"
+                              ? ` · ${MEMBER_ROLE_LABELS[person.role].toLowerCase()}`
+                              : ""}
+                          </span>
+                        </>
+                      )}
+                    </span>
+
                     <div className="team-cell">
-                    {person.linked ? (
-                      <>
-                        <span className="team-status linked">
-                          {where}
-                          {person.username ? ` · @${person.username}` : ""}
-                        </span>
-                        {/* Приглашение во второй мессенджер — для тех, кто уже
-                            на связи в одном: запасной канал, не дубль. */}
-                        {maxBot.available && !person.max && (
-                          <button className="btn btn-small" onClick={() => handleInvite(person.id, person.name, "max")}>
-                            + MAX
-                          </button>
-                        )}
-                        {!person.telegram && (
-                          <button className="btn btn-small" onClick={() => handleInvite(person.id, person.name, "telegram")}>
-                            + Telegram
-                          </button>
-                        )}
-                        <button
-                          className="btn btn-small"
-                          onClick={() => handleUnlink(person.id, person.name, person.telegram ? "telegram" : "max")}
-                        >
-                          Отключить
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="team-status">не подключён</span>
+                      {/* Позвать туда, где человека ещё нет. Это и есть то,
+                          ради чего окно открывают в первый раз. */}
+                      {!person.linked && (
                         <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "telegram")}>
                           Telegram
                         </button>
-                        {maxBot.available && (
-                          <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "max")}>
-                            MAX
-                          </button>
-                        )}
-                      </>
-                    )}
-                    </div>
-
-                    {/* Приглашение в сам трекер — отдельно от мессенджеров:
-                        это логин, а не чат, и одно другого не заменяет. */}
-                    <div className="team-cell">
-                    {person.member === "none" && (
-                      <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name)}>
-                        + В трекер
-                      </button>
-                    )}
-                    {person.member === "invited" && (
-                      <>
-                        <span className="team-status">{MEMBER_LABEL.invited}</span>
-                        <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name, person.direction)}>
-                          Ссылка ещё раз
+                      )}
+                      {!person.linked && maxBot.available && (
+                        <button className="btn btn-small btn-primary" onClick={() => handleInvite(person.id, person.name, "max")}>
+                          MAX
                         </button>
-                      </>
-                    )}
-                    {(person.member === "active" || person.member === "disabled") && (
-                      <>
-                        <span className={person.member === "active" ? "team-status linked" : "team-status"}>
-                          {MEMBER_LABEL[person.member]}
-                          {person.direction ? ` · ${person.direction}` : ""}
-                          {/* Роль называется только тогда, когда она не
-                              обычная: у тринадцати из четырнадцати строк
-                              слово «руководитель» повторялось бы, ничего не
-                              добавляя. */}
-                          {person.role !== "manager" ? ` · ${MEMBER_ROLE_LABELS[person.role].toLowerCase()}` : ""}
-                        </span>
+                      )}
+                      {person.member === "none" && (
+                        <button className="btn btn-small" onClick={() => handleTrackerInvite(person.id, person.name)}>
+                          + В трекер
+                        </button>
+                      )}
+                      {!!menuItemsFor(person).length && (
                         <button
-                          className="btn btn-small"
+                          className="team-more"
                           type="button"
-                          title="Направление"
-                          onClick={() =>
-                            void (async () => {
-                              const next = await ask.ask({
-                                title: "Направление",
-                                question: `Какое направление ведёт ${person.name}?`,
-                                note: "По направлениям собирается понедельничная сводка.",
-                                value: person.direction,
-                                placeholder: "Например: Продажи",
-                                okText: "Сохранить",
-                              });
-                              if (next === null) return;
-                              await setDirection(person.id, next.trim());
-                            })()
-                          }
+                          title="Ещё действия"
+                          aria-label={`Ещё действия: ${person.name}`}
+                          onClick={(e) => setMenuFor({ id: person.id, name: person.name, anchor: e.currentTarget.getBoundingClientRect() })}
                         >
-                          Направление
+                          ⋮
                         </button>
-                        {/* Права. Только у того, кто уже вошёл: роль без
-                            входа ничего не значит — менять разделы можно
-                            только из трекера. */}
-                        {person.member === "active" && (
-                          <button
-                            className="btn btn-small"
-                            type="button"
-                            title="Что человеку позволено сверх своей работы"
-                            onClick={() =>
-                              void (async () => {
-                                const next = await ask.choose({
-                                  title: "Права",
-                                  question: `Что может ${person.name}?`,
-                                  note: "Руководитель ведёт свою работу. Администратор и разработчик вдобавок меняют разделы и ответственных за них. «Команда», приглашения и сами права остаются у вас при любой роли.",
-                                  options: [
-                                    { value: "manager", label: "Руководитель" },
-                                    { value: "admin", label: "Администратор" },
-                                    { value: "developer", label: "Разработчик" },
-                                  ],
-                                });
-                                if (next === null || next === person.role) return;
-                                await setMemberRole(person.id, next as MemberRole);
-                              })()
-                            }
-                          >
-                            Права
-                          </button>
-                        )}
-                        {/* Та же кнопка и те же слова, что у приглашённого:
-                            вопрос у Кирилла один — «дать ссылку ещё раз», —
-                            и то, что внутри это другой маршрут (аккаунт уже
-                            существует, заводить второй нельзя), его не
-                            касается. */}
-                        <button className="btn btn-small" type="button" onClick={() => void handleAccessLink(person.id, person.name)}>
-                          Ссылка ещё раз
-                        </button>
-                        <button
-                          className="btn btn-small"
-                          type="button"
-                          onClick={() =>
-                            void (async () => {
-                              const turnOff = person.member === "active";
-                              if (turnOff) {
-                                const yes = await ask.confirm({
-                                  question: `Отключить доступ ${person.name} в трекер?`,
-                                  note: "Задачи и его отчёты останутся на месте — исчезнет только вход.",
-                                  okText: "Отключить вход",
-                                  danger: true,
-                                });
-                                if (!yes) return;
-                              }
-                              await setTrackerAccess(person.id, !turnOff);
-                            })()
-                          }
-                        >
-                          {person.member === "active" ? "Отключить вход" : "Вернуть вход"}
-                        </button>
-                      </>
-                    )}
+                      )}
                     </div>
                   </div>
 
@@ -378,6 +383,31 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
             })}
           </div>
         )}
+
+        {/* Меню висит на уровне окна, а не внутри строки: строки
+            перерисовываются при каждом ответе сервера, а открытое меню
+            переживать это должно. Пункты пересобираются по свежей строке —
+            «Отключить вход» обязано стать «Вернуть вход» сразу. */}
+        {menuFor &&
+          (() => {
+            const person = colleagues.find((p) => p.id === menuFor.id);
+            const items = person ? menuItemsFor(person) : [];
+            if (!items.length) return null;
+            return (
+              <ActionMenu
+                anchor={menuFor.anchor}
+                title={menuFor.name}
+                items={items.map((item) => ({
+                  ...item,
+                  onSelect: () => {
+                    setMenuFor(null);
+                    item.onSelect();
+                  },
+                }))}
+                onClose={() => setMenuFor(null)}
+              />
+            );
+          })()}
 
         {!maxBot.available && (
           <div className="team-hint" style={{ marginTop: 12 }}>
