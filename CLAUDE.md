@@ -76,8 +76,10 @@ npm run test:workspace  # owner + two throwaway managers against production:
                       # invite, join, a task on two people, review, return,
                       # refusal, meeting revote, idea→task, discussion,
                       # access revoked, граница миграции 0031, потерянный
-                      # доступ (ссылка на новый пароль и «забыли пароль»).
-                      # 101 проверка.
+                      # доступ (ссылка на новый пароль и «забыли пароль»),
+                      # владелец как ПОЛУЧАТЕЛЬ работы (задача от
+                      # руководителя, приёмка, встреча с ним, реплика,
+                      # доходящая до постановщика). 116 проверок.
                       # Written 15.09.2026 because nothing covered any of this.
 node --env-file=.env.local scripts/check-assignments.mjs [--fix]
                       # tasks and meetings that LOOK assigned and are not.

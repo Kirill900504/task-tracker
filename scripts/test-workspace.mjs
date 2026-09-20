@@ -454,6 +454,103 @@ try {
   const { data: outsiderView } = await mgrA.db.from("item_comments").select("id").eq("item_id", privateId);
   check("обсуждение чужой задачи не видно", (outsiderView || []).length === 0, outsiderView);
 
+  // ── Владелец как получатель ────────────────────────────────────────────
+  //
+  // Половина паритета, которой не было: руководитель поручает работу
+  // ВЛАДЕЛЬЦУ. Его строка в списке людей помечена «(я)», и эта метка
+  // означала «строка владельца», а читалась как «этого человека не
+  // касается» — задачу ему ставили, а сказать было некому, позвать на
+  // встречу нельзя вовсе, и ответ в обсуждении до постановщика не
+  // доходил (см. docs/interactions.md).
+  section("Владелец как получатель");
+  const { data: selfRow, error: selfError } = await owner.db
+    .from("assignees")
+    .insert({ user_id: owner.id, name: "Тест Владелец (я)" })
+    .select("id")
+    .single();
+  check("у владельца есть своя строка в списке людей", !selfError && !!selfRow?.id, selfError?.message);
+
+  const toOwnerId = randomUUID();
+  const { error: toOwnerError } = await mgrA.db.from("tasks").insert({
+    id: toOwnerId,
+    user_id: owner.id,
+    title: "Согласовать смету с банком",
+    assignee: "Тест Владелец (я)",
+    deadline: soon,
+    created_by: mgrA.id,
+  });
+  check("руководитель ставит задачу владельцу", !toOwnerError, toOwnerError?.message);
+
+  const { data: ownerPart, error: ownerPartError } = await mgrA.db
+    .from("task_participants")
+    .insert({ user_id: owner.id, task_id: toOwnerId, assignee_id: selfRow.id, role: "executor" })
+    .select("id")
+    .single();
+  check("и ставит его исполнителем", !ownerPartError && !!ownerPart?.id, ownerPartError?.message);
+
+  const ownerAccept = await post(owner, "/api/workspace/report", { action: "accept", participantId: ownerPart.id });
+  check("владелец принимает её в работу", ownerAccept.status === 200, ownerAccept);
+
+  const ownerDone = await post(owner, "/api/workspace/report", {
+    action: "done",
+    participantId: ownerPart.id,
+    comment: "Смета согласована",
+  });
+  check("и отчитывается по ней", ownerDone.status === 200 && ownerDone.body?.awaitingReview === true, ownerDone);
+
+  // Приёмка проходит через ту же рассылку, которая для владельца молчала:
+  // важно не только что маршрут отвечает 200, но и что он доходит до
+  // конца — сообщение исполнителю ищется теперь через lib/reach.
+  const ownerReview = await post(mgrA, "/api/workspace/review", { taskId: toOwnerId, action: "approve", comment: "Принято" });
+  check("постановщик принимает работу владельца", ownerReview.status === 200, ownerReview);
+  const { data: closedForOwner } = await admin.from("tasks").select("status, approval_state").eq("id", toOwnerId).maybeSingle();
+  check("задача закрыта той же записью", closedForOwner?.status === "done" && closedForOwner?.approval_state === "accepted", closedForOwner);
+
+  // Встреча, которой не могло существовать: руководитель зовёт владельца.
+  const withOwnerId = randomUUID();
+  await mgrA.db.from("meetings").insert({
+    id: withOwnerId,
+    user_id: owner.id,
+    title: "Разбор по смете",
+    date: soon,
+    time: "15:00",
+    status: "planned",
+    created_by: mgrA.id,
+  });
+  const { data: ownerInvite, error: ownerInviteError } = await mgrA.db
+    .from("meeting_participants")
+    .insert({ user_id: owner.id, meeting_id: withOwnerId, assignee_id: selfRow.id, role: "participant", response: "none", round: 1 })
+    .select("id")
+    .single();
+  check("руководитель зовёт владельца на встречу", !ownerInviteError && !!ownerInvite?.id, ownerInviteError?.message);
+
+  const ownerVote = await post(owner, "/api/workspace/report", { action: "vote", participantId: ownerInvite.id, response: "yes" });
+  check("и владелец отвечает «буду»", ownerVote.status === 200, ownerVote);
+
+  // Реплика владельца в задаче руководителя: постановщик не участник
+  // собственной задачи, и раньше она не доходила до него ни сразу, ни
+  // сводкой — двое переписывались, и один об этом не знал.
+  const replyId = randomUUID();
+  await owner.db.from("item_comments").insert({
+    id: replyId,
+    user_id: owner.id,
+    item_kind: "task",
+    item_id: toOwnerId,
+    author_user_id: owner.id,
+    author_assignee_id: selfRow.id,
+    body: "Банк просит ещё один документ",
+    source: "app",
+  });
+  const told = await post(owner, "/api/workspace/comment", { commentId: replyId });
+  check("рассылка реплики проходит", told.status === 200, told);
+  const { data: queued } = await admin
+    .from("notification_queue")
+    .select("kind, to_user")
+    .eq("user_id", owner.id)
+    .eq("to_user", mgrA.id)
+    .eq("kind", "comment");
+  check("постановщик узнаёт о реплике в своей задаче", (queued || []).length > 0, queued);
+
   // ── Отключение доступа ─────────────────────────────────────────────────
   section("Отключение доступа");
   await admin.from("workspace_members").update({ status: "disabled", disabled_at: new Date().toISOString() }).eq("member_id", mgrA.id);
