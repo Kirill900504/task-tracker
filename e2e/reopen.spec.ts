@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { createClient } from "@supabase/supabase-js";
 import { pickSelfExecutor } from "./helpers";
 import { userFilePath } from "./userFile";
 
@@ -22,7 +23,7 @@ import { userFilePath } from "./userFile";
 // блок приёмки показывает «Задача принята и закрыта», кнопка есть, и
 // после неё задача действительно уходит из «Завершённых».
 
-const { email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
+const { id: userId, email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
 
 async function login(page: Page) {
   await page.goto("/login");
@@ -45,9 +46,34 @@ async function waitForSaved(page: Page) {
   await expect(page.locator("#syncStatus")).not.toHaveClass(/show/, { timeout: 15_000 });
 }
 
+// Дождаться, пока у свежего аккаунта появится список людей.
+//
+// Он не приходит вместе с трекером: база у нового пользователя пуста, и
+// DEFAULT_ASSIGNEES сеет туда сам движок синхронизации — уже после первой
+// загрузки. До этого момента в форме задачи нет ни одной фишки человека,
+// а задача без исполнителя не сохраняется вовсе. Без явного ожидания тест
+// проверял не «открыть заново», а кто быстрее — сеяние или клик, и падал
+// примерно раз из шести, каждый раз в новом месте.
+//
+// Спрашивается база, а не экран: список виден только внутри открытой
+// формы, то есть ждать его в интерфейсе — значит открывать форму и
+// закрывать её ради ожидания.
+async function waitForPeople(): Promise<void> {
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  for (let i = 0; i < 40; i++) {
+    const { data } = await admin.from("assignees").select("id").eq("user_id", userId).limit(1);
+    if ((data || []).length) return;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error("Список людей у тестового аккаунта так и не появился за 20 секунд");
+}
+
 test("принятая задача открывается заново кнопкой в карточке", async ({ page }) => {
   const title = `E2E открыть заново ${Date.now()}`;
   await login(page);
+  await waitForPeople();
 
   // Задача самому себе: отчитаться и принять работу должен один человек,
   // иначе для теста понадобился бы второй вход.
@@ -59,21 +85,16 @@ test("принятая задача открывается заново кноп
   await expect(card).toBeVisible();
   await waitForSaved(page);
 
-  // Перезагрузка перед ответом — не украшение теста, а первый запуск
-  // нового аккаунта. Список людей у него сеется движком синхронизации в
-  // ту же секунду, а useWorkspaceRole ищет свою строку («(я)») ОДНИМ
-  // запросом на старте: в первый заход он видит пустой список и остаётся
-  // без своей строки до следующей загрузки. У живого трекера люди есть
-  // всегда, поэтому это ничего не стоит там и стоит одного reload здесь.
-  await page.reload();
-  await expect(page.locator("#newTaskBtn")).toBeVisible();
-  // Столбец «Завершённые» — это режим показа, он живёт во вкладке и
-  // перезагрузку не переживает.
-  await showDoneOn(page);
-
   // Отчитаться — из самой карточки, там же, где задача (экрана «Что от вас
   // ждут» больше нет).
-  await page.locator(".task", { hasText: title }).click();
+  //
+  // Перезагрузки здесь нарочно НЕТ, хотя пару часов она стояла: у нового
+  // аккаунта список людей сеется в ту же секунду, и своя строка («(я)»)
+  // находилась только со второй загрузки. Это чинилось в самом трекере
+  // (useWorkspaceRole переспрашивает её, пока список едет), и тест
+  // обязан проверять починку, а не обходить её: первый заход должен
+  // сразу показывать «Это поручено вам».
+  await card.click();
   // Строка участия заводится на сервере (триггер плюс assignExecutors) и
   // приезжает realtime-ом чуть позже самой задачи — до неё блока «Это
   // поручено вам» в карточке просто нет.
