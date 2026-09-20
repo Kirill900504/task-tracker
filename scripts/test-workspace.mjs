@@ -533,6 +533,44 @@ try {
   check("и отмечено как волевое", forcedRow?.approval_state === "accepted" && !!forcedRow?.force_closed_by && !!forcedRow?.force_closed_reason, forcedRow);
   check("закрытая волевым — тоже закрыта", forcedRow?.status === "done", forcedRow);
 
+  // ── Выход из «Завершённых» ─────────────────────────────────────────────
+  //
+  // Доска ходит только вперёд, значит из закрытой задачи выход один —
+  // кнопка в карточке, то есть этот маршрут. Закрытой задачу делают ДВА
+  // поля сразу, и снятие одного оставляло её в «Завершённых» при снятой
+  // галочке: состояние, из которого нет выхода ни мышью, ни кнопкой.
+  const reopenAlien = await post(mgrB, "/api/workspace/review", { action: "reopen", taskId: stuckId });
+  check("чужую закрытую задачу заново не откроешь", reopenAlien.status === 403, reopenAlien);
+
+  const reopened = await post(owner, "/api/workspace/review", { action: "reopen", taskId: stuckId, comment: "Снова нужно" });
+  check("постановщик открывает задачу заново", reopened.status === 200, reopened);
+  const { data: reopenedRow } = await admin
+    .from("tasks")
+    .select("status, approval_state, approved_at, completed_at, force_closed_by, force_closed_reason")
+    .eq("id", stuckId)
+    .maybeSingle();
+  check(
+    "снято всё, что задачу закрывало",
+    reopenedRow?.status === "in_progress" &&
+      reopenedRow?.approval_state === "open" &&
+      !reopenedRow?.approved_at &&
+      !reopenedRow?.completed_at &&
+      !reopenedRow?.force_closed_by &&
+      !reopenedRow?.force_closed_reason,
+    reopenedRow,
+  );
+  const { data: reopenLine } = await admin
+    .from("item_comments")
+    .select("body")
+    .eq("item_id", stuckId)
+    .eq("system", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  // Имя, а не роль: «Постановщик открыл заново» не отвечает на вопрос,
+  // который к этой строке задают, когда постановщиков четырнадцать.
+  check("и записано в хронику именем того, кто это сделал", (reopenLine?.body || "").includes("открыл задачу заново"), reopenLine);
+
   // ── Потерянный доступ ──────────────────────────────────────────────────
   //
   // «Как дать ссылку повторно, если предыдущая утеряна» — вопрос Кирилла от
