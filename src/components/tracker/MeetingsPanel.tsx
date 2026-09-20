@@ -365,8 +365,7 @@ export default function MeetingsPanel({
           // Своя встреча — та, которую собрал сам. Чужую видно, потому что
           // позвали; закрывать, переносить и удалять её вправе организатор.
           canEdit={isMine(modalMeeting, myUserId)}
-          canPropose={!!myUserId}
-          canConfirm={!myUserId}
+          canConfirm={isMine(modalMeeting, myUserId)}
           // Моя строка голосования: по ней в карточке появляются «Буду /
           // Опоздаю / Не смогу». Раньше они были только на отдельном экране.
           myVote={modalMeeting ? votes.forMeeting(modalMeeting.id).find((v) => v.assigneeId === meId) || null : null}

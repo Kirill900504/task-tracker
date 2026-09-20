@@ -9,6 +9,7 @@ import { canVoteNo } from "@/lib/meetingVotes";
 import { fmtDate } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import { withoutSelfMark } from "@/lib/actorName";
+import { confirmIfEveryoneAgreed } from "@/lib/meetingConfirm";
 import { newTaskRow } from "@/lib/newTask";
 import { recordEvent } from "@/lib/itemHistory";
 import { isSelfAssignee } from "@/lib/trackerRows";
@@ -185,7 +186,10 @@ export async function POST(req: Request) {
           ? `✅ ${myName} будет на встрече «${meeting?.title || ""}» (${when})`
           : `❌ ${myName} не сможет быть на «${meeting?.title || ""}» (${when}): ${reason}`,
     );
-    return NextResponse.json({ ok: true });
+    // Предложение, на которое согласились все, становится встречей само —
+    // иначе «все сказали „буду“» ничем не отличается от «никто не ответил».
+    const agreed = await confirmIfEveryoneAgreed(admin, vote.meeting_id);
+    return NextResponse.json({ ok: true, scheduled: agreed.confirmed });
   }
 
   if (!body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig } from "@/lib/botTransport";
 import type { CallbackAction } from "@/lib/colleagues";
-import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
+import { chatsFor, meetingButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague, notifyAuthor } from "@/lib/botDelivery";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
 import { handleOwnerCallback } from "@/lib/ownerReplies";
@@ -60,6 +60,11 @@ export async function handleBotCallback(
     // Сказать исполнителям — сразу и без сводки: от них ждут ответа.
     if (outcome.tellAssignees) {
       await tellAssignees(admin, outcome.tellAssignees.taskId, outcome.tellAssignees.text);
+    }
+    // То же для встречи: назначенное время надо занять в чужом дне, и
+    // узнать об этом человек должен не из календаря на следующий день.
+    if (outcome.tellMeeting) {
+      await tellMeeting(admin, outcome.tellMeeting.meetingId, outcome.tellMeeting.text);
     }
     // Возврат на доработку ждёт слов: следующее сообщение владельца станет
     // причиной. Помнится там же, где все незакрытые вопросы бота.
@@ -166,6 +171,20 @@ async function pendingOf(
   }
   const { data } = await admin.from("assignees").select("pending_action").eq("id", actor.assigneeId).maybeSingle();
   return (data as { pending_action?: unknown } | null)?.pending_action ?? null;
+}
+
+// Тем, кого позвали на встречу. Кнопки остаются ответами: назначенное
+// время можно и не суметь — «Не смогу» после «Назначить» такой же
+// законный ответ, как и до него.
+async function tellMeeting(admin: SupabaseClient, meetingId: string, text: string): Promise<void> {
+  const { data: parts } = await admin.from("meeting_participants").select("assignee_id").eq("meeting_id", meetingId);
+  const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
+  if (!ids.length) return;
+  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+  for (const person of ((people || []) as ColleagueRow[])) {
+    const target = chatsFor(person)[0];
+    if (target) await sendToColleague(target, text, meetingButtons(meetingId));
+  }
 }
 
 async function tellAssignees(admin: SupabaseClient, taskId: string, text: string): Promise<void> {

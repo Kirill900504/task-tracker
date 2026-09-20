@@ -20,6 +20,7 @@ import { useAsk } from "@/components/Ask";
 import { sortNames } from "@/lib/peopleOrder";
 import Modal from "./Modal";
 import Icon from "./Icon";
+import ChipChoice from "./ChipChoice";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS: string[] = (() => {
@@ -49,7 +50,6 @@ export default function MeetingModal({
   onSetStatus,
   onReschedule,
   canEdit = true,
-  canPropose = false,
   canConfirm = false,
   isMove,
   myVote = null,
@@ -70,9 +70,7 @@ export default function MeetingModal({
   // и удалять её вправе организатор. База откажет всё равно — и откажет
   // молча, поэтому кнопок здесь просто нет.
   canEdit?: boolean;
-  // Может только предлагать, а не назначать: руководитель.
-  canPropose?: boolean;
-  // Может назначить предложенное: владелец.
+  // Может назначить предложенное: тот, кто встречу собрал.
   canConfirm?: boolean;
   // Эта новая встреча — перенос прежней. Форма та же, что у любой новой, но
   // называться «Новая встреча» она не должна: человек нажал «Перенести», и
@@ -94,6 +92,16 @@ export default function MeetingModal({
   const [sendState, setSendState] = useState("");
   const [sendAt, setSendAt] = useState<DOMRect | null>(null);
   const [result, setResult] = useState(meeting?.result ?? "");
+  // Назначаем сразу или сперва спрашиваем.
+  //
+  // Раньше это решал не человек, а его место в системе: у владельца
+  // встреча становилась назначенной, у руководителя — всегда только
+  // предложением, и выйти из предложения он не мог ничем. Вопрос
+  // Кирилла 20.09.2026 был именно об этом: «а если Макаров хочет
+  // организовать встречу с Есиной и Мамаковой? он что не может
+  // назначить?». Может. Но выбор остаётся — он и есть разница между
+  // «в 15:00 у нас планёрка» и «давайте в 15:00, кто может?».
+  const [asProposal, setAsProposal] = useState(false);
 
   // Esc закрывает окно — как и любое другое окно трекера.
 
@@ -132,10 +140,11 @@ export default function MeetingModal({
       time: isEditing ? meeting.time : time || "",
       title: isEditing ? meeting.title : trimmedTitle,
       participants: isEditing ? meeting.participants : sanitizeAssigneeList(participants),
-      // Новая встреча от руководителя — предложение: назначить значит
-      // занять чужое время, и такого права у него нет. У владельца всё как
-      // было.
-      status: meeting?.status ?? (canPropose ? "proposed" : "planned"),
+      // Назначена или предложена — как выбрал тот, кто собирает. Раньше
+      // это зависело от того, кто он: владелец назначал, руководитель мог
+      // только предложить и не мог назначить никогда. Право занимать чужое
+      // время у участников одинаковое, а отказаться может каждый.
+      status: meeting?.status ?? (asProposal ? "proposed" : "planned"),
       result: meeting ? result.trim() : "",
       movedToDate: meeting?.movedToDate ?? "",
       resolvedAt: meeting?.resolvedAt ?? "",
@@ -273,17 +282,43 @@ export default function MeetingModal({
                 ))}
               </div>
             </div>
+
+            {/* Назначаю или предлагаю — выбор того, кто собирает, а не его
+                звания. «Назначаю» — обычный случай: время стоит у всех в
+                календаре, напоминания идут, ответы «буду / не смогу»
+                собираются как обычно. «Предлагаю» — когда за время не
+                ручаешься: оно ничьего дня не занимает, а как только все
+                ответят «буду», встреча назначается сама и всем об этом
+                говорят (lib/meetingConfirm). */}
+            <div className="field">
+              <label>Как собираем</label>
+              <ChipChoice
+                id="mKind"
+                value={asProposal ? "proposal" : "planned"}
+                onSelect={(v) => setAsProposal(v === "proposal")}
+                options={[
+                  { value: "planned", label: "Назначаю" },
+                  { value: "proposal", label: "Предлагаю время" },
+                ]}
+              />
+              <div className="field-hint">
+                {asProposal
+                  ? "Время ни у кого не занимается. Когда все ответят «буду» — встреча назначится сама."
+                  : "Встреча встанет в календарь у всех, кого зовёте, и по ней пойдут напоминания."}
+              </div>
+            </div>
           </>
         )}
 
-        {/* Предложенную встречу назначает владелец — то есть тот, чьё
-            право занимать чужое время не под вопросом. До этого она видна,
-            по ней можно ответить, но ни в календарь, ни в напоминания она
-            не попадает. */}
+        {/* Предложенную встречу назначает тот, кто её собрал: право
+            занимать чужое время у него ровно такое же, как у всех. До
+            этого она видна, по ней можно ответить, но ни в календарь, ни в
+            напоминания она не попадает. */}
         {proposed && canConfirm && (
           <div className="field proposed-row">
             <div className="proposed-text">
-              Встречу предложили, но ещё не назначили. Пока она не занимает время и не шлёт напоминаний.
+              Пока это предложение: время ни у кого не занято и напоминаний нет. Когда ответят все, встреча назначится
+              сама — или назначьте сейчас, не дожидаясь.
             </div>
             <button type="button" className="btn btn-small btn-primary" id="confirmMeetingBtn" onClick={() => setStatus("planned")}>
               <Icon name="check" size={15} /> Назначить
@@ -293,11 +328,10 @@ export default function MeetingModal({
         {proposed && !canConfirm && (
           <div className="field proposed-row">
             <div className="proposed-text">
-              {/* Имени здесь больше нет: эту строку читают четырнадцать
-                  человек, и «пока Кирилл не назначит» из них верно ровно
-                  для одного. Кто назначает — сказано ролью. */}
-              Это предложение: время оно не занимает, пока встречу не назначит владелец трекера. Ответить по нему уже
-              можно.
+              {/* Ни имени, ни должности: эту строку читают четырнадцать
+                  человек, и ответ на «когда же она станет встречей»
+                  зависит теперь от них самих, а не от того, кто главный. */}
+              Это предложение: время оно пока не занимает. Ответьте — когда ответят все, встреча назначится.
             </div>
           </div>
         )}

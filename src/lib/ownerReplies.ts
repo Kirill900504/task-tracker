@@ -45,6 +45,10 @@ export type OwnerOutcome = {
   // Кому сказать, что решение принято. Исполнителям — всегда сразу: они
   // ждут ответа, и задержка стоит дороже порядка.
   tellAssignees?: { taskId: string; text: string };
+  // То же для встречи: сказать тем, кого позвали. Отдельное поле, а не
+  // общее с задачами, потому что и список людей берётся из другой
+  // таблицы.
+  tellMeeting?: { meetingId: string; text: string };
   // Возврат на доработку требует слов, и следующее сообщение владельца
   // станет ими. Хранится это там же, где все незакрытые вопросы бота, —
   // в pending_action его строки (миграция 0033 сделала то же самое для
@@ -213,6 +217,7 @@ type MeetingRow = {
   title: string;
   date: string;
   time: string | null;
+  status?: string | null;
   user_id: string;
   from_task_id: string | null;
   result: string | null;
@@ -221,7 +226,7 @@ type MeetingRow = {
 async function loadMeeting(admin: SupabaseClient, actor: BotActor, meetingId: string): Promise<MeetingRow | null> {
   const { data } = await admin
     .from("meetings")
-    .select("id, title, date, time, user_id, from_task_id, result")
+    .select("id, title, date, time, user_id, from_task_id, result, status")
     .eq("id", meetingId)
     .match(actorScope(actor))
     .is("deleted_at", null)
@@ -261,14 +266,27 @@ export async function ownerMeetingCard(admin: SupabaseClient, actor: BotActor, m
   if (silent.length) lines.push("❓ Молчат: " + silent.map((r) => r.name).join(", "));
   if (meeting.result) lines.push("", "📝 " + meeting.result);
 
+  // У предложенной встречи вопрос другой, чем у назначенной: не «как
+  // прошла», а «собираемся ли». Она назначается сама, когда ответят
+  // все (lib/meetingConfirm), но ждать всех не обязательно — кнопка
+  // здесь ровно для этого, и она есть у того, кто встречу собрал.
+  const proposed = meeting.status === "proposed";
+  if (proposed) lines.push("", "Это предложение: время пока не занято. Назначится само, когда ответят все.");
+
+  const actions: BotButton[][] = proposed
+    ? [[{ text: "✅ Назначить", data: encodeCallback("meeting", "mset", meetingId) }]]
+    : [
+        [
+          { text: "✅ Прошла", data: encodeCallback("meeting", "mok", meetingId) },
+          { text: "⚪ Без результата", data: encodeCallback("meeting", "mno", meetingId) },
+        ],
+        [{ text: "📝 Записать итог", data: encodeCallback("meeting", "mrec", meetingId) }],
+      ];
+
   return {
     text: lines.join("\n"),
     buttons: [
-      [
-        { text: "✅ Прошла", data: encodeCallback("meeting", "mok", meetingId) },
-        { text: "⚪ Без результата", data: encodeCallback("meeting", "mno", meetingId) },
-      ],
-      [{ text: "📝 Записать итог", data: encodeCallback("meeting", "mrec", meetingId) }],
+      ...actions,
       [{ text: "💬 Ответить", data: encodeCallback("meeting", "msg", meetingId) }],
       ...ownerNav(),
     ],
@@ -528,6 +546,31 @@ export async function handleOwnerCallback(
     const card = await ownerMeetingCard(admin, actor, action.id);
     if (!card) return { toast: "Эта встреча не найдена" };
     return { toast: "Открываю", say: card.text, sayButtons: card.buttons };
+  }
+
+  // Назначить предложенное — право того, кто собирал: время занимают у
+  // людей, которые могут отказаться, и это та же симметрия, что у
+  // задач. Владелец здесь ничем не отличается от остальных.
+  if (action.action === "mset" && action.kind === "meeting") {
+    const meeting = await loadMeeting(admin, actor, action.id);
+    if (!meeting) return { toast: "Эта встреча не найдена" };
+    if (meeting.status !== "proposed") return { toast: "Она уже назначена" };
+    const { error } = await admin.from("meetings").update({ status: "planned" }).eq("id", action.id);
+    if (error) return { toast: "Не получилось назначить" };
+    const when = fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "");
+    await recordEvent(admin, {
+      userId: actor.spaceId,
+      kind: "meeting",
+      itemId: action.id,
+      text: `✅ Встреча назначена на ${when}`,
+    });
+    return {
+      toast: "Назначено",
+      rewriteTo: `✅ Встреча назначена: «${meeting.title}»\n${when}`,
+      rewriteButtons: [[{ text: "📅 Открыть встречу", data: encodeCallback("meeting", "oshow", action.id) }], ...ownerNav()],
+      // Участникам — сразу: до этой минуты у них ничего не стояло.
+      tellMeeting: { meetingId: action.id, text: `✅ Встреча назначена: «${meeting.title}»\n${when}` },
+    };
   }
 
   if ((action.action === "mok" || action.action === "mno") && action.kind === "meeting") {
