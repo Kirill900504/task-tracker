@@ -18,7 +18,6 @@ export type ExtractedTask = {
   title: string;
   assignee: string;
   deadline: string;
-  priority: "high" | "med";
 };
 
 export type MeetingNotesResult = {
@@ -36,7 +35,7 @@ function systemPrompt(now: Date, assignees: string[]): string {
     "",
     "Пользователь надиктовал итоги прошедшей встречи или совещания. Твоя задача — вытащить из этого рассказа ПОРУЧЕНИЯ (что кому нужно сделать).",
     "Ответь РОВНО ОДНИМ JSON-объектом, без markdown и пояснений, начиная с символа {:",
-    '{"summary":string,"tasks":[{"title":string,"assignee":string,"when":string,"priority":"high"|"med"}]}',
+    '{"summary":string,"tasks":[{"title":string,"assignee":string,"when":string}]}',
     "",
     "summary — одно-два предложения: о чём была встреча и что решили. Без воды.",
     "tasks — только реальные поручения, которые кто-то должен выполнить.",
@@ -48,7 +47,6 @@ function systemPrompt(now: Date, assignees: string[]): string {
     // something it does reliably, and the calendar maths happens in code.
     '  when — КОГДА срок, одним словом из этого списка: "none" (срок не назван), "today", "tomorrow", "day_after", "this_week", "next_week", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday".',
     "        НИКОГДА не пиши сюда дату числом — только слово из списка. Дату подставит система сама.",
-    "  priority — high ТОЛЬКО если про ЭТО конкретное поручение сказано «срочно», «важно», «горит». Про соседнее поручение сказали срочно — на это не переносится. По умолчанию med.",
     "",
     "ПЕРЕЧИСЛИ ВСЕ ПОРУЧЕНИЯ ДО ЕДИНОГО. Пройди рассказ по порядку и выпиши каждое действие, которое кому-то предстоит сделать.",
     "Проверь себя перед ответом: пройдись по КАЖДОМУ упомянутому человеку и убедись, что его поручение попало в список.",
@@ -228,7 +226,6 @@ function parseTasks(parsed: Record<string, unknown>, assignees: string[], now: D
       title,
       assignee: String(input.assignee || ""),
       deadline,
-      priority: input.priority === "high" ? "high" : "med",
     });
   }
 

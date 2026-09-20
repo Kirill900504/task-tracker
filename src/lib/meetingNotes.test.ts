@@ -47,7 +47,7 @@ describe("resolveWhen", () => {
 });
 
 describe("mergeMissedTasks", () => {
-  const t = (title: string): ExtractedTask => ({ title, assignee: "", deadline: "", priority: "med" });
+  const t = (title: string): ExtractedTask => ({ title, assignee: "", deadline: "" });
   const story =
     "Игорь готовит смету по складу. Наталья свяжется с перевозчиком. " +
     "Юра посмотрит договор аренды, сроки не горят.";

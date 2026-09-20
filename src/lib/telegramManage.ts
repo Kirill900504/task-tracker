@@ -23,7 +23,7 @@ export type PendingDelete = { itemType: ManageItemType; id: string; title: strin
 export type PendingCreateTasks = {
   kind: "create_tasks";
   userId: string;
-  tasks: { title: string; assignee: string; deadline: string; priority: "high" | "med" }[];
+  tasks: { title: string; assignee: string; deadline: string }[];
   // Кто ставит. Пусто — владелец (так было всегда). Руководитель, диктующий
   // задачу в бот, ставит её от своего имени: иначе отчёт по ней придёт не
   // ему, и он не сможет её ни принять, ни вернуть.
@@ -198,7 +198,6 @@ export async function resolvePendingAction(
         userId: pending.userId,
         title: t.title,
         assignee: t.assignee || "",
-        priority: t.priority,
         deadline: t.deadline || null,
         createdBy: pending.createdBy || null,
       }),

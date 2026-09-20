@@ -149,7 +149,6 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
       title: String(input.title || ""),
       description: String(input.description || ""),
       assignee: String(input.assignee || ""),
-      priority: String(input.priority || ""),
       deadline: (input.deadline as string) || null,
     });
     const { error } = await ctx.admin.from("tasks").insert(row);
@@ -474,7 +473,6 @@ async function offerTask(
       title: String(it.input.title || "").trim(),
       assignee: String(it.input.assignee || "").trim(),
       deadline: (it.input.deadline as string) || "",
-      priority: (String(it.input.priority || "") === "high" ? "high" : "med") as "high" | "med",
     }))
     .filter((t) => t.title);
   if (!tasks.length) return false;
@@ -487,7 +485,6 @@ async function offerTask(
   const lines = tasks.map((t, i) => {
     const bits = [t.assignee || "без исполнителя"];
     if (t.deadline) bits.push("до " + fmtDate(t.deadline));
-    if (t.priority === "high") bits.push("важно");
     return `${i + 1}) ${t.title} — ${bits.join(", ")}`;
   });
   await say(
