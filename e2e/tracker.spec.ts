@@ -1283,3 +1283,60 @@ test("«Команда» открывается на готовом списке
   await expect(page.locator("#teamList")).toBeVisible({ timeout: 1000 });
   await expect(page.locator("#teamOverlay .empty", { hasText: "Загрузка" })).toHaveCount(0);
 });
+
+// Окно ПК уменьшается ступенями и остаётся окном ПК.
+//
+// Слова Кирилла 20.09.2026: «мне не нравится, как сжимается приложение
+// компьютерной версии… на каком-то этапе сжатия я заметил, что приложение
+// для ПК переделывается под мобильную версию» и «не хочу, чтобы при сжатии
+// или расширении все блоки беспорядочно гуляли».
+//
+// Проверяется здесь не красота, а два свойства, которые ломаются молча:
+// на каждой ширине выше порога телефона ЕСТЬ раскладка (доска на месте,
+// вкладок внизу нет) и НЕТ горизонтальной прокрутки. Второе — главный
+// признак того, что что-то не поместилось: на экране это выглядит как
+// «блоки уехали», а в коде не выглядит никак.
+test("окно ПК перестраивается ступенями, а не превращается в телефон", async ({ page }) => {
+  await login(page);
+  // Без четвёртого столбца: login() включает «Завершённые» для остальных
+  // тестов, а здесь считается именно путь задачи — три столбца.
+  const doneBtn = page.locator("#showDoneCheckbox");
+  if ((await doneBtn.getAttribute("aria-pressed")) === "true") await doneBtn.click();
+
+  // Ширины взяты по ступеням: три колонки, две, две узких, одна.
+  for (const width of [1500, 1200, 1000, 860]) {
+    await page.setViewportSize({ width, height: 900 });
+    // Ступень включается медиазапросом, то есть на следующем кадре.
+    await page.waitForTimeout(300);
+
+    // Это по-прежнему компьютер: доска на месте, вкладок под пальцем нет.
+    await expect(page.locator("#mainCol"), `доска пропала на ${width}`).toBeVisible();
+    await expect(page.locator("#mobileNav"), `на ${width} включились вкладки телефона`).toHaveCount(0);
+    await expect(page.locator("#mobileHeader"), `на ${width} включилась шапка телефона`).toHaveCount(0);
+
+    // Ничего не торчит вбок.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, `на ${width} появилась горизонтальная прокрутка`).toBeLessThanOrEqual(1);
+
+    // Встречи и мысли остаются на всех ступенях: уходит только календарь,
+    // и только там, где колонок стало две.
+    await expect(page.locator("#meetingsPanel"), `встречи пропали на ${width}`).toBeVisible();
+    await expect(page.locator("#ideasPanel"), `мысли пропали на ${width}`).toBeVisible();
+    // Календарь виден до 1100: на первой ступени он не исчезает, а
+    // опускается под мысли — 1280 и 1366 это обычный ноутбук, и пропавшая
+    // панель там читалась бы как поломка.
+    const calVisible = await page.locator("#calPanel").isVisible();
+    expect(calVisible, `календарь на ${width} повёл себя не по ступени`).toBe(width > 1100);
+
+    // И доска остаётся доской: три столбца — это путь задачи, и терять
+    // его на ровном месте нельзя. Ради этого календарь и уступает место.
+    const boardCols = await page.evaluate(
+      () => getComputedStyle(document.querySelector(".columns")!).gridTemplateColumns.split(" ").length,
+    );
+    expect(boardCols, `доска на ${width} потеряла столбец`).toBe(3);
+  }
+
+  // А ниже порога — вкладки, и это уже телефон.
+  await page.setViewportSize({ width: 760, height: 900 });
+  await expect(page.locator("#mobileNav")).toBeVisible();
+});

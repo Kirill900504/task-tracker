@@ -3,17 +3,28 @@
 import { useRef, useState } from "react";
 import PopLayer from "./PopLayer";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
-import Icon from "./Icon";
+import Icon, { type IconName } from "./Icon";
 
 // On a phone the desktop header cost half the screen: a logo, eight buttons
 // wrapped onto three rows, and the quote. Here it is one row — who and when,
-// search, and everything else behind «…», which is where buttons you press
-// once a month belong.
+// and ONE button beside them.
+//
+// Одна, а не две. Слова Кирилла 20.09.2026: «вместо кнопок Лупы и „…“
+// оставить одну кнопку с картинкой команды». Лупа и «⋯» стояли рядом и
+// обе не говорили ничего: «⋯» — это «здесь что-то есть», а поиск на
+// телефоне открывают в разы реже, чем на компьютере, где под него есть
+// клавиша. Теперь кнопка одна, у неё есть лицо (люди — то же, чем
+// подписана «Команда» на компьютере), а поиск стоит первой строкой в её
+// меню и никуда не делся.
 
 export type MobileMenuItem = {
   id: string;
   label: string;
   onSelect: () => void;
+  // Значок строки меню. Эмодзи в подписях здесь больше нет: строки стоят
+  // столбиком, и цветная наклейка от системы рядом со словом в шрифте
+  // интерфейса выглядит приклеенной (правило про значки в CLAUDE.md).
+  icon?: IconName;
   // Shown as the current state rather than an action (notifications already
   // granted, for instance).
   disabled?: boolean;
@@ -21,11 +32,9 @@ export type MobileMenuItem = {
 
 export default function MobileHeader({
   clockText,
-  onSearch,
   items,
 }: {
   clockText: string;
-  onSearch: () => void;
   items: MobileMenuItem[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -44,20 +53,18 @@ export default function MobileHeader({
           <div className="mobile-date">{clockText}</div>
         </div>
       </div>
-      <button className="mobile-icon-btn" id="mobileSearchBtn" aria-label="Поиск" onClick={onSearch}>
-        <Icon name="search" size={17} />
-      </button>
       <button
-        className="mobile-icon-btn"
+        className={"mobile-icon-btn" + (menuOpen ? " active" : "")}
         id="mobileMoreBtn"
-        aria-label="Ещё"
+        aria-label="Команда и настройки"
+        aria-expanded={menuOpen}
         ref={buttonRef}
         onClick={() => {
           setAnchor(buttonRef.current?.getBoundingClientRect() ?? null);
           setMenuOpen((v) => !v);
         }}
       >
-        ⋯
+        <Icon name="users" size={19} />
       </button>
 
       {menuOpen &&
@@ -76,7 +83,8 @@ export default function MobileHeader({
                     item.onSelect();
                   }}
                 >
-                  {item.label}
+                  {item.icon && <Icon name={item.icon} size={16} />}
+                  <span>{item.label}</span>
                 </button>
               ))}
             </div>

@@ -20,6 +20,7 @@ import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useAsk } from "@/components/Ask";
 import { isMine } from "@/lib/ownership";
 import { useDropHandler } from "./dnd/TrackerDnd";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 export default function MeetingsPanel({
   myUserId = "",
@@ -73,6 +74,7 @@ export default function MeetingsPanel({
   // задач: и карточки, и форма читают отсюда.
   const votes = useMeetingVotes();
   const ask = useAsk();
+  const isMobile = useIsMobile();
   const [modalState, setModalState] = useState<{ open: boolean; meeting: Meeting | null; prefill?: MeetingPrefill }>({ open: false, meeting: null });
   // Перенос, начатый из формы встречи: та встреча, которую надо закрыть как
   // перенесённую, когда новая будет сохранена.
@@ -276,29 +278,41 @@ export default function MeetingsPanel({
 
   return (
     <div className="panel dash-panel" id="meetingsPanel" data-panel-id="meetingsPanel">
-      <div className="dash-panel-head">
-        <div className="panel-title">
-          Встречи <span className="count">{sorted.length + needRecap.length}</span>
-        </div>
-        {/* Иконка завершённых — рядом с «+», а не переключателем в
-            шапке трекера: это вопрос к ЭТОЙ панели, и отвечать на него
-            должна она. */}
-        {resolved.length > 0 && (
-          <button
-            type="button"
-            className="panel-done-btn"
-            id="meetingsDoneBtn"
-            title="Прошедшие и отменённые встречи"
-            onClick={() => setDoneOpen(true)}
-          >
-            <Icon name="check" size={14} />
-            <span className="panel-done-count">{resolved.length}</span>
+      {/* На телефоне этой строки нет вовсе.
+          Слова Кирилла 20.09.2026: «убрать полоску с „встречи“, количество
+          встреч и кнопкой для создания новой, это всё лишнее, так как итак
+          понятно, что мы в блоке встречи». Каждая из трёх вещей в ней уже
+          сказана в другом месте: название — подписью вкладки внизу, число —
+          цифрой на той же вкладке, «+» — круглой кнопкой, которая на
+          телефоне и так заводит встречу именно здесь (см. NewTracker).
+          Прошедшие встречи с телефона не показываются по его же слову
+          («завершённые в мобильной версии поскрывай»): это чтение задним
+          числом, и место ему на компьютере. */}
+      {!isMobile && (
+        <div className="dash-panel-head">
+          <div className="panel-title">
+            Встречи <span className="count">{sorted.length + needRecap.length}</span>
+          </div>
+          {/* Иконка завершённых — рядом с «+», а не переключателем в
+              шапке трекера: это вопрос к ЭТОЙ панели, и отвечать на него
+              должна она. */}
+          {resolved.length > 0 && (
+            <button
+              type="button"
+              className="panel-done-btn"
+              id="meetingsDoneBtn"
+              title="Прошедшие и отменённые встречи"
+              onClick={() => setDoneOpen(true)}
+            >
+              <Icon name="check" size={14} />
+              <span className="panel-done-count">{resolved.length}</span>
+            </button>
+          )}
+          <button className="btn btn-primary btn-small" id="addMeetingBtn" title="Новая встреча (B)" onClick={() => setModalState({ open: true, meeting: null, prefill: { date: selectedDay ?? todayStr() } })}>
+            +
           </button>
-        )}
-        <button className="btn btn-primary btn-small" id="addMeetingBtn" title="Новая встреча (B)" onClick={() => setModalState({ open: true, meeting: null, prefill: { date: selectedDay ?? todayStr() } })}>
-          +
-        </button>
-      </div>
+        </div>
+      )}
       {/* Что прошло и не закрыто — первым: пока итога нет, встреча не
           закончилась, чем бы она ни закончилась на самом деле. */}
       {needRecap.length > 0 && (

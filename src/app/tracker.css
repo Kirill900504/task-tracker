@@ -174,15 +174,99 @@
     width:100%; margin:0 auto; padding:20px clamp(16px,3vw,40px);
     display:grid; grid-template-columns:300px 1fr 320px; gap:20px; align-items:start;
   }
-  @media (max-width:1000px){
-    .layout{grid-template-columns:1fr !important;}
-    /* Zone order is fixed on mobile (tasks first) regardless of how panels
-       were rearranged on desktop — a narrow screen has no "left/right" for
-       that arrangement to mean anything, so it falls back to the one order
-       that always makes sense. */
-    [data-zone="left"]{order:2;}
-    [data-zone="center"]{order:1;}
-    [data-zone="right"]{order:3;}
+  /* ---------- Ступени сжатия окна ---------------------------------
+     Окно ПК уменьшается ступенями, а не падает разом в телефон.
+
+     Слова Кирилла 20.09.2026: «мне не нравится, как сжимается приложение
+     компьютерной версии… при сжатии скрывай самые менее приоритетные
+     панели и блоки… и на каком-то этапе сжатия я заметил, что приложение
+     для ПК переделывается под мобильную версию, а есть ли более
+     эффективные альтернативы сжатия, чтобы на более читабельную версию
+     для ПК просто перестраивалось». И следом второе, про то же: «не хочу,
+     чтобы при сжатии или расширении все блоки беспорядочно гуляли».
+
+     Было так: до 1000px три колонки, ниже — вкладки телефона. То есть
+     окно, развёрнутое на половину монитора (а это ровно 960px на обычном
+     FHD), превращалось в телефон при живых мыши и клавиатуре, а между
+     1000 и 1150 доска успевала рассыпаться в две колонки без всякого
+     повода. Отсюда и «беспорядочно гуляют»: порогов было четыре, стояли
+     они в разных местах файла и ни один не знал о соседях.
+
+     Теперь порог один на ступень, и ступени перечислены здесь подряд,
+     сверху вниз — это единственное место, где написано, что во что
+     превращается:
+
+       ≥1400   три колонки: «когда» | «что» | «о чём»
+       1100…1400  две колонки: доска во всю высоту, справа встречи, под
+                  ними мысли, под ними КАЛЕНДАРЬ — он опускается в самый
+                  низ, потому что из всего на экране занимает больше всех
+                  места на единицу смысла: тридцать клеток ради выбора
+                  дня, при том что у каждой встречи дата написана на ней
+                  самой.
+       900…1100   то же, но календаря нет вовсе.
+       800…900    одна колонка: доска, под ней встречи, под ними мысли.
+       <800       вкладки внизу (мобильная оболочка, MOBILE_QUERY).
+
+     Порог в 1400, а не в 1100, выбран доской, и это стоило одного
+     замера. При 1200 три боковые колонки оставляют доске 536 пикселей —
+     то есть два столбца вместо трёх, и «На приёмке» уезжает под
+     остальные. Календарь и доска не помещаются вдвоём, и выбор между
+     ними очевиден: доска — это то, ради чего трекер открывают. Отдав ей
+     ширину, получаем 822 пикселя и три полноценных столбца.
+
+     Но исчезать календарю рано: 1280 и 1366 — это обычный ноутбук, а не
+     «сжатое окно», и пропавшая панель там читалась бы как поломка (на
+     этом сразу упал e2e: полный круг проверок ищет клетку календаря при
+     стандартных 1280). Поэтому на первой ступени он не исчезает, а
+     опускается под мысли: ширины доске не занимает, найти его можно
+     прокруткой. Исчезает он ступенью ниже, где места действительно нет.
+
+     Чтобы панель могла переехать из одной колонки в другую, зоны на этих
+     ступенях объявлены display:contents: сами обёртки перестают быть
+     ящиками, и раскладкой управляют сами слоты. Порядок в разметке при
+     этом не меняется — меняется только то, куда встаёт каждый слот.
+
+     Приоритет везде один и тот же и взят из его же слов о том, чем
+     пользуются: задачи → встречи → мысли → календарь. Уходит всегда
+     последнее, и уходит целиком, а не сплющивается в нечитаемое.
+
+     Сама доска при этом считает свою ширину САМА, а не по ширине окна —
+     см. @container ниже. Это и есть ответ на «блоки не должны гулять»:
+     столбцы перестраиваются, когда тесно им, а не когда тесно окну. */
+  @media (max-width:1600px){
+    .layout{grid-template-columns:270px minmax(0,1fr) 290px; gap:16px;}
+  }
+  @media (max-width:1400px){
+    .layout{grid-template-columns:minmax(0,1fr) 290px;}
+    /* Зоны перестают быть ящиками — местом в сетке распоряжаются сами
+       панели. Иначе календарь не смог бы уйти из левой колонки вниз
+       правой: он лежит в одной обёртке со встречами. */
+    .dash-zone{display:contents;}
+    /* Доска слева и во всю высоту; справа встречи, мысли и календарь —
+       ровно в порядке приоритета. Номера строк, а не порядок в потоке:
+       перенос по потоку рвал бы колонку в произвольном месте — та же
+       причина, по которой строка команды и строка раздела собраны
+       сеткой. */
+    [data-panel-slot="mainCol"]{grid-column:1; grid-row:1 / span 3;}
+    [data-panel-slot="meetingsPanel"]{grid-column:2; grid-row:1;}
+    [data-panel-slot="ideasPanel"]{grid-column:2; grid-row:2;}
+    [data-panel-slot="calPanel"]{grid-column:2; grid-row:3;}
+  }
+  /* Ниже 1100 боковая колонка ужимается ещё, чтобы доска не потеряла
+     третий столбец: 1000 − 260 оставляет ей 648, то есть ровно те три
+     столбца, ради которых календарь и уступает место. Здесь он уже
+     уходит совсем: выбрать день по-прежнему можно там, где это нужно, —
+     в форме задачи и в форме встречи. */
+  @media (max-width:1100px){
+    .layout{grid-template-columns:minmax(0,1fr) 260px; gap:14px;}
+    [data-panel-slot="mainCol"]{grid-row:1 / span 2;}
+    [data-panel-slot="calPanel"]{display:none;}
+  }
+  @media (max-width:900px){
+    .layout{grid-template-columns:minmax(0,1fr); gap:14px; padding:14px 16px;}
+    [data-panel-slot="mainCol"]{grid-column:1; grid-row:1;}
+    [data-panel-slot="meetingsPanel"]{grid-column:1; grid-row:2;}
+    [data-panel-slot="ideasPanel"]{grid-column:1; grid-row:3;}
   }
   .dash-zone{min-width:0; border-radius:10px; transition:background .15s ease, box-shadow .15s ease;}
   /* One scrollbar for the whole tracker: the side columns are part of the
@@ -218,7 +302,7 @@
   /* Mobile quick-add: a floating thumb-reachable button + bottom sheet
      replaces the toolbar bar (which needs scrolling up to reach), so hide
      the now-empty toolbar slot rather than leave a blank gap. */
-  @media (max-width:1000px){
+  @media (max-width:800px){
     #quickAddSlot{display:none;}
   }
   .quick-add-fab{
@@ -329,13 +413,21 @@
   .cal-filter-note{display:flex; align-items:center; gap:8px; margin-top:7px; font-size:12px; color:var(--ink-soft); flex-wrap:wrap;}
 
   /* Ideas */
-  .idea-add{display:flex; gap:6px; margin-bottom:8px;}
-  .idea-add{align-items:flex-start;}
+  /* Строка мысли: поле и микрофон стоят на одной линии и одной высоты.
+     Слова Кирилла 20.09.2026: «в разделе мысли выровнять строку ввода».
+     Разъезжалось потому, что высоту поля задавали отступы и кегль
+     (получалось ~35px), а кнопка была нарисована квадратом в 40 — и на
+     эти пять пикселей она торчала вверх, при том что выравнивание по
+     верхнему краю тут обязательно: поле растёт вниз по мере набора, и
+     привязанная к его середине кнопка уезжала бы вместе с текстом.
+     Поэтому высота задана обоим и одна. */
+  .idea-add{display:flex; gap:6px; margin-bottom:8px; align-items:flex-start;}
   .idea-add input, .idea-add .auto-grow{flex:1; min-width:0;}
   .idea-add .auto-grow{
-    padding:8px 10px; border:1px solid var(--line); border-radius:6px;
-    font-family:var(--sans); font-size:13px; background:var(--paper-soft); color:var(--ink);
+    min-height:38px; padding:9px 11px; border:1px solid var(--line); border-radius:var(--radius-sm);
+    font-family:var(--sans); font-size:13px; line-height:1.35; background:var(--paper-soft); color:var(--ink);
   }
+  .idea-add .field-mic-btn{width:38px; height:38px;}
   .idea-item{
     border:1px solid var(--line-soft); border-radius:var(--radius-md); padding:8px 10px; margin-bottom:5px;
     display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; align-items:flex-start; background:var(--paper-soft);
@@ -404,17 +496,22 @@
      решения. Четвёртый столбец появляется вместе с «Завершёнными». */
   .columns{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; align-items:start;}
   .columns.with-done{grid-template-columns:repeat(4, minmax(0, 1fr));}
-  /* Когда трём столбцам тесно, приёмка уходит вниз во всю ширину, а не
-     жмётся третьей узкой колонкой под «Краткосрочные»: полоса во всю ширину
-     читается как отдельный раздел, а четверть ширины — как обрезанный. */
-  @media (max-width:1150px){ .columns, .columns.with-done{grid-template-columns:1fr 1fr;} }
-  @media (max-width:640px){ .columns, .columns.with-done{grid-template-columns:1fr;} }
-  /* Safety net for the panel constructor: if the Tasks panel is dragged
-     into a narrow zone, fall back to one column based on the PANEL's own
-     width rather than the viewport's — a container query, not a media
-     query, is what makes that distinction possible. */
-  @container (max-width:480px){ .columns, .columns.with-done{grid-template-columns:1fr;} }
-  @container (max-width:760px){ .columns, .columns.with-done{grid-template-columns:1fr 1fr;} }
+  /* Доска считает свою ширину САМА — по ширине панели, а не окна.
+     Это @container, а не @media, и разница здесь принципиальная.
+
+     По окну было так: одно правило ломало доску на 1150px, другое — на
+     640, а сама панель в это время могла быть и широкой, и узкой,
+     смотря какая ступень раскладки включилась. Получалось, что столбцы
+     перестраивались не тогда, когда им тесно, а тогда, когда изменилось
+     число, о котором они ничего не знают, — то самое «блоки беспорядочно
+     гуляют» из слов Кирилла 20.09.2026. Панель объявлена контейнером
+     (container-type:inline-size на .dash-panel), поэтому спросить её
+     собственную ширину можно прямо здесь.
+
+     Пороги — по ширине карточки, а не по кругу: ниже 200px на столбец
+     название задачи начинает переноситься по слогам. */
+  @container (max-width:620px){ .columns, .columns.with-done{grid-template-columns:1fr 1fr;} }
+  @container (max-width:400px){ .columns, .columns.with-done{grid-template-columns:1fr;} }
   .column{min-width:0;}
   /* На приёмке ждут решения — столбец помечен тем же цветом, что и сама
      пометка на карточке, чтобы взгляд находил его без чтения заголовка. */
@@ -505,8 +602,8 @@
   /* Окно «Загрузка». Уже карточки задачи: в нём одна колонка строк, и
      широкое окно растянуло бы имя от края до края. */
   .load-modal{max-width:520px;}
-  @media (max-width:768px){ .filter-pill{min-height:34px;} }
-  @media (max-width:768px){
+  @media (max-width:800px){ .filter-pill{min-height:34px;} }
+  @media (max-width:800px){
     .section-tabs{overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; -webkit-overflow-scrolling:touch;}
     .section-tab{min-height:32px;}
   }
@@ -901,7 +998,7 @@
      сплошной цвет кричал бы на весь экран. */
   .btn-danger{background:var(--high); border-color:var(--high); color:#2A1A15; box-shadow:var(--shadow-1);}
   .btn-danger:hover{opacity:.92; box-shadow:0 0 0 3px var(--high-bg), var(--shadow-1);}
-  @media (max-width:768px){
+  @media (max-width:800px){
     .overlay.ask-overlay{padding:16px; align-items:center; z-index:600;}
     .modal.ask-modal{
       width:100%; max-width:420px; min-height:0; margin:auto;
@@ -1186,7 +1283,7 @@
   .dd-option.selected{background:var(--accent-soft); color:var(--accent);}
   .dd-check{flex:none; font-size:12px; color:var(--accent);}
   /* На телефоне строка списка — цель для пальца, а не для курсора. */
-  @media (max-width:768px){ .dd-option{padding:12px 12px; font-size:14px;} .dd-trigger{padding:11px 13px;} }
+  @media (max-width:800px){ .dd-option{padding:12px 12px; font-size:14px;} .dd-trigger{padding:11px 13px;} }
 
   /* Popover: create a task/meeting on a clicked calendar date */
   .date-popover{
@@ -1238,7 +1335,7 @@
      экране обязаны выглядеть одной и той же вещью. */
   .mini-cal-day.today{color:var(--accent); font-weight:700; border-color:var(--accent);}
   .mini-cal-day.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:700; box-shadow:var(--shadow-1);}
-  @media (max-width:768px){ .mini-cal{max-width:none;} .mini-cal-day{min-height:38px;} }
+  @media (max-width:800px){ .mini-cal{max-width:none;} .mini-cal-day{min-height:38px;} }
   /* Всплывающий вариант (в карточке задачи): строка с датой, календарь — по
      нажатию. Разворачивать его там всегда значило растянуть форму на
      полтора экрана ради поля, которое заполняют не каждый раз. */
@@ -1288,7 +1385,7 @@
   .mini-cal-trigger:hover, .mini-cal-trigger.open{border-color:var(--accent); color:var(--accent);}
   .mini-cal-trigger.open{background:var(--accent-soft);}
   /* На телефоне шторка прижимается к краям и даёт дню палец целиком. */
-  @media (max-width:768px){
+  @media (max-width:800px){
     .cal-sheet-scrim{padding:12px;}
     .cal-sheet .mini-cal{width:100%;}
     .cal-sheet .mini-cal-day{min-height:40px;}
@@ -1583,7 +1680,7 @@
      Всё внутри одного медиазапроса: десктоп этого не видит вообще.
      Порог обязан совпадать с MOBILE_QUERY в useIsMobile — см. комментарий
      там о дыре между 768 и 1150. */
-  @media (max-width:1000px){
+  @media (max-width:800px){
     body{ padding:0; }
 
     /* Шапка — одна строка вместо трёх */
@@ -1614,28 +1711,54 @@
       padding:12px 12px calc(76px + env(safe-area-inset-bottom, 0px));
       min-height:calc(100vh - 120px);
     }
+    /* Нижняя панель — главный орган управления на телефоне, и выглядеть
+       она должна соответственно. Слова Кирилла 20.09.2026: «нижнюю панель
+       сделать более привлекающей внимание и современной (с нормальными
+       иконками)».
+       Было: серая полоска в цвет фона, эмодзи из системного шрифта и
+       двухпиксельная чёрточка над активной вкладкой — на телефоне такая
+       чёрточка читается как край экрана, а не как «вы здесь».
+       Стало: панель приподнята над содержимым тенью и размытием, значки
+       контурные (одним набором, см. Icon.tsx), а «вы здесь» — заливка
+       под значком, то есть фигура, которую видно боковым зрением. */
     .mobile-nav{
       position:fixed; left:0; right:0; bottom:0; z-index:210;
       display:grid; grid-template-columns:repeat(5, 1fr);
-      background:var(--paper); border-top:1px solid var(--line);
-      padding-bottom:env(safe-area-inset-bottom, 0px);
+      background:color-mix(in srgb, var(--paper) 88%, transparent);
+      backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+      border-top:1px solid var(--line-soft);
+      box-shadow:0 -8px 24px rgba(0,0,0,.28);
+      padding:6px 4px env(safe-area-inset-bottom, 0px);
     }
     .mobile-tab{
-      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
-      padding:9px 2px 8px; border:0; background:none; cursor:pointer;
-      color:var(--ink-soft); font-family:var(--sans); font-size:10.5px;
-      border-top:2px solid transparent; margin-top:-1px;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+      padding:6px 2px 7px; border:0; background:none; cursor:pointer;
+      color:var(--ink-soft); font-family:var(--display); font-size:10.5px; font-weight:600;
+      -webkit-tap-highlight-color:transparent;
     }
-    .mobile-tab.active{color:var(--accent); border-top-color:var(--accent);}
-    .mobile-tab-icon{position:relative; font-size:17px; line-height:1;}
+    .mobile-tab.active{color:var(--accent);}
+    .mobile-tab-icon{
+      position:relative; display:flex; align-items:center; justify-content:center;
+      width:46px; height:28px; border-radius:999px;
+      transition:background .16s ease, color .16s ease;
+    }
+    /* Пилюля под значком — та же форма, что у активного фильтра на доске,
+       чтобы «выбрано» везде в трекере выглядело одинаково. */
+    .mobile-tab.active .mobile-tab-icon{background:var(--accent-soft);}
+    .mobile-tab:active .mobile-tab-icon{transform:scale(.92);}
     .mobile-tab-badge{
-      position:absolute; top:-6px; left:11px;
-      min-width:16px; height:16px; padding:0 4px; border-radius:8px;
+      position:absolute; top:-3px; right:2px;
+      min-width:17px; height:17px; padding:0 4px; border-radius:9px;
       background:var(--high); color:#2A130D; font-family:var(--display); font-size:10px; font-weight:700;
       display:flex; align-items:center; justify-content:center;
+      box-shadow:0 0 0 2px var(--paper);
     }
     .mobile-tab.active .mobile-tab-badge{background:var(--accent); color:#F3F8FA;}
     .mobile-tab-label{line-height:1;}
+    @media (prefers-reduced-motion: reduce){
+      .mobile-tab-icon{transition:none;}
+      .mobile-tab:active .mobile-tab-icon{transform:none;}
+    }
 
     /* Панели внутри вкладок: без рамок и ручек перетаскивания —
        конструктор панелей на телефоне не нужен. */
@@ -1677,6 +1800,13 @@
     }
     .today-empty-title{font-size:16px; color:var(--ink); margin-bottom:4px;}
     .today-empty-sub{font-size:13px; color:var(--ink-soft); margin-bottom:14px;}
+
+    /* Строка мысли под палец: те же 44px, что у всех целей касания, и
+       кегль 16 — ниже него встроенный браузер iOS приближает страницу
+       при фокусе, а приближать её больше нечем (масштаб выключен,
+       см. viewport в layout.tsx). */
+    .idea-add .auto-grow{min-height:44px; font-size:16px; padding:11px 12px;}
+    .idea-add .field-mic-btn{width:44px; height:44px;}
 
     /* Карточки под палец */
     .task{padding:14px 12px; margin-bottom:9px;}
@@ -1729,33 +1859,42 @@
     .search-results{max-height:none;}
   }
 
-  @media (max-width:768px){
+  @media (max-width:800px){
     /* Панель задач на телефоне: заголовок дублирует вкладку, ручка панелей
        не нужна — остаётся только то, чем пользуются. */
     .mobile-main #mainCol > .dash-panel-head{display:none;}
 
-    .toolbar{gap:8px;}
-    .toolbar #newTaskBtn{flex:1; min-height:46px; font-size:15px;}
-    .toolbar-filter-toggle{position:relative; min-height:46px;}
-    .toolbar-filter-dot{
-      position:absolute; top:8px; right:8px; width:7px; height:7px; border-radius:50%;
-      background:var(--accent);
+    /* Полоса над доской на телефоне: «+», «Все / Мне / Я поручил»,
+       «Просрочено» — и больше ничего.
+
+       Слова Кирилла 20.09.2026: «вместо огромной кнопки „+ Новая задача“
+       оставить маленькую кнопочку „+“ для создания новой задачи, справа
+       отображать только кнопку просрочено и „Все/мне/я поручил“,
+       остальное скрыть». Раньше здесь была кнопка во всю ширину, под ней
+       вторая строка с «Фильтрами», а за ними разворачивалось ещё пять
+       кнопок — полтора экрана до первой задачи. Теперь полоса помещается
+       в одну строку, а сворачивать стало нечего: вместе с «Фильтрами»
+       ушли и они сами (см. TasksPanel).
+       Полоса не переносится (nowrap) и прокручивается вбок, если
+       «Просрочено» не поместилось рядом с переключателем: перенос рвал бы
+       ряд каждый раз в новом месте — то же правило, что у строки команды
+       и строки раздела. */
+    .toolbar{
+      gap:8px; padding:8px; flex-wrap:nowrap; overflow-x:auto;
+      -webkit-overflow-scrolling:touch; scrollbar-width:none;
     }
-    /* Свёрнуто — на экране только «Новая задача» и «Фильтры».
-       Список здесь длиннее, чем кажется нужным, и каждая строка в нём
-       стоит отдельного случая: фильтр, забытый в свёрнутой панели, виден
-       на экране и не выключается ничем. */
-    .toolbar.collapsed select,
-    .toolbar.collapsed .toolbar-dd,
-    .toolbar.collapsed .filter-pill,
-    .toolbar.collapsed .load-pill,
-    .toolbar.collapsed .view-switch,
-    .toolbar.collapsed .check-wrap{display:none;}
-    .toolbar select, .toolbar .dd-trigger{min-height:44px; font-size:16px;}
-    .toolbar .check-wrap{min-height:40px;}
+    .toolbar::-webkit-scrollbar{display:none;}
+    .toolbar .view-switch, .toolbar .filter-pill{flex:none;}
+    /* «+» — квадрат под палец, ровно той же высоты, что соседи в ряду. */
+    .toolbar-add{
+      flex:none; width:44px; height:44px; padding:0;
+      display:inline-flex; align-items:center; justify-content:center;
+    }
+    .toolbar .filter-pill{min-height:44px;}
+    .toolbar .view-switch-btn{min-height:40px; padding:0 12px;}
   }
 
-  @media (max-width:768px){
+  @media (max-width:800px){
     /* Свайп по карточке */
     .swipe-wrap{position:relative; overflow:hidden; border-radius:var(--radius-md); margin-bottom:9px;}
     .swipe-wrap .task{margin-bottom:0; transition:transform .18s ease;}
@@ -2462,7 +2601,7 @@
   .board-tab-count{font-variant-numeric:var(--nums); opacity:.8;}
   .columns-single{grid-template-columns:1fr !important;}
   /* Заголовок столбца на телефоне не нужен: его название уже на кнопке. */
-  @media (max-width:1000px){ .columns-single .section-title{display:none;} }
+  @media (max-width:800px){ .columns-single .section-title{display:none;} }
 
   /* ---------- Каркас первых долей секунды (BootSkeleton) --------------
      Слова Кирилла 20.09.2026: «сперва появляется чёрный экран и в левом
@@ -2500,5 +2639,24 @@
   @media (prefers-reduced-motion: reduce){
     .skel-line, .skel-day, .skel-pill, .skel-logo{animation:none;}
   }
-  @media (max-width:1150px){ .skel-layout{grid-template-columns:1fr;} .skel-board{grid-template-columns:1fr 1fr;} }
-  @media (max-width:1000px){ .skel-layout{grid-template-columns:1fr;} .skel-board{grid-template-columns:1fr;} .skel-col:last-child{display:none;} }
+  /* Каркас обязан ломаться ровно там же, где настоящая раскладка (см.
+     «Ступени сжатия окна»). Иначе первый кадр показывает одно, второй —
+     другое, и получается тот самый прыжок блоков, от которого ступени и
+     заводили: каркас живёт доли секунды, но именно эти доли секунды
+     человек и видит при каждом запуске. */
+  @media (max-width:1600px){ .skel-layout{grid-template-columns:270px minmax(0,1fr) 290px;} }
+  @media (max-width:1400px){
+    .skel-layout{grid-template-columns:minmax(0,1fr) 290px;}
+    .skel-col-wide{grid-column:1; grid-row:1 / span 2;}
+    .skel-col:first-child{grid-column:2; grid-row:1;}
+    .skel-col:last-child{grid-column:2; grid-row:2;}
+  }
+  /* Календарь уходит там же, где и в настоящей раскладке. */
+  @media (max-width:1100px){ .skel-layout{grid-template-columns:minmax(0,1fr) 260px;} .skel-cal{display:none;} }
+  @media (max-width:900px){
+    .skel-layout{grid-template-columns:minmax(0,1fr);}
+    .skel-col-wide{grid-column:1; grid-row:1;}
+    .skel-col:first-child{grid-column:1; grid-row:2;}
+    .skel-col:last-child{grid-column:1; grid-row:3;}
+  }
+  @media (max-width:800px){ .skel-board{grid-template-columns:1fr;} .skel-col:last-child{display:none;} }

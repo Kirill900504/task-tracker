@@ -35,9 +35,13 @@ export default function ReviewScreen({ tasks, onOpen }: { tasks: Task[]; onOpen:
 
   return (
     <div className="review-screen">
-      <div className="section-title">
-        Ждут вашей приёмки <span className="count">{list.length}</span>
-      </div>
+      {/* Заголовка «Ждут вашей приёмки N» здесь нет, и это слова Кирилла
+          20.09.2026: «убирай „ждут вашей приёмки“ и кол-во, и так понятно,
+          что мы в разделе задач, которые ждут приёмки». Он прав дважды:
+          строка повторяла подпись вкладки, под которой стоит, а число уже
+          горит на самой вкладке — то есть она занимала первый экран
+          телефона, не сказав ничего нового (правило «каждый сантиметр
+          экрана — рабочий»). */}
       {list.map((t) => (
         <button key={t.id} type="button" className="review-row" onClick={() => onOpen(t)}>
           <span className="review-row-title">{t.title}</span>

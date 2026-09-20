@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Idea } from "@/types/tracker";
 import { sortIdeasForList } from "@/lib/ideaDisplay";
 import { isMine } from "@/lib/ownership";
@@ -12,6 +12,7 @@ import Icon from "./Icon";
 import type { useToasts } from "@/hooks/useToasts";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 export default function IdeasPanel({
   myUserId = "",
@@ -21,6 +22,7 @@ export default function IdeasPanel({
   toasts,
   onConvertToTask,
   onConvertToMeeting,
+  focusAddSignal = 0,
 }: {
   // Свой auth-id: чужую мысль прислали тебе, а не отдали.
   myUserId?: string;
@@ -38,7 +40,13 @@ export default function IdeasPanel({
   onConvertToMeeting: (ideaId: string) => void;
   // The idea the global search just jumped to, briefly flashed.
   highlightId?: string | null;
+  // Круглая «+» на телефоне нажата в разделе мыслей. Заводить мысль
+  // нечем — окна у неё нет, — значит «создать» здесь означает «поставить
+  // курсор в поле», и панель делает это сама. Счётчик, а не флаг: второе
+  // нажатие подряд должно сработать так же, как первое.
+  focusAddSignal?: number;
 }) {
+  const isMobile = useIsMobile();
   const [text, setText] = useState("");
   // Окно с вычеркнутыми мыслями.
   const [doneOpen, setDoneOpen] = useState(false);
@@ -47,6 +55,16 @@ export default function IdeasPanel({
   // это шум там, где ищут, что записать дальше.
   const visible = sortIdeasForList(ideas, false);
   const done = ideas.filter((i) => i.done);
+
+  // Фокус — побочное действие над DOM, а не состояние, поэтому эффект
+  // здесь на своём месте (правило React-компилятора запрещает setState в
+  // эффекте, а не работу с узлом). Нулевой сигнал — это первая отрисовка:
+  // открывать клавиатуру тому, кто просто зашёл в раздел, незачем.
+  useEffect(() => {
+    if (!focusAddSignal) return;
+    const el = document.getElementById("ideaInput") as HTMLTextAreaElement | HTMLInputElement | null;
+    el?.focus();
+  }, [focusAddSignal]);
 
   function addText(raw: string) {
     const v = raw.trim();
@@ -65,23 +83,29 @@ export default function IdeasPanel({
 
   return (
     <div className="panel dash-panel" id="ideasPanel" data-panel-id="ideasPanel">
-      <div className="dash-panel-head">
-        <div className="panel-title">
-          Идеи и мысли <span className="count">{visible.length}</span>
+      {/* На телефоне этой строки нет: название повторяет подпись вкладки,
+          число — цифру на ней, а вычеркнутые мысли с телефона не
+          показываются вовсе («завершённые в мобильной версии поскрывай»,
+          20.09.2026). Первым на экране стоит поле, в которое пишут. */}
+      {!isMobile && (
+        <div className="dash-panel-head">
+          <div className="panel-title">
+            Идеи и мысли <span className="count">{visible.length}</span>
+          </div>
+          {done.length > 0 && (
+            <button
+              type="button"
+              className="panel-done-btn"
+              id="ideasDoneBtn"
+              title="Вычеркнутые мысли"
+              onClick={() => setDoneOpen(true)}
+            >
+              <Icon name="check" size={14} />
+              <span className="panel-done-count">{done.length}</span>
+            </button>
+          )}
         </div>
-        {done.length > 0 && (
-          <button
-            type="button"
-            className="panel-done-btn"
-            id="ideasDoneBtn"
-            title="Вычеркнутые мысли"
-            onClick={() => setDoneOpen(true)}
-          >
-            <Icon name="check" size={14} />
-            <span className="panel-done-count">{done.length}</span>
-          </button>
-        )}
-      </div>
+      )}
       <div className="idea-add">
         <AutoGrowTextarea
           id="ideaInput"

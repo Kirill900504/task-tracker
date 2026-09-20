@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, type FormEvent, type ReactNode } from "react";
-import { useSpeechInput } from "@/hooks/useSpeechInput";
+import { speechErrorText, useSpeechInput } from "@/hooks/useSpeechInput";
 import { useAsk } from "@/components/Ask";
 import { createPortal } from "react-dom";
 import Icon from "@/components/tracker/Icon";
@@ -58,7 +58,23 @@ const INPUT_STYLE = {
 
 type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "answer" | "notes-preview" | "error";
 
-export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
+export default function QuickAdd({
+  provider,
+  sheetOpen = false,
+  onCloseSheet,
+}: {
+  provider: QuickAddProvider;
+  // Своей плавающей кнопки у быстрого ввода на телефоне больше нет.
+  //
+  // Круглая «+» теперь заводит то, в каком разделе её нажали (слова
+  // Кирилла 20.09.2026: «если в разделе задачи → ЗАДАЧУ, если в разделе
+  // встречи → ВСТРЕЧУ и с мыслями так же»), а разбор фразы голосом
+  // открывается строкой «Записать голосом» в меню шапки. Две круглых
+  // кнопки в одном углу были бы ровно тем, чего он не хочет: одинаковые
+  // на вид, разные по смыслу.
+  sheetOpen?: boolean;
+  onCloseSheet?: () => void;
+}) {
   // Backed by useTrackerData's actions, passed straight in. (This used to
   // fall back to a window.trackerAPI global, which was how the old vanilla-JS
   // UI handed its state over; that UI is gone.)
@@ -101,7 +117,6 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
-  const [sheetOpen, setSheetOpen] = useState(false);
 
   const [text, setText] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -126,6 +141,13 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
   const speech = useSpeechInput({
     onTranscript: setText,
     onDone: (finalText) => send(finalText, false),
+    // Диктовка здесь — не удобство, а весь способ ввода: кнопка, которая
+    // загорелась и ничего не сделала, оставляет человека ни с чем. Причина
+    // пишется тем же местом, что и остальные отказы этой формы.
+    onError: (code) => {
+      setErrorMessage(speechErrorText(code));
+      setStatus("error");
+    },
   });
 
   function noteDropped(droppedNames: string[]) {
@@ -298,7 +320,7 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
     setMeetingPreview(null);
     setErrorMessage("");
     setStatus("idle");
-    if (isMobile) setSheetOpen(false);
+    if (isMobile) onCloseSheet?.();
   }
 
   function onSubmit(e: FormEvent) {
@@ -485,30 +507,16 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
   }
 
   if (isMobile) {
-    // Floating, thumb-reachable capture button + bottom sheet — reachable
-    // from anywhere on the page without scrolling to the toolbar. Portals
-    // straight to <body> since it's position:fixed regardless of where in
-    // the DOM it lives.
-    if (typeof document === "undefined") return null;
+    // Лист снизу, открываемый снаружи. Portals straight to <body> since
+    // it's position:fixed regardless of where in the DOM it lives.
+    if (typeof document === "undefined" || !sheetOpen) return null;
     return createPortal(
-      <>
-        <button
-          type="button"
-          className="quick-add-fab"
-          onClick={() => setSheetOpen(true)}
-          aria-label="Добавить задачу, встречу или мысль"
-        >
-          +
-        </button>
-        {sheetOpen && (
-          <div className="quick-add-sheet-backdrop" onClick={reset}>
-            <div className="quick-add-sheet" onClick={(e) => e.stopPropagation()}>
-              <div className="quick-add-sheet-handle" />
-              {renderFormBody()}
-            </div>
-          </div>
-        )}
-      </>,
+      <div className="quick-add-sheet-backdrop" onClick={reset}>
+        <div className="quick-add-sheet" onClick={(e) => e.stopPropagation()}>
+          <div className="quick-add-sheet-handle" />
+          {renderFormBody()}
+        </div>
+      </div>,
       document.body,
     );
   }

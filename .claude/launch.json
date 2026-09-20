@@ -4,21 +4,45 @@
     {
       "name": "task-tracker-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true
     },
     {
       "name": "task-tracker-prod",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["next", "start", "-p", "3100"],
+      "runtimeArgs": [
+        "next",
+        "start",
+        "-p",
+        "3100"
+      ],
       "port": 3100
     },
     {
       "name": "task-tracker-prod-3200",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["next", "start", "-p", "3200"],
+      "runtimeArgs": [
+        "next",
+        "start",
+        "-p",
+        "3200"
+      ],
       "port": 3200
+    },
+    {
+      "name": "task-tracker-prod-3300",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "next",
+        "start",
+        "-p",
+        "3300"
+      ],
+      "port": 3300
     }
   ]
 }

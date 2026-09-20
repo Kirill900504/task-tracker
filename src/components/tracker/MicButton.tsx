@@ -7,7 +7,8 @@
 // Renders nothing at all where the browser has no speech recognition, rather
 // than offering a button that would do nothing.
 import { useRef } from "react";
-import { useSpeechInput } from "@/hooks/useSpeechInput";
+import { speechErrorText, useSpeechInput } from "@/hooks/useSpeechInput";
+import { useAsk } from "@/components/Ask";
 import Icon from "./Icon";
 
 export default function MicButton({
@@ -28,9 +29,16 @@ export default function MicButton({
   // dictated part, not the text that was already in the field.
   const baseRef = useRef("");
   const combine = (text: string) => (baseRef.current ? `${baseRef.current} ${text}` : text);
+  const ask = useAsk();
   const speech = useSpeechInput({
     onTranscript: (text) => onChange(combine(text)),
     onDone: onDone ? (text) => onDone(combine(text)) : undefined,
+    // Отказ обязан говорить. Раньше он молчал, и снаружи это выглядело
+    // так: кнопка загорелась и осталась гореть — «зажатый микрофон» из
+    // слов Кирилла 20.09.2026. Молчащая кнопка неотличима от сломанной,
+    // а от неё вдобавок непонятно, что делать; теперь она называет
+    // причину и путь в обход (см. speechErrorText).
+    onError: (code) => void ask.say({ title: "Диктовка не включилась", question: speechErrorText(code) }),
   });
 
   if (!speech.supported) return null;

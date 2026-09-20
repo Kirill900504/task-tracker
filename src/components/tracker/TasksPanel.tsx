@@ -150,10 +150,10 @@ export default function TasksPanel({
   // именем, а не идентификатором.
   const authors = useAuthors();
   const ask = useAsk();
-  // On a phone the four filter controls cost a third of the screen before
-  // a single task is visible, and most days none of them is touched — so
-  // they fold away, with a dot on the button when any is actually set.
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Кнопки «Фильтры», сворачивавшей эту полосу, больше нет: сворачивать
+  // стало нечего. На телефоне в полосе остались «+», «Все / Мне / Я
+  // поручил» и «Просрочено» — то, что Кирилл перечислил поимённо, и оно
+  // помещается в одну строку целиком.
 
   // Свёрнутый столбец помнится между загрузками: доска у каждого своя, и
   // тот, кто не принимает работу, сворачивает «На приёмке» один раз.
@@ -578,7 +578,10 @@ export default function TasksPanel({
   // «Завершённые» появляются в полосе только вместе с кнопкой, которая их
   // открывает, — и если выбранный столбец исчез, показываем «Новые», а не
   // пустоту от несуществующего столбца.
-  const visibleColumns: KanbanColumn[] = showDone ? ["new", "work", "review", "done"] : ["new", "work", "review"];
+  // На телефоне четвёртого столбца нет никогда, даже если «Завершённые»
+  // включены на компьютере: переключатель один на оба экрана, а правило
+  // «завершённые в мобильной версии поскрывай» — про экран.
+  const visibleColumns: KanbanColumn[] = showDone && !isMobile ? ["new", "work", "review", "done"] : ["new", "work", "review"];
   const shownColumn: KanbanColumn = visibleColumns.includes(mobileColumn) ? mobileColumn : "new";
 
   function renderColumn(column: KanbanColumn) {
@@ -641,29 +644,29 @@ export default function TasksPanel({
       )}
       {extraBanner}
       {(() => {
-        const filtersActive = filterSection !== "all" || filterAssignee !== "all" || onlyOverdue || view !== "all";
-        const collapsed = isMobile && !filtersOpen;
         return (
           // Строки с надписью «ЗАДАЧИ» над этой панелью больше нет: она
           // ничего не объясняла (задачи ни с чем не спутать) и стоила
           // высоты.
-          <div className={"toolbar" + (collapsed ? " collapsed" : "")}>
-            <button className="btn btn-primary" id="newTaskBtn" title="Новая задача (N)" onClick={() => setModalState({ open: true, task: null })}>
-              + Новая задача
+          //
+          // На телефоне в этой полосе остаются ТРИ вещи, и это слова
+          // Кирилла 20.09.2026: «вместо огромной кнопки „+ Новая задача“
+          // оставить маленькую кнопочку „+“… справа отображать только
+          // кнопку просрочено и „Все/мне/я поручил“, остальное скрыть».
+          // Полоса шириной в экран, из которой половина — надпись на
+          // кнопке, стоила первого экрана до единой задачи; «Загрузка»,
+          // «Завершённые» и сама кнопка «Фильтры» с телефона ушли
+          // (завершённые — по отдельному его правилу, см. ниже).
+          <div className="toolbar">
+            <button
+              className={"btn btn-primary" + (isMobile ? " toolbar-add" : "")}
+              id="newTaskBtn"
+              title="Новая задача (N)"
+              aria-label="Новая задача"
+              onClick={() => setModalState({ open: true, task: null })}
+            >
+              {isMobile ? <Icon name="plus" size={18} /> : "+ Новая задача"}
             </button>
-            {isMobile && (
-              <button
-                className={"btn toolbar-filter-toggle" + (filtersActive ? " has-filters" : "")}
-                id="mobileFiltersBtn"
-                onClick={() => setFiltersOpen((v) => !v)}
-              >
-                {/* Текст не меняется вместе с состоянием: «Скрыть фильтры»
-                    шире «Фильтров», и кнопка при нажатии толкала соседнюю.
-                    Что фильтры раскрыты, видно по ним самим. */}
-                Фильтры
-                {filtersActive && <span className="toolbar-filter-dot" />}
-              </button>
-            )}
             <div className="search-wrap" id="quickAddSlot" />
             {/* «Загрузка» вместо фильтра по исполнителю.
 
@@ -676,7 +679,7 @@ export default function TasksPanel({
                 Кнопки нет вовсе, пока поручать некому: пустое окно со
                 словами «никому ничего не поручено» — это кнопка, после
                 которой ничего не произошло. */}
-            {peopleWithWork > 0 && (
+            {peopleWithWork > 0 && !isMobile && (
               <span className={"load-pill" + (filterAssignee !== "all" ? " active" : "")}>
                 <button
                   type="button"
@@ -753,27 +756,30 @@ export default function TasksPanel({
               <Icon name="warning" size={14} /> Просрочено
               {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
             </button>
-            <button
-              type="button"
-              className={"filter-pill done" + (showDone ? " active" : "")}
-              id="showDoneCheckbox"
-              aria-pressed={showDone}
-              onClick={() => {
-                const next = !showDone;
-                onShowDoneChange(next);
-                // На телефоне столбец один, и открыть четвёртый, не перейдя
-                // на него, — это кнопка, после которой ничего не произошло.
-                if (isMobile) setMobileColumn(next ? "done" : "new");
-              }}
-            >
-              {/* Счётчика здесь нет намеренно. Он появлялся ровно в момент
-                  нажатия — то есть кнопка становилась шире, а вся полоса
-                  справа от неё уезжала под курсором. Слова Кирилла
-                  20.09.2026: «не хочу, чтобы в трекере нажатие одной кнопки
-                  двигало другие кнопки или разделы». Сколько завершённых, и
-                  так написано в заголовке открывшегося столбца. */}
-              <Icon name="check" size={14} /> Завершённые
-            </button>
+            {/* «Завершённые» — только на компьютере. Слова Кирилла
+                20.09.2026: «смотреть во всех разделах завершённые в
+                мобильной версии поскрывай, это большая информационная
+                нагрузка на восприятие». Он прав по сути: закрытую работу
+                перечитывают за столом и редко, а на телефоне она отнимает
+                место у той, которую ещё делают. То же правило убрало
+                галочки с прошедшими встречами и вычеркнутыми мыслями. */}
+            {!isMobile && (
+              <button
+                type="button"
+                className={"filter-pill done" + (showDone ? " active" : "")}
+                id="showDoneCheckbox"
+                aria-pressed={showDone}
+                onClick={() => onShowDoneChange(!showDone)}
+              >
+                {/* Счётчика здесь нет намеренно. Он появлялся ровно в момент
+                    нажатия — то есть кнопка становилась шире, а вся полоса
+                    справа от неё уезжала под курсором. Слова Кирилла
+                    20.09.2026: «не хочу, чтобы в трекере нажатие одной кнопки
+                    двигало другие кнопки или разделы». Сколько завершённых, и
+                    так написано в заголовке открывшегося столбца. */}
+                <Icon name="check" size={14} /> Завершённые
+              </button>
+            )}
           </div>
         );
       })()}

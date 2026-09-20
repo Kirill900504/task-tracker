@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Icon, { type IconName } from "./Icon";
 
 // The phone gets its own frame: one section on screen at a time, chosen from
 // a bar under the thumb, instead of the desktop's three columns stacked into
@@ -13,16 +14,28 @@ import type { ReactNode } from "react";
 
 export type MobileTab = "today" | "tasks" | "meetings" | "ideas" | "review";
 
-const TABS: { id: MobileTab; label: string; icon: string }[] = [
-  { id: "today", label: "Сегодня", icon: "◎" },
-  { id: "tasks", label: "Задачи", icon: "☑" },
-  { id: "meetings", label: "Встречи", icon: "📅" },
-  { id: "ideas", label: "Мысли", icon: "💡" },
-  // Пятая вкладка была «Месяц» — календарь, который с телефона открывают
-  // раз в неделю. Приёмка нужна каждый день: это единственное в трекере,
-  // что ждёт лично Кирилла. Календарь никуда не делся — он открывается
-  // внутри «Встреч», где ему и место.
-  { id: "review", label: "Приёмка", icon: "◍" },
+// Вкладка, с которой начинается каждая сессия. Слова Кирилла 20.09.2026:
+// «Задачи… он же всегда должен быть главной страницей и на с него
+// начинаться каждая сессия». Держится здесь, рядом с самим списком, а не
+// строкой useState в корне: порядок и точка входа — одно решение.
+export const DEFAULT_MOBILE_TAB: MobileTab = "tasks";
+
+// Порядок продиктован Кириллом 20.09.2026 и повторяет расположение блоков
+// на компьютере: встречи слева, задачи посередине, мысли справа. То, чего
+// на компьютере нет отдельным блоком, — приёмка и «Сегодня» — встаёт по
+// частоте: приёмка ждёт решения каждый день, «Сегодня» — это взгляд, а не
+// работа, и он крайний.
+//
+// Значки — контурные из Icon.tsx, а не эмодзи. Эмодзи рисует система: на
+// Windows это цветные наклейки своего размера и своего цвета, который не
+// темнеет вместе с неактивной вкладкой, — пять разных картинок в ряд
+// вместо одного набора (см. правило про шрифты и значки в CLAUDE.md).
+const TABS: { id: MobileTab; label: string; icon: IconName }[] = [
+  { id: "meetings", label: "Встречи", icon: "calendar" },
+  { id: "tasks", label: "Задачи", icon: "tasks" },
+  { id: "review", label: "Приёмка", icon: "inbox" },
+  { id: "ideas", label: "Мысли", icon: "bulb" },
+  { id: "today", label: "Сегодня", icon: "today" },
 ];
 
 export default function MobileShell({
@@ -51,10 +64,15 @@ export default function MobileShell({
               key={t.id}
               className={"mobile-tab" + (tab === t.id ? " active" : "")}
               data-tab={t.id}
+              aria-current={tab === t.id ? "page" : undefined}
               onClick={() => onTabChange(t.id)}
             >
+              {/* Подсветка активной вкладки — заливка под значком, а не
+                  полоска по верхнему краю панели: полоска толщиной в два
+                  пикселя на телефоне читается как край экрана, а не как
+                  ответ на вопрос «где я сейчас». */}
               <span className="mobile-tab-icon">
-                {t.icon}
+                <Icon name={t.icon} size={21} />
                 {!!count && <span className="mobile-tab-badge">{count > 99 ? "99+" : count}</span>}
               </span>
               <span className="mobile-tab-label">{t.label}</span>

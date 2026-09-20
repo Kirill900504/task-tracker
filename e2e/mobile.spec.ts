@@ -21,25 +21,116 @@ async function login(page: Page) {
   await expect(page.locator("#mobileNav")).toBeVisible({ timeout: 20_000 });
 }
 
-test("the phone gets its own shell: compact header, tabs, and a Today screen", async ({ page }) => {
+test("the phone gets its own shell: compact header, tabs, and tasks first", async ({ page }) => {
   await login(page);
 
   // The desktop header — logo, quote and eight buttons — is not there.
   await expect(page.locator("#mobileHeader")).toBeVisible();
   await expect(page.locator(".header-quote")).toHaveCount(0);
-  await expect(page.locator("#todayScreen")).toBeVisible();
 
-  // Everything else lives behind «…», so the header stays one row.
+  // Сессия начинается с задач: «он же всегда должен быть главной
+  // страницей и с него начинаться каждая сессия» (20.09.2026).
+  await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/);
+  await expect(page.locator("#mainCol")).toBeVisible();
+
+  // Порядок вкладок продиктован им же и повторяет расположение блоков на
+  // компьютере. Проверяется целиком, а не по одной: порядок — это и есть
+  // всё требование, и перепутанная пара внутри него ничем себя не выдаст.
+  const tabs = await page.locator(".mobile-tab .mobile-tab-label").allTextContents();
+  expect(tabs).toEqual(["Встречи", "Задачи", "Приёмка", "Мысли", "Сегодня"]);
+
+  // Значки — свои, контурные: ни одного эмодзи из системного шрифта.
+  await expect(page.locator(".mobile-tab .mobile-tab-icon svg")).toHaveCount(5);
+
+  // Кнопка в шапке одна, и у неё есть лицо — «вместо кнопок Лупы и „…“
+  // оставить одну кнопку с картинкой команды». Поиск при этом не потерян:
+  // он первой строкой в её меню.
+  await expect(page.locator(".mobile-header button")).toHaveCount(1);
+  await expect(page.locator("#mobileSearchBtn")).toHaveCount(0);
   await page.click("#mobileMoreBtn");
   await expect(page.locator("#mobileMoreMenu")).toBeVisible();
   await expect(page.locator(".export-item", { hasText: "Команда" })).toBeVisible();
+  await expect(page.locator(".export-item", { hasText: "Поиск по трекеру" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("#mobileMoreMenu")).toHaveCount(0);
+
+  // Пальцами не увеличивается (20.09.2026). Проверяется описание окна, а
+  // не сам жест: жеста у Playwright нет, а именно это описание браузер и
+  // читает.
+  const viewportMeta = await page.locator('meta[name="viewport"]').getAttribute("content");
+  expect(viewportMeta).toContain("maximum-scale=1");
+  expect(viewportMeta).toContain("user-scalable=no");
 
   // Nothing may stick out sideways: a horizontal scrollbar on a phone is the
   // classic sign of a desktop layout squeezed into it.
   const overflows = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(overflows).toBe(false);
+});
+
+// Что с телефона убрано — и убрано именно там, где Кирилл на это показал.
+//
+// Проверка на отсутствие выглядит пустой, но здесь она главная: каждая
+// строка тут — отдельная его фраза, и вернуть любую из этих вещей можно
+// одной случайной правкой, которая нигде больше себя не проявит.
+test("на телефоне убрано всё, что дублирует подпись вкладки", async ({ page }) => {
+  await login(page);
+
+  // Задачи: вместо кнопки во всю ширину — «+», рядом только «Все / Мне /
+  // Я поручил» и «Просрочено». Ни «Загрузки», ни «Завершённых», ни самой
+  // кнопки «Фильтры» (сворачивать стало нечего).
+  await expect(page.locator("#newTaskBtn")).toBeVisible();
+  const addBox = await page.locator("#newTaskBtn").boundingBox();
+  expect(addBox!.width).toBeLessThan(80);
+  expect(addBox!.height).toBeGreaterThanOrEqual(40);
+  await expect(page.locator("#filterOverdueBtn")).toBeVisible();
+  await expect(page.locator("#mobileFiltersBtn")).toHaveCount(0);
+  await expect(page.locator("#loadBtn")).toHaveCount(0);
+  await expect(page.locator("#showDoneCheckbox")).toHaveCount(0);
+  // И четвёртого столбца доски нет вовсе.
+  await expect(page.locator(".board-tab", { hasText: "Завершённые" })).toHaveCount(0);
+
+  // Встречи: ни календаря месяца, ни полосы «Встречи N + ✓».
+  await page.click('[data-tab="meetings"]');
+  await expect(page.locator("#calPanel")).toHaveCount(0);
+  await expect(page.locator("#addMeetingBtn")).toHaveCount(0);
+  await expect(page.locator("#meetingsDoneBtn")).toHaveCount(0);
+
+  // Мысли: первым на экране поле, а не заголовок с числом.
+  await page.click('[data-tab="ideas"]');
+  await expect(page.locator("#ideaInput")).toBeVisible();
+  await expect(page.locator("#ideasDoneBtn")).toHaveCount(0);
+
+  // Приёмка: без строки «Ждут вашей приёмки N».
+  await page.click('[data-tab="review"]');
+  await expect(page.locator(".review-screen .section-title")).toHaveCount(0);
+});
+
+// Круглая «+» заводит то, в каком разделе её нажали.
+test("круглая «+» создаёт событие того раздела, где нажата", async ({ page }) => {
+  await login(page);
+
+  // Задачи → форма задачи.
+  await page.click(".quick-add-fab");
+  await expect(page.locator("#fTitle")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // Встречи → форма встречи.
+  await page.click('[data-tab="meetings"]');
+  await page.click(".quick-add-fab");
+  await expect(page.locator("#mTitle")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // Мысли → курсор в поле: заводить там нечем, и «создать» значит именно
+  // это.
+  await page.click('[data-tab="ideas"]');
+  await page.click(".quick-add-fab");
+  await expect(page.locator("#ideaInput")).toBeFocused();
+
+  // В «Сегодня» и «Приёмке» кнопки нет: заводить там нечего.
+  await page.click('[data-tab="review"]');
+  await expect(page.locator(".quick-add-fab")).toHaveCount(0);
+  await page.click('[data-tab="today"]');
+  await expect(page.locator(".quick-add-fab")).toHaveCount(0);
 });
 
 test("tabs switch sections and a task can be created from the phone", async ({ page }) => {
@@ -48,16 +139,7 @@ test("tabs switch sections and a task can be created from the phone", async ({ p
   await login(page);
 
   await page.click('[data-tab="tasks"]');
-  // The filters are folded away — the list is what you came for.
   await expect(page.locator("#newTaskBtn")).toBeVisible();
-  // Фильтра по исполнителю в полосе больше нет — его заменила «Загрузка»
-  // (окно), а проверяется здесь само сворачивание: «Просрочено» стоит в
-  // полосе всегда и потому годится в свидетели лучше кнопки, которой нет,
-  // пока никому ничего не поручено.
-  await expect(page.locator("#filterOverdueBtn")).toBeHidden();
-  await page.click("#mobileFiltersBtn");
-  await expect(page.locator("#filterOverdueBtn")).toBeVisible();
-  await page.click("#mobileFiltersBtn");
 
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);

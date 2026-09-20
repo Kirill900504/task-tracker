@@ -33,7 +33,7 @@ import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
 import { mergeResult } from "@/lib/meetingLink";
 import SearchOverlay from "@/components/tracker/SearchOverlay";
 import TeamModal from "@/components/tracker/TeamModal";
-import MobileShell, { type MobileTab } from "@/components/tracker/MobileShell";
+import MobileShell, { DEFAULT_MOBILE_TAB, type MobileTab } from "@/components/tracker/MobileShell";
 import MobileHeader from "@/components/tracker/MobileHeader";
 import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
@@ -135,7 +135,14 @@ export default function NewTracker() {
   const [justCreatedMeetingId, setJustCreatedMeetingId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
-  const [mobileTab, setMobileTab] = useState<MobileTab>("today");
+  // Сессия начинается с задач — см. DEFAULT_MOBILE_TAB.
+  const [mobileTab, setMobileTab] = useState<MobileTab>(DEFAULT_MOBILE_TAB);
+  // Разбор фразы голосом: на телефоне это лист снизу, и открывает его
+  // строка в меню шапки, а не собственная круглая кнопка (см. QuickAdd).
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  // Круглая «+» нажата в разделе мыслей: заводить там нечего, поэтому
+  // «создать» значит «поставить курсор в поле» (см. IdeasPanel).
+  const [ideaFocusSignal, setIdeaFocusSignal] = useState(0);
   const [openExistingTaskId, setOpenExistingTaskId] = useState<string | null>(null);
   const [openExistingMeetingId, setOpenExistingMeetingId] = useState<string | null>(null);
   const [highlightIdeaId, setHighlightIdeaId] = useState<string | null>(null);
@@ -553,6 +560,7 @@ export default function NewTracker() {
             toasts={toasts}
             onConvertToTask={convertIdeaToTask}
             onConvertToMeeting={convertIdeaToMeeting}
+            focusAddSignal={ideaFocusSignal}
           />
         ),
   };
@@ -597,7 +605,7 @@ export default function NewTracker() {
     <>
       <ToastStack toasts={toasts.toasts} onUndo={toasts.undo} onDismiss={toasts.dismiss} />
       {dateTimeConfirm.dialog}
-      <QuickAdd provider={quickAddProvider} />
+      <QuickAdd provider={quickAddProvider} sheetOpen={quickAddOpen} onCloseSheet={() => setQuickAddOpen(false)} />
       {teamOpen && isOwner && <TeamModal onClose={() => setTeamOpen(false)} />}
       {searchOpen && (
         <SearchOverlay
@@ -617,29 +625,40 @@ export default function NewTracker() {
       )}
       {isMobile ? (
         <>
+          {/* Одна кнопка в шапке, и её меню — единственное место, куда
+              сложено всё редкое. Поиск стоит первым после «Команды»:
+              лупа, занимавшая половину свободного места в шапке, ушла
+              вместе со второй кнопкой (см. MobileHeader).
+              Эмодзи в подписях заменены контурными значками: строки стоят
+              столбиком, и цветная наклейка от системы рядом со словом
+              выглядит приклеенной. */}
           <MobileHeader
             clockText={clockText}
-            onSearch={() => setSearchOpen(true)}
             items={[
-              ...(isOwner ? [{ id: "team", label: "👥 Команда", onSelect: () => setTeamOpen(true) }] : []),
-              { id: "done", label: showDone ? "🙈 Скрыть завершённые задачи" : "👁 Показать завершённые задачи", onSelect: () => setShowDone((v) => !v) },
+              ...(isOwner ? [{ id: "team", label: "Команда", icon: "users" as const, onSelect: () => setTeamOpen(true) }] : []),
+              { id: "search", label: "Поиск по трекеру", icon: "search" as const, onSelect: () => setSearchOpen(true) },
+              // Разбор фразы голосом — то, ради чего у быстрого ввода была
+              // своя круглая кнопка. Кнопку забрали разделы (пункт 7), а
+              // сам разбор остался и открывается отсюда.
+              { id: "voice", label: "Записать голосом", icon: "mic" as const, onSelect: () => setQuickAddOpen(true) },
               ...(notifications.permission !== "unsupported"
                 ? [
                     {
                       id: "notif",
-                      label: notifications.permission === "granted" ? "🔔 Уведомления включены" : "🔔 Включить уведомления",
+                      label: notifications.permission === "granted" ? "Уведомления включены" : "Включить уведомления",
+                      icon: notifications.permission === "granted" ? ("bell" as const) : ("bell-off" as const),
                       onSelect: notifications.requestPermission,
                       disabled: notifications.permission === "granted",
                     },
                   ]
                 : []),
-              ...(installPrompt.visible ? [{ id: "install", label: "📥 Установить приложение", onSelect: installPrompt.promptInstall }] : []),
+              ...(installPrompt.visible ? [{ id: "install", label: "Установить приложение", icon: "install" as const, onSelect: installPrompt.promptInstall }] : []),
               // Привязка чата к учётной записи — владельцева. У руководителя
               // свой путь, полосой над доской: его чат живёт в строке человека,
               // а не в аккаунте (см. MessengerLink и useMyMessenger).
-              ...(isOwner && botLink.needs.telegram ? [{ id: "tg", label: "🔗 Подключить Telegram", onSelect: () => botLink.link("telegram") }] : []),
-              ...(isOwner && botLink.needs.max ? [{ id: "max", label: "🔗 Подключить MAX", onSelect: () => botLink.link("max") }] : []),
-              { id: "signout", label: "Выйти", onSelect: () => actions.signOut() },
+              ...(isOwner && botLink.needs.telegram ? [{ id: "tg", label: "Подключить Telegram", icon: "link" as const, onSelect: () => botLink.link("telegram") }] : []),
+              ...(isOwner && botLink.needs.max ? [{ id: "max", label: "Подключить MAX", icon: "link" as const, onSelect: () => botLink.link("max") }] : []),
+              { id: "signout", label: "Выйти", icon: "logout" as const, onSelect: () => actions.signOut() },
             ]}
           />
           <MobileShell
@@ -688,17 +707,41 @@ export default function NewTracker() {
               />
             </div>
             <div hidden={mobileTab !== "tasks"}>{panels.mainCol}</div>
-            {/* Календарь месяца переехал сюда из пятой вкладки: его
-                открывают вместе со встречами, а не вместо них. */}
-            <div hidden={mobileTab !== "meetings"}>
-              {panels.calPanel}
-              {panels.meetingsPanel}
-            </div>
+            {/* Календаря месяца здесь больше нет. Слова Кирилла
+                20.09.2026: «в разделе „встречи“ убрать календарь, в
+                мобильной версии он хавает слишком много пространства».
+                Тридцать клеток занимали первый экран целиком, а отвечали
+                на то, на что под ними отвечает сам список встреч — где
+                дата написана словами и стоит на карточке. Выбрать день
+                по-прежнему можно там, где это и нужно: в форме встречи. */}
+            <div hidden={mobileTab !== "meetings"}>{panels.meetingsPanel}</div>
             <div hidden={mobileTab !== "ideas"}>{panels.ideasPanel}</div>
             <div hidden={mobileTab !== "review"}>
               <ReviewScreen tasks={tasks} onOpen={(t) => setOpenExistingTaskId(t.id)} />
             </div>
           </MobileShell>
+          {/* Круглая «+» заводит то, в каком разделе её нажали.
+              Слова Кирилла 20.09.2026: «если в разделе задачи → ЗАДАЧУ,
+              если в разделе встречи → ВСТРЕЧУ и с мыслями так же». До
+              этого она открывала разбор фразы — одинаковый во всех пяти
+              разделах, то есть кнопка, которая не знает, где стоит.
+              В «Сегодня» и «Приёмке» её нет вовсе: заводить там нечего,
+              а кнопка, заводящая задачу из очереди приёмки, отвечала бы
+              не на тот вопрос, с которым туда заходят. */}
+          {(mobileTab === "tasks" || mobileTab === "meetings" || mobileTab === "ideas") && (
+            <button
+              type="button"
+              className="quick-add-fab"
+              aria-label={mobileTab === "tasks" ? "Новая задача" : mobileTab === "meetings" ? "Новая встреча" : "Новая мысль"}
+              onClick={() => {
+                if (mobileTab === "tasks") setOpenTaskRequest({});
+                else if (mobileTab === "meetings") setOpenMeetingRequest({ date: selectedDate ?? todayStr() });
+                else setIdeaFocusSignal((n) => n + 1);
+              }}
+            >
+              <Icon name="plus" size={26} />
+            </button>
+          )}
         </>
       ) : (
         <>
