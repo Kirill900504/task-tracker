@@ -511,6 +511,18 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     const { error } = await db.auth.signOut();
     if (error) return { ok: false, reason: "error", message: error.message };
     if (userIdRef.current) await clearSnapshot(userIdRef.current);
+    // Заодно — то, что ради быстрого старта лежит в localStorage: роль и
+    // строки участия (см. useWorkspaceRole и useTaskParticipants). Оба
+    // помечены чужим auth-id и другому человеку не отдадутся, так что дело
+    // не в правах: просто после «Выйти» на общем компьютере в браузере не
+    // должно оставаться ни имён, ни того, кто на какой задаче. Снимок
+    // задач тут же стирается по той же причине.
+    try {
+      localStorage.removeItem("kkt_identity");
+      localStorage.removeItem("kkt_participants");
+    } catch {
+      /* приватный режим — там и класть было некуда */
+    }
     router.push("/login");
     return { ok: true };
   }, [router]);
