@@ -18,6 +18,8 @@
 // against the deployed site and must not need Electron installed.
 import { _electron as electron } from "../node_modules/@playwright/test/index.mjs";
 import { fileURLToPath } from "node:url";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -26,7 +28,31 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // lives in desktop/, so the binary is handed over explicitly. Requiring the
 // electron package from Node returns the path to the executable.
 const executablePath = createRequire(import.meta.url)("electron");
+
+// Свой профиль на каждый прогон, и это не гигиена, а условие запуска.
+//
+// Приложение держит ОДНО окно на профиль (requestSingleInstanceLock), а
+// профиль у запуска из исходников тот же, что у установленной копии, —
+// имя берётся из package.json. Пока у Кирилла открыт «Планировщик
+// задач», тестовое окно закрывается в ту же секунду, в которую
+// открылось, и Playwright сообщает «Target page, context or browser has
+// been closed» — то есть выглядит это как поломка оболочки, а не как
+// занятый профиль. Свой каталог снимает и блокировку, и чужой кэш.
+const profile = mkdtempSync(path.join(tmpdir(), "rokas-smoke-"));
+const launchArgs = [here, `--user-data-dir=${profile}`];
 const failures = [];
+// Снимок — не проверка, а артефакт «посмотреть глазами». Захват кадра у
+// окна Electron изредка не отдаётся вовсе (окно позади чужого, свежий
+// профиль, композитор занят), и падать из-за этого проверке нельзя:
+// поведение уже проверено текстом выше.
+async function shot(win, file) {
+  try {
+    await win.screenshot({ path: file, timeout: 8000 });
+  } catch {
+    console.log("  —    снимок " + path.basename(file) + " не сделан (окно не отдало кадр); на проверку не влияет");
+  }
+}
+
 const check = (ok, what) => {
   console.log((ok ? "  ok   " : "  FAIL ") + what);
   if (!ok) failures.push(what);
@@ -34,7 +60,7 @@ const check = (ok, what) => {
 
 // ---- 1 & 3: the real site, signed out --------------------------------------
 {
-  const app = await electron.launch({ args: [here], executablePath });
+  const app = await electron.launch({ args: launchArgs, executablePath });
   const win = await app.firstWindow();
   await win.waitForLoadState("domcontentloaded");
   await win.waitForTimeout(6000);
@@ -46,7 +72,7 @@ const check = (ok, what) => {
   const title = await win.title();
   check(title.length > 0, "у окна есть заголовок: " + title);
 
-  await win.screenshot({ path: path.join(here, "smoke-login.png") });
+  await shot(win, path.join(here, "smoke-login.png"));
   await app.close();
 }
 
@@ -55,7 +81,7 @@ const check = (ok, what) => {
   // Port 1 is never listening, so the load fails the way a dead network does,
   // and the worker has never run in this profile — exactly a first launch
   // offline, which is the case with no cached shell to fall back on.
-  const app = await electron.launch({ args: [here], executablePath, env: { ...process.env, ROKAS_URL: "http://127.0.0.1:1" } });
+  const app = await electron.launch({ args: launchArgs, executablePath, env: { ...process.env, ROKAS_URL: "http://127.0.0.1:1" } });
   const win = await app.firstWindow();
   await win.waitForLoadState("domcontentloaded");
   await win.waitForTimeout(3000);
@@ -65,7 +91,7 @@ const check = (ok, what) => {
   check(/Нет связи/.test(text), "показана русская страница «Нет связи»");
   check((await win.locator("#retry").count()) === 1, "есть кнопка «Попробовать снова»");
 
-  await win.screenshot({ path: path.join(here, "smoke-offline.png") });
+  await shot(win, path.join(here, "smoke-offline.png"));
   await app.close();
 }
 

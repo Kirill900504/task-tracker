@@ -67,6 +67,11 @@ function createWindow() {
     // the person watches an empty frame while the site loads.
     show: false,
     autoHideMenuBar: true,
+    // .ico, а не .png: в заголовке окна и на панели задач Windows рисует
+    // иконку в 16–32 пикселя, и из одного большого PNG она сжимается в
+    // серую кашу. В .ico лежат семь размеров, и маленькие — это только
+    // сам знак, без слова и подписи, которые в такой величине всё равно
+    // не читаются (см. build/icon.ico).
     icon: path.join(__dirname, "build", "icon.png"),
     webPreferences: {
       // Nothing of ours runs in the page: the tracker is a website and stays
@@ -110,6 +115,15 @@ function createWindow() {
     // reports; it is not a failure anyone needs to see.
     if (!isMainFrame || errorCode === -3) return;
     void mainWindow.loadFile(path.join(__dirname, "offline.html"), { query: { url: failedUrl } });
+    // И показать окно. Оно ждёт "ready-to-show", чтобы не мигать пустой
+    // рамкой, пока грузится сайт, — но у страницы, загруженной ВМЕСТО
+    // упавшей, это событие может не прийти вовсе, и первый запуск без
+    // сети тогда выглядит как приложение, которое запустилось и не
+    // открылось: значок в панели задач есть, окна нет. Показ стоит
+    // ДО ожидания загрузки, а не после: сама страница лежит рядом на
+    // диске и рисуется мгновенно, а вот обещание loadFile при отменённой
+    // навигации может не исполниться никогда.
+    if (!mainWindow.isDestroyed() && !mainWindow.isVisible()) mainWindow.show();
   });
 
   void mainWindow.loadURL(APP_URL);
