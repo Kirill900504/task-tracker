@@ -3,6 +3,7 @@ import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
 import { actorScope, type BotActor } from "@/lib/botActor";
+import { botMenu, navRow } from "@/lib/botMenu";
 
 // О чём ПОСТАНОВЩИК может спросить бота — и что он может нажать.
 //
@@ -99,37 +100,43 @@ export async function ownerMeetings(admin: SupabaseClient, actor: BotActor, toda
 // уезжала вверх, и человек, открывший чат через неделю, не видел ни одной.
 // Меню — это «здесь можно что-то нажать», сказанное один раз и доступное
 // из любого места: каждый экран носит внизу «☰ Меню».
+//
+// Сами разделы переехали в `lib/botMenu`: у получателя теперь ровно то же
+// меню, сужаемое ролью, и держать их в двух файлах значило бы обновлять
+// половину и забывать половину.
 export function ownerMenu(): OwnerReply {
-  return {
-    text: "Что показать?",
-    buttons: [
-      [
-        { text: "📋 Задачи", data: encodeCallback("task", "olist", "all") },
-        { text: "📌 Сегодня", data: encodeCallback("task", "olist", "today") },
-      ],
-      [
-        { text: "⚠ Просрочено", data: encodeCallback("task", "olist", "overdue") },
-        { text: "🔍 На приёмке", data: encodeCallback("task", "olist", "review") },
-      ],
-      [
-        { text: "📅 Встречи", data: encodeCallback("meeting", "olist", "all") },
-        { text: "💡 Мысли", data: encodeCallback("idea", "olist", "all") },
-      ],
-      [{ text: "👥 Люди", data: encodeCallback("task", "olist", "people") }],
-      [{ text: "➕ Поручить", data: encodeCallback("task", "new", "start") }],
-    ],
-  };
+  return botMenu("assigner");
 }
 
 // Нижний ряд под любым экраном. «Меню» здесь не для красоты: без него
 // каждый список — тупик, из которого выходят прокруткой переписки.
 export function ownerNav(): BotButton[][] {
+  return navRow("assigner");
+}
+
+// Справка постановщика. Появилась вместе с кнопкой «❓ Помощь» в меню:
+// до этого справка была только у получателя, а тот, кто ставит задачи,
+// узнавал о возможностях бота, наткнувшись на них.
+//
+// Главное здесь — первая строка. Свободный текст постановщика это
+// ПОРУЧЕНИЕ, а не реплика, и человек, не знающий этого, пишет боту
+// заметку для себя и получает вопрос «завести задачу?».
+export function assignerHelp(): string {
   return [
-    [
-      { text: "☰ Меню", data: encodeCallback("task", "omenu", "x") },
-      { text: "📋 Задачи", data: encodeCallback("task", "olist", "all") },
-    ],
-  ];
+    "Что я умею.",
+    "",
+    "Просто напишите, что нужно сделать и кому — «Игорю смету к пятнице»: я разберу и спрошу «да?» перед тем, как завести. Голосовое тоже понимаю.",
+    "",
+    "Спросить словом:",
+    "• «меню» — все разделы кнопками",
+    "• «сегодня» — что на сегодня",
+    "• «просрочено» — что горит",
+    "• «встречи» — ближайшие",
+    "",
+    "По каждой задаче из списка открывается карточка: принять работу, вернуть на доработку с причиной, продлить срок, напомнить, открыть заново.",
+    "",
+    "«💬 Ответить» направляет следующее сообщение в обсуждение именно этой задачи — его увидят все её участники.",
+  ].join("\n");
 }
 
 function mark(t: OwnerTaskRow, today: string): string {
@@ -212,6 +219,8 @@ export async function ownerListReply(
     for (const person of ((people || []) as { id: string; name: string }[])) ids[person.name] = person.id;
     return peopleLoadReply(await ownerTasks(admin, actor), today, ids);
   }
+
+  if (which === "help") return { text: assignerHelp(), buttons: ownerNav() };
 
   const tasks = await ownerTasks(admin, actor);
 

@@ -42,6 +42,37 @@ export async function setTelegramCommands(): Promise<boolean> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ commands: BOT_COMMANDS }),
     });
+    if (!res.ok) return false;
+  } catch {
+    return false;
+  }
+  return setTelegramMenuButton();
+}
+
+// Кнопка «Меню» слева от поля ввода.
+//
+// Список команд по «/» — это подсказка для того, кто уже знает, что
+// команды бывают. Кирилл прислал 20.09.2026 снимки чужого бота именно с
+// этой кнопкой: она стоит у поля ввода всегда, не уезжает вверх вместе с
+// перепиской и видна человеку, открывшему чат впервые. Его слова о том,
+// зачем это: «если люди вне офиса им не всегда будет кайф открывать
+// приложения, а мессенджеры у них ОТКРЫТЫ ВСЕГДА».
+//
+// Тип «commands» вместо «web_app» здесь намеренно и пока: мини-приложение
+// показывает трекер, а трекер требует входа, которого у получателя задач
+// нет (см. docs/bot-menu.md). Кнопка команд работает у всех и сегодня.
+export async function setTelegramMenuButton(): Promise<boolean> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return false;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/setChatMenuButton`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // Без chat_id — значение по умолчанию для всех чатов сразу. С
+      // chat_id пришлось бы ставить её каждому из четырнадцати и помнить,
+      // кто уже получил.
+      body: JSON.stringify({ menu_button: { type: "commands" } }),
+    });
     return res.ok;
   } catch {
     return false;

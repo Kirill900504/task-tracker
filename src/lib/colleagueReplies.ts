@@ -6,7 +6,9 @@ import { uid } from "@/lib/uid";
 import { recordEvent } from "@/lib/itemHistory";
 import { newTaskRow } from "@/lib/newTask";
 import { deliverComment } from "@/lib/commentDelivery";
+import { confirmIfEveryoneAgreed } from "@/lib/meetingConfirm";
 import { colleagueCommandsHelp, matchColleagueCommand, meetingCard, meetingRoster, replyForColleague, taskCard } from "@/lib/colleagueQueries";
+import type { ColleagueQuery } from "@/lib/colleagueQueries";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import type { Notice } from "@/lib/noticeQueue";
 
@@ -131,6 +133,16 @@ export function colleagueHelp(name: string): string {
   return colleagueCommandsHelp(name);
 }
 
+// Какой список просит кнопка. Вид встречи всегда означает встречи —
+// у них подвидов нет; у задач подвид несёт третье поле. Незнакомое слово
+// падает в «мои задачи», а не в ошибку: кнопка из старого сообщения,
+// уехавшего вверх, должна открывать хоть что-то.
+function listView(action: CallbackAction): ColleagueQuery {
+  if (action.kind === "meeting") return "meetings";
+  const known: ColleagueQuery[] = ["today", "overdue", "review", "menu", "help"];
+  return known.find((v) => v === action.id) ?? "tasks";
+}
+
 export async function handleColleagueCallback(
   admin: SupabaseClient,
   chatId: number,
@@ -153,7 +165,12 @@ export async function handleColleagueCallback(
   // переписке уехать вверх — и ответить было нечем.
   if (action.action === "list") {
     const today = new Date().toISOString().slice(0, 10);
-    const reply = await replyForColleague(admin, colleague, action.kind === "meeting" ? "meetings" : "tasks", today);
+    // Третье поле кнопки — какой именно список. Раньше оно не читалось
+    // вовсе: списков было два, задачи и встречи, и вид угадывался по виду
+    // кнопки. Меню (lib/botMenu) спрашивает «сегодня», «просрочено», «на
+    // приёмке» — выборки, которые давно написаны и до которых не было
+    // кнопки.
+    const reply = await replyForColleague(admin, colleague, listView(action), today);
     return { toast: "Открываю", say: reply.text, sayButtons: reply.buttons };
   }
 
@@ -381,12 +398,19 @@ export async function handleColleagueCallback(
       .update({ confirmed_by: coming ? [...confirmed, colleague.name] : confirmed })
       .eq("id", meeting.id);
 
+    // Предложение, на которое согласились все, становится встречей само.
+    // Правило общее с трекером (lib/meetingConfirm): ответить «буду» можно
+    // и кнопкой в мессенджере, и в карточке, а встреча от этого должна
+    // появляться одинаково.
+    const scheduled = coming ? (await confirmIfEveryoneAgreed(admin, meeting.id as string)).confirmed : false;
+
     if (coming) {
       return {
-        toast: late ? "Отметил, что опоздаете" : "Отметил, что будете",
+        toast: scheduled ? "Все согласились — встреча назначена" : late ? "Отметил, что опоздаете" : "Отметил, что будете",
         rewriteTo:
           `📅 ${meeting.title}\n${when}\n\n` +
           (late ? "🕐 Вы придёте, но опоздаете" : "✅ Вы подтвердили участие") +
+          (scheduled ? "\nВсе ответили — встреча назначена." : "") +
           "\nПередумали? Нажмите другую кнопку — ответ можно менять до начала.",
         // Кнопки остаются: «передумать можно до начала» — решение проекта, и
         // без них оно не действует.

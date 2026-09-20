@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback, meetingButtons, taskButtons } from "@/lib/colleagues";
+import { botMenu, navRow } from "@/lib/botMenu";
 import { fmtDate } from "@/lib/taskDisplay";
 
 // О чём коллега может спросить бота.
@@ -19,7 +20,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 // Что видит коллега — только своё: выборки идут по его строке участия, а не
 // по пространству. Читать чужие задачи он не вправе и в трекере.
 
-export type ColleagueQuery = "tasks" | "today" | "overdue" | "meetings" | "review" | "help";
+export type ColleagueQuery = "tasks" | "today" | "overdue" | "meetings" | "review" | "menu" | "help";
 
 const TRIGGERS: Record<ColleagueQuery, string[]> = {
   tasks: ["/tasks", "мои задачи", "задачи", "мои", "что на мне", "мои дела"],
@@ -27,7 +28,11 @@ const TRIGGERS: Record<ColleagueQuery, string[]> = {
   overdue: ["/overdue", "просрочено", "просроченные", "что просрочено", "просроченные задачи"],
   meetings: ["/meetings", "встречи", "мои встречи", "какие встречи", "ближайшие встречи"],
   review: ["/review", "приёмка", "на приёмке", "приемка", "на приемке"],
-  help: ["/help", "помощь", "команды", "что умеешь", "start", "/start"],
+  // «Меню» словом — и «старт» вместе с ним: первое, что человек пишет
+  // боту, должно показывать разделы, а не текст про них. Справка осталась
+  // отдельным словом для того, кто уже видел меню и всё равно не понял.
+  menu: ["/menu", "меню", "menu", "разделы", "start", "/start"],
+  help: ["/help", "помощь", "команды", "что умеешь"],
 };
 
 export function matchColleagueCommand(text: string): ColleagueQuery | null {
@@ -189,13 +194,13 @@ export function listReply(title: string, tasks: MyTask[], today: string, empty: 
 
 // Нижний ряд под любым списком: откуда угодно — в другой список, не
 // пролистывая переписку назад.
+//
+// Вторая кнопка была «📅 Встречи», и это оставляло человека внутри двух
+// разделов: из списка задач он попадал во встречи, из встреч — обратно в
+// задачи, а всё остальное существовало, только если угадать слово.
+// Теперь здесь дверь в меню, ровно как у постановщика (lib/botMenu).
 export function navButtons(): BotButton[][] {
-  return [
-    [
-      { text: "📋 Мои задачи", data: encodeCallback("task", "list", "my") },
-      { text: "📅 Встречи", data: encodeCallback("meeting", "list", "my") },
-    ],
-  ];
+  return navRow("recipient");
 }
 
 export async function replyForColleague(
@@ -204,6 +209,7 @@ export async function replyForColleague(
   kind: ColleagueQuery,
   today: string,
 ): Promise<BotReply> {
+  if (kind === "menu") return botMenu("recipient");
   if (kind === "help") return { text: colleagueCommandsHelp(colleague.name), buttons: navButtons() };
 
   if (kind === "meetings") {
