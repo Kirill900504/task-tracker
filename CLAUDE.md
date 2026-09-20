@@ -1367,19 +1367,25 @@ by a running `next start` (and by OneDrive) — stop the server first.
   self-applying migration could not apply itself and 0022 went in with
   `scripts/run-migration.mjs` from here; and every call to MAX failed on the
   root CA (see the rule above).
-- **The mini-app link in the MAX cabinet is still empty, and only that.**
-  The code behind it is done and live since 20.09.2026: `/app` plus
-  `/api/max/miniapp-auth` sign a MAX user in without a password, using the
-  same signature algorithm as Telegram. What is missing is one field in
-  business.max.ru — `https://task-tracker-beta-ebon.vercel.app/app` — and
-  editing a published bot sends it back through moderation, up to a day,
-  with neither the documentation nor the platform saying whether the bot
-  answers meanwhile. He chose on 14.09.2026 to live without it, and on
-  20.09.2026 said «MAX тоже делаем, если что — подождём, пока пройдет
-  модерация». So it goes in on a day when a day of silence is affordable,
-  with the fourteen warned in advance — not on your own initiative, and
-  not in the middle of a working week. Until then the MAX «Открыть
-  трекер» button is an ordinary link that opens the browser, which works.
+- **The MAX mini-app is CONNECTED — 20.09.2026, by Кирилл himself.**
+  `https://task-tracker-beta-ebon.vercel.app/app`, button «Открыть», in
+  business.max.ru → Чат-боты → бот → ⋮ → Настройки. The cabinet accepted
+  the path despite listing only letters, digits, dot and hyphen as legal
+  characters, so the slash is fine after all — but the fallback that made
+  the bare domain work too (the /login interception, `lib/messengerLaunch`)
+  stays: it costs nothing and the next field may be stricter.
+  The two-year-old worry turned out to be smaller than it looked. Saving
+  puts the bot back through moderation («Изменение информации потребует
+  повторной модерации»), and the bot kept answering the whole time —
+  checked within the minute: `platform-api2.max.ru/me` returned 200 with
+  the command list intact, the webhook subscription still pointed at our
+  domain, and the MAX half of `test:bots` passed. **Do not read that as a
+  promise**: it is one observation of one edit, the platform documents
+  nothing about it, and the next change may behave differently. Warn the
+  people who use MAX before touching that screen again.
+  The code behind it: `/app` plus `/api/max/miniapp-auth`, same signature
+  algorithm as Telegram, verified end to end against production with the
+  real bot token (owner and manager signed in, forgeries refused).
 - Colleagues are recipients, not users. Making them real users who exchange
   items with each other is his own next big idea, deliberately deferred.
 - **The morning brief is facts first, model second.** GigaChat writes the
