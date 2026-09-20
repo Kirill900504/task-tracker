@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import PopLayer from "./PopLayer";
+import Icon from "./Icon";
 import type { Meeting } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
 import { awaitsRecap } from "@/lib/calendarLogic";
@@ -21,8 +22,22 @@ import { useAsk } from "@/components/Ask";
 // Теперь порядок тот же, что у задачи: название, под ним строка «дата ·
 // время · участники», под ней действия. Действия — с подписями: «✓» под
 // встречей может значить и «прошла», и «я буду», и разницу между ними
-// значком не объяснить. Подписи стоят сеткой 2×2, а не общим flex-wrap:
-// панель узкая, и перенос по месту рвал бы ряд каждый раз в новом месте.
+// значком не объяснить.
+//
+// Подписи — по одному слову, и все три помещаются в одну строку («Успех»,
+// «Провал», «Перенос», 20.09.2026). Сетка 2×2 из целых фраз занимала под
+// встречей четыре строки — больше, чем сама встреча, — и повторялась у
+// каждой в списке. Слово короче фразы ровно настолько, насколько оно
+// понятнее: «Прошла успешно» и «Успех» отвечают на один вопрос, а второе
+// читается одним взглядом.
+//
+// Удаление из этого ряда ушло: оно не решение по встрече, а отказ от неё,
+// и стоять четвёртым среди трёх исходов ему незачем. Крестик вернулся в
+// правый верхний угол карточки — то самое место, где его ищут, — но
+// заметным: своя кнопка с рамкой, а не серый значок на грани видимости.
+// Прежний довод «крестик у края читается как „закрыть“» снят подсказкой и
+// вопросом перед удалением; довод против четвёртой кнопки в ряду —
+// сильнее.
 
 export default function MeetingChip({
   meeting,
@@ -145,54 +160,69 @@ export default function MeetingChip({
           {waitingRecap && <span className="pill pill-recap">нужен итог</span>}
         </div>
 
-        {/* Четыре решения по встрече, все со словами. Значки ✓ ✕ ⇢ стояли
-            здесь раньше и читались только тем, кто уже знает, что они
-            значат; крестик удаления при этом жил отдельно у края карточки
-            и выглядел как «закрыть», а не как «удалить». */}
+        {/* Три исхода встречи, каждый одним словом и все в одну строку.
+            Значки ✓ ✕ ⇢ стояли здесь раньше и читались только тем, кто уже
+            знает, что они значат; целые фразы, пришедшие им на смену,
+            читались сразу, но занимали под каждой встречей четыре строки.
+            Полное название осталось подсказкой — она отвечает на «успех
+            чего?», когда такой вопрос возникает. */}
         {showQuickActions && (
           <div className="meeting-actions">
             <button
               className="meeting-act success"
+              title="Встреча прошла успешно"
               onClick={(e) => {
                 e.stopPropagation();
                 onQuickStatus("success");
               }}
             >
-              Прошла успешно
+              Успех
             </button>
             <button
               className="meeting-act noresult"
+              title="Встреча прошла без результата"
               onClick={(e) => {
                 e.stopPropagation();
                 onQuickStatus("no_result");
               }}
             >
-              Без результата
+              Провал
             </button>
             <button
               className="meeting-act reschedule"
+              title="Перенести встречу на другой день"
               onClick={(e) => {
                 e.stopPropagation();
                 onQuickReschedule();
               }}
             >
-              Перенести
-            </button>
-            <button
-              className="meeting-act danger"
-              onClick={(e) => {
-                e.stopPropagation();
-                void (async () => {
-                  const yes = await ask.confirm({ question: `Удалить встречу «${meeting.title}»?`, okText: "Удалить", danger: true });
-                  if (yes) onDelete();
-                })();
-              }}
-            >
-              Удалить встречу
+              Перенос
             </button>
           </div>
         )}
       </div>
+
+      {/* Отмена встречи — в правом верхнем углу, где её и ищут. Заметной
+          кнопкой, а не значком, проступающим на наведение: наведения нет
+          на телефоне вовсе, и невидимая кнопка равна отсутствующей.
+          Спрашивает перед удалением, поэтому промах пальцем ничего не
+          стоит. */}
+      {showQuickActions && (
+        <button
+          className="meeting-del"
+          title={`Удалить встречу «${meeting.title}»`}
+          aria-label="Удалить встречу"
+          onClick={(e) => {
+            e.stopPropagation();
+            void (async () => {
+              const yes = await ask.confirm({ question: `Удалить встречу «${meeting.title}»?`, okText: "Удалить", danger: true });
+              if (yes) onDelete();
+            })();
+          }}
+        >
+          <Icon name="close" size={15} />
+        </button>
+      )}
 
       {peopleAnchor && (
         <PopLayer>

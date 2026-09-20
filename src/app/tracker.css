@@ -1098,15 +1098,17 @@
     font-family:var(--sans); font-size:12px; color:var(--ink); text-align:left;
   }
   .people-tooltip .prow{padding:2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  /* Четыре решения по встрече — словами и сеткой 2×2.
+  /* Три исхода встречи — одним словом каждый и все в одной строке.
      Значками они были неразличимы: «✓» под встречей одинаково похоже и на
-     «прошла успешно», и на «я приду», а крестик удаления у края карточки
-     читался как «закрыть». Сетка, а не flex-wrap: панель узкая, и общий
-     перенос рвал бы ряд каждый раз в новом месте — то самое «кнопки
-     гуляют как хотят». 32px высоты — палец попадает не глядя. */
-  .meeting-actions{display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:2px;}
+     «прошла успешно», и на «я приду». Целые фразы это объяснили, но встали
+     сеткой 2×2 и заняли под каждой встречей четыре строки — на узкой
+     панели больше самой встречи. Слова короткие, поэтому три равные
+     колонки помещаются и в узкую панель; grid, а не flex-wrap, по прежней
+     причине: перенос рвал бы ряд каждый раз в новом месте. 32px высоты —
+     палец попадает не глядя. */
+  .meeting-actions{display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-top:2px;}
   .meeting-act{
-    min-height:32px; padding:6px 8px; display:inline-flex; align-items:center; justify-content:center;
+    min-height:32px; padding:6px 4px; display:inline-flex; align-items:center; justify-content:center;
     background:var(--paper-soft); border:1px solid var(--line); border-radius:var(--radius-sm);
     color:var(--ink-soft); cursor:pointer; font-family:var(--display); font-size:11.5px; font-weight:600;
     line-height:1.1; text-align:center;
@@ -1116,8 +1118,23 @@
   .meeting-act.success:hover{color:var(--success); border-color:var(--success);}
   .meeting-act.noresult:hover{color:var(--high); border-color:var(--high);}
   .meeting-act.reschedule:hover{color:var(--accent); border-color:var(--accent);}
-  .meeting-act.danger:hover{color:var(--high); border-color:var(--high);}
   .meeting-act:active{transform:scale(.97);}
+  /* Отмена встречи — крестик в правом верхнем углу карточки. Место у него
+     то же, что у «закрыть» в любом окне, и путать их нечем: он спрашивает
+     перед удалением и называет встречу по имени. Заметность здесь — не
+     украшение, а условие: значок, проступающий на наведение, на телефоне
+     не проступает никогда. Поэтому рамка видна всегда, а красным он
+     становится под рукой. 28px — минимальная цель, в которую попадают
+     пальцем. */
+  .meeting-del{
+    flex:none; align-self:flex-start; width:28px; height:28px;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:var(--paper-soft); border:1px solid var(--line); border-radius:var(--radius-sm);
+    color:var(--ink-soft); cursor:pointer; padding:0;
+    transition:color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .meeting-del:hover{background:var(--paper); color:var(--high); border-color:var(--high);}
+  .meeting-del:active{transform:scale(.94);}
 
   /* ---------- Свой выпадающий список (Dropdown.tsx) ---------- */
   /* Раскрытый системный `<select>` рисует не трекер, а операционная
