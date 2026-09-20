@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { hasMessengerLaunch, miniAppRedirect } from "@/lib/messengerLaunch";
 
 // The front door. Shares its look with /join and /reset-password (.auth-*
 // in tracker.css) — they are one screen with different words on it, and
@@ -25,6 +26,20 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+
+  // Человека, пришедшего из мини-приложения, здесь быть не должно.
+  //
+  // Он открыл трекер из бота, где мессенджер уже подтвердил, кто он, —
+  // и упёрся в форму, требующую пароль, которого он не помнит. Так
+  // выходит, когда ссылка мини-приложения ведёт на корень: сессии нет,
+  // middleware отправляет на /login, а данные мессенджера лежат во
+  // фрагменте, которого сервер не видит (см. lib/messengerLaunch).
+  // Здесь они видны — значит отсюда и уводим на вход по подписи.
+  useEffect(() => {
+    if (hasMessengerLaunch(window.location.hash)) {
+      window.location.replace(miniAppRedirect(window.location.hash));
+    }
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
