@@ -119,6 +119,47 @@ export function useWorkspaceRole(): WorkspaceIdentity {
   useEffect(() => {
     let cancelled = false;
     const db = createClient();
+
+    // Своя строка в списке людей у СОВСЕМ нового пространства появляется
+    // не сразу.
+    //
+    // Порядок такой: трекер открывается, движок синхронизации видит пустой
+    // список людей и засевает его значениями по умолчанию (там и строка
+    // «(я)»), — а этот хук спрашивает про неё раньше, одним запросом на
+    // старте. Ответ «строки нет» он запоминал до перезагрузки, и до неё
+    // владелец не видел ни блока «это поручено вам», ни своей роли в цвете
+    // карточки. У Кирилла люди заведены годами, так что ломался ровно
+    // первый запуск пустого аккаунта — то есть каждый e2e и любой второй
+    // трекер.
+    //
+    // Поэтому если строки нет, её спрашивают ещё несколько раз, редея:
+    // сеяние — дело одной-двух секунд, а слушать ради него realtime по
+    // таблице людей дороже самого вопроса.
+    async function findSelfLater(userId: string) {
+      for (const wait of [800, 1500, 3000, 5000]) {
+        await new Promise((r) => setTimeout(r, wait));
+        if (cancelled) return;
+        const { data } = await db.from("assignees").select("id, name").eq("user_id", userId);
+        const self = (data || []).find((r) => isSelfAssignee((r.name as string) || ""));
+        if (!self || cancelled) continue;
+        // Ветка одна — владелец собственного пространства, — поэтому
+        // ответ собирается целиком, без правки предыдущего состояния (в
+        // функциональный setState нельзя класть запись в localStorage).
+        const fresh: Cached = {
+          role: "owner",
+          memberRole: "owner",
+          assigneeId: self.id as string,
+          name: "",
+          ownerId: userId,
+          userId,
+          isAdmin: true,
+          isOwner: true,
+        };
+        setState(fresh);
+        writeCache(fresh);
+        return;
+      }
+    }
     // getSession, а не getUser: первый читает сессию, которая и так лежит в
     // браузере, второй идёт в сеть спрашивать, жив ли токен (см. lib/me.ts —
     // там это уже стоило «секундной задержки»). Права от этого не слабеют:
@@ -195,7 +236,12 @@ export function useWorkspaceRole(): WorkspaceIdentity {
               isOwner: true,
             };
             setState(fresh);
-            writeCache(fresh);
+            // Пустую строку человека не запоминаем — см. findSelfLater:
+            // у только что заведённого пространства список людей ещё
+            // сеется, и записать «строки нет» значит запомнить это
+            // навсегда.
+            if (selfAssigneeId) writeCache(fresh);
+            else void findSelfLater(userId);
           }
         }
         setLoading(false);
