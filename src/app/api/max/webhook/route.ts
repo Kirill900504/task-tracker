@@ -4,9 +4,8 @@ import { maxTransport } from "@/lib/max";
 import { russianFetch } from "@/lib/russianCa";
 import { maxSettings } from "@/lib/botSettings";
 import { decodeCallback } from "@/lib/colleagues";
-import { handleColleagueCallback } from "@/lib/colleagueReplies";
+import { deliverCallbackNotice, handleBotCallback } from "@/lib/botCallback";
 import { handleLinkCode, handleText, type BotContext } from "@/lib/botPipeline";
-import { notifyAuthor } from "@/lib/botDelivery";
 import { MAX_CHANNEL } from "@/lib/botTransport";
 
 // MAX's side of the bot. Everything past "what did this person say" is the
@@ -101,7 +100,7 @@ export async function POST(req: Request) {
     const action = decodeCallback(callback?.payload || "");
     if (!callback?.callback_id || !chatId || !action) return NextResponse.json({ ok: true });
 
-    const outcome = await handleColleagueCallback(admin, chatId, action, MAX_CHANNEL);
+    const outcome = await handleBotCallback(admin, chatId, action, MAX_CHANNEL);
     await transport.resolveCallback({
       callbackId: callback.callback_id,
       chatId,
@@ -116,10 +115,7 @@ export async function POST(req: Request) {
     if (outcome.say) {
       await transport.send(chatId, outcome.say, outcome.sayButtons?.length ? { buttons: outcome.sayButtons } : undefined);
     }
-    if (outcome.notifyOwner) {
-      const owner = await admin.from("assignees").select("user_id").eq("max_user_id", chatId).limit(1).maybeSingle();
-      if (owner.data?.user_id) await notifyAuthor(admin, owner.data.user_id as string, outcome.notifyTo ?? null, outcome.notifyOwner, outcome.notice);
-    }
+    await deliverCallbackNotice(admin, chatId, MAX_CHANNEL, outcome);
     return NextResponse.json({ ok: true });
   }
 

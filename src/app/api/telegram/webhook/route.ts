@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { downloadTelegramFile, telegramTransport } from "@/lib/telegram";
 import { decodeCallback, findColleagueByChat } from "@/lib/colleagues";
-import { handleColleagueCallback, handleColleagueFile } from "@/lib/colleagueReplies";
+import { handleColleagueFile } from "@/lib/colleagueReplies";
+import { deliverCallbackNotice, handleBotCallback } from "@/lib/botCallback";
 import { handleLinkCode, handleText, type BotContext } from "@/lib/botPipeline";
-import { notifyAuthor } from "@/lib/botDelivery";
 import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
 
 // Telegram's side of the bot: the update format, voice files, and Telegram's
@@ -41,7 +41,9 @@ export async function POST(req: Request) {
       await transport.resolveCallback({ callbackId: callbackQuery.id, chatId: pressedChatId ?? 0, toast: "Не понял, что нажато" });
       return NextResponse.json({ ok: true });
     }
-    const outcome = await handleColleagueCallback(admin, pressedChatId, action, TELEGRAM_CHANNEL);
+    // Один разбор на оба мессенджера, и он же решает, чья это кнопка —
+    // коллеги или владельца (см. lib/botCallback).
+    const outcome = await handleBotCallback(admin, pressedChatId, action, TELEGRAM_CHANNEL);
     await transport.resolveCallback({
       callbackId: callbackQuery.id,
       chatId: pressedChatId,
@@ -56,11 +58,7 @@ export async function POST(req: Request) {
     if (outcome.say) {
       await transport.send(pressedChatId, outcome.say, outcome.sayButtons?.length ? { buttons: outcome.sayButtons } : undefined);
     }
-    if (outcome.notifyOwner) {
-      const colleagueOwner = await admin.from("assignees").select("user_id").eq("telegram_chat_id", pressedChatId).limit(1).maybeSingle();
-      if (colleagueOwner.data?.user_id)
-        await notifyAuthor(admin, colleagueOwner.data.user_id as string, outcome.notifyTo ?? null, outcome.notifyOwner, outcome.notice);
-    }
+    await deliverCallbackNotice(admin, pressedChatId, TELEGRAM_CHANNEL, outcome);
     return NextResponse.json({ ok: true });
   }
 

@@ -17,6 +17,12 @@ import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
 import { attachExecutors, attachMeetingParticipants, assignNote } from "@/lib/assignExecutors";
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 import { newTaskRow } from "@/lib/newTask";
+import { ownerListReply, ownerMeetingsReply, ownerMenu } from "@/lib/ownerQueries";
+import { applyReview } from "@/lib/reviewWork";
+
+// Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
+// мессенджере, а закрывает следующее сообщение владельца.
+type ReturnPending = { kind: "review_return"; taskId: string; title: string };
 
 // What the bot DOES with a message — the whole of it, and none of the
 // business of getting that message off the wire.
@@ -517,7 +523,38 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
   // message is either "да" or a cancel, never a new request.
   if (account.pending_action) {
     await remember(ctx, { pending_action: null });
-    await say(ctx, await resolvePendingAction(account.pending_action as PendingAction, trimmed));
+    // Возврат на доработку: нажали кнопку, теперь пишут, что именно
+    // доделать. Правила возврата — общие с трекером (lib/reviewWork):
+    // отчёты обнуляются, людям говорится сразу, в хронику пишется строка.
+    const waiting = account.pending_action as PendingAction | ReturnPending;
+    if ((waiting as ReturnPending).kind === "review_return") {
+      const ask = waiting as ReturnPending;
+      const { data: taskRow } = await ctx.admin
+        .from("tasks")
+        .select("id, title, user_id")
+        .eq("id", ask.taskId)
+        .eq("user_id", account.user_id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      const task = taskRow as { id: string; title: string; user_id: string } | null;
+      if (!task) {
+        await say(ctx, "Эта задача больше не найдена.");
+        return;
+      }
+      const done = await applyReview(ctx.admin, task, "return", trimmed, { label: "Владелец", userId: account.user_id });
+      await say(ctx, done.ok ? `↩ Вернул «${task.title}» на доработку — исполнителям сказано.` : done.error);
+      return;
+    }
+    await say(ctx, await resolvePendingAction(waiting as PendingAction, trimmed));
+    return;
+  }
+
+  // «Меню» — то же, что кнопка «☰ Меню», только словом. Человек, открывший
+  // чат спустя неделю, кнопок не видит: они уехали вверх вместе с
+  // сообщениями.
+  if (/^(меню|menu|\/menu|что умеешь|start|\/start)$/i.test(trimmed)) {
+    const menu = ownerMenu();
+    await ctx.transport.send(ctx.chatId, menu.text, menu.buttons?.length ? { buttons: menu.buttons } : undefined);
     return;
   }
 
@@ -528,6 +565,19 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
   const queryKind = matchQueryCommand(trimmed);
   if (queryKind) {
     if (account.pending_context) await remember(ctx, { pending_context: null });
+    // Кнопками, а не голым текстом: список, из которого нельзя открыть
+    // задачу, — это список, после которого всё равно открывать трекер.
+    const which = queryKind === "today" ? "today" : queryKind === "overdue" ? "overdue" : "";
+    if (queryKind === "meetings") {
+      const reply = await ownerMeetingsReply(ctx.admin, account.user_id, new Date().toISOString().slice(0, 10));
+      await ctx.transport.send(ctx.chatId, reply.text, reply.buttons?.length ? { buttons: reply.buttons } : undefined);
+      return;
+    }
+    if (which) {
+      const reply = await ownerListReply(ctx.admin, account.user_id, which, new Date().toISOString().slice(0, 10));
+      await ctx.transport.send(ctx.chatId, reply.text, reply.buttons?.length ? { buttons: reply.buttons } : undefined);
+      return;
+    }
     await say(ctx, await replyForQuery(queryKind, account.user_id));
     return;
   }

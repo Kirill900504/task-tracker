@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readInput, reviewInput } from "@/lib/apiInput";
-import { chatsFor, replyButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
+import { chatsFor, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { recordEvent } from "@/lib/itemHistory";
+import { applyReview, type ReviewAction } from "@/lib/reviewWork";
 import { fmtDate } from "@/lib/taskDisplay";
 
 // Решение постановщика по отчёту: принять, вернуть, закрыть волевым.
@@ -61,15 +62,7 @@ export async function POST(req: Request) {
   const isAuthor = task.created_by === user.id;
   if (!isOwner && !isAuthor) return NextResponse.json({ error: "Это решение не ваше" }, { status: 403 });
 
-  const now = new Date().toISOString();
   const comment = (body.comment || "").trim();
-
-  if (body.action === "return" && !comment) {
-    return NextResponse.json({ error: "Напишите, что доделать" }, { status: 400 });
-  }
-  if (body.action === "force" && !comment) {
-    return NextResponse.json({ error: "Нужна причина" }, { status: 400 });
-  }
 
   // Срок двинули — и об этом должны узнать те, кто по нему работает.
   //
@@ -166,81 +159,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // Принято и закрыто — одно и то же событие. «Принял, но задача висит
-  // открытой» не значит ничего: ни для списка, ни для сводки, ни для
-  // человека, который отчитался.
-  const closed = { status: "done", completed_at: now, last_completed_on: now.slice(0, 10) };
-
-  if (body.action === "approve") {
-    await admin
-      .from("tasks")
-      .update({ approval_state: "accepted", approval_comment: comment || null, approved_at: now, ...closed })
-      .eq("id", task.id);
-  } else if (body.action === "return") {
-    await admin.from("tasks").update({ approval_state: "returned", approval_comment: comment, approved_at: null }).eq("id", task.id);
-    // Отчёты исполнителей обнуляются: иначе задача осталась бы в состоянии
-    // «отчитались все» и приёмка предложилась бы снова, ничего не изменив.
-    await admin.from("task_participants").update({ done_at: null, done_comment: null }).eq("task_id", task.id).eq("role", "executor");
-  } else {
-    await admin
-      .from("tasks")
-      .update({ approval_state: "accepted", approved_at: now, force_closed_by: user.id, force_closed_reason: comment, ...closed })
-      .eq("id", task.id);
-  }
-
-  // Хроника пишется до рассылки: сообщение может не уйти (нет чата, нет
-  // связи), а запись о решении остаться должна в любом случае — именно её
-  // потом и ищут, когда спрашивают «а что просили доделать».
-  const byWhom = isOwner ? "Владелец" : "Постановщик";
-  await recordEvent(admin, {
-    userId: task.user_id,
-    kind: "task",
-    itemId: task.id,
-    text:
-      body.action === "return"
-        ? `↩ ${byWhom} вернул на доработку: ${comment}`
-        : body.action === "approve"
-          ? `✅ ${byWhom} принял работу${comment ? ": " + comment : ""}`
-          : `🔒 ${byWhom} закрыл задачу волевым решением: ${comment}`,
-  });
-
-  // Сказать людям. Молчание после возврата на доработку — самый дорогой
-  // вид молчания здесь: работа стоит, и никто не знает, что она стоит.
-  const { data: parts } = await admin
-    .from("task_participants")
-    .select("assignee_id, role")
-    .eq("task_id", task.id)
-    .in("role", ["executor", "coexecutor"]);
-  const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
-  if (ids.length) {
-    const { data: people } = await admin
-      .from("assignees")
-      .select("id, name, telegram_chat_id, max_user_id")
-      .in("id", ids);
-
-    const text =
-      body.action === "return"
-        ? `↩ Вернули на доработку: «${task.title}»\n\n${comment}`
-        : body.action === "approve"
-          ? `✅ Принято: «${task.title}»${comment ? "\n\n" + comment : ""}`
-          : `🔒 Задача закрыта: «${task.title}»\n\n${comment}`;
-
-    // Под возвратом — кнопки, которыми на него отвечают.
-    //
-    // Раньше приходил голый текст, а сообщение с кнопками, которым задачу
-    // присылали, к этому моменту уже переписано в «🏁 Отмечено
-    // выполненным» — то есть отчитаться заново было буквально нечем, кроме
-    // как листать переписку назад. Правило шире этого места: каждое
-    // сообщение бота, после которого от человека чего-то ждут, обязано
-    // нести кнопку этого действия. После приёмки и закрытия ждать нечего —
-    // там остаётся только «Ответить», чтобы сказать спасибо или возразить.
-    const buttons = body.action === "return" ? taskButtons(task.id, "executor") : replyButtons("task", task.id);
-
-    for (const person of ((people || []) as ColleagueRow[])) {
-      const target = chatsFor(person)[0];
-      if (target) await sendToColleague(target, text, buttons);
-    }
-  }
-
+  // Принято, возвращено, закрыто волевым — всё это правила, и живут они в
+  // lib/reviewWork: те же кнопки есть теперь в мессенджере, и второй
+  // экземпляр этих правил разошёлся бы с первым (в этом проекте так уже
+  // было трижды). Маршрут отвечает за своё — что решение принимает тот,
+  // кто вправе.
+  const result = await applyReview(
+    admin,
+    { id: task.id, title: task.title, user_id: task.user_id },
+    body.action as ReviewAction,
+    comment,
+    { label: isOwner ? "Владелец" : "Постановщик", userId: user.id },
+  );
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
   return NextResponse.json({ ok: true });
 }

@@ -1,0 +1,279 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
+import { encodeCallback, type CallbackAction } from "@/lib/colleagues";
+import { fmtDate } from "@/lib/taskDisplay";
+import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
+import { ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, type OwnerReply } from "@/lib/ownerQueries";
+import { applyReview } from "@/lib/reviewWork";
+
+// Что происходит, когда владелец нажимает кнопку.
+//
+// Половина трекера, которой в мессенджере не было вовсе. Кнопки под
+// сообщениями получал только тот, кому что-то поручили, — а тот, кто
+// поручал, мог лишь читать: чтобы принять работу, вернуть её или сдвинуть
+// срок, приходилось открывать трекер. Слова Кирилла 19.09.2026: боты
+// должны быть доведены «до такого состояния, чтобы через них работать
+// было не менее удобно, чем через само приложение».
+//
+// Устройство такое же, как у ответов коллеги (colleagueReplies): функция
+// получает нажатие и возвращает, что сказать, чем переписать сообщение и
+// кого уведомить. Отправку делает маршрут — он один на оба мессенджера.
+
+export type OwnerOutcome = {
+  toast: string;
+  // Чем переписать сообщение, под которым нажали. Переписывание — не
+  // украшение: в MAX нет всплывающих подсказок, и переписанное сообщение и
+  // есть весь ответ.
+  rewriteTo?: string;
+  rewriteButtons?: BotButton[][];
+  // Отдельным сообщением: список, карточка, вопрос.
+  say?: string;
+  sayButtons?: BotButton[][];
+  // Кому сказать, что решение принято. Исполнителям — всегда сразу: они
+  // ждут ответа, и задержка стоит дороже порядка.
+  tellAssignees?: { taskId: string; text: string };
+  // Возврат на доработку требует слов, и следующее сообщение владельца
+  // станет ими. Хранится это там же, где все незакрытые вопросы бота, —
+  // в pending_action его строки (миграция 0033 сделала то же самое для
+  // руководителя).
+  askReturn?: { taskId: string; title: string };
+};
+
+// Найти владельца по чату. Его чат живёт не там, где чаты коллег:
+// `telegram_accounts` / `max_accounts` — это «куда писать хозяину
+// трекера», а `assignees.<чат>` — «куда писать человеку, которому
+// поручили». Перепутать их нельзя: подключившийся «как владелец»
+// руководитель получил бы пустой трекер вместо своих задач.
+export async function findOwnerByChat(
+  admin: SupabaseClient,
+  chatId: number,
+  channel: BotChannelConfig,
+): Promise<{ userId: string } | null> {
+  const { data } = await admin
+    .from(channel.accountsTable)
+    .select("user_id")
+    .eq(channel.chatColumn, chatId)
+    .limit(1)
+    .maybeSingle();
+  const row = data as { user_id: string } | null;
+  return row ? { userId: row.user_id } : null;
+}
+
+type TaskRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  assignee: string | null;
+  deadline: string | null;
+  status: string | null;
+  approval_state: string | null;
+  approval_comment: string | null;
+};
+
+async function loadTask(admin: SupabaseClient, userId: string, taskId: string): Promise<TaskRow | null> {
+  const { data } = await admin
+    .from("tasks")
+    .select("id, title, description, assignee, deadline, status, approval_state, approval_comment")
+    .eq("id", taskId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  return (data as TaskRow | null) || null;
+}
+
+async function participantsOf(admin: SupabaseClient, taskId: string): Promise<TaskParticipant[]> {
+  const { data } = await admin
+    .from("task_participants")
+    .select("assignee_id, role, accepted_at, done_at, done_comment, declined_at, decline_reason, assignees(name)")
+    .eq("task_id", taskId);
+  type Row = {
+    assignee_id: string;
+    role: TaskParticipant["role"];
+    accepted_at: string | null;
+    done_at: string | null;
+    done_comment: string | null;
+    declined_at: string | null;
+    decline_reason: string | null;
+    assignees: { name: string } | { name: string }[] | null;
+  };
+  return ((data || []) as Row[]).map((r) => ({
+    assigneeId: r.assignee_id,
+    name: (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "",
+    role: r.role,
+    acceptedAt: r.accepted_at,
+    doneAt: r.done_at,
+    doneComment: r.done_comment,
+    declinedAt: r.declined_at,
+    declineReason: r.decline_reason,
+  }));
+}
+
+// Карточка задачи глазами того, кто её поставил.
+//
+// Набор кнопок здесь совсем другой, чем у исполнителя, и это главное:
+// исполнителю — «принял / сделал / не могу», постановщику — «принять
+// работу / вернуть / продлить / напомнить». Одна и та же задача, два
+// разных вопроса к ней.
+export async function ownerTaskCard(admin: SupabaseClient, userId: string, taskId: string): Promise<OwnerReply | null> {
+  const task = await loadTask(admin, userId, taskId);
+  if (!task) return null;
+  const people = await participantsOf(admin, taskId);
+
+  const lines = [`📋 ${task.title}`];
+  if (task.description) lines.push("", task.description);
+  const facts: string[] = [];
+  if (task.deadline) facts.push("срок " + fmtDate(task.deadline));
+  if (task.assignee) facts.push("исполнитель: " + task.assignee);
+  if (facts.length) lines.push("", facts.join(" · "));
+  const progress = progressLabel(people);
+  if (progress) lines.push(progress);
+
+  const reported = people.filter((p) => p.role === "executor" && p.doneAt);
+  for (const p of reported) lines.push(`🏁 ${p.name}: ${p.doneComment || "без комментария"}`);
+  const declined = people.filter((p) => p.declinedAt && !p.doneAt);
+  for (const p of declined) lines.push(`⛔ ${p.name} не может: ${p.declineReason || "без причины"}`);
+
+  const waiting = task.approval_state === "awaiting_review";
+  if (waiting) lines.push("", "Отчитались все — задача ждёт вашего решения.");
+
+  const buttons: BotButton[][] = [];
+  if (waiting) {
+    buttons.push([
+      { text: "✅ Принять работу", data: encodeCallback("task", "ok", taskId) },
+      { text: "↩ Вернуть", data: encodeCallback("task", "back", taskId) },
+    ]);
+  }
+  buttons.push([
+    { text: "📅 Продлить срок", data: encodeCallback("task", "plus", taskId) },
+    { text: "🔔 Напомнить", data: encodeCallback("task", "ping", taskId) },
+  ]);
+  buttons.push([{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }]);
+  buttons.push(...ownerNav());
+
+  return { text: lines.join("\n"), buttons };
+}
+
+// Насколько двигаем срок. Те же четыре шага, что и у просьбы о переносе с
+// той стороны: разговор один и тот же, и мерить его надо одинаково.
+export const EXTEND_OPTIONS = [
+  { days: 1, label: "+1 день" },
+  { days: 3, label: "+3 дня" },
+  { days: 7, label: "+неделя" },
+  { days: 14, label: "+2 недели" },
+];
+
+export function extendButtons(taskId: string): BotButton[][] {
+  return [
+    EXTEND_OPTIONS.slice(0, 2).map((o) => ({ text: o.label, data: encodeCallback("task", "plus" + o.days, taskId) })),
+    EXTEND_OPTIONS.slice(2).map((o) => ({ text: o.label, data: encodeCallback("task", "plus" + o.days, taskId) })),
+    [{ text: "← Отмена", data: encodeCallback("task", "oshow", taskId) }],
+  ];
+}
+
+export function addDays(date: string, days: number): string {
+  const base = date ? new Date(date + "T00:00:00") : new Date();
+  if (Number.isNaN(base.getTime())) return "";
+  base.setDate(base.getDate() + days);
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
+}
+
+// Разбор нажатия. Возвращает null, если кнопка не владельческая, — тогда
+// маршрут пробует обычный путь коллеги.
+export async function handleOwnerCallback(
+  admin: SupabaseClient,
+  userId: string,
+  action: CallbackAction,
+  today: string,
+): Promise<OwnerOutcome | null> {
+  if (action.action === "omenu") {
+    const menu = ownerMenu();
+    return { toast: "Меню", say: menu.text, sayButtons: menu.buttons };
+  }
+
+  if (action.action === "olist") {
+    const reply = action.kind === "meeting" ? await ownerMeetingsReply(admin, userId, today) : await ownerListReply(admin, userId, action.id, today);
+    return { toast: "Открываю", say: reply.text, sayButtons: reply.buttons };
+  }
+
+  if (action.action === "oshow" && action.kind === "task") {
+    const card = await ownerTaskCard(admin, userId, action.id);
+    if (!card) return { toast: "Эта задача не найдена" };
+    return { toast: "Открываю", say: card.text, sayButtons: card.buttons };
+  }
+
+  if (action.action === "plus" && action.kind === "task") {
+    const task = await loadTask(admin, userId, action.id);
+    if (!task) return { toast: "Эта задача не найдена" };
+    return {
+      toast: "На сколько двигаем?",
+      say: `📅 «${task.title}»\n\nТекущий срок: ${task.deadline ? fmtDate(task.deadline) : "не назначен"}. На сколько продлить?`,
+      sayButtons: extendButtons(action.id),
+    };
+  }
+
+  const extend = action.action.match(/^plus(\d+)$/);
+  if (extend && action.kind === "task") {
+    const task = await loadTask(admin, userId, action.id);
+    if (!task) return { toast: "Эта задача не найдена" };
+    const next = addDays(task.deadline || today, Number(extend[1]));
+    if (!next) return { toast: "Не получилось посчитать дату" };
+    const { error } = await admin.from("tasks").update({ deadline: next }).eq("id", action.id);
+    if (error) return { toast: "Не получилось сохранить" };
+    return {
+      toast: "Срок продлён",
+      rewriteTo: `📅 Срок «${task.title}» — до ${fmtDate(next)}.`,
+      rewriteButtons: [[{ text: "📋 Открыть задачу", data: encodeCallback("task", "oshow", action.id) }], ...ownerNav()],
+      // Перенос срока — событие, а не тихая правка: человек планировал
+      // неделю под прежнее число.
+      tellAssignees: { taskId: action.id, text: `📅 Срок задачи «${task.title}» продлён до ${fmtDate(next)}.` },
+    };
+  }
+
+  // Приёмка и возврат — те же правила, что в трекере (lib/reviewWork):
+  // приёмка закрывает задачу одной записью, возврат обнуляет отчёты, и в
+  // обоих случаях людям говорится сразу.
+  //
+  // «Принять» здесь без комментария: в мессенджере это одно нажатие в
+  // ответ на отчёт, который уже прочитан выше в том же чате, и требовать
+  // слова значило бы сделать самый частый ответ самым долгим. Возврату
+  // слова нужны — «доделай» без «что именно» это не ответ, — поэтому он
+  // спрашивает причину следующим сообщением (pending_action).
+  if (action.action === "ok" && action.kind === "task") {
+    const task = await loadTask(admin, userId, action.id);
+    if (!task) return { toast: "Эта задача не найдена" };
+    const done = await applyReview(admin, { id: task.id, title: task.title, user_id: userId }, "approve", "", {
+      label: "Владелец",
+      userId,
+    });
+    if (!done.ok) return { toast: done.error };
+    return {
+      toast: "Принято",
+      rewriteTo: `✅ Принято: «${task.title}». Задача закрыта, исполнителям сказано.`,
+      rewriteButtons: ownerNav(),
+    };
+  }
+
+  if (action.action === "back" && action.kind === "task") {
+    const task = await loadTask(admin, userId, action.id);
+    if (!task) return { toast: "Эта задача не найдена" };
+    return {
+      toast: "Что доделать?",
+      askReturn: { taskId: task.id, title: task.title },
+      say: `↩ «${task.title}»\n\nНапишите следующим сообщением, что именно доделать, — отправлю исполнителям.`,
+    };
+  }
+
+  if (action.action === "ping" && action.kind === "task") {
+    const task = await loadTask(admin, userId, action.id);
+    if (!task) return { toast: "Эта задача не найдена" };
+    return {
+      toast: "Напомнил",
+      tellAssignees: {
+        taskId: action.id,
+        text: `🔔 Напоминание по задаче «${task.title}»${task.deadline ? ` (срок ${fmtDate(task.deadline)})` : ""}. Что с ней?`,
+      },
+    };
+  }
+
+  return null;
+}
