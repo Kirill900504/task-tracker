@@ -53,14 +53,48 @@ jobs:
       # Action logs need admin rights on this repository, so the last lines of
       # stderr are echoed as an annotation, which the API serves publicly —
       # the same trick ci.yml uses for the schema test.
-      - name: Build and publish the installer
+      - name: Build the installer
+        working-directory: desktop
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run dist 2>&1 | tee build.log || {
+            echo "::error::$(tail -n 12 build.log | tr '\n' ' ' | cut -c1-900)"
+            exit 1
+          }
+
+      # Релиз публикует ОТДЕЛЬНЫЙ шаг, а не сам electron-builder.
+      #
+      # Он грузит установщик и его .blockmap двумя разными обращениями: ни
+      # одно не находит готового релиза, и оба его создают — на тег выходит
+      # ДВА релиза. Опаснее всего то, как это выглядит: сборка зелёная,
+      # установщик есть, а «последним» GitHub показывает тот релиз, где
+      # лежит один .blockmap — без .exe и без latest.yml. Постоянная ссылка
+      # ведёт в пустоту, установленное приложение обновления не находит и
+      # молчит об этом. Так прошли 1.0.1, 1.0.2 и 1.0.3.
+      #
+      # Отключить .blockmap нельзя: вместе с ним из latest.yml пропадает
+      # size, а без size electron-updater качать отказывается — на этом
+      # сгорела 1.0.4. Поэтому файлы уходят одной командой: релиз создаётся
+      # один раз и сразу со всем содержимым.
+      - name: Publish the release
         working-directory: desktop
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
           set -o pipefail
-          npm run release 2>&1 | tee build.log || {
-            echo "::error::$(tail -n 12 build.log | tr '\n' ' ' | cut -c1-900)"
+          ls -la dist
+          gh release create "$TAG" dist/*.exe dist/*.exe.blockmap dist/latest.yml \
+            --title "${TAG#v}" --notes "Планировщик задач ${TAG#v}" 2>&1 | tee publish.log || {
+            echo "::error::$(tail -n 12 publish.log | tr '\n' ' ' | cut -c1-900)"
             exit 1
           }
+          # Выпуск проверяется не зелёной галочкой, а списком файлов: без
+          # latest.yml обновление не найдёт никто — ни человек по ссылке,
+          # ни установленное приложение.
+          have=$(gh release view "$TAG" --json assets --jq '[.assets[].name] | join(" ")')
+          echo "в релизе: $have"
+          case "$have" in *latest.yml*) ;; *) echo "::error::latest.yml не попал в релиз — обновление не найдётся"; exit 1 ;; esac
+          case "$have" in *.exe*) ;; *) echo "::error::установщик не попал в релиз"; exit 1 ;; esac

@@ -1,6 +1,6 @@
 {
   "name": "rokas-desktop",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "description": "Планировщик задач — настольное приложение",
   "main": "main.js",
@@ -43,8 +43,7 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Планировщик задач",
       "runAfterFinish": true,
-      "deleteAppDataOnUninstall": false,
-      "differentialPackage": false
+      "deleteAppDataOnUninstall": false
     },
     "publish": {
       "provider": "github",
