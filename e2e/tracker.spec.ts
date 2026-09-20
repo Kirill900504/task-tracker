@@ -1054,6 +1054,15 @@ test("левая кнопка по разделу заводит задачу, �
   await tab.click({ button: "right" });
   await expect(tab).not.toHaveClass(/active/);
 
+  // И «Все» снимает отбор той же кнопкой, которой он поставлен: рука,
+  // выбравшая раздел правой, снимает выбор правой же.
+  const all = page.locator("#sectionTabs .section-tab", { hasText: /^Все$/ });
+  await tab.click({ button: "right" });
+  await expect(tab).toHaveClass(/active/);
+  await all.click({ button: "right" });
+  await expect(all).toHaveClass(/active/);
+  await expect(tab).not.toHaveClass(/active/);
+
   // А переименование — в окне «Разделы».
   await page.click("#sectionSettingsBtn");
   const row = page.locator(".section-row", { hasText: `Старое${stamp}` });
