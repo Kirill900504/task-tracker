@@ -51,6 +51,11 @@ test("the phone gets its own shell: compact header, tabs, and tasks first", asyn
   await expect(page.locator("#mobileMoreMenu")).toBeVisible();
   await expect(page.locator(".export-item", { hasText: "Команда" })).toBeVisible();
   await expect(page.locator(".export-item", { hasText: "Поиск по трекеру" })).toBeVisible();
+  // «Загрузка» ушла из полосы над доской (там остались три кнопки, которые
+  // назвал Кирилл) — но не из трекера: вопрос «к кому идти первым» задают
+  // как раз не за столом. Она здесь, и только когда есть кому быть
+  // загруженным.
+  await expect(page.locator(".export-item", { hasText: "Загрузка" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(page.locator("#mobileMoreMenu")).toHaveCount(0);
 

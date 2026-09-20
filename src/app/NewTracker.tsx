@@ -34,6 +34,8 @@ import { mergeResult } from "@/lib/meetingLink";
 import SearchOverlay from "@/components/tracker/SearchOverlay";
 import TeamModal from "@/components/tracker/TeamModal";
 import MobileShell, { DEFAULT_MOBILE_TAB, type MobileTab } from "@/components/tracker/MobileShell";
+import LoadModal from "@/components/tracker/LoadModal";
+import { peopleLoad } from "@/lib/peoplePanel";
 import MobileHeader from "@/components/tracker/MobileHeader";
 import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
@@ -143,6 +145,12 @@ export default function NewTracker() {
   // Круглая «+» нажата в разделе мыслей: заводить там нечего, поэтому
   // «создать» значит «поставить курсор в поле» (см. IdeasPanel).
   const [ideaFocusSignal, setIdeaFocusSignal] = useState(0);
+  // «Загрузка» — у кого что горит. На компьютере её открывает кнопка в
+  // полосе над доской; на телефоне полоса сведена к трём кнопкам по слову
+  // Кирилла, и эта из неё ушла. Совсем терять её нельзя: «к кому идти
+  // первым» — вопрос, который задают как раз не за столом. Поэтому она
+  // строкой в меню шапки, там же, где поиск.
+  const [loadOpen, setLoadOpen] = useState(false);
   const [openExistingTaskId, setOpenExistingTaskId] = useState<string | null>(null);
   const [openExistingMeetingId, setOpenExistingMeetingId] = useState<string | null>(null);
   const [highlightIdeaId, setHighlightIdeaId] = useState<string | null>(null);
@@ -637,6 +645,12 @@ export default function NewTracker() {
             items={[
               ...(isOwner ? [{ id: "team", label: "Команда", icon: "users" as const, onSelect: () => setTeamOpen(true) }] : []),
               { id: "search", label: "Поиск по трекеру", icon: "search" as const, onSelect: () => setSearchOpen(true) },
+              // Только когда есть кому быть загруженным: строка меню,
+              // открывающая окно со словами «никому ничего не поручено», —
+              // это строка, после которой ничего не произошло.
+              ...(peopleLoad(tasks, assignees).length > 0
+                ? [{ id: "load", label: "Загрузка — у кого что горит", icon: "users" as const, onSelect: () => setLoadOpen(true) }]
+                : []),
               // Разбор фразы голосом — то, ради чего у быстрого ввода была
               // своя круглая кнопка. Кнопку забрали разделы (пункт 7), а
               // сам разбор остался и открывается отсюда.
@@ -741,6 +755,15 @@ export default function NewTracker() {
             >
               <Icon name="plus" size={26} />
             </button>
+          )}
+          {loadOpen && (
+            <LoadModal
+              tasks={tasks}
+              assignees={assignees}
+              selected={filterAssignee}
+              onSelect={setFilterAssignee}
+              onClose={() => setLoadOpen(false)}
+            />
           )}
         </>
       ) : (
