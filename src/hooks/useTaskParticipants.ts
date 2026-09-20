@@ -333,7 +333,7 @@ export function useTaskParticipants() {
   // туда ушли ответы исполнителя: правила должны жить в одном месте, и
   // сказать людям о возврате может только тот, у кого есть доступ к боту.
   const review = useCallback(
-    async (action: "approve" | "return" | "force", taskId: string, comment: string) => {
+    async (action: "approve" | "return" | "force" | "reopen", taskId: string, comment: string) => {
       const res = await fetch("/api/workspace/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -393,6 +393,10 @@ export function useTaskParticipants() {
   const approve = useCallback((taskId: string, comment: string) => review("approve", taskId, comment), [review]);
   const returnForRework = useCallback((taskId: string, comment: string) => review("return", taskId, comment), [review]);
   const forceClose = useCallback((taskId: string, reason: string) => review("force", taskId, reason), [review]);
+  // Приёмку снимает только сервер: колонка не принадлежит движку
+  // синхронизации, и снятая в браузере галочка «сделано» оставляла задачу
+  // в «Завершённых» навсегда.
+  const reopen = useCallback((taskId: string, comment: string) => review("reopen", taskId, comment), [review]);
 
   const forTask = useCallback((taskId: string) => byTask[taskId] || [], [byTask]);
 
@@ -421,6 +425,7 @@ export function useTaskParticipants() {
       approve,
       returnForRework,
       forceClose,
+      reopen,
       acceptWork,
       reportWork,
       declineWork,
@@ -441,6 +446,7 @@ export function useTaskParticipants() {
       approve,
       returnForRework,
       forceClose,
+      reopen,
       acceptWork,
       reportWork,
       declineWork,

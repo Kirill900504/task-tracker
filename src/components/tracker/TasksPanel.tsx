@@ -347,7 +347,16 @@ export default function TasksPanel({
       return;
     }
     if (t.status === "done") {
-      actions.saveTask({ ...t, status: "in_progress", lastCompletedOn: "", completedAt: "" });
+      actions.saveTask({ ...t, status: "in_progress", lastCompletedOn: "", completedAt: "", approvalState: "open", approvalComment: "" });
+      // Приёмка — серверная колонка, и снятая галочка её не трогает: без
+      // этого вызова принятая задача оставалась бы в «Завершённых» при
+      // снятой галочке, то есть открыть её было нечем вовсе. Заодно об
+      // этом узнают исполнители — для них задача снова живая.
+      if (t.approvalState === "accepted") {
+        void participants.reopen(t.id, "").catch((e) => {
+          toasts.showToast(e instanceof Error ? e.message : "Не получилось вернуть задачу в работу");
+        });
+      }
     } else {
       // completedAt is what orders the "завершённые" list newest-first, so
       // the task just closed is the one at the top, ready to be reopened.
@@ -918,6 +927,28 @@ export default function TasksPanel({
               return;
             }
             toggleDone({ ...modalTask, status: "in_progress", approvalState: "accepted", approvalComment: reason });
+          }}
+          onReopenWork={async (comment) => {
+            if (!modalTask) return;
+            try {
+              await participants.reopen(modalTask.id, comment);
+            } catch (e) {
+              toasts.showToast(e instanceof Error ? e.message : "Не получилось вернуть задачу в работу");
+              return;
+            }
+            // Маршрут снимает и приёмку, и статус одной записью — здесь то
+            // же самое локально, чтобы карточка уехала из «Завершённых»
+            // сразу, а не после эха. Обе стороны пишут одно и то же,
+            // поэтому перезаписать друг друга не могут (см. приёмку выше).
+            actions.saveTask({
+              ...modalTask,
+              status: "in_progress",
+              lastCompletedOn: "",
+              completedAt: "",
+              approvalState: "open",
+              approvalComment: "",
+            });
+            closeModal();
           }}
         />
       )}

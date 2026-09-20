@@ -46,6 +46,7 @@ export default function TaskParticipants({
   onApprove,
   onReturn,
   onForceClose,
+  onReopen,
   onAcceptReschedule,
   onRejectReschedule,
 }: {
@@ -58,6 +59,7 @@ export default function TaskParticipants({
   onApprove: (comment: string) => void;
   onReturn: (comment: string) => void;
   onForceClose: (reason: string) => void;
+  onReopen: (comment: string) => void;
   onAcceptReschedule: (participantId: string, date: string) => void;
   onRejectReschedule: (participantId: string) => void;
 }) {
@@ -105,6 +107,23 @@ export default function TaskParticipants({
     });
     if (reason === null) return;
     onForceClose(reason.trim());
+  }
+
+  async function handleReopen() {
+    // Причина необязательна: закрытую по ошибке задачу открывают обратно
+    // одним нажатием, и требовать объяснение за собственную опечатку —
+    // это плата не за то. Но если слово сказано, оно уйдёт исполнителям:
+    // у них задача уже была «принята», и её возвращение без единого слова
+    // выглядит как сбой.
+    const comment = await ask.ask({
+      title: "Открыть задачу заново",
+      question: "Что изменилось?",
+      note: "Можно оставить пустым. Отчёты исполнителей никуда не денутся — задача вернётся туда, где была до приёмки, и по ней можно отчитаться заново.",
+      multiline: true,
+      okText: "Открыть заново",
+    });
+    if (comment === null) return;
+    onReopen(comment.trim());
   }
 
   return (
@@ -205,6 +224,22 @@ export default function TaskParticipants({
             </button>
             <button className="btn btn-small" type="button" onClick={() => void handleReturn()}>
               Вернуть на доработку
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Выход из «Завершённых». Доска ходит только вперёд — перетащить
+          задачу обратно нельзя намеренно, — и до этой кнопки выхода не
+          было вовсе: галочка «сделано» снимала статус, но не приёмку, а
+          приёмка держит задачу в «Завершённых» сама по себе. Получалось
+          состояние, из которого не выбраться ни мышью, ни кнопкой. */}
+      {stage === "done" && (
+        <div className="tp-review">
+          <div className="tp-review-text">Задача принята и закрыта.</div>
+          <div className="tp-review-actions">
+            <button className="btn btn-small" type="button" onClick={() => void handleReopen()}>
+              Открыть заново
             </button>
           </div>
         </div>

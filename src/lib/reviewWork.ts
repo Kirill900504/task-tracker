@@ -21,9 +21,27 @@ import { recordEvent } from "@/lib/itemHistory";
 // Маршрут остаётся тем, чем был: он проверяет, что решение принимает тот,
 // кто вправе, — и зовёт это. Бот делает то же самое своей проверкой.
 
-export type ReviewAction = "approve" | "return" | "force";
+export type ReviewAction = "approve" | "return" | "force" | "reopen";
 
 export type ReviewResult = { ok: true } | { ok: false; error: string };
+
+// Выход из «Завершённых» — и он обязан снимать РОВНО то, что задачу
+// закрывало. Столбец доски выводится из двух вещей сразу (`status` и
+// `approval_state`), поэтому снятая галочка «сделано» без снятой приёмки
+// не возвращала задачу никуда: она оставалась в «Завершённых», а человек
+// был уверен, что открыл её. Приёмку из браузера не снять — колонка
+// серверная, — значит выход есть только через маршрут, и набор колонок у
+// него один на все входы (трекер, бот, массовые действия).
+export const REOPEN_PATCH = {
+  approval_state: "open",
+  approval_comment: null,
+  approved_at: null,
+  force_closed_by: null,
+  force_closed_reason: null,
+  status: "in_progress",
+  completed_at: null,
+  last_completed_on: null,
+} as const;
 
 export async function applyReview(
   admin: SupabaseClient,
@@ -51,6 +69,8 @@ export async function applyReview(
     // Отчёты обнуляются: иначе задача осталась бы «отчитались все», и
     // приёмка предложилась бы снова, ничего не изменив.
     await admin.from("task_participants").update({ done_at: null, done_comment: null }).eq("task_id", task.id).eq("role", "executor");
+  } else if (action === "reopen") {
+    await admin.from("tasks").update(REOPEN_PATCH).eq("id", task.id);
   } else {
     await admin
       .from("tasks")
@@ -70,7 +90,9 @@ export async function applyReview(
         ? `↩ ${who.label} вернул на доработку: ${text}`
         : action === "approve"
           ? `✅ ${who.label} принял работу${text ? ": " + text : ""}`
-          : `🔒 ${who.label} закрыл задачу волевым решением: ${text}`,
+          : action === "reopen"
+            ? `🔄 ${who.label} открыл задачу заново${text ? ": " + text : ""}`
+            : `🔒 ${who.label} закрыл задачу волевым решением: ${text}`,
   });
 
   await tellExecutors(admin, task, action, text);
@@ -100,12 +122,16 @@ async function tellExecutors(
       ? `↩ Вернули на доработку: «${task.title}»\n\n${comment}`
       : action === "approve"
         ? `✅ Принято: «${task.title}»${comment ? "\n\n" + comment : ""}`
-        : `🔒 Задача закрыта: «${task.title}»\n\n${comment}`;
+        : action === "reopen"
+          ? `🔄 Задачу открыли заново: «${task.title}»${comment ? "\n\n" + comment : ""}`
+          : `🔒 Задача закрыта: «${task.title}»\n\n${comment}`;
 
   // Под возвратом — кнопки, которыми на него отвечают: сообщение, которым
   // задачу присылали, к этому моменту уже переписано, и отчитаться заново
-  // было бы нечем. После приёмки ждать нечего — остаётся «Ответить».
-  const buttons = action === "return" ? taskButtons(task.id, "executor") : replyButtons("task", task.id);
+  // было бы нечем. То же самое у заново открытой задачи: по ней снова
+  // ждут отчёта. После приёмки ждать нечего — остаётся «Ответить».
+  const buttons =
+    action === "return" || action === "reopen" ? taskButtons(task.id, "executor") : replyButtons("task", task.id);
 
   for (const person of ((people || []) as ColleagueRow[])) {
     const target = chatsFor(person)[0];

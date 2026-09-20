@@ -3,6 +3,7 @@ import { attachExecutors, assignNote } from "@/lib/assignExecutors";
 import { applyBulkMove, type BulkMovePlan } from "@/lib/bulkActions";
 import { closeMeetingWithResult } from "@/lib/meetingLink";
 import { newTaskRow } from "@/lib/newTask";
+import { REOPEN_PATCH } from "@/lib/reviewWork";
 
 // Editing/completing/deleting existing tasks and meetings from Telegram.
 // The model only ever supplies an action + a title fragment ("query") — it
@@ -109,8 +110,11 @@ async function applyAction(
     }
     const status = action === "complete" ? "done" : action === "reopen" ? "in_progress" : null;
     if (!status) return { error: "Это действие неприменимо к задаче" };
-    const patch: Record<string, unknown> = { status };
-    if (status === "in_progress") patch.last_completed_on = null;
+    // «Открыть заново» снимает ровно то, что задачу закрывало: статуса
+    // мало, потому что принятая задача держится в «Завершённых» самой
+    // приёмкой. Набор колонок общий с трекером и маршрутом — второй его
+    // экземпляр разошёлся бы с первым.
+    const patch: Record<string, unknown> = status === "in_progress" ? { ...REOPEN_PATCH } : { status };
     const { error } = await admin.from("tasks").update(patch).eq("id", id);
     return { error: error?.message || null };
   }

@@ -91,6 +91,7 @@ export default function TaskModal({
   onApproveWork,
   onReturnWork,
   onForceCloseWork,
+  onReopenWork,
   onAcceptReschedule,
   onRejectReschedule,
   onPersonAdded,
@@ -118,6 +119,7 @@ export default function TaskModal({
   onApproveWork: (comment: string) => void;
   onReturnWork: (comment: string) => void;
   onForceCloseWork: (reason: string) => void;
+  onReopenWork: (comment: string) => void;
   onAcceptReschedule: (participantId: string, date: string) => void;
   onRejectReschedule: (participantId: string) => void;
   // Дождаться, пока только что заведённый человек доедет до базы, и
@@ -545,6 +547,7 @@ export default function TaskModal({
             onApprove={onApproveWork}
             onReturn={onReturnWork}
             onForceClose={onForceCloseWork}
+            onReopen={onReopenWork}
             onAcceptReschedule={onAcceptReschedule}
             onRejectReschedule={onRejectReschedule}
           />
