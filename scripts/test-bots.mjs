@@ -594,32 +594,21 @@ try {
     written,
   );
 
-  // Выход из «Завершённых». Закрытая задача держится ДВУМЯ полями, и
-  // снятие одного оставляло её закрытой — состояние без выхода.
-  await admin
-    .from("tasks")
-    .update({ status: "done", approval_state: "accepted", approved_at: new Date().toISOString() })
-    .eq("id", ownerTask);
-  const reopened = await post(
-    "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "верни в работу задачу Проверка владельческих кнопок" } },
-    { "x-telegram-bot-api-secret-token": tgSecret },
-  );
-  const { data: backToWork } = await admin
-    .from("tasks")
-    .select("status, approval_state, approved_at, completed_at")
-    .eq("id", ownerTask)
-    .maybeSingle();
-  check(
-    "«верни в работу» снимает и статус, и приёмку",
-    reopened.status === 200 &&
-      backToWork?.status === "in_progress" &&
-      backToWork?.approval_state === "open" &&
-      !backToWork?.approved_at &&
-      !backToWork?.completed_at,
-    backToWork,
-  );
-
+  // Здесь стояла проверка той же двери СЛОВАМИ («верни в работу задачу
+  // …»). Её больше нет, и это не потеря покрытия, а разделение
+  // ответственности.
+  //
+  // Ту фразу разбирает GigaChat, и проверка краснела тогда, когда
+  // модель её не узнавала: код при этом был цел, а прогон по боевому
+  // объявлял регрессию. Дважды подряд 20.09.2026 — и оба раза
+  // следующий прогон зеленел сам. Тест, который иногда красный не по
+  // вине кода, перестают читать, и вместе с ним перестают читать
+  // соседние.
+  //
+  // Правило («открыть заново» снимает и статус, и приёмку) теперь
+  // проверяется юнит-тестом на чистой функции — src/lib/
+  // telegramManage.test.ts, — а здесь остаётся то, что и должно
+  // проверяться на боевом: живая кнопка, которая ходит в базу.
   // Та же дверь из «Завершённых», но кнопкой под карточкой: закрыть
   // задачу промахом по «Принять работу» в телефоне — дело одной секунды,
   // а искать её потом в списках долго.

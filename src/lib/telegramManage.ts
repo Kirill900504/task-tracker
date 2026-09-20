@@ -94,6 +94,28 @@ function describeAction(action: ManageAction, itemType: ManageItemType): string 
   return "удалить";
 }
 
+// Что записать в задачу для «выполнено» и «верни в работу».
+//
+// Вынесено из запроса в отдельную функцию не ради красоты, а чтобы это
+// можно было ПРОВЕРИТЬ. Дорога сюда идёт через модель: фразу «верни в
+// работу задачу …» разбирает GigaChat, и проверка на боевом краснела
+// тогда, когда модель не узнавала фразу, — код при этом был
+// безупречен. Тест, который иногда красный не по вине кода, хуже
+// отсутствующего: его перестают читать. Теперь модель проверяется
+// прогоном по боевому, а правило — юнит-тестом, и они не мешают друг
+// другу.
+//
+// Само правило: «открыть заново» снимает ровно то, что задачу
+// закрывало. Статуса мало — принятую задачу держит в «Завершённых» и
+// приёмка, и набор колонок для этого один на весь проект
+// (lib/reviewWork.REOPEN_PATCH), иначе второй его экземпляр разойдётся
+// с первым.
+export function taskPatchFor(action: ManageAction): Record<string, unknown> | null {
+  if (action === "complete") return { status: "done" };
+  if (action === "reopen") return { ...REOPEN_PATCH };
+  return null;
+}
+
 async function applyAction(
   admin: ReturnType<typeof createAdminClient>,
   itemType: ManageItemType,
@@ -108,13 +130,8 @@ async function applyAction(
       const { error } = await admin.from("tasks").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       return { error: error?.message || null };
     }
-    const status = action === "complete" ? "done" : action === "reopen" ? "in_progress" : null;
-    if (!status) return { error: "Это действие неприменимо к задаче" };
-    // «Открыть заново» снимает ровно то, что задачу закрывало: статуса
-    // мало, потому что принятая задача держится в «Завершённых» самой
-    // приёмкой. Набор колонок общий с трекером и маршрутом — второй его
-    // экземпляр разошёлся бы с первым.
-    const patch: Record<string, unknown> = status === "in_progress" ? { ...REOPEN_PATCH } : { status };
+    const patch = taskPatchFor(action);
+    if (!patch) return { error: "Это действие неприменимо к задаче" };
     const { error } = await admin.from("tasks").update(patch).eq("id", id);
     return { error: error?.message || null };
   }
