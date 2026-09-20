@@ -995,23 +995,33 @@ test("разделы переставляются перетаскиванием
   await page.mouse.move(a.x + a.width / 2 - 10, a.y + a.height / 2, { steps: 4 });
   await page.waitForTimeout(150);
 
-  // Ведём к САМОМУ НАЧАЛУ ряда, а не в середину Альфы, и целимся уже
-  // после начала переноса.
+  // Ведём к ПЕРВОМУ разделу ряда, медленно и с остановками.
   //
-  // Причина — та же, что записана в dragOnto (e2e/helpers.ts), только
-  // злее: пока рука идёт, соседи расступаются, и прямоугольник Альфы, где
-  // бы он ни был снят, к моменту отпускания уже не там. Раз за разом это
-  // давало сдвиг ровно на одну позицию — Гамма вставала ПОСЛЕ Альфы, — и
-  // выглядело как «перетаскивание не сработало». Левый край ряда никуда
-  // не уезжает вовсе, поэтому целью взят он: раздел, доведённый туда,
-  // встаёт первым, чего проверке и достаточно. Первая кнопка ряда —
-  // «Все», она не переставляется, так что попасть «мимо всех» нельзя.
-  const row = (await page.locator("#sectionTabs").boundingBox())!;
-  const b = (await dst.boundingBox())!;
+  // И то, и другое — не перестраховка, а то, как эта перестановка
+  // устроена (SectionTabs): она смотрит, какая кнопка сейчас ПОД
+  // курсором, и меняет порядок местами с ней. Отсюда две вещи, на
+  // которых тест и падал через раз.
+  //
+  // Первая: после обмена перетаскиваемый раздел встаёт ровно туда, где
+  // курсор, и дальше курсор ездит внутри него самого — а над собой
+  // обмена не бывает. Чтобы сделать второй шаг, надо выйти за его край,
+  // и целиться поэтому надо не в середину соседа, а в НАЧАЛО ряда.
+  //
+  // Вторая: «какая кнопка под курсором» читается из настоящего DOM, а
+  // перестроить его должен React. Если гнать мышь без пауз, все события
+  // приходят раньше первой же перерисовки, и каждое следующее считается
+  // по ряду, которого на экране уже нет: раздел переезжал на одну
+  // позицию и замирал. Рука столько событий в секунду не производит, а
+  // Playwright производит — отсюда паузы между шагами.
+  //
+  // Цель — левый край первого раздела, а не край всей строки: у кнопки
+  // «Все» нет data-section-id, и остановка на ней не считается ничем.
+  const first = (await page.locator("#sectionTabs .section-tab[data-section-id]").first().boundingBox())!;
   const from = { x: a.x + a.width / 2 - 10, y: a.y + a.height / 2 };
-  const to = { x: row.x + 8, y: b.y + b.height / 2 };
+  const to = { x: first.x + 6, y: first.y + first.height / 2 };
   for (let i = 1; i <= 12; i++) {
-    await page.mouse.move(from.x + (to.x - from.x) * (i / 12), from.y + (to.y - from.y) * (i / 12), { steps: 3 });
+    await page.mouse.move(from.x + (to.x - from.x) * (i / 12), from.y + (to.y - from.y) * (i / 12));
+    await page.waitForTimeout(60);
   }
   await page.waitForTimeout(300);
   await page.mouse.up();
@@ -1298,6 +1308,55 @@ test("«Команда» открывается на готовом списке
   await page.click("#teamBtn");
   await expect(page.locator("#teamList")).toBeVisible({ timeout: 1000 });
   await expect(page.locator("#teamOverlay .empty", { hasText: "Загрузка" })).toHaveCount(0);
+});
+
+// Своё имя видно и правится — там же, где видно чужие.
+//
+// Вопрос Кирилла 20.09.2026: «а другие пользователи же видят меня как
+// Кирилл Кучеренко? или как они меня видят?». Ответа не было нигде: своя
+// строка из «Команды» вырезалась, а переименовать человека было нельзя
+// ниоткуда вообще — ни себя, ни коллегу с опечаткой в фамилии.
+//
+// Проверяется здесь именно связка: строка «это вы» существует, и имя,
+// поменянное в ней, доезжает до базы. Пометка «(я)» при этом остаётся в
+// базе и не показывается: по ней трекер находит собственную строку
+// владельца, а читают список все.
+test("своё имя видно в «Команде» и меняется оттуда же", async ({ page }) => {
+  await login(page);
+  await waitForSaved(page);
+
+  await page.click("#teamBtn");
+  const myRow = page.locator("#teamList .team-row", { hasText: "это вы" });
+  await expect(myRow).toBeVisible();
+  await expect(myRow.locator(".team-name")).not.toContainText("(я)");
+
+  const stamp = Math.random().toString(36).slice(2, 8);
+  await myRow.locator(".team-more").click();
+  await page.locator(".export-menu .export-item, .action-sheet .export-item").filter({ hasText: /^Имя$/ }).click();
+  await page.fill(".ask-modal input", `Кирилл Тестовый ${stamp}`);
+  await page.click("#askOkBtn");
+
+  await expect(page.locator("#teamList .team-row", { hasText: "это вы" }).locator(".team-name")).toHaveText(
+    `Кирилл Тестовый ${stamp}`,
+  );
+
+  // И в базе — с пометкой на месте: без неё перестанут работать и «Сделал»
+  // по задаче, поставленной владельцу, и правило «себе не пишут».
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  // Экран отвечает раньше облака: имя в списке меняется сразу, а запись
+  // идёт следом (см. rename в useColleagues). Поэтому базу спрашиваем с
+  // ожиданием — иначе тест ловит момент до записи и читается как поломка.
+  await expect
+    .poll(
+      async () => {
+        const { data } = await admin.from("assignees").select("name").eq("user_id", userId).ilike("name", "%(я)%");
+        return (data || []).map((r) => r.name);
+      },
+      { timeout: 10_000 },
+    )
+    .toContain(`Кирилл Тестовый ${stamp} (я)`);
 });
 
 // Окно ПК уменьшается ступенями и остаётся окном ПК.
