@@ -1063,19 +1063,27 @@ test("левая кнопка по разделу заводит задачу, �
   await expect(all).toHaveClass(/active/);
   await expect(tab).not.toHaveClass(/active/);
 
-  // А переименование — в окне «Разделы».
+  // А переименование — в окне «Разделы», прямо в строке раздела.
   await page.click("#sectionSettingsBtn");
-  const row = page.locator(".section-row", { hasText: `Старое${stamp}` });
+  const row = page.locator(`.section-row[data-section-id="${id}"]`);
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "Название" }).click();
-  await expect(page.locator(".ask-modal")).toBeVisible();
-  await page.fill("#askInput", `Новое${stamp}`);
-  await page.click("#askOkBtn");
+  const nameField = row.locator("input.section-row-name");
+  await expect(nameField).toHaveValue(`Старое${stamp}`);
+  await nameField.fill(`Новое${stamp}`);
   await expect(page.locator("#sectionTabs .section-tab", { hasText: `Новое${stamp}` })).toBeVisible();
   await waitForSaved(page);
 
+  // И строка раздела помещается в одну строку: он попросил об этом прямо,
+  // увидев одиннадцать разделов, у половины которых «Удалить» уехала вниз.
+  // Меряется это не глазами, а высотой: ряд, поместившийся в строку, не
+  // выше своей самой высокой кнопки.
+  const head = row.locator(".section-row-head");
+  const headBox = (await head.boundingBox())!;
+  const btnBox = (await row.getByRole("button", { name: "Удалить" }).boundingBox())!;
+  expect(headBox.height).toBeLessThan(btnBox.height * 1.6);
+
   // И удаление — там же, рядом.
-  await page.locator(".section-row", { hasText: `Новое${stamp}` }).getByRole("button", { name: "Удалить" }).click();
+  await row.getByRole("button", { name: "Удалить" }).click();
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.click("#askOkBtn");
   await expect(page.locator("#sectionTabs .section-tab", { hasText: stamp })).toHaveCount(0);

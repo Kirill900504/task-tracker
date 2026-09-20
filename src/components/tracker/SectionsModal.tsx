@@ -59,18 +59,6 @@ export default function SectionsModal({
 
   const sorted = [...sections].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
-  async function rename(section: Section) {
-    const name = await ask.ask({
-      title: "Раздел",
-      question: "Как он должен называться?",
-      value: section.name,
-      okText: "Сохранить",
-      required: "У раздела должно быть название.",
-    });
-    if (!name?.trim() || name.trim() === section.name) return;
-    onSave({ ...section, name: name.trim() });
-  }
-
   async function changeKind(section: Section) {
     const kind = await ask.choose({
       title: "Какой это раздел",
@@ -127,7 +115,7 @@ export default function SectionsModal({
       <div className="modal">
         <h2 id="sectionsTitle">Разделы</h2>
         <p className="modal-note">
-          Правая кнопка по разделу в трекере заводит новую задачу с теми, кто перечислен здесь. Левая — отбирает задачи этого раздела.
+          Название правится прямо здесь. Левая кнопка по разделу в трекере заводит новую задачу с теми, кто перечислен в нём, правая — отбирает его задачи.
         </p>
 
         {failed && <div className="ms-answer-error">{failed}</div>}
@@ -136,25 +124,37 @@ export default function SectionsModal({
           const bound = links.forSection(section.id);
           const open = openFor === section.id;
           return (
-            <div key={section.id} className="section-row">
+            <div key={section.id} className="section-row" data-section-id={section.id}>
               <div className="section-row-head">
                 <span className={"section-dot" + (section.kind === "personal" ? " personal" : "")} />
-                <span className="section-row-name">{section.name}</span>
-                <span className="section-row-count">
-                  {bound.length ? `${bound.length} чел.` : "никого"}
-                </span>
-                <button type="button" className="btn btn-small" onClick={() => setOpenFor(open ? null : section.id)}>
-                  {open ? "Свернуть" : "Ответственные"}
-                </button>
-                <button type="button" className="btn btn-small" onClick={() => void rename(section)}>
-                  Название
-                </button>
-                <button type="button" className="btn btn-small" onClick={() => void changeKind(section)}>
-                  {section.kind === "personal" ? "Личный" : "Рабочий"}
-                </button>
-                <button type="button" className="btn btn-small btn-danger" onClick={() => onDelete(section)}>
-                  Удалить
-                </button>
+                <SectionName section={section} onSave={onSave} />
+                <div className="section-cell">
+                  {/* Подпись кнопки не меняется от нажатия — меняется её вид:
+                      «Ответственные» ↔ «Свернуть» двигали «Удалить» вправо и
+                      влево под рукой, а это ровно то, чего он просил не
+                      делать. Число рядом отвечает на тот же вопрос, что
+                      отвечала снятая подпись «никого». */}
+                  <button
+                    type="button"
+                    className={"btn btn-small section-btn-people" + (open ? " active" : "")}
+                    title="Кого подставлять в новую задачу по этому разделу"
+                    aria-expanded={open}
+                    onClick={() => setOpenFor(open ? null : section.id)}
+                  >
+                    Люди <span className="pill">{bound.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-small section-btn-kind"
+                    title="Рабочий или личный: личные разделы не попадают в сводки"
+                    onClick={() => void changeKind(section)}
+                  >
+                    {section.kind === "personal" ? "Личный" : "Рабочий"}
+                  </button>
+                  <button type="button" className="btn btn-small btn-danger" onClick={() => onDelete(section)}>
+                    Удалить
+                  </button>
+                </div>
               </div>
 
               {open && (
@@ -192,5 +192,54 @@ export default function SectionsModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+// Название раздела правится на месте, а не в окне вопроса.
+//
+// Кнопка «Название» открывала `ask` с полем ввода — три нажатия и целое
+// окно ради одного слова, и по ней же не было видно, что имя вообще можно
+// менять: подпись называла поле, а не действие. Поле, в котором стоит само
+// название, говорит это собой и заодно освобождает место в строке, из-за
+// которого «Удалить» уезжала на вторую строку.
+//
+// Пишется сразу, как текст задачи: движок синхронизации сам склеивает
+// подряд идущие правки, и ждать здесь нечего. Escape при этом закрывает
+// всё окно (так устроен `useEscapeToClose` — он слушает в фазе перехвата),
+// поэтому набранное не должно ждать ни «Сохранить», ни даже потери фокуса:
+// к моменту Escape оно уже сохранено.
+//
+// Пустое имя — это не имя: в базу оно не уходит вовсе, а поле, оставленное
+// пустым, возвращает прежнее, когда из него уходят. Иначе раздел без
+// названия превратился бы в безымянную кнопку, которую нечем выбрать.
+function SectionName({ section, onSave }: { section: Section; onSave: (section: Section) => void }) {
+  const [draft, setDraft] = useState(section.name);
+
+  function change(value: string) {
+    setDraft(value);
+    const name = value.trim();
+    if (name && name !== section.name) onSave({ ...section, name });
+  }
+
+  return (
+    <input
+      className="section-row-name"
+      value={draft}
+      aria-label="Название раздела"
+      title="Название раздела — правится прямо здесь"
+      maxLength={40}
+      onChange={(e) => change(e.target.value)}
+      onBlur={() => {
+        if (!draft.trim()) setDraft(section.name);
+      }}
+      onKeyDown={(e) => {
+        // Enter здесь значит «закончил», а не «отправить форму»: сохранено
+        // уже всё, и остаётся только убрать курсор из поля.
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }}
+    />
   );
 }

@@ -2327,11 +2327,43 @@
      сразу, а у того, по кому пришли. */
   .section-row{border-bottom:1px solid var(--line-soft); padding:10px 0;}
   .section-row:last-of-type{border-bottom:none;}
-  .section-row-head{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  /* Сетка с именованными местами, а не flex-wrap: у одиннадцати разделов
+     подряд перенос рвал ряд каждый раз в новом месте — у «Разработки» и
+     «Автоматизации» «Удалить» уезжала под строку, у соседей оставалась в
+     ней, и список читался как сломанный. Имя сжимается (minmax с 0 и
+     ellipsis внутри), кнопки не сжимаются никогда: сжать их — значит
+     обрезать слово. */
+  .section-row-head{
+    display:grid; grid-template-columns:8px minmax(0,1fr) auto; align-items:center; gap:8px;
+  }
   .section-dot{width:8px; height:8px; border-radius:50%; background:var(--section-work); flex:none;}
   .section-dot.personal{background:var(--section-personal);}
-  .section-row-name{font-size:14px; font-weight:700; color:var(--ink); margin-right:2px;}
-  .section-row-count{font-size:12px; color:var(--ink-soft); margin-right:auto;}
+  /* Поле, а не подпись: название правится на месте. Выглядит оно как
+     название и только под курсором и в фокусе показывает, что это поле, —
+     иначе строка из одиннадцати рамок читается как анкета. */
+  .section-row-name{
+    min-width:0; width:100%; font-family:var(--sans); font-size:14px; font-weight:700; color:var(--ink);
+    background:transparent; border:1px solid transparent; border-radius:var(--radius-sm);
+    padding:5px 8px; text-overflow:ellipsis;
+  }
+  .section-row-name:hover{border-color:var(--line-soft); background:var(--paper-soft);}
+  .section-row-name:focus{outline:none; border-color:var(--accent); background:var(--paper-soft);}
+  .section-cell{display:flex; align-items:center; justify-content:flex-end; gap:6px;}
+  .section-cell .btn-small{flex:none; min-height:30px; display:inline-flex; align-items:center; gap:6px;}
+  /* Ширина у обеих постоянная: «Личный» короче «Рабочего», а число
+     ответственных растёт с одного знака до двух — и без этого соседняя
+     «Удалить» ездила бы под рукой. */
+  .section-btn-people{min-width:92px; justify-content:center;}
+  .section-btn-kind{min-width:84px; justify-content:center;}
+  .section-btn-people.active{border-color:var(--accent); color:var(--accent);}
+  .section-btn-people .pill{padding:2px 7px;}
+  /* Телефон: в одну строку это не помещается никаким уменьшением, поэтому
+     имя занимает свою строку целиком, а кнопки встают под ним — по-прежнему
+     все вместе и в том же порядке. */
+  @media (max-width:560px){
+    .section-row-head{grid-template-columns:8px minmax(0,1fr);}
+    .section-cell{grid-column:1 / -1; justify-content:flex-start; flex-wrap:wrap;}
+  }
   .section-row-people{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:9px; padding-left:16px;}
   .section-person{
     display:inline-flex; align-items:center; gap:6px;
