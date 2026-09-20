@@ -957,12 +957,25 @@ test("левая кнопка по разделу заводит задачу, �
   const tab = page.locator("#sectionTabs .section-tab", { hasText: `Старое${stamp}` });
   await expect(tab).toBeVisible({ timeout: 20_000 });
 
-  // Правая кнопка — новая задача, и раздел в ней уже выбран.
-  await tab.click({ button: "right" });
+  // Дать строке разделов устояться. Она только что приехала из базы и
+  // пересортировалась по sort_order, а нажатие, попавшее в перерисовку,
+  // теряется целиком: pointerdown достаётся старому узлу, pointerup —
+  // новому, и onClick не случается вовсе. Рука в это окно почти не
+  // попадает, тест попадает всегда.
+  await page.waitForTimeout(800);
+
+  // Левая кнопка — новая задача, и раздел в ней уже выбран.
+  await tab.click();
   await expect(page.locator("#fTitle")).toBeVisible();
   await expect(page.locator(`#fSection [data-value="${id}"]`)).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   await expect(page.locator("#fTitle")).toHaveCount(0);
+
+  // Правая — отбор по разделу, и повторная его снимает.
+  await tab.click({ button: "right" });
+  await expect(tab).toHaveClass(/active/);
+  await tab.click({ button: "right" });
+  await expect(tab).not.toHaveClass(/active/);
 
   // А переименование — в окне «Разделы».
   await page.click("#sectionSettingsBtn");

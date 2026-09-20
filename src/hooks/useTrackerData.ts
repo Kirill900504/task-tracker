@@ -72,6 +72,9 @@ const NETWORK_TIMEOUT_MS = 8000;
 // phone (waking radio, token refresh, five queries) can genuinely take
 // longer than the cap above.
 const SLOW_START_TIMEOUT_MS = 20000;
+// Короткая проба сети, когда копия уже на экране: столько трекер молчит,
+// прежде чем честно сказать «показываю сохранённое».
+const FAST_PROBE_MS = 2500;
 
 // Rejects rather than hanging: see boot()'s comment about connections that
 // accept a request and never answer.
@@ -605,7 +608,10 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       // живёт в liveRef/shadowRef и включает всё, что человек успел
       // сделать, поэтому она и берётся источником вместо самой копии.
       const fastStart = !!cached;
-      if (cached) startFromCache(cached, { offline: false });
+      // Баннер «нет связи» ставится сразу, если связи и правда нет: иначе
+      // человек, открывший трекер в самолёте, восемь секунд смотрел бы на
+      // копию как на живые данные — ровно до таймаута первого запроса.
+      if (cached) startFromCache(cached, { offline: typeof navigator !== "undefined" && !navigator.onLine });
 
       const loadAll = (ms?: number) =>
         withTimeout(
@@ -621,22 +627,39 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
 
       let results;
       try {
-        results = await loadAll();
+        // Когда копия уже на экране, первая попытка короткая.
+        //
+        // Ждать восемь секунд имеет смысл, только если ждёт человек: ему
+        // нечего показать, и терпение дешевле ошибки. А когда трекер уже
+        // открыт на вчерашнем кадре, эти восемь секунд — это восемь секунд
+        // молчания о том, что данные несвежие: в метро или в самолёте он
+        // всё это время выглядит живым. Поэтому при быстром старте сеть
+        // пробуется коротко, и по её молчанию сразу поднимается «нет
+        // связи»; настоящая попытка продолжается следом, с обычным
+        // терпением, и снимает баннер, когда ответит.
+        results = await loadAll(fastStart ? FAST_PROBE_MS : undefined);
       } catch {
         if (cancelled) return;
-        if (cached) {
-          startFromCache(cached);
-          return;
-        }
-        // Nothing stored to show instead, so being patient costs nothing and
-        // saves the start: on a phone opening the installed app cold, the
-        // first attempt can time out on a connection that is perfectly fine.
-        try {
-          results = await loadAll(SLOW_START_TIMEOUT_MS);
-        } catch {
-          if (cancelled) return;
-          failLoad("Нет связи с облаком");
-          return;
+        if (fastStart) {
+          markOffline();
+          try {
+            results = await loadAll(SLOW_START_TIMEOUT_MS);
+          } catch {
+            // Копия уже показана и помечена как копия — это и есть
+            // рабочее состояние офлайна, дальше дело обычного повтора.
+            return;
+          }
+        } else {
+          // Показать нечего, значит терпение ничего не стоит и спасает
+          // старт: на телефоне, открывшем приложение «на холодную», первая
+          // попытка успевает истечь на совершенно живой связи.
+          try {
+            results = await loadAll(SLOW_START_TIMEOUT_MS);
+          } catch {
+            if (cancelled) return;
+            failLoad("Нет связи с облаком");
+            return;
+          }
         }
       }
       if (cancelled) return;
@@ -730,6 +753,15 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     // runs while it considers itself offline, and without that flag an
     // error screen was a dead end with no way back — which is what a cold
     // start on the phone ran into.
+    // Данные на экране есть, но они из копии: баннер поднимается, экран
+    // не перерисовывается. Отдельно от startFromCache именно поэтому —
+    // тот вернул бы списки к сохранённым и стёр бы работу, начатую после
+    // первого кадра.
+    function markOffline() {
+      setOffline(true);
+      offlineRef.current = true;
+    }
+
     function failLoad(message: string) {
       setLoadError(message);
       setLoading(false);
