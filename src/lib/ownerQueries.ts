@@ -256,3 +256,22 @@ export async function ownerMeetingsReply(admin: SupabaseClient, userId: string, 
     ],
   };
 }
+
+// Кнопки под утренней сводкой.
+//
+// Сводка перечисляет ровно то, что требует решения: что ждёт приёмки, что
+// просрочено, кто молчит. Дочитав её, человек должен иметь под рукой то,
+// чем на это ответить, — иначе сводка остаётся чтением, а работа
+// откладывается до компьютера.
+export function briefButtons(): BotButton[][] {
+  return [
+    [
+      { text: "🔍 На приёмке", data: encodeCallback("task", "olist", "review") },
+      { text: "⚠ Просрочено", data: encodeCallback("task", "olist", "overdue") },
+    ],
+    [
+      { text: "➕ Поручить", data: encodeCallback("task", "new", "start") },
+      { text: "☰ Меню", data: encodeCallback("task", "omenu", "x") },
+    ],
+  ];
+}

@@ -20,6 +20,9 @@ export type BotCommand = { command: string; description: string };
 // его; два разных меню в одном боте развести всё равно нечем, а команда,
 // которой у человека нет, отвечает понятной фразой вместо тишины.
 export const BOT_COMMANDS: BotCommand[] = [
+  // «Меню» первым: это единственная команда, после которой видно все
+  // остальные кнопки, и человеку, открывшему чат впервые, достаточно её.
+  { command: "menu", description: "Меню" },
   { command: "tasks", description: "Мои задачи" },
   { command: "today", description: "Что на сегодня" },
   { command: "overdue", description: "Что просрочено" },

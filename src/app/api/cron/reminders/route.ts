@@ -5,6 +5,7 @@ import { flushNotices } from "@/lib/noticeQueue";
 import { moscowNow, dateStr, minutesOfDay } from "@/lib/taskLogic";
 import { isRussianWorkingDay } from "@/lib/workCalendar";
 import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
+import { briefButtons } from "@/lib/ownerQueries";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
 import { dueReminder, minutesUntil, ownerReminder, participantReminder, reasonNudge, recapAsk, recapButtons, recapDue } from "@/lib/meetingReminders";
 import { awaitingReason, voteTally, type MeetingVote } from "@/lib/meetingVotes";
@@ -207,7 +208,11 @@ export async function GET(req: Request) {
             names.join("\n");
         }
 
-        if (text) await notifyOwner(admin, userId, text);
+        // Под сводкой — кнопки, а не только текст. Сводка перечисляет то,
+        // что требует решения, и человек, дочитав её, должен нажать, а не
+        // идти искать, чем нажать: «кнопка там, где от человека ждут
+        // ответа» — правило проекта, и сводка тут самый частый случай.
+        if (text) await notifyOwner(admin, userId, text, briefButtons());
       });
     }
 
