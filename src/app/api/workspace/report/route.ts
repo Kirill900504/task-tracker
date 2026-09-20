@@ -8,6 +8,7 @@ import { canDecline, canReportDone } from "@/lib/taskProgress";
 import { canVoteNo } from "@/lib/meetingVotes";
 import { fmtDate } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
+import { withoutSelfMark } from "@/lib/actorName";
 import { newTaskRow } from "@/lib/newTask";
 import { recordEvent } from "@/lib/itemHistory";
 import { isSelfAssignee } from "@/lib/trackerRows";
@@ -63,7 +64,12 @@ export async function POST(req: Request) {
   }
   if (!m) return NextResponse.json({ error: "Вы не участник этого трекера" }, { status: 403 });
 
-  const myName = (Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name) || "Коллега";
+  // Полное имя строки — в саму задачу: по нему её потом находят бот,
+  // сводки и карточки, и «(я)» там часть имени. В текстах, которые
+  // читают ЛЮДИ, пометки быть не должно: она написана для одного
+  // человека, а читают их все.
+  const rowName = (Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name) || "";
+  const myName = withoutSelfMark(rowName) || "Участник";
   const now = new Date().toISOString();
 
   // «Взять в работу»: мысль становится задачей на этого же человека.
@@ -104,7 +110,7 @@ export async function POST(req: Request) {
     // Без срока: срок ставит тот, кто спросит, а не тот, кто взялся.
     const { error: taskError } = await admin
       .from("tasks")
-      .insert(newTaskRow({ id: taskId, userId: m.owner_id, title, assignee: myName, createdBy: user.id }));
+      .insert(newTaskRow({ id: taskId, userId: m.owner_id, title, assignee: rowName || myName, createdBy: user.id }));
     if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
 
     // upsert, а не insert: имя исполнителя стоит в самой задаче, и строку
