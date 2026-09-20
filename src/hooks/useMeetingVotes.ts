@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { me } from "@/lib/me";
 import type { MeetingVote } from "@/lib/meetingVotes";
 
 // Кто придёт, кто не сможет и кто не ответил.
@@ -120,7 +121,14 @@ export function useMeetingVotes() {
   const sync = useCallback(
     async (meetingId: string, names: string[]): Promise<string[]> => {
       const db = createClient();
-      const wanted = names.filter((n) => n && !isSelfAssignee(n));
+      // Своей строки голосования у организатора нет — он идёт по
+      // определению. Но «организатор» это тот, кто собирает, а не владелец
+      // пространства: фильтр по метке «(я)» означал, что позванный
+      // руководителем Кирилл не получает строки вовсе, то есть ни голоса,
+      // ни напоминаний, ни места в «кто идёт».
+      const who = await me();
+      const iAmOwner = !who.userId || who.userId === who.workspaceId;
+      const wanted = names.filter((n) => n && (iAmOwner ? !isSelfAssignee(n) : peopleByName[n] !== who.assigneeId));
       const existing = byMeeting[meetingId] || [];
 
       const wantedIds = new Set(wanted.map((n) => peopleByName[n]).filter(Boolean));

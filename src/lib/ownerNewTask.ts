@@ -5,6 +5,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { newTaskRow } from "@/lib/newTask";
 import { attachExecutors, assignNote } from "@/lib/assignExecutors";
+import { withoutSelfMark } from "@/lib/actorName";
 import { uid } from "@/lib/uid";
 
 // Поручить прямо из мессенджера — кнопками, а не фразой.
@@ -48,7 +49,9 @@ export async function whoButtons(admin: SupabaseClient, userId: string): Promise
   const rows: BotButton[][] = [];
   // По двое в ряд: имена длинные, а ряд из трёх в мессенджере обрезается.
   for (let i = 0; i < list.length; i += 2) {
-    rows.push(list.slice(i, i + 2).map((p) => ({ text: p.name, data: encodeCallback("task", "nwho", p.id) })));
+    // Без пометки «(я)»: она написана для владельца, а кнопки эти видит и
+    // руководитель, который поручает задачу ему.
+    rows.push(list.slice(i, i + 2).map((p) => ({ text: withoutSelfMark(p.name), data: encodeCallback("task", "nwho", p.id) })));
   }
   const bySection = ((sections || []) as { id: string; name: string }[]).filter((s) => withPeople.has(s.id));
   for (let i = 0; i < bySection.length; i += 2) {
@@ -117,7 +120,10 @@ export async function createTaskFromBot(
   for (const role of ["executor", "coexecutor", "watcher"] as const) {
     const names = people.filter((p) => p.role === role).map((p) => p.name);
     if (!names.length) continue;
-    const result = await attachExecutors(admin, userId, { id, title, deadline: deadline || null }, names, role);
+    // createdBy передаётся дальше: по нему attachExecutors понимает, значит
+    // ли строка «… (я)» в списке «себе» — или это руководитель поручает
+    // задачу владельцу, и тому надо сказать, как любому другому.
+    const result = await attachExecutors(admin, userId, { id, title, deadline: deadline || null }, names, role, createdBy);
     const note = assignNote(result);
     if (note) notes.push(note);
   }

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { chatsFor, replyButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
-import { sendToColleague } from "@/lib/botDelivery";
+import { replyButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
+import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
 
 // Решение постановщика — одно на трекер и на бота.
@@ -103,7 +103,7 @@ export async function applyReview(
 // молчания здесь: работа стоит, и никто не знает, что она стоит.
 async function tellExecutors(
   admin: SupabaseClient,
-  task: { id: string; title: string },
+  task: { id: string; title: string; user_id: string },
   action: ReviewAction,
   comment: string,
 ): Promise<void> {
@@ -133,8 +133,10 @@ async function tellExecutors(
   const buttons =
     action === "return" || action === "reopen" ? taskButtons(task.id, "executor") : replyButtons("task", task.id);
 
+  // Через sendToPerson, а не по чату из строки человека: исполнителем
+  // бывает и владелец, а его чат живёт не в этой строке, и рассылка,
+  // написанная через chatsFor, для него молчала (см. lib/reach).
   for (const person of ((people || []) as ColleagueRow[])) {
-    const target = chatsFor(person)[0];
-    if (target) await sendToColleague(target, text, buttons);
+    await sendToPerson(admin, task.user_id, person, text, buttons);
   }
 }

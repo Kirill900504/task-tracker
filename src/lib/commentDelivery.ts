@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { chatsFor, replyButtons, type ColleagueRow } from "@/lib/colleagues";
-import { notifyOwner, sendToColleague } from "@/lib/botDelivery";
+import { replyButtons, type ColleagueRow } from "@/lib/colleagues";
+import { notifyAuthor, notifyOwner } from "@/lib/botDelivery";
+import { sendToPerson } from "@/lib/reach";
 import { queueNotice } from "@/lib/noticeQueue";
 import { actorName, withoutSelfMark } from "@/lib/actorName";
 
@@ -58,14 +59,26 @@ async function itemTitle(admin: SupabaseClient, kind: CommentRow["item_kind"], i
   return kind === "idea" ? value.slice(0, 60) : value;
 }
 
-// Все, кто на итеме. Постановщик отдельной строкой не запрашивается: он
-// всегда участник того, что завёл, — задачу без исполнителя здесь не
-// заводят, а встречу и мысль заводят адресатам.
+// Все, кто на итеме.
 async function audience(admin: SupabaseClient, kind: CommentRow["item_kind"], itemId: string): Promise<string[]> {
   const table = kind === "task" ? "task_participants" : kind === "meeting" ? "meeting_participants" : "idea_recipients";
   const column = kind === "task" ? "task_id" : kind === "meeting" ? "meeting_id" : "idea_id";
   const { data } = await admin.from(table).select("assignee_id").eq(column, itemId);
   return ((data || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
+}
+
+// Кто это поручил. Здесь стояло «постановщик отдельной строкой не нужен —
+// он всегда участник того, что завёл», и это было правдой ровно до тех
+// пор, пока заводил один владелец: его строка ниже получает всё.
+// Руководитель, поставивший задачу Игорю, участником НЕ становится —
+// участники задачи это исполнители, соисполнители и наблюдатели, — и
+// ответ Игоря в обсуждении не доходил до него ни сразу, ни сводкой. То
+// есть ровно то, ради чего этот файл написан: двое переписываются, и
+// один из них об этом не знает.
+async function itemAuthor(admin: SupabaseClient, kind: CommentRow["item_kind"], itemId: string): Promise<string | null> {
+  const table = kind === "task" ? "tasks" : kind === "meeting" ? "meetings" : "ideas";
+  const { data } = await admin.from(table).select("created_by").eq("id", itemId).maybeSingle();
+  return (data as { created_by?: string | null } | null)?.created_by ?? null;
 }
 
 // Разговор считается новым, если до него в этом итеме два часа никто не
@@ -114,9 +127,10 @@ export async function deliverComment(admin: SupabaseClient, commentId: string): 
     return { delivered: 0, skipped: "throttled" };
   }
 
-  const [title, assigneeIds] = await Promise.all([
+  const [title, assigneeIds, createdBy] = await Promise.all([
     itemTitle(admin, comment.item_kind, comment.item_id),
     audience(admin, comment.item_kind, comment.item_id),
+    itemAuthor(admin, comment.item_kind, comment.item_id),
   ]);
 
   // Автор, постановщик и владелец могут оказаться одним человеком — каждый
@@ -151,15 +165,37 @@ export async function deliverComment(admin: SupabaseClient, commentId: string): 
   for (const assigneeId of wanted) {
     const person = byId.get(assigneeId);
     if (!person) continue;
-    const target = chatsFor(person)[0];
-    if (!target) continue;
-    const result = await sendToColleague(target, text, buttons);
-    if (result.ok) delivered++;
+    // Строка владельца чата не несёт — его чаты берутся у lib/reach.
+    delivered += await sendToPerson(admin, comment.user_id, person, text, buttons);
+  }
+
+  // Постановщику — если он не владелец (тот получит ниже), не автор этой
+  // реплики и не стоит участником сам (тогда ему уже ушло). Строкой в
+  // сводку, по той же причине, что и владельцу: реплика в обсуждении —
+  // самое частое, что здесь происходит.
+  if (createdBy && createdBy !== comment.user_id && createdBy !== comment.author_user_id) {
+    // Его собственная строка в списке людей — по членству: в `assignees`
+    // колонка `user_id` означает владельца пространства, а не человека.
+    const { data: memberRow } = await admin
+      .from("workspace_members")
+      .select("assignee_id")
+      .eq("member_id", createdBy)
+      .eq("owner_id", comment.user_id)
+      .maybeSingle();
+    const ownRow = (memberRow as { assignee_id?: string } | null)?.assignee_id;
+    if (!ownRow || !wanted.has(ownRow)) {
+      await notifyAuthor(admin, comment.user_id, createdBy, text, {
+        kind: "comment",
+        item: title,
+        who: authorName,
+        what: comment.body.trim(),
+      });
+      delivered++;
+    }
   }
 
   // Владелец — всегда, если он не автор: он отвечает за пространство и
-  // видит в нём всё. Постановщик-руководитель отдельной строкой не нужен —
-  // он стоит участником в собственном итеме и получил сообщение выше.
+  // видит в нём всё.
   //
   // Ему это идёт строкой в сводку, а не отдельным сообщением: реплика в
   // обсуждении — самое частое, что здесь происходит, и именно она первой

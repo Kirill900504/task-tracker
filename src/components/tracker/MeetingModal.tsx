@@ -5,6 +5,7 @@
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
 import { useMemo, useState } from "react";
 import { useColleagues } from "@/hooks/useColleagues";
+import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import SendMenu from "./SendMenu";
 import ItemChat from "./ItemChat";
 import MeetingAnswer from "./MeetingAnswer";
@@ -12,6 +13,7 @@ import type { MeetingVoteRow } from "@/hooks/useMeetingVotes";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
 import { isSelfAssignee, sanitizeAssigneeList } from "@/lib/trackerRows";
+import { withoutSelfMark } from "@/lib/actorName";
 import { uid } from "@/lib/uid";
 import MicButton from "./MicButton";
 import MiniCalendar from "./MiniCalendar";
@@ -95,6 +97,10 @@ export default function MeetingModal({
   const [time, setTime] = useState(meeting?.time || prefill?.time || "10:00");
   const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? prefill?.participants ?? []));
   const { colleagues } = useColleagues();
+  // Кто я в этом пространстве — нужно ровно для одного: не предлагать
+  // позвать самого себя (см. selectableAssignees). Ответ прошлого запуска
+  // хук отдаёт сразу, сеть поправляет его фоном.
+  const identity = useWorkspaceRole();
   const ask = useAsk();
   const [sendState, setSendState] = useState("");
   const [sendAt, setSendAt] = useState<DOMRect | null>(null);
@@ -159,9 +165,16 @@ export default function MeetingModal({
 
   // Esc закрывает окно — как и любое другое окно трекера.
 
-  // The account owner is the one scheduling, so he is not offered as
-  // someone to add to his own meeting.
-  const selectableAssignees = sortNames(assignees.filter((a) => !isSelfAssignee(a)));
+  // Позвать нельзя только СЕБЯ — а «себя» у каждого своего.
+  //
+  // Здесь стоял фильтр по метке «(я)», то есть по строке владельца, и
+  // читался он как «собирает всегда владелец». С паритетом постановщиков
+  // (20.09.2026) собирает кто угодно, и фильтр по чужой метке означал
+  // ровно одно: руководитель не мог позвать Кирилла на встречу вовсе —
+  // ни голоса, ни напоминаний, ни строки «кто идёт». Своя строка у
+  // владельца помечена «(я)», у руководителя — это его имя.
+  const myRow = identity.isOwner ? "" : identity.name;
+  const selectableAssignees = sortNames(assignees.filter((a) => (myRow ? a !== myRow : !isSelfAssignee(a))));
 
   function toggleParticipant(name: string) {
     setParticipants((prev) => (prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name]));
@@ -343,7 +356,10 @@ export default function MeetingModal({
                     className={"participant-chip" + (participants.includes(name) ? " selected" : "")}
                     onClick={() => toggleParticipant(name)}
                   >
-                    {name}
+                    {/* Метка «(я)» написана для одного человека, а читают
+                        список все: в базу уходит полное имя строки, на
+                        экран — имя. */}
+                    {withoutSelfMark(name)}
                   </button>
                 ))}
               </div>

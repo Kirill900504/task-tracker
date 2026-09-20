@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { chatsFor, taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
-import { sendToColleague } from "@/lib/botDelivery";
+import { taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
+import { sendToPerson } from "@/lib/reach";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { isQuietHour } from "@/lib/quietHours";
 
@@ -51,6 +51,11 @@ export async function attachExecutors(
   // каждого своя роль, и соисполнитель, записанный исполнителем, держал бы
   // задачу открытой наравне с тем, кто за неё отвечает.
   role: "executor" | "coexecutor" | "watcher" = "executor",
+  // Кто поручает. Пусто — сам владелец пространства (так это читает и
+  // notifyAuthor). Нужно ровно для одного: понять, значит ли строка
+  // «… (я)» в списке имён «себе» — или это руководитель ставит задачу
+  // владельцу, и тогда владельцу надо сказать, как любому другому.
+  createdBy: string | null = null,
 ): Promise<AssignResult> {
   const wanted = [...new Set(names.map((n) => (n || "").trim()).filter(Boolean))];
   if (!wanted.length) return { attached: [], missing: [] };
@@ -93,11 +98,13 @@ export async function attachExecutors(
   // мессенджер. Вызывают это только при создании, так что повторить
   // уведомление здесь нечем.
   const from = await ownerDisplayName(admin, userId);
+  const byOwner = !createdBy || createdBy === userId;
   for (const person of people) {
-    if (isSelfAssignee(person.name)) continue;
-    const target = chatsFor(person)[0];
-    if (!target) continue;
-    await sendToColleague(target, taskMessage(task, from), taskButtons(task.id, role));
+    // Себе не пишут — но «себе» это про того, кто поручает, а не про
+    // строку владельца вообще: задача, которую владельцу поставил
+    // руководитель, обязана до него доехать (см. lib/reach).
+    if (isSelfAssignee(person.name) && byOwner) continue;
+    await sendToPerson(admin, userId, person, taskMessage(task, from), taskButtons(task.id, role));
   }
   return { attached, missing };
 }

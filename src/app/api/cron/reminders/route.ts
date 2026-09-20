@@ -11,6 +11,7 @@ import { dueReminder, minutesUntil, ownerReminder, participantReminder, reasonNu
 import { awaitingReason, voteTally, type MeetingVote } from "@/lib/meetingVotes";
 import { chatsFor, meetingButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
+import { chatsForPerson, sendToPerson } from "@/lib/reach";
 import { buildManagerBrief, composeManagerBrief, managerBriefIsEmpty } from "@/lib/managerBrief";
 import { personStats, composePeopleReview, composeMyWeek, buildParticipation } from "@/lib/peopleReview";
 import { findAssignmentDrift } from "@/lib/assignmentDrift";
@@ -277,8 +278,7 @@ export async function GET(req: Request) {
               .select("id, name, telegram_chat_id, max_user_id")
               .in("id", task.waiting.map((w) => w.assigneeId));
             for (const person of ((people || []) as ColleagueRow[])) {
-              const target = chatsFor(person)[0];
-              if (target) await sendToColleague(target, nudgeText(task, step), taskButtons(task.taskId, "executor"));
+              await sendToPerson(admin, userId, person, nudgeText(task, step), taskButtons(task.taskId, "executor"));
             }
           }
 
@@ -307,11 +307,16 @@ export async function GET(req: Request) {
         .eq("user_id", userId);
 
       for (const person of ((colleagues || []) as ColleagueRow[])) {
-        const target = chatsFor(person)[0];
-        if (!target) continue;
+        // Владелец здесь тоже адресат, и это не лишнее письмо: его
+        // собственная сводка отвечает на «что я поручил», а эта — на «что
+        // поручили мне», и пустой она не уходит. Чат у его строки пустой
+        // (он подключает мессенджер к учётной записи), поэтому спрашивается
+        // lib/reach, а не строка.
+        const targets = await chatsForPerson(admin, userId, person);
+        if (!targets.length) continue;
         await onceOnly(admin, { userId, kind: "manager_brief", refId: `${today}:${person.id}`, date: today }, async () => {
           const facts = await buildManagerBrief(admin, userId, person, today);
-          if (!managerBriefIsEmpty(facts)) await sendToColleague(target, composeManagerBrief(facts));
+          if (!managerBriefIsEmpty(facts)) await sendToPerson(admin, userId, person, composeManagerBrief(facts));
         });
       }
     }

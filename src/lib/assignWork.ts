@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { isQuietHour } from "@/lib/quietHours";
+import { me } from "@/lib/me";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 
 // Поставить человека на задачу — одним способом на весь браузер.
@@ -68,7 +69,16 @@ export async function assignPerson(
   // строкой «ждут вашего ответа». Будить человека ради задачи, к которой он
   // всё равно приступит утром, — верный способ научить его выключать
   // уведомления совсем.
-  if (isSelfAssignee(name)) return "";
+  // Строка «… (я)» — это владелец, и раньше она означала «себе, значит
+  // говорить некому». С паритетом постановщиков (20.09.2026) она значит
+  // это только тогда, когда назначает САМ владелец: руководитель, ставящий
+  // задачу Кириллу, поручает её человеку, и молчать здесь — то же самое,
+  // что «назначил и не сказал». Чей это вход, известно без обращения к
+  // сети: у владельца собственный id и есть пространство (lib/me).
+  if (isSelfAssignee(name)) {
+    const who = await me();
+    if (!who.userId || who.userId === who.workspaceId) return "";
+  }
   if (isQuietHour()) return `Сейчас ночь — ${name} получит задачу утренней сводкой.`;
 
   try {
@@ -78,6 +88,10 @@ export async function assignPerson(
       body: JSON.stringify({ kind: "task", id: taskId, to: [name] }),
     });
     const data = await res.json().catch(() => null);
+    // Себе отправлять нечего, и это не «не дошло»: маршрут говорит об этом
+    // отдельным полем, потому что «не подключён» про подключённого — самый
+    // обидный вид неправды.
+    if (data && Array.isArray(data.self) && data.self.includes(name)) return "";
     // Не отправилось — чаще всего человек просто не подключён к боту.
     // Промолчать здесь значит оставить постановщика в уверенности, что
     // задачу увидели: он ждёт ответа, а человек о задаче не знает.

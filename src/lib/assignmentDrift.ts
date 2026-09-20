@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isSelfAssignee } from "@/lib/trackerRows";
 
 // Назначено ли то, что выглядит назначенным.
 //
@@ -27,7 +28,16 @@ export async function findAssignmentDrift(admin: SupabaseClient, userId: string)
     .neq("status", "done")
     .is("deleted_at", null);
 
-  const named = ((tasks || []) as { id: string; title: string; assignee: string | null }[]).filter((t) => (t.assignee || "").trim());
+  // Задача, которую владелец завёл сам себе, строки участия не имеет и
+  // иметь не должна: и триггер 0024, и форма пропускают строку «… (я)»
+  // именно потому, что «поручить себе» — не поручение. Без этого условия
+  // каждая его личная задача приходила бы в понедельничную сводку строкой
+  // «человек её не видит», то есть тревогой про него самого. Скрипт
+  // check-assignments.mjs, задающий тот же вопрос, так и считал с самого
+  // начала — здесь была вторая правда об одном факте.
+  const named = ((tasks || []) as { id: string; title: string; assignee: string | null }[]).filter(
+    (t) => (t.assignee || "").trim() && !isSelfAssignee(t.assignee || ""),
+  );
   if (!named.length) return [];
 
   // Одним запросом, а не по задаче: сорок задач — сорок круговых поездок в

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readInput, reviewInput } from "@/lib/apiInput";
-import { chatsFor, taskButtons, type ColleagueRow } from "@/lib/colleagues";
-import { sendToColleague } from "@/lib/botDelivery";
+import { taskButtons, type ColleagueRow } from "@/lib/colleagues";
+import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
 import { applyReview, type ReviewAction } from "@/lib/reviewWork";
 import { actorName } from "@/lib/actorName";
@@ -98,8 +98,7 @@ export async function POST(req: Request) {
         ? "📅 Новый срок по задаче «" + task.title + "»: " + fmtDate(to)
         : "📅 С задачи «" + task.title + "» сняли срок";
       for (const person of ((people || []) as ColleagueRow[])) {
-        const target = chatsFor(person)[0];
-        if (target) await sendToColleague(target, text, taskButtons(task.id, "executor"));
+        await sendToPerson(admin, task.user_id, person, text, taskButtons(task.id, "executor"));
       }
     }
     return NextResponse.json({ ok: true });
@@ -147,10 +146,11 @@ export async function POST(req: Request) {
       .select("id, name, telegram_chat_id, max_user_id")
       .eq("id", part.assignee_id)
       .maybeSingle();
-    const target = person ? chatsFor(person as ColleagueRow)[0] : undefined;
-    if (target) {
-      await sendToColleague(
-        target,
+    if (person) {
+      await sendToPerson(
+        admin,
+        task.user_id,
+        person as ColleagueRow,
         moved
           ? `📅 Срок перенесён: «${task.title}»${when ? "\nНовый срок: " + fmtDate(when) : ""}${comment ? "\n\n" + comment : ""}`
           : `📅 Срок остаётся прежним: «${task.title}»${comment ? "\n\n" + comment : ""}`,
