@@ -6,7 +6,15 @@
 // button is acknowledged, and which table remembers whose chat this is. That
 // difference lives behind these two types and nowhere else.
 
-export type BotButton = { text: string; data: string };
+// Кнопка под сообщением. Обычная возвращает боту своё `data` и разбирается
+// как нажатие; кнопка с `app` вместо этого ОТКРЫВАЕТ трекер внутри
+// мессенджера (мини-приложение), и боту не приходит ничего.
+//
+// `data` у неё всё равно есть, и это не формальность: если мессенджер
+// мини-приложений не умеет — а MAX сегодня их не публикует без повторной
+// модерации, — транспорт отправляет её как обычную, и нажатие получает
+// внятный ответ вместо тишины.
+export type BotButton = { text: string; data: string; app?: string };
 export type BotSendResult = { ok: boolean; error?: string; messageId?: string };
 
 export type BotTransport = {

@@ -1,5 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { maxSettings } from "@/lib/botSettings";
 import { russianFetch } from "@/lib/russianCa";
+import { miniAppUrl } from "@/lib/trackerUrl";
 
 // Меню команд бота — то, что мессенджер показывает сам, до всякого
 // сообщения.
@@ -58,25 +60,75 @@ export async function setTelegramCommands(): Promise<boolean> {
 // зачем это: «если люди вне офиса им не всегда будет кайф открывать
 // приложения, а мессенджеры у них ОТКРЫТЫ ВСЕГДА».
 //
-// Тип «commands» вместо «web_app» здесь намеренно и пока: мини-приложение
-// показывает трекер, а трекер требует входа, которого у получателя задач
-// нет (см. docs/bot-menu.md). Кнопка команд работает у всех и сегодня.
-export async function setTelegramMenuButton(): Promise<boolean> {
+// `chatId` отсутствует — ставим значение ПО УМОЛЧАНИЮ, на все чаты разом.
+// С ним — только этому чату, и это разные вещи: по умолчанию у всех
+// команды, а у тех, у кого есть вход в трекер, — мини-приложение
+// (syncTelegramAppButtons ниже).
+export async function setTelegramMenuButton(
+  menuButton: Record<string, unknown> = { type: "commands" },
+  chatId?: number,
+): Promise<boolean> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return false;
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/setChatMenuButton`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // Без chat_id — значение по умолчанию для всех чатов сразу. С
-      // chat_id пришлось бы ставить её каждому из четырнадцати и помнить,
-      // кто уже получил.
-      body: JSON.stringify({ menu_button: { type: "commands" } }),
+      body: JSON.stringify({ ...(chatId ? { chat_id: chatId } : {}), menu_button: menuButton }),
     });
     return res.ok;
   } catch {
     return false;
   }
+}
+
+// Тем, у кого есть вход в трекер, та же кнопка открывает сам трекер.
+//
+// Это и есть то, что Кирилл показал на снимках: кнопка у поля ввода
+// открывает не список команд, а приложение. Разница с чужим ботом в том,
+// что у нас за ней стоит вход, и у половины людей его нет, — поэтому
+// кнопка ставится ПОИМЕННО, а не всем сразу. Получателю задач остаётся
+// значение по умолчанию (команды): мини-приложение ответило бы ему
+// отказом, и кнопка, ведущая к отказу, хуже отсутствующей.
+//
+// Зовётся из ежедневного крона рядом с остальными настройками бота:
+// пригласили человека — на следующий день кнопка у него появилась сама.
+// Ждать дольше суток незачем, а делать это на каждое сообщение значит
+// вызывать API Telegram там, где человек ждёт ответа.
+export async function syncTelegramAppButtons(admin: SupabaseClient): Promise<number> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return 0;
+
+  const chats = new Set<number>();
+
+  // Владелец: его чат живёт в таблице аккаунтов.
+  const { data: accounts } = await admin.from("telegram_accounts").select("telegram_chat_id");
+  for (const row of ((accounts || []) as { telegram_chat_id: number | null }[])) {
+    if (row.telegram_chat_id) chats.add(row.telegram_chat_id);
+  }
+
+  // Остальные: чат на строке человека, но только при активном членстве —
+  // оно и означает «у него есть вход».
+  const { data: members } = await admin
+    .from("workspace_members")
+    .select("assignee_id, member_id, status")
+    .eq("status", "active");
+  const ids = ((members || []) as { assignee_id: string | null; member_id: string | null }[])
+    .filter((m) => m.member_id && m.assignee_id)
+    .map((m) => m.assignee_id as string);
+  if (ids.length) {
+    const { data: people } = await admin.from("assignees").select("telegram_chat_id").in("id", ids);
+    for (const row of ((people || []) as { telegram_chat_id: number | null }[])) {
+      if (row.telegram_chat_id) chats.add(row.telegram_chat_id);
+    }
+  }
+
+  const button = { type: "web_app", text: "Трекер", web_app: { url: miniAppUrl() } };
+  let set = 0;
+  for (const chatId of chats) {
+    if (await setTelegramMenuButton(button, chatId)) set++;
+  }
+  return set;
 }
 
 // У MAX это часть профиля бота: PATCH /me с тем же списком. И, как всё

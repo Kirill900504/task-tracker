@@ -49,6 +49,12 @@ export async function updateSession(request: NextRequest) {
   // падение мы бы не узнали никогда. Маршрут сам разбирается, чья это
   // сессия, и сам себя ограничивает по частоте.
   if (request.nextUrl.pathname.startsWith("/api/client-error")) return supabaseResponse;
+  // Мини-приложение: сюда человек попадает ИМЕННО потому, что сессии у
+  // него нет, — страница меняет подпись мессенджера на сессию и уходит на
+  // трекер. Отправить её на /login значит показать форму входа вместо
+  // входа, который в эту секунду происходит сам.
+  if (request.nextUrl.pathname.startsWith("/app")) return supabaseResponse;
+  if (request.nextUrl.pathname.endsWith("/miniapp-auth")) return supabaseResponse;
   // The messengers and the external cron pinger call these with their own
   // secret-token checks, not a browser session — never gate them behind
   // the login redirect. (A missed entry here does not fail loudly: the POST

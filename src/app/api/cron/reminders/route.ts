@@ -17,7 +17,7 @@ import { findAssignmentDrift } from "@/lib/assignmentDrift";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { onceOnly } from "@/lib/onceOnly";
 import { findSilent, composeSilence } from "@/lib/silence";
-import { setMaxCommands, setTelegramCommands } from "@/lib/botCommands";
+import { setMaxCommands, setTelegramCommands, syncTelegramAppButtons } from "@/lib/botCommands";
 import { alarmText, findStuck, nudgeText } from "@/lib/escalation";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
@@ -102,7 +102,11 @@ export async function GET(req: Request) {
   // превращает это в одну попытку в день, а не выставилось — бот работает
   // как работал, и завтра попробует снова.
   await onceOnly(admin, { userId: userIds[0], kind: "bot_commands", refId: today, date: today }, async () => {
-    await Promise.all([setTelegramCommands(), setMaxCommands()]);
+    // Здесь же — кнопка у поля ввода: у всех она открывает список команд,
+    // а у тех, кто входит в трекер, сам трекер (мини-приложение). Поэтому
+    // поимённо, и поэтому раз в день: пригласили человека — назавтра
+    // кнопка появилась сама, без единого действия с его стороны.
+    await Promise.all([setTelegramCommands(), setMaxCommands(), syncTelegramAppButtons(admin)]);
   });
 
   // Накопившиеся события — одним письмом каждому, кому они адресованы.

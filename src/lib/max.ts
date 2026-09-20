@@ -43,7 +43,15 @@ function keyboardAttachment(buttons: BotButton[][]) {
   return {
     type: "inline_keyboard",
     payload: {
-      buttons: buttons.map((row) => row.map((b) => ({ type: "callback", text: b.text, payload: b.data }))),
+      // Кнопка, открывающая трекер, в MAX — обычная ссылка, а не
+      // мини-приложение: опубликованного мини-приложения у нас там нет
+      // (правка published-бота уходит на модерацию, см. CLAUDE.md), а
+      // ссылка открывает тот же трекер во внешнем браузере и работает
+      // сегодня. Молча превратить её в callback было бы хуже всего:
+      // нажатие ушло бы боту, который о ней ничего не знает.
+      buttons: buttons.map((row) =>
+        row.map((b) => (b.app ? { type: "link", text: b.text, url: b.app } : { type: "callback", text: b.text, payload: b.data })),
+      ),
     },
   };
 }

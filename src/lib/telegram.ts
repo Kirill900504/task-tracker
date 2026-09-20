@@ -6,7 +6,11 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 // One row of the buttons attached under a message. Telegram calls these
 // inline keyboards; pressing one sends `callback_data` back to the webhook
 // without the person having to type anything.
-export type InlineButton = { text: string; callback_data: string };
+//
+// A `web_app` button does something else entirely: it opens a page inside
+// Telegram instead of messaging the bot. Telegram refuses a button that
+// carries both, so these are two shapes rather than one with two fields.
+export type InlineButton = { text: string; callback_data: string } | { text: string; web_app: { url: string } };
 export type SendResult = { ok: boolean; error?: string; messageId?: number };
 
 // The result matters when writing to a COLLEAGUE: they may never have
@@ -108,6 +112,12 @@ export async function downloadTelegramFile(fileId: string): Promise<ArrayBuffer>
   return fileRes.arrayBuffer();
 }
 
+// A neutral button in Telegram's own shape. A button carrying `app` opens
+// the tracker inside Telegram; everything else messages the bot.
+function toInline(b: { text: string; data: string; app?: string }): InlineButton {
+  return b.app ? { text: b.text, web_app: { url: b.app } } : { text: b.text, callback_data: b.data };
+}
+
 // The Telegram side of the shared bot interface (see botTransport.ts). The
 // functions above stay as they are — this only translates the neutral shapes
 // into Telegram's own.
@@ -116,14 +126,14 @@ export function telegramTransport(): BotTransport {
     channel: "telegram",
     label: "Telegram",
     async send(chatId, text, options) {
-      const buttons = options?.buttons?.map((row) => row.map((b) => ({ text: b.text, callback_data: b.data })));
+      const buttons = options?.buttons?.map((row) => row.map(toInline));
       const result = await sendTelegramMessage(chatId, text, buttons?.length ? { buttons } : undefined);
       return { ok: result.ok, error: result.error, messageId: result.messageId != null ? String(result.messageId) : undefined };
     },
     async resolveCallback({ callbackId, chatId, messageId, toast, rewriteTo, rewriteButtons }) {
       await answerCallbackQuery(callbackId, toast);
       if (rewriteTo && messageId) {
-        const buttons = rewriteButtons?.map((row) => row.map((b) => ({ text: b.text, callback_data: b.data })));
+        const buttons = rewriteButtons?.map((row) => row.map(toInline));
         await editTelegramMessage(chatId, Number(messageId), rewriteTo, buttons?.length ? { buttons } : undefined);
       }
     },

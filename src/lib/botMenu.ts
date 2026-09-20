@@ -1,5 +1,6 @@
 import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback } from "@/lib/colleagues";
+import { miniAppUrl } from "@/lib/trackerUrl";
 
 // Меню бота — одно на всех, сужаемое ролью.
 //
@@ -32,7 +33,9 @@ import { encodeCallback } from "@/lib/colleagues";
 
 export type MenuAudience = "assigner" | "recipient";
 
-type Entry = { text: string; data: string };
+// `app` — раздел, который не отвечает сообщением, а открывает трекер
+// внутри мессенджера (см. BotButton в botTransport).
+type Entry = { text: string; data: string; app?: string };
 
 type Section = {
   // Чем раздел является для того, кто ставит задачи, и для того, кто их
@@ -84,6 +87,20 @@ const SECTIONS: Section[] = [
   },
   { assigner: { text: "👥 Люди", data: encodeCallback("task", "olist", "people") }, wide: true },
   { assigner: { text: "➕ Поручить", data: encodeCallback("task", "new", "start") }, wide: true },
+  {
+    // Трекер целиком, открытый прямо в мессенджере, без пароля: подпись
+    // Telegram доказывает, кто пришёл (см. /api/telegram/miniapp-auth).
+    //
+    // Только у постановщика, и по той же причине, что и мысли: входа у
+    // получателя нет, и открывать ему нечего — страница ответила бы
+    // отказом, а кнопка, ведущая к отказу, хуже отсутствующей.
+    //
+    // Ниже всех разделов намеренно. Всё, что выше, — ответ, который бот
+    // даёт сам, не заставляя ничего открывать; трекер нужен для того,
+    // чего в чате не сделать (доска, календарь, «Команда»).
+    assigner: { text: "🚀 Открыть трекер", data: encodeCallback("task", "omenu", "x"), app: miniAppUrl() },
+    wide: true,
+  },
   {
     // Справка последней и у обоих: человек, дошедший до неё, уже не нашёл
     // нужного выше.
