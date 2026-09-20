@@ -316,7 +316,6 @@ export async function taskCard(
   if (task.deadline) {
     meta.push(task.deadline < today && task.status !== "done" ? "⚠ просрочено: " + fmtDate(task.deadline) : "срок: " + fmtDate(task.deadline));
   }
-  if (task.priority === "high") meta.push("важно");
   if (row.role === "coexecutor") meta.push("вы соисполнитель");
   if (row.role === "watcher") meta.push("вы наблюдатель");
   if (meta.length) lines.push("", meta.join(" · "));

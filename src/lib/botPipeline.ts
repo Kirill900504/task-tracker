@@ -172,7 +172,6 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     const shown = assigned.attached;
     if (shown.length === 1) lines.push("Исполнитель: " + shown[0]);
     if (shown.length > 1) lines.push("Исполнители: " + shown.join(", "));
-    if (row.priority === "high") lines.push("Приоритет: высокий");
     await say(ctx, lines.join("\n") + droppedNote(droppedNames) + assignNote(assigned));
     return;
   }
@@ -288,7 +287,6 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     const lines = tasks.map((t, i) => {
       const bits = [t.assignee || "без исполнителя"];
       if (t.deadline) bits.push("до " + fmtDate(t.deadline));
-      if (t.priority === "high") bits.push("важно");
       return `${i + 1}) ${t.title} — ${bits.join(", ")}`;
     });
     await remember(ctx, { pending_action: { kind: "create_tasks", userId, tasks, meeting: pendingMeeting } });

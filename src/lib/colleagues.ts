@@ -55,7 +55,6 @@ export function taskMessage(task: { title: string; description?: string; deadlin
   if (task.description) lines.push("", task.description);
   const bits: string[] = [];
   if (task.deadline) bits.push("срок: " + fmtDate(task.deadline));
-  if (task.priority === "high") bits.push("важно");
   if (bits.length) lines.push("", bits.join(" · "));
   return lines.join("\n");
 }

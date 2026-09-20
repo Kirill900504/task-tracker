@@ -511,6 +511,18 @@ try {
     backToWork,
   );
 
+  // Та же дверь из «Завершённых», но кнопкой под карточкой: закрыть
+  // задачу промахом по «Принять работу» в телефоне — дело одной секунды,
+  // а искать её потом в списках долго.
+  await admin.from("tasks").update({ status: "done", approval_state: "accepted" }).eq("id", ownerTask);
+  const reopenPress = await pressOwner("own5c", "t:reop:" + ownerTask);
+  const { data: reopenedByButton } = await admin.from("tasks").select("status, approval_state").eq("id", ownerTask).maybeSingle();
+  check(
+    "«Открыть заново» возвращает задачу в работу",
+    reopenPress.status === 200 && reopenedByButton?.status === "in_progress" && reopenedByButton?.approval_state === "open",
+    reopenedByButton,
+  );
+
   // Мастер «Поручить»: три шага и задача в конце.
   await pressOwner("own6", "t:new:start");
   const { data: wizardStarted } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();

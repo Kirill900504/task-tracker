@@ -27,12 +27,15 @@ describe("callback data", () => {
 });
 
 describe("what a colleague receives", () => {
-  it("says who it is from, and shows the deadline and priority", () => {
+  it("says who it is from and shows the deadline", () => {
     const text = taskMessage({ title: "Подготовить смету", deadline: "2026-09-11", priority: "high" }, "Кирилл");
     expect(text).toContain("Кирилл");
     expect(text).toContain("Подготовить смету");
     expect(text).toContain("11.09.2026");
-    expect(text).toContain("важно");
+    // Приоритета в трекере больше нет (20.09.2026), и строки с ним у
+    // старых задач тоже молчат: назвать задачу важной нечем, значит и
+    // сообщение о ней так её называть не должно.
+    expect(text).not.toContain("важно");
   });
 
   it("leaves out what a task does not have", () => {

@@ -112,15 +112,18 @@ export function briefIsEmpty(f: BriefFacts): boolean {
 }
 
 // Ranking is code's job, not the model's: most-overdue first, then anything
-// tied to a meeting in the next day, then explicitly high priority.
+// tied to a meeting in the next day.
+//
+// Приоритет из порядка ушёл вместе с самим приоритетом (20.09.2026):
+// поднимать задачу за метку, которую больше негде поставить и негде
+// увидеть, значит объяснять порядок сводки тем, чего в трекере нет.
 function rank(t: BriefTask): number {
-  return t.daysOverdue * 10 + (t.hasMeetingSoon ? 5 : 0) + (t.priority === "high" ? 3 : 0) + (t.deadline ? 1 : 0);
+  return t.daysOverdue * 10 + (t.hasMeetingSoon ? 5 : 0) + (t.deadline ? 1 : 0);
 }
 
 function reasonFor(t: BriefTask): string {
   if (t.daysOverdue > 0) return `срок был ${t.daysOverdue} дн. назад`;
   if (t.hasMeetingSoon) return "по этой теме встреча в ближайший день";
-  if (t.priority === "high") return "высокий приоритет";
   return "срок сегодня";
 }
 

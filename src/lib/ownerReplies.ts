@@ -165,6 +165,13 @@ export async function ownerTaskCard(admin: SupabaseClient, userId: string, taskI
   const waiting = task.approval_state === "awaiting_review";
   if (waiting) lines.push("", "Отчитались все — задача ждёт вашего решения.");
 
+  // Закрытая задача отвечает на другой вопрос, и кнопки у неё другие.
+  // «Продлить срок» и «Напомнить» под принятой работой предлагают
+  // сделать то, чего делать уже не надо, а единственное, что с ней
+  // бывает нужно, — открыть заново, если закрыли не то.
+  const closed = task.status === "done" || task.approval_state === "accepted";
+  if (closed) lines.push("", "Задача закрыта.");
+
   const buttons: BotButton[][] = [];
   if (waiting) {
     buttons.push([
@@ -172,10 +179,14 @@ export async function ownerTaskCard(admin: SupabaseClient, userId: string, taskI
       { text: "↩ Вернуть", data: encodeCallback("task", "back", taskId) },
     ]);
   }
-  buttons.push([
-    { text: "📅 Продлить срок", data: encodeCallback("task", "plus", taskId) },
-    { text: "🔔 Напомнить", data: encodeCallback("task", "ping", taskId) },
-  ]);
+  if (closed) {
+    buttons.push([{ text: "🔄 Открыть заново", data: encodeCallback("task", "reop", taskId) }]);
+  } else {
+    buttons.push([
+      { text: "📅 Продлить срок", data: encodeCallback("task", "plus", taskId) },
+      { text: "🔔 Напомнить", data: encodeCallback("task", "ping", taskId) },
+    ]);
+  }
   buttons.push([{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }]);
   buttons.push(...ownerNav());
 
@@ -387,7 +398,28 @@ export async function handleOwnerCallback(
     return {
       toast: "Принято",
       rewriteTo: `✅ Принято: «${task.title}». Задача закрыта, исполнителям сказано.`,
-      rewriteButtons: ownerNav(),
+      // Кнопка обратного хода стоит прямо здесь, под тем сообщением,
+      // которым задачу закрыли: промахнуться по «Принять работу» в
+      // телефоне легко, а искать потом закрытую задачу в списках — долго.
+      rewriteButtons: [[{ text: "🔄 Открыть заново", data: encodeCallback("task", "reop", task.id) }], ...ownerNav()],
+    };
+  }
+
+  // Открыть заново — единственный выход из «Завершённых», и он один на
+  // трекер и на бота (lib/reviewWork.REOPEN_PATCH): снимается и статус, и
+  // приёмка, отчёты остаются, исполнителям говорится.
+  if (action.action === "reop" && action.kind === "task") {
+    const task = await loadTask(admin, userId, action.id);
+    if (!task) return { toast: "Эта задача не найдена" };
+    const done = await applyReview(admin, { id: task.id, title: task.title, user_id: userId }, "reopen", "", {
+      label: await actorName(admin, userId, userId),
+      userId,
+    });
+    if (!done.ok) return { toast: done.error };
+    return {
+      toast: "Открыл заново",
+      rewriteTo: `🔄 «${task.title}» снова в работе. Исполнителям сказано.`,
+      rewriteButtons: [[{ text: "📋 Открыть задачу", data: encodeCallback("task", "oshow", task.id) }], ...ownerNav()],
     };
   }
 
