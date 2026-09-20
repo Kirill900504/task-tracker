@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import Icon from "./Icon";
+import { orderWithAt, slotAt, type SectionSlot } from "@/lib/sectionOrder";
 import type { Section } from "@/types/tracker";
 
 // Разделы кнопками под панелью задач: выбрать, завести новый, переставить.
@@ -74,6 +75,10 @@ export default function SectionTabs({
   // Кнопка, на которой нажали, и чем нажали: пока перенос не начался, это
   // всё, что о нём известно.
   const armed = useRef<{ id: string; el: HTMLElement; touch: boolean } | null>(null);
+  // Где какая кнопка стояла В МОМЕНТ НАЧАЛА переноса — снимок, по которому
+  // считается позиция вставки, пока перенос идёт. См. длинный комментарий
+  // у slotAt: без него перенос терял шаги.
+  const slots = useRef<SectionSlot[]>([]);
   // Было ли перетаскивание: если было, нажатие не должно ещё и переключать
   // фильтр — человек переставлял, а не выбирал.
   const moved = useRef(false);
@@ -96,6 +101,12 @@ export default function SectionTabs({
   function beginDrag(id: string, target: HTMLElement | null, pointerId: number) {
     if (holdTimer.current) clearTimeout(holdTimer.current);
     holdTimer.current = null;
+    // Снимок ряда — один раз, здесь. Дальше он не пересчитывается нарочно:
+    // см. slotAt.
+    slots.current = [...document.querySelectorAll<HTMLElement>("#sectionTabs [data-section-id]")].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { id: el.dataset.sectionId!, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
     setDragId(id);
     setPreview(sorted.map((s) => s.id));
     // Дальнейшие события приходят сюда, даже если указатель ушёл с кнопки.
@@ -134,17 +145,17 @@ export default function SectionTabs({
       return;
     }
     moved.current = true;
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    const overId = (el as HTMLElement | null)?.closest<HTMLElement>("[data-section-id]")?.dataset.sectionId;
-    if (!overId || overId === dragId) return;
-    setPreview((cur) => {
-      const list = [...(cur ?? sorted.map((s) => s.id))];
-      const from = list.indexOf(dragId);
-      const to = list.indexOf(overId);
-      if (from < 0 || to < 0) return cur;
-      list.splice(to, 0, ...list.splice(from, 1));
-      return list;
-    });
+    // Куда встанет раздел, если отпустить здесь, — считается по снимку
+    // ряда, а не по тому, что сейчас под указателем (см. lib/sectionOrder:
+    // там записано, чем это отличается и что ломалось раньше).
+    const to = slotAt(slots.current, e.clientX, e.clientY, dragId);
+    if (to < 0) return;
+    const next = orderWithAt(
+      slots.current.map((s) => s.id),
+      dragId,
+      to,
+    );
+    setPreview((cur) => (cur && cur.join() === next.join() ? cur : next));
   }
 
   function onPointerUp() {
