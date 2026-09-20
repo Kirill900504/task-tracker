@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
-import { dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, settled } from "./helpers";
+import { dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, settled as settledBox } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // The one smoke test covering the actual "Definition of Done" checklist
@@ -414,7 +414,12 @@ test("задача переставляется внутри столбца, и 
   const [upper, lower] = [mineShown[0], mineShown[1]];
 
   await mineCard(upper).scrollIntoViewIfNeeded();
-  const a = (await mineCard(upper).boundingBox())!;
+  // Дождаться, пока карточка перестанет ездить: три задачи только что
+  // заведены, и участие к каждой доезжает отдельно — столбец в эти
+  // секунды пересчитывается, а нажатие по координатам, снятым до, придётся
+  // мимо (см. settled в helpers; здесь под именем settledBox — в этом
+  // тесте уже есть своя переменная settled).
+  const a = await settledBox(mineCard(upper));
 
   await page.mouse.move(a.x + 60, a.y + 20);
   await page.mouse.down();
@@ -991,7 +996,7 @@ test("разделы переставляются перетаскиванием
   // растут столбцы, появляется полоса «Загрузка», — и между замером и
   // нажатием кнопка успевает съехать. Нажатие тогда приходится мимо,
   // перенос не начинается вовсе (см. settled в helpers).
-  const a = await settled(src);
+  const a = await settledBox(src);
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
   // Порог в четыре пикселя — сначала преодолеть его, и только потом
