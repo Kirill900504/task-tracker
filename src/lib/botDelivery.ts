@@ -83,6 +83,10 @@ export async function notifyAuthor(
   // Исполнителю, наоборот, всё уходит сразу: там ждут ответа от него, и
   // задержка стоит дороже порядка.
   notice?: Notice,
+  // Кнопки под сообщением, если оно уходит сразу. Сводка из очереди
+  // тоже несёт их: её верхняя группа — «Ждут вашей приёмки», то есть от
+  // человека прямо сейчас ждут решения, а нажать было нечего.
+  buttons?: BotButton[][],
 ): Promise<void> {
   if (notice) {
     const to = !createdBy || createdBy === ownerId ? null : createdBy;
@@ -92,7 +96,7 @@ export async function notifyAuthor(
   }
 
   if (!createdBy || createdBy === ownerId) {
-    await notifyOwner(admin, ownerId, text);
+    await notifyOwner(admin, ownerId, text, buttons);
     return;
   }
 
@@ -108,7 +112,7 @@ export async function notifyAuthor(
   if (!assigneeId) {
     // Автора не нашли — молчать хуже, чем сказать не тому: владелец всё
     // равно отвечает за пространство.
-    await notifyOwner(admin, ownerId, text);
+    await notifyOwner(admin, ownerId, text, buttons);
     return;
   }
 
@@ -118,7 +122,7 @@ export async function notifyAuthor(
     .eq("id", assigneeId)
     .maybeSingle();
   const target = person ? chatsFor(person as ColleagueRow)[0] : undefined;
-  if (target) await sendToColleague(target, text);
+  if (target) await sendToColleague(target, text, buttons);
 }
 
 // Writing to a colleague: one message, through the messenger they connected

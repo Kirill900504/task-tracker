@@ -6,6 +6,7 @@ import { moscowNow, dateStr, minutesOfDay } from "@/lib/taskLogic";
 import { isRussianWorkingDay } from "@/lib/workCalendar";
 import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
 import { briefButtons } from "@/lib/ownerQueries";
+import { navButtons } from "@/lib/colleagueQueries";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
 import { dueReminder, minutesUntil, ownerReminder, participantReminder, reasonNudge, recapAsk, recapButtons, recapDue } from "@/lib/meetingReminders";
 import { awaitingReason, voteTally, type MeetingVote } from "@/lib/meetingVotes";
@@ -129,7 +130,16 @@ export async function GET(req: Request) {
   // ровно на три часа. Тот же порог, посчитанный из уже готовых минут.
   const quiet = nowMin >= 22 * 60 || nowMin < BRIEF_FROM_MINUTES;
   if (!quiet) {
-    await flushNotices(admin, (userId, toUser, text) => notifyAuthor(admin, userId, toUser, text));
+    // Сводка — сообщение, после которого от человека ждут решения: её
+    // верхняя группа так и называется, «Ждут вашей приёмки». Значит под
+    // ней кнопки того же действия, что и под утренней сводкой, — иначе
+    // прочитавший её идёт искать задачу руками.
+    await flushNotices(admin, (userId, toUser, text) =>
+      // Кнопки — по адресату, а не одни на всех: владельческие разбирает
+      // только чат владельца (см. botCallback), и у руководителя они были
+      // бы мёртвыми — ровно та поломка, которую диагностика и искала.
+      notifyAuthor(admin, userId, toUser, text, undefined, toUser ? navButtons() : briefButtons()),
+    );
   }
 
   for (const userId of userIds) {
