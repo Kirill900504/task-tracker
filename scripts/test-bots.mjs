@@ -384,6 +384,115 @@ try {
   const { data: pendingGone } = await admin.from("assignees").select("pending_action").eq("id", assignee.id).maybeSingle();
   check("память подтверждения освобождается", pendingGone?.pending_action === null, pendingGone);
 
+  // ---- Руководитель — такой же постановщик ----
+  //
+  // Слова Кирилла 20.09.2026: «надо чтоб каждый человек мог принять
+  // работу из мессенджера и делать любые манипуляции, так как сейчас мы
+  // делаем абсолютно равноправный для всех постановщик задач». До этого
+  // весь набор «Принять / Вернуть / Продлить» отвечал только чату
+  // владельца, и руководитель, поставивший задачу, шёл принимать её в
+  // трекер.
+  //
+  // Проверяется обе стороны правила: своя задача решается из чата, чужая
+  // не решается ничем.
+  console.log(String.fromCharCode(10) + "Руководитель как постановщик:");
+
+  const mgrTask = "mgr" + Math.random().toString(36).slice(2, 8);
+  await admin.from("tasks").insert({
+    id: mgrTask,
+    user_id: userId,
+    created_by: memberUser.user.id,
+    title: "Задача от руководителя",
+    assignee: "Проверочный Коллега",
+    status: "in_progress",
+    approval_state: "awaiting_review",
+  });
+
+  const mgrPress = (id, data) =>
+    post(
+      "/api/telegram/webhook",
+      {
+        update_id: Math.floor(Math.random() * 1e9),
+        callback_query: { id, data, message: { chat: { id: colleagueChat }, message_id: 40 } },
+      },
+      { "x-telegram-bot-api-secret-token": tgSecret },
+    );
+
+  const mgrMenu = await mgrPress("mgr1", "t:omenu:x");
+  check("меню постановщика открывается и у руководителя", mgrMenu.status === 200, mgrMenu);
+
+  const mgrCard = await mgrPress("mgr2", "t:oshow:" + mgrTask);
+  check("карточка своей задачи открывается", mgrCard.status === 200, mgrCard);
+
+  const mgrAccept = await mgrPress("mgr3", "t:ok:" + mgrTask);
+  const { data: mgrAccepted } = await admin.from("tasks").select("status, approval_state").eq("id", mgrTask).maybeSingle();
+  check(
+    "руководитель принимает работу из мессенджера",
+    mgrAccept.status === 200 && mgrAccepted?.status === "done" && mgrAccepted?.approval_state === "accepted",
+    mgrAccepted,
+  );
+
+  // Хроника подписывается именем того, кто решил, а не ролью и не
+  // владельцем: постановщиков теперь много, и «Постановщик принял» не
+  // отвечает на единственный вопрос к этой строке.
+  const { data: mgrHistory } = await admin
+    .from("item_comments")
+    .select("body")
+    .eq("item_id", mgrTask)
+    .eq("system", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  check("и это записано в хронику задачи", (mgrHistory?.body || "").includes("принял работу"), mgrHistory);
+
+  const mgrReopen = await mgrPress("mgr4", "t:reop:" + mgrTask);
+  const { data: mgrReopened } = await admin.from("tasks").select("status, approval_state").eq("id", mgrTask).maybeSingle();
+  check(
+    "и открывает её заново",
+    mgrReopen.status === 200 && mgrReopened?.approval_state === "open" && mgrReopened?.status === "in_progress",
+    mgrReopened,
+  );
+
+  // Чужая задача — граница. Она не «запрещена кнопкой», её просто нет в
+  // его выборке: то же самое сделал бы и маршрут трекера.
+  const aliensTask = "aln" + Math.random().toString(36).slice(2, 8);
+  await admin.from("tasks").insert({
+    id: aliensTask,
+    user_id: userId,
+    title: "Задача владельца",
+    assignee: "Проверочный Коллега",
+    status: "in_progress",
+    approval_state: "awaiting_review",
+  });
+  const alienPress = await mgrPress("mgr5", "t:ok:" + aliensTask);
+  const { data: alienRow } = await admin.from("tasks").select("status, approval_state").eq("id", aliensTask).maybeSingle();
+  check(
+    "чужую задачу руководитель принять не может",
+    alienPress.status === 200 && alienRow?.approval_state === "awaiting_review" && alienRow?.status === "in_progress",
+    alienRow,
+  );
+
+  // Возврат с причиной: кнопка спрашивает слова, и следующее сообщение
+  // руководителя становится ими. Память живёт на его строке человека, а
+  // не в таблице аккаунтов, — до 20.09.2026 этот путь для него не
+  // существовал вовсе.
+  await admin.from("tasks").update({ status: "in_progress", approval_state: "awaiting_review" }).eq("id", mgrTask);
+  await mgrPress("mgr6", "t:back:" + mgrTask);
+  const { data: mgrWaiting } = await admin.from("assignees").select("pending_action").eq("id", assignee.id).maybeSingle();
+  check("«Вернуть» ждёт причину на строке человека", mgrWaiting?.pending_action?.kind === "review_return", mgrWaiting);
+
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "не хватает сметы по филиалам" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: mgrReturned } = await admin.from("tasks").select("approval_state, approval_comment").eq("id", mgrTask).maybeSingle();
+  check(
+    "и причина возвращает задачу на доработку",
+    mgrReturned?.approval_state === "returned" && mgrReturned?.approval_comment === "не хватает сметы по филиалам",
+    mgrReturned,
+  );
+
   // ---- Кнопки владельца ----
   //
   // Половина бота, которой не было: нажатие владельца искали среди

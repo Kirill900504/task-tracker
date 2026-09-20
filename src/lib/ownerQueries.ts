@@ -2,8 +2,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
+import { actorScope, type BotActor } from "@/lib/botActor";
 
-// О чём владелец может спросить бота — и что он может нажать.
+// О чём ПОСТАНОВЩИК может спросить бота — и что он может нажать.
+//
+// «Постановщик» здесь — роль по задаче, а не место в системе: половина
+// эта была владельческой до 20.09.2026, и руководитель, поставивший
+// задачу, не мог принять по ней работу из мессенджера вовсе. Теперь
+// каждая выборка сужается актором (lib/botActor): владелец видит всё
+// своё пространство, остальные — то, что поставили сами.
 //
 // До сих пор кнопки в мессенджере были только у коллег: нажатие искало
 // человека по `assignees.<чат>`, а чат владельца живёт в другой таблице, и
@@ -45,11 +52,11 @@ type TaskRaw = {
   priority: string | null;
 };
 
-export async function ownerTasks(admin: SupabaseClient, userId: string): Promise<OwnerTaskRow[]> {
+export async function ownerTasks(admin: SupabaseClient, actor: BotActor): Promise<OwnerTaskRow[]> {
   const { data } = await admin
     .from("tasks")
     .select("id, title, assignee, deadline, status, approval_state, priority")
-    .eq("user_id", userId)
+    .match(actorScope(actor))
     .is("deleted_at", null)
     .neq("status", "done")
     .order("deadline", { nullsFirst: false });
@@ -66,11 +73,11 @@ export async function ownerTasks(admin: SupabaseClient, userId: string): Promise
 
 export type OwnerMeetingRow = { id: string; title: string; date: string; time: string; result: string; participants: string[] };
 
-export async function ownerMeetings(admin: SupabaseClient, userId: string, today: string): Promise<OwnerMeetingRow[]> {
+export async function ownerMeetings(admin: SupabaseClient, actor: BotActor, today: string): Promise<OwnerMeetingRow[]> {
   const { data } = await admin
     .from("meetings")
     .select("id, title, date, time, result, participants, status")
-    .eq("user_id", userId)
+    .match(actorScope(actor))
     .is("deleted_at", null)
     .in("status", ["planned", "proposed"])
     .gte("date", today)
@@ -191,24 +198,26 @@ export function peopleLoadReply(tasks: OwnerTaskRow[], today: string, ids: Recor
 
 export async function ownerListReply(
   admin: SupabaseClient,
-  userId: string,
+  actor: BotActor,
   which: string,
   today: string,
 ): Promise<OwnerReply> {
   if (which === "people") {
     // Идентификаторы нужны кнопкам: в списке задач человек назван именем,
     // а открывается его карточка по строке в списке людей.
-    const { data: people } = await admin.from("assignees").select("id, name").eq("user_id", userId);
+    // Список людей общий на пространство — он и должен быть общим: имена
+    // в задачах одни и те же у всех. Сужает картину не он, а сами задачи.
+    const { data: people } = await admin.from("assignees").select("id, name").eq("user_id", actor.spaceId);
     const ids: Record<string, string> = {};
     for (const person of ((people || []) as { id: string; name: string }[])) ids[person.name] = person.id;
-    return peopleLoadReply(await ownerTasks(admin, userId), today, ids);
+    return peopleLoadReply(await ownerTasks(admin, actor), today, ids);
   }
 
-  const tasks = await ownerTasks(admin, userId);
+  const tasks = await ownerTasks(admin, actor);
 
   if (which === "today") {
     const due = tasks.filter((t) => t.deadline && t.deadline <= today);
-    const meetings = (await ownerMeetings(admin, userId, today)).filter((m) => m.date === today);
+    const meetings = (await ownerMeetings(admin, actor, today)).filter((m) => m.date === today);
     const reply = taskList("📌 На сегодня", due, today, "На сегодня ничего не назначено 🎉");
     if (!meetings.length) return reply;
     const lines = meetings.map((m) => `• ${m.time ? m.time + " — " : ""}${m.title}`);
@@ -233,11 +242,11 @@ export async function ownerListReply(
 // Мысли — входящий ящик, и в мессенджере он тот же самый. Записывать их
 // бот умел давно (быстрый ввод разбирает «запиши мысль…»), а вот
 // достать обратно было нечем: список жил только в трекере.
-export async function ownerIdeasReply(admin: SupabaseClient, userId: string): Promise<OwnerReply> {
+export async function ownerIdeasReply(admin: SupabaseClient, actor: BotActor): Promise<OwnerReply> {
   const { data } = await admin
     .from("ideas")
     .select("id, text, important, created_at")
-    .eq("user_id", userId)
+    .match(actorScope(actor))
     .eq("done", false)
     .is("deleted_at", null)
     .order("important", { ascending: false })
@@ -255,12 +264,12 @@ export async function ownerIdeasReply(admin: SupabaseClient, userId: string): Pr
   };
 }
 
-export async function personReply(admin: SupabaseClient, userId: string, assigneeId: string, today: string): Promise<OwnerReply> {
-  const { data } = await admin.from("assignees").select("name").eq("id", assigneeId).eq("user_id", userId).maybeSingle();
+export async function personReply(admin: SupabaseClient, actor: BotActor, assigneeId: string, today: string): Promise<OwnerReply> {
+  const { data } = await admin.from("assignees").select("name").eq("id", assigneeId).eq("user_id", actor.spaceId).maybeSingle();
   const name = (data as { name: string } | null)?.name;
   if (!name) return { text: "Этого человека больше нет в списке.", buttons: ownerNav() };
 
-  const mine = (await ownerTasks(admin, userId)).filter((t) => (t.assignee || "").trim() === name);
+  const mine = (await ownerTasks(admin, actor)).filter((t) => (t.assignee || "").trim() === name);
   const reply = taskList(`📋 ${name}`, mine, today, `За ${name} сейчас ничего не числится.`);
   return {
     text: reply.text,
@@ -271,8 +280,8 @@ export async function personReply(admin: SupabaseClient, userId: string, assigne
   };
 }
 
-export async function ownerMeetingsReply(admin: SupabaseClient, userId: string, today: string): Promise<OwnerReply> {
-  const meetings = await ownerMeetings(admin, userId, today);
+export async function ownerMeetingsReply(admin: SupabaseClient, actor: BotActor, today: string): Promise<OwnerReply> {
+  const meetings = await ownerMeetings(admin, actor, today);
   if (!meetings.length) return { text: "Встреч впереди нет.", buttons: ownerNav() };
   const shown = meetings.slice(0, PAGE);
   const lines = shown.map((m) => `• ${fmtDate(m.date)}${m.time ? ", " + m.time : ""} — ${m.title}`);

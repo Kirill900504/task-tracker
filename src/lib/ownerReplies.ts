@@ -9,8 +9,17 @@ import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
 import { recordEvent } from "@/lib/itemHistory";
 import { actorName } from "@/lib/actorName";
+import { actorScope, type BotActor } from "@/lib/botActor";
 
-// Что происходит, когда владелец нажимает кнопку.
+// Что происходит, когда ПОСТАНОВЩИК нажимает кнопку.
+//
+// Половина эта была владельческой: и выборки, и права шли от
+// одного user_id. С 20.09.2026 постановщиком в боте может быть любой,
+// кто поставил задачу («абсолютно равноправный для всех постановщик задач»),
+// поэтому вместо user_id сюда приходит актор (lib/botActor): чьё
+// пространство, кто именно нажал и видит ли он в нём всё. Права
+// считаются тем же способом, что в маршрутах трекера, — по created_by,
+// и задача, которой человек не ставил, для него просто не находится.
 //
 // Половина трекера, которой в мессенджере не было вовсе. Кнопки под
 // сообщениями получал только тот, кому что-то поручили, — а тот, кто
@@ -71,13 +80,13 @@ export async function findOwnerByChat(
 
 async function sectionPeople(
   admin: SupabaseClient,
-  userId: string,
+  spaceId: string,
   sectionId: string,
 ): Promise<{ name: string; role: "executor" | "coexecutor" | "watcher" }[]> {
   const { data } = await admin
     .from("section_assignees")
     .select("role, assignees(name)")
-    .eq("user_id", userId)
+    .eq("user_id", spaceId)
     .eq("section_id", sectionId);
   type Row = { role: "executor" | "coexecutor" | "watcher"; assignees: { name: string } | { name: string }[] | null };
   return ((data || []) as Row[])
@@ -99,12 +108,18 @@ type TaskRow = {
   approval_comment: string | null;
 };
 
-async function loadTask(admin: SupabaseClient, userId: string, taskId: string): Promise<TaskRow | null> {
+// Задача, которую этот человек вправе решать.
+//
+// Сужение актором — это и есть проверка прав: чужая задача просто не
+// находится, и все ветки ниже отвечают «не найдена» одним и тем же
+// способом. Отдельной проверки «а ваша ли она» нет нарочно — забытая
+// в одной ветке, она означала бы чужую закрытую задачу.
+async function loadTask(admin: SupabaseClient, actor: BotActor, taskId: string): Promise<TaskRow | null> {
   const { data } = await admin
     .from("tasks")
     .select("id, title, description, assignee, deadline, status, approval_state, approval_comment")
     .eq("id", taskId)
-    .eq("user_id", userId)
+    .match(actorScope(actor))
     .is("deleted_at", null)
     .maybeSingle();
   return (data as TaskRow | null) || null;
@@ -143,8 +158,8 @@ async function participantsOf(admin: SupabaseClient, taskId: string): Promise<Ta
 // исполнителю — «принял / сделал / не могу», постановщику — «принять
 // работу / вернуть / продлить / напомнить». Одна и та же задача, два
 // разных вопроса к ней.
-export async function ownerTaskCard(admin: SupabaseClient, userId: string, taskId: string): Promise<OwnerReply | null> {
-  const task = await loadTask(admin, userId, taskId);
+export async function ownerTaskCard(admin: SupabaseClient, actor: BotActor, taskId: string): Promise<OwnerReply | null> {
+  const task = await loadTask(admin, actor, taskId);
   if (!task) return null;
   const people = await participantsOf(admin, taskId);
 
@@ -203,12 +218,12 @@ type MeetingRow = {
   result: string | null;
 };
 
-async function loadMeeting(admin: SupabaseClient, userId: string, meetingId: string): Promise<MeetingRow | null> {
+async function loadMeeting(admin: SupabaseClient, actor: BotActor, meetingId: string): Promise<MeetingRow | null> {
   const { data } = await admin
     .from("meetings")
     .select("id, title, date, time, user_id, from_task_id, result")
     .eq("id", meetingId)
-    .eq("user_id", userId)
+    .match(actorScope(actor))
     .is("deleted_at", null)
     .maybeSingle();
   return (data as MeetingRow | null) || null;
@@ -221,8 +236,8 @@ async function loadMeeting(admin: SupabaseClient, userId: string, meetingId: str
 // ответ, который не пишут. Встреча оставалась открытой месяцами. Теперь
 // под вопросом кнопки, а рассказ остаётся для случаев, когда есть что
 // рассказать.
-export async function ownerMeetingCard(admin: SupabaseClient, userId: string, meetingId: string): Promise<OwnerReply | null> {
-  const meeting = await loadMeeting(admin, userId, meetingId);
+export async function ownerMeetingCard(admin: SupabaseClient, actor: BotActor, meetingId: string): Promise<OwnerReply | null> {
+  const meeting = await loadMeeting(admin, actor, meetingId);
   if (!meeting) return null;
 
   const { data: votes } = await admin
@@ -288,7 +303,7 @@ export function addDays(date: string, days: number): string {
 // маршрут пробует обычный путь коллеги.
 export async function handleOwnerCallback(
   admin: SupabaseClient,
-  userId: string,
+  actor: BotActor,
   action: CallbackAction,
   today: string,
 ): Promise<OwnerOutcome | null> {
@@ -300,10 +315,10 @@ export async function handleOwnerCallback(
   if (action.action === "olist") {
     const reply =
       action.kind === "meeting"
-        ? await ownerMeetingsReply(admin, userId, today)
+        ? await ownerMeetingsReply(admin, actor, today)
         : action.kind === "idea"
-          ? await ownerIdeasReply(admin, userId)
-          : await ownerListReply(admin, userId, action.id, today);
+          ? await ownerIdeasReply(admin, actor)
+          : await ownerListReply(admin, actor, action.id, today);
     return { toast: "Открываю", say: reply.text, sayButtons: reply.buttons };
   }
 
@@ -321,7 +336,10 @@ export async function handleOwnerCallback(
       .from(table)
       .select("id, title")
       .eq("id", action.id)
-      .eq("user_id", userId)
+      // Пространство, а не авторство: написать в обсуждение вправе
+      // любой участник итема, и запрещать это постановщику чужой
+      // задачи значило бы запретить разговор в ней.
+      .eq("user_id", actor.spaceId)
       .is("deleted_at", null)
       .maybeSingle();
     const item = data as { id: string; title: string } | null;
@@ -336,13 +354,13 @@ export async function handleOwnerCallback(
   }
 
   if (action.action === "oshow" && action.kind === "task") {
-    const card = await ownerTaskCard(admin, userId, action.id);
+    const card = await ownerTaskCard(admin, actor, action.id);
     if (!card) return { toast: "Эта задача не найдена" };
     return { toast: "Открываю", say: card.text, sayButtons: card.buttons };
   }
 
   if (action.action === "plus" && action.kind === "task") {
-    const task = await loadTask(admin, userId, action.id);
+    const task = await loadTask(admin, actor, action.id);
     if (!task) return { toast: "Эта задача не найдена" };
     return {
       toast: "На сколько двигаем?",
@@ -353,7 +371,7 @@ export async function handleOwnerCallback(
 
   const extend = action.action.match(/^plus(\d+)$/);
   if (extend && action.kind === "task") {
-    const task = await loadTask(admin, userId, action.id);
+    const task = await loadTask(admin, actor, action.id);
     if (!task) return { toast: "Эта задача не найдена" };
     const next = addDays(task.deadline || today, Number(extend[1]));
     if (!next) return { toast: "Не получилось посчитать дату" };
@@ -363,7 +381,7 @@ export async function handleOwnerCallback(
     // задачи зависит от того, откуда нажали кнопку, — а спрашивают у неё
     // одно и то же: сколько раз эту задачу двигали и когда.
     await recordEvent(admin, {
-      userId,
+      userId: actor.spaceId,
       kind: "task",
       itemId: action.id,
       text: `📅 Срок ${task.deadline ? "перенесён с " + fmtDate(task.deadline) + " на " : "поставлен на "}${fmtDate(next)}`,
@@ -388,11 +406,11 @@ export async function handleOwnerCallback(
   // слова нужны — «доделай» без «что именно» это не ответ, — поэтому он
   // спрашивает причину следующим сообщением (pending_action).
   if (action.action === "ok" && action.kind === "task") {
-    const task = await loadTask(admin, userId, action.id);
+    const task = await loadTask(admin, actor, action.id);
     if (!task) return { toast: "Эта задача не найдена" };
-    const done = await applyReview(admin, { id: task.id, title: task.title, user_id: userId }, "approve", "", {
-      label: await actorName(admin, userId, userId),
-      userId,
+    const done = await applyReview(admin, { id: task.id, title: task.title, user_id: actor.spaceId }, "approve", "", {
+      label: await actorName(admin, actor.spaceId, actor.userId),
+      userId: actor.userId,
     });
     if (!done.ok) return { toast: done.error };
     return {
@@ -409,11 +427,11 @@ export async function handleOwnerCallback(
   // трекер и на бота (lib/reviewWork.REOPEN_PATCH): снимается и статус, и
   // приёмка, отчёты остаются, исполнителям говорится.
   if (action.action === "reop" && action.kind === "task") {
-    const task = await loadTask(admin, userId, action.id);
+    const task = await loadTask(admin, actor, action.id);
     if (!task) return { toast: "Эта задача не найдена" };
-    const done = await applyReview(admin, { id: task.id, title: task.title, user_id: userId }, "reopen", "", {
-      label: await actorName(admin, userId, userId),
-      userId,
+    const done = await applyReview(admin, { id: task.id, title: task.title, user_id: actor.spaceId }, "reopen", "", {
+      label: await actorName(admin, actor.spaceId, actor.userId),
+      userId: actor.userId,
     });
     if (!done.ok) return { toast: done.error };
     return {
@@ -424,7 +442,7 @@ export async function handleOwnerCallback(
   }
 
   if (action.action === "back" && action.kind === "task") {
-    const task = await loadTask(admin, userId, action.id);
+    const task = await loadTask(admin, actor, action.id);
     if (!task) return { toast: "Эта задача не найдена" };
     return {
       toast: "Что доделать?",
@@ -435,14 +453,14 @@ export async function handleOwnerCallback(
 
   // ——— Человек: что на нём и что ему ещё поручить.
   if (action.action === "oper" && action.kind === "task") {
-    const reply = await personReply(admin, userId, action.id, today);
+    const reply = await personReply(admin, actor, action.id, today);
     return { toast: "Открываю", say: reply.text, sayButtons: reply.buttons };
   }
 
   // «Поручить ему» — тот же мастер, но человек уже выбран: спрашиваем
   // сразу, что поручить, и следом на когда.
   if (action.action === "npers" && action.kind === "task") {
-    const { data } = await admin.from("assignees").select("name").eq("id", action.id).eq("user_id", userId).maybeSingle();
+    const { data } = await admin.from("assignees").select("name").eq("id", action.id).eq("user_id", actor.spaceId).maybeSingle();
     const name = (data as { name: string } | null)?.name;
     if (!name) return { toast: "Этого человека больше нет" };
     return {
@@ -462,7 +480,7 @@ export async function handleOwnerCallback(
       .from("ideas")
       .select("id, text, important")
       .eq("id", action.id)
-      .eq("user_id", userId)
+      .match(actorScope(actor))
       .is("deleted_at", null)
       .maybeSingle();
     const idea = data as { id: string; text: string; important: boolean } | null;
@@ -485,13 +503,13 @@ export async function handleOwnerCallback(
       .from("ideas")
       .update({ done: true, done_at: new Date().toISOString() })
       .eq("id", action.id)
-      .eq("user_id", userId);
+      .match(actorScope(actor));
     if (error) return { toast: "Не получилось" };
     return { toast: "Вычеркнул", rewriteTo: "✓ Вычеркнуто.", rewriteButtons: ownerNav() };
   }
 
   if (action.action === "itask" && action.kind === "idea") {
-    const { data } = await admin.from("ideas").select("id, text").eq("id", action.id).eq("user_id", userId).maybeSingle();
+    const { data } = await admin.from("ideas").select("id, text").eq("id", action.id).match(actorScope(actor)).maybeSingle();
     const idea = data as { id: string; text: string } | null;
     if (!idea) return { toast: "Эта мысль не найдена" };
     // Дальше — обычный мастер, начиная со второго шага: название уже есть.
@@ -500,20 +518,20 @@ export async function handleOwnerCallback(
     return {
       toast: "Кому поручить?",
       say: `«${idea.text}»\n\nКому поручить?`,
-      sayButtons: await whoButtons(admin, userId),
+      sayButtons: await whoButtons(admin, actor.spaceId),
       setPending: { kind: "new_task", stage: "who", title: idea.text, fromIdea: idea.id },
     };
   }
 
   // ——— Встреча: открыть, закрыть, записать итог.
   if (action.action === "oshow" && action.kind === "meeting") {
-    const card = await ownerMeetingCard(admin, userId, action.id);
+    const card = await ownerMeetingCard(admin, actor, action.id);
     if (!card) return { toast: "Эта встреча не найдена" };
     return { toast: "Открываю", say: card.text, sayButtons: card.buttons };
   }
 
   if ((action.action === "mok" || action.action === "mno") && action.kind === "meeting") {
-    const meeting = await loadMeeting(admin, userId, action.id);
+    const meeting = await loadMeeting(admin, actor, action.id);
     if (!meeting) return { toast: "Эта встреча не найдена" };
     const outcome = action.action === "mok" ? "success" : "no_result";
     await closeMeeting(admin, meeting, outcome, "");
@@ -532,7 +550,7 @@ export async function handleOwnerCallback(
   // «Записать итог» ждёт слов — тем же механизмом, что и возврат задачи на
   // доработку: следующее сообщение станет итогом.
   if (action.action === "mrec" && action.kind === "meeting") {
-    const meeting = await loadMeeting(admin, userId, action.id);
+    const meeting = await loadMeeting(admin, actor, action.id);
     if (!meeting) return { toast: "Эта встреча не найдена" };
     return {
       toast: "Слушаю",
@@ -548,7 +566,7 @@ export async function handleOwnerCallback(
   }
 
   if (action.action === "nwho" && action.kind === "task") {
-    const { data } = await admin.from("assignees").select("name").eq("id", action.id).eq("user_id", userId).maybeSingle();
+    const { data } = await admin.from("assignees").select("name").eq("id", action.id).eq("user_id", actor.spaceId).maybeSingle();
     const name = (data as { name: string } | null)?.name;
     if (!name) return { toast: "Этого человека больше нет" };
     return {
@@ -560,7 +578,7 @@ export async function handleOwnerCallback(
   }
 
   if (action.action === "nsec" && action.kind === "task") {
-    const people = await sectionPeople(admin, userId, action.id);
+    const people = await sectionPeople(admin, actor.spaceId, action.id);
     if (!people.length) return { toast: "За этим разделом никто не закреплён" };
     return {
       toast: "По разделу",
@@ -577,7 +595,7 @@ export async function handleOwnerCallback(
   }
 
   if (action.action === "ping" && action.kind === "task") {
-    const task = await loadTask(admin, userId, action.id);
+    const task = await loadTask(admin, actor, action.id);
     if (!task) return { toast: "Эта задача не найдена" };
     return {
       toast: "Напомнил",

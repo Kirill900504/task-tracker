@@ -22,6 +22,7 @@ import { whenButtons, whoButtons, type NewTaskPending } from "@/lib/ownerNewTask
 import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
 import { deliverComment } from "@/lib/commentDelivery";
+import { actorScope, findActorByChat, type BotActor } from "@/lib/botActor";
 import { actorName } from "@/lib/actorName";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
@@ -37,6 +38,10 @@ type OwnerReplyPending = { kind: "owner_reply"; replyKind: "task" | "meeting"; i
 // (colleagueReplies): нажал, отвлёкся, написал о другом — и это другое
 // должно уйти туда, куда ушло бы без нажатия.
 const AIM_LIFETIME_MS = 2 * 60 * 60 * 1000;
+
+// Слово, которым открывают меню. Одно на оба чата: дверь обратно должна
+// называться одинаково у владельца и у любого другого постановщика.
+const MENU_WORD = /^(меню|menu|\/menu|что умеешь|start|\/start)$/i;
 
 function isOwnerReply(p: unknown): p is OwnerReplyPending {
   return !!p && (p as OwnerReplyPending).kind === "owner_reply";
@@ -494,6 +499,136 @@ async function offerTask(
   return true;
 }
 
+// Незакрытый вопрос ПОСТАНОВЩИКА — один разбор на оба чата.
+//
+// Причина возврата, итог встречи, реплика в обсуждение и шаги мастера
+// «Поручить» приходят следующим сообщением, и до 20.09.2026 всё это
+// разбирала только ветка владельца. У руководителя такой ветки не было:
+// его текст шёл в половину получателя, где подобную память никто не
+// ждал, и ответом на «что доделать» стало бы «Отменено, „undefined“ не
+// тронул». Раз кнопки у всех одни, общим должно быть и то, что после
+// них пишут.
+//
+// Возвращает true, если сообщение было ответом на вопрос: тогда
+// вызывающий на этом и останавливается.
+async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknown, trimmed: string): Promise<boolean> {
+  // Возврат на доработку: нажали кнопку, теперь пишут, что именно
+  // доделать. Правила возврата общие с трекером (lib/reviewWork):
+  // отчёты обнуляются, людям говорится сразу, в хронику пишется строка.
+  if ((waiting as ReturnPending).kind === "review_return") {
+    const ask = waiting as ReturnPending;
+    const { data: taskRow } = await ctx.admin
+      .from("tasks")
+      .select("id, title, user_id")
+      .eq("id", ask.taskId)
+      .match(actorScope(actor))
+      .is("deleted_at", null)
+      .maybeSingle();
+    const task = taskRow as { id: string; title: string; user_id: string } | null;
+    if (!task) {
+      await say(ctx, "Эта задача больше не найдена.");
+      return true;
+    }
+    const done = await applyReview(ctx.admin, task, "return", trimmed, {
+      label: await actorName(ctx.admin, task.user_id, actor.userId),
+      userId: actor.userId,
+    });
+    await say(ctx, done.ok ? `↩ Вернул «${task.title}» на доработку — исполнителям сказано.` : done.error);
+    return true;
+  }
+
+  // Итог встречи, пришедший словами после кнопки «Записать итог».
+  // Правила — общие с трекером (lib/meetingRecap): разослать тем, кто
+  // был, записать в хронику и вернуть в задачу, если встреча выросла
+  // из неё.
+  if ((waiting as RecapPending).kind === "meeting_recap") {
+    const ask = waiting as RecapPending;
+    const { data: row } = await ctx.admin
+      .from("meetings")
+      .select("id, title, date, time, user_id, from_task_id, result")
+      .eq("id", ask.meetingId)
+      .match(actorScope(actor))
+      .is("deleted_at", null)
+      .maybeSingle();
+    const meeting = row as MeetingRecapRow | null;
+    if (!meeting) {
+      await say(ctx, "Эта встреча больше не найдена.");
+      return true;
+    }
+    await closeMeeting(ctx.admin, meeting, "success", trimmed);
+    await say(ctx, "📝 Итог записан и разослан тем, кто был.");
+    return true;
+  }
+
+  // Реплика в обсуждение — после кнопки «💬 Ответить».
+  //
+  // Для постановщика это единственный способ написать в задачу из
+  // мессенджера: его свободный текст здесь — поручение, а не реплика.
+  // Живёт намерение два часа и ровно одно сообщение, как и у получателя
+  // (takeAim в colleagueReplies). Остывшее намерение сообщение не
+  // съедает: оно обрабатывается как обычный текст, ровно так же, как
+  // если бы кнопку не нажимали вовсе.
+  if (isOwnerReply(waiting)) {
+    const fresh = Date.now() - (Date.parse(waiting.at || "") || 0) < AIM_LIFETIME_MS;
+    if (fresh) {
+      await say(ctx, await writeOwnerComment(ctx, actor.userId, waiting, trimmed));
+      return true;
+    }
+    return false;
+  }
+
+  // Первый шаг мастера «Поручить»: пришло название. Спрашиваем, кому, —
+  // кнопками, потому что имя, набранное руками, промахивается мимо
+  // списка людей, а имя, названное моделью, промахивается ещё чаще.
+  if ((waiting as NewTaskPending).kind === "new_task" && (waiting as NewTaskPending).stage === "title") {
+    const title = trimmed.slice(0, 200);
+    if (!title) {
+      await say(ctx, "Пустое название — не задача. Напишите, что поручить.");
+      return true;
+    }
+    // Человек мог быть выбран заранее — «Поручить ему» из его карточки.
+    // Тогда шаг «кому» уже пройден, и спрашивать его второй раз значит
+    // переспрашивать то, что человек только что нажал.
+    const chosen = (waiting as { people?: { name: string; role: "executor" | "coexecutor" | "watcher" }[] }).people;
+    if (chosen?.length) {
+      await rememberFor(ctx, actor, { kind: "new_task", stage: "when", title, people: chosen });
+      await ctx.transport.send(ctx.chatId, `«${title}» — ${chosen.map((x) => x.name).join(", ")}. На когда?`, {
+        buttons: whenButtons(),
+      });
+      return true;
+    }
+    await rememberFor(ctx, actor, { kind: "new_task", stage: "who", title });
+    await ctx.transport.send(ctx.chatId, `«${title}»\n\nКому поручить?`, {
+      buttons: await whoButtons(ctx.admin, actor.spaceId),
+    });
+    return true;
+  }
+
+  // Второй и третий шаги отвечают кнопкой, а не словом. Если человек всё
+  // же написал — не теряем ни шаг, ни написанное: память возвращается на
+  // место, а кнопки показываются снова.
+  if ((waiting as NewTaskPending).kind === "new_task") {
+    await rememberFor(ctx, actor, waiting as Record<string, unknown>);
+    await ctx.transport.send(ctx.chatId, "Выберите кнопкой — или начните заново словом «меню».", {
+      buttons: await whoButtons(ctx.admin, actor.spaceId),
+    });
+    return true;
+  }
+
+  return false;
+}
+
+// Запомнить незакрытый вопрос там, где живёт этот чат: у владельца в
+// таблице аккаунтов, у остальных на строке человека. Та же пара, что в
+// lib/botCallback, и по той же причине.
+async function rememberFor(ctx: BotContext, actor: BotActor, value: Record<string, unknown> | null): Promise<void> {
+  if (actor.isOwner) {
+    await remember(ctx, { pending_action: value });
+    return;
+  }
+  await ctx.admin.from("assignees").update({ pending_action: value }).eq("id", actor.assigneeId);
+}
+
 export async function handleText(ctx: BotContext, text: string): Promise<void> {
   const trimmed = text.trim();
 
@@ -522,6 +657,12 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       const waiting = await pendingFor(ctx.admin, colleague.id);
       if (waiting) {
         await clearPending(ctx.admin, colleague.id);
+        // Половина вопросов здесь — постановщицкие: причина возврата, итог
+        // встречи, шаг мастера «Поручить». Раньше их тут быть не могло,
+        // потому что и кнопок таких у руководителя не было; теперь есть, и
+        // разбирает их та же функция, что и в чате владельца.
+        const actor = await findActorByChat(ctx.admin, ctx.chatId, ctx.channel);
+        if (actor && (await assignerPending(ctx, actor, waiting, trimmed))) return;
         await say(ctx, await resolvePendingAction(waiting, trimmed));
         return;
       }
@@ -533,6 +674,16 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       // Кто перед нами: руководитель со входом в трекер или человек,
       // которому просто пишут. От этого зависит, чем считать его фразу.
       const asManager = await managerIdOf(ctx.admin, colleague.id);
+
+      // «Меню» словом — то же, что кнопка, и теперь оно есть у каждого, кто
+      // ставит задачи. Кнопки уезжают вверх вместе с перепиской, и человек,
+      // открывший чат через неделю, не видит ни одной: слово «меню» — это
+      // дверь обратно, и она не может быть только у владельца.
+      if (asManager && MENU_WORD.test(trimmed)) {
+        const menu = ownerMenu();
+        await ctx.transport.send(ctx.chatId, menu.text, menu.buttons?.length ? { buttons: menu.buttons } : undefined);
+        return;
+      }
       const answered = await handleColleagueText(ctx.admin, colleague, trimmed, ctx.channel.id, !!asManager);
       if (answered) {
         await ctx.transport.send(ctx.chatId, answered.reply, answered.buttons?.length ? { buttons: answered.buttons } : undefined);
@@ -572,114 +723,13 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     return;
   }
 
-  // A pending confirmation always wins over everything else — the next
-  // message is either "да" or a cancel, never a new request.
+  // Незакрытый вопрос старше всего остального: следующее сообщение — это
+  // «да», причина возврата или шаг мастера, а не новая просьба.
   if (account.pending_action) {
     await remember(ctx, { pending_action: null });
-    // Возврат на доработку: нажали кнопку, теперь пишут, что именно
-    // доделать. Правила возврата — общие с трекером (lib/reviewWork):
-    // отчёты обнуляются, людям говорится сразу, в хронику пишется строка.
-    // Один столбец памяти на все незакрытые вопросы бота: подтверждение
-    // «да», причина возврата, шаг мастера. Разбирается он по полю kind, и
-    // потому читается сначала как неизвестное.
-    const waiting = account.pending_action as PendingAction | ReturnPending | NewTaskPending;
-    if ((waiting as unknown as ReturnPending).kind === "review_return") {
-      const ask = waiting as unknown as ReturnPending;
-      const { data: taskRow } = await ctx.admin
-        .from("tasks")
-        .select("id, title, user_id")
-        .eq("id", ask.taskId)
-        .eq("user_id", account.user_id)
-        .is("deleted_at", null)
-        .maybeSingle();
-      const task = taskRow as { id: string; title: string; user_id: string } | null;
-      if (!task) {
-        await say(ctx, "Эта задача больше не найдена.");
-        return;
-      }
-      const done = await applyReview(ctx.admin, task, "return", trimmed, { label: await actorName(ctx.admin, task.user_id, account.user_id), userId: account.user_id });
-      await say(ctx, done.ok ? `↩ Вернул «${task.title}» на доработку — исполнителям сказано.` : done.error);
-      return;
-    }
-    // Итог встречи, пришедший словами после кнопки «Записать итог».
-    // Правила — общие с трекером (lib/meetingRecap): разослать тем, кто
-    // был, записать в хронику и вернуть в задачу, если встреча выросла
-    // из неё.
-    if ((waiting as unknown as RecapPending).kind === "meeting_recap") {
-      const ask = waiting as unknown as RecapPending;
-      const { data: row } = await ctx.admin
-        .from("meetings")
-        .select("id, title, date, time, user_id, from_task_id, result")
-        .eq("id", ask.meetingId)
-        .eq("user_id", account.user_id)
-        .is("deleted_at", null)
-        .maybeSingle();
-      const meeting = row as MeetingRecapRow | null;
-      if (!meeting) {
-        await say(ctx, "Эта встреча больше не найдена.");
-        return;
-      }
-      await closeMeeting(ctx.admin, meeting, "success", trimmed);
-      await say(ctx, "📝 Итог записан и разослан тем, кто был.");
-      return;
-    }
-
-    // Реплика в обсуждение — после кнопки «💬 Ответить».
-    //
-    // Для владельца это единственный способ написать в задачу из
-    // мессенджера: его свободный текст здесь — поручение, а не реплика.
-    // Живёт намерение два часа и ровно одно сообщение, как и у коллеги
-    // (takeAim в colleagueReplies): нажал, отвлёкся, написал о другом —
-    // и это другое должно уйти туда, куда ушло бы без нажатия.
-    // Остывшее намерение не съедает сообщение: оно обрабатывается как
-    // обычный текст владельца, то есть как поручение, — ровно так же, как
-    // если бы кнопку не нажимали вовсе.
-    if (isOwnerReply(waiting)) {
-      const fresh = Date.now() - (Date.parse(waiting.at || "") || 0) < AIM_LIFETIME_MS;
-      if (fresh) {
-        await say(ctx, await writeOwnerComment(ctx, account.user_id, waiting, trimmed));
-        return;
-      }
-    }
-
-    // Первый шаг мастера «Поручить»: пришло название. Спрашиваем, кому, —
-    // кнопками, потому что имя, набранное руками, промахивается мимо
-    // списка людей, а имя, названное моделью, промахивается ещё чаще.
-    if ((waiting as unknown as NewTaskPending).kind === "new_task" && (waiting as unknown as NewTaskPending).stage === "title") {
-      const title = trimmed.slice(0, 200);
-      if (!title) {
-        await say(ctx, "Пустое название — не задача. Напишите, что поручить.");
-        return;
-      }
-      // Человек мог быть выбран заранее — «Поручить ему» из его карточки.
-      // Тогда шаг «кому» уже пройден, и спрашивать его второй раз значит
-      // переспрашивать то, что человек только что нажал.
-      const chosen = (waiting as unknown as { people?: { name: string; role: "executor" | "coexecutor" | "watcher" }[] }).people;
-      if (chosen?.length) {
-        await remember(ctx, { pending_action: { kind: "new_task", stage: "when", title, people: chosen } });
-        await ctx.transport.send(ctx.chatId, `«${title}» — ${chosen.map((p) => p.name).join(", ")}. На когда?`, {
-          buttons: whenButtons(),
-        });
-        return;
-      }
-      await remember(ctx, { pending_action: { kind: "new_task", stage: "who", title } });
-      await ctx.transport.send(ctx.chatId, `«${title}»\n\nКому поручить?`, {
-        buttons: await whoButtons(ctx.admin, account.user_id),
-      });
-      return;
-    }
-
-    // Второй и третий шаги отвечают кнопкой, а не словом. Если человек всё
-    // же написал — не теряем ни шаг, ни написанное: память возвращается на
-    // место, а кнопки показываются снова.
-    if ((waiting as unknown as NewTaskPending).kind === "new_task") {
-      await remember(ctx, { pending_action: waiting });
-      await ctx.transport.send(ctx.chatId, "Выберите кнопкой — или начните заново словом «меню».", {
-        buttons: await whoButtons(ctx.admin, account.user_id),
-      });
-      return;
-    }
-
+    const waiting = account.pending_action;
+    const asOwner: BotActor = { userId: account.user_id, spaceId: account.user_id, assigneeId: "", isOwner: true };
+    if (await assignerPending(ctx, asOwner, waiting, trimmed)) return;
     // Остывшее «💬 Ответить» сюда не адресовано: resolvePendingAction
     // разбирает подтверждения («да»), и незнакомая ему память ответила бы
     // «Отменено, „undefined“ не тронул».
@@ -692,7 +742,7 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
   // «Меню» — то же, что кнопка «☰ Меню», только словом. Человек, открывший
   // чат спустя неделю, кнопок не видит: они уехали вверх вместе с
   // сообщениями.
-  if (/^(меню|menu|\/menu|что умеешь|start|\/start)$/i.test(trimmed)) {
+  if (MENU_WORD.test(trimmed)) {
     const menu = ownerMenu();
     await ctx.transport.send(ctx.chatId, menu.text, menu.buttons?.length ? { buttons: menu.buttons } : undefined);
     return;

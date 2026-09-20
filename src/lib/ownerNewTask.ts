@@ -99,11 +99,15 @@ export async function createTaskFromBot(
   title: string,
   people: { name: string; role: "executor" | "coexecutor" | "watcher" }[],
   deadline: string,
+  // Кто поручил. Пусто — владелец пространства (так это и читает
+  // notifyAuthor). У руководителя здесь его auth-id: по нему ему придёт
+  // отчёт, и по нему же бот потом пустит его к приёмке этой задачи.
+  createdBy: string | null = null,
 ): Promise<{ text: string }> {
   const executors = people.filter((p) => p.role === "executor").map((p) => p.name);
   const id = uid();
   const { error } = await admin.from("tasks").insert(
-    newTaskRow({ id, userId, title, assignee: executors[0] || people[0]?.name || "", deadline: deadline || null }),
+    newTaskRow({ id, userId, title, assignee: executors[0] || people[0]?.name || "", deadline: deadline || null, createdBy }),
   );
   if (error) return { text: "Не получилось сохранить задачу: " + error.message };
 
