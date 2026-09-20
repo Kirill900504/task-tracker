@@ -1,8 +1,8 @@
 {
   "name": "rokas-desktop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
-  "description": "РОКАС Трекер — настольное приложение",
+  "description": "Планировщик задач — настольное приложение",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "ru.rokas.tracker",
-    "productName": "ROKAS Tracker",
+    "productName": "Планировщик задач",
     "copyright": "РОКАС",
     "directories": {
       "output": "dist",
@@ -32,7 +32,7 @@
     "win": {
       "target": "nsis",
       "icon": "build/icon.png",
-      "artifactName": "ROKAS-Tracker-Setup-${version}.${ext}"
+      "artifactName": "Planirovshchik-Zadach-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": true,
@@ -40,7 +40,7 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "РОКАС Трекер",
+      "shortcutName": "Планировщик задач",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false
     },
