@@ -459,6 +459,58 @@ try {
     { returned, clearedReports },
   );
 
+  // «💬 Ответить» — единственная дверь постановщика в обсуждение: его
+  // свободный текст здесь поручение, а не реплика. Кнопка стояла под
+  // каждой карточкой и не делала ничего («эта кнопка не для вас»), и
+  // поймать это мог только тот, кто её нажал, — теперь нажимает проверка.
+  await pressOwner("own5a", "t:msg:" + ownerTask);
+  const { data: ownerAim } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
+  check("«Ответить» адресует следующее сообщение", ownerAim?.pending_action?.kind === "owner_reply", ownerAim);
+
+  const ownerSaid = "вопрос по смете " + Date.now();
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: ownerSaid } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: written } = await admin
+    .from("item_comments")
+    .select("body, author_user_id, source, item_id")
+    .eq("item_id", ownerTask)
+    .eq("body", ownerSaid)
+    .maybeSingle();
+  check(
+    "и оно ложится в обсуждение задачи, а не заводит новую",
+    !!written && written.author_user_id === userId && written.source === "telegram",
+    written,
+  );
+
+  // Выход из «Завершённых». Закрытая задача держится ДВУМЯ полями, и
+  // снятие одного оставляло её закрытой — состояние без выхода.
+  await admin
+    .from("tasks")
+    .update({ status: "done", approval_state: "accepted", approved_at: new Date().toISOString() })
+    .eq("id", ownerTask);
+  const reopened = await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "верни в работу задачу Проверка владельческих кнопок" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: backToWork } = await admin
+    .from("tasks")
+    .select("status, approval_state, approved_at, completed_at")
+    .eq("id", ownerTask)
+    .maybeSingle();
+  check(
+    "«верни в работу» снимает и статус, и приёмку",
+    reopened.status === 200 &&
+      backToWork?.status === "in_progress" &&
+      backToWork?.approval_state === "open" &&
+      !backToWork?.approved_at &&
+      !backToWork?.completed_at,
+    backToWork,
+  );
+
   // Мастер «Поручить»: три шага и задача в конце.
   await pressOwner("own6", "t:new:start");
   const { data: wizardStarted } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
