@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig } from "@/lib/botTransport";
 import type { CallbackAction } from "@/lib/colleagues";
-import { chatsFor, meetingButtons, type ColleagueRow } from "@/lib/colleagues";
-import { sendToColleague, notifyAuthor } from "@/lib/botDelivery";
+import { meetingButtons, type ColleagueRow } from "@/lib/colleagues";
+import { notifyAuthor } from "@/lib/botDelivery";
+import { sendToPerson } from "@/lib/reach";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
 import { handleOwnerCallback } from "@/lib/ownerReplies";
 import { findActorByChat, type BotActor } from "@/lib/botActor";
@@ -176,29 +177,33 @@ async function pendingOf(
 // Тем, кого позвали на встречу. Кнопки остаются ответами: назначенное
 // время можно и не суметь — «Не смогу» после «Назначить» такой же
 // законный ответ, как и до него.
+// Пространство берётся из самой строки участия (его ставит триггер
+// миграции 0019), а не передаётся сверху: оно нужно затем, чтобы дойти до
+// владельца, если получатель — он. Его чат живёт в учётной записи, а не в
+// строке списка людей (см. lib/reach).
 async function tellMeeting(admin: SupabaseClient, meetingId: string, text: string): Promise<void> {
-  const { data: parts } = await admin.from("meeting_participants").select("assignee_id").eq("meeting_id", meetingId);
-  const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
-  if (!ids.length) return;
-  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+  const { data: parts } = await admin.from("meeting_participants").select("assignee_id, user_id").eq("meeting_id", meetingId);
+  const rows = (parts || []) as { assignee_id: string; user_id: string }[];
+  if (!rows.length) return;
+  const ownerId = rows[0].user_id;
+  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", rows.map((r) => r.assignee_id));
   for (const person of ((people || []) as ColleagueRow[])) {
-    const target = chatsFor(person)[0];
-    if (target) await sendToColleague(target, text, meetingButtons(meetingId));
+    await sendToPerson(admin, ownerId, person, text, meetingButtons(meetingId));
   }
 }
 
 async function tellAssignees(admin: SupabaseClient, taskId: string, text: string): Promise<void> {
   const { data: parts } = await admin
     .from("task_participants")
-    .select("assignee_id")
+    .select("assignee_id, user_id")
     .eq("task_id", taskId)
     .in("role", ["executor", "coexecutor"]);
-  const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
-  if (!ids.length) return;
-  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+  const rows = (parts || []) as { assignee_id: string; user_id: string }[];
+  if (!rows.length) return;
+  const ownerId = rows[0].user_id;
+  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", rows.map((r) => r.assignee_id));
   for (const person of ((people || []) as ColleagueRow[])) {
-    const target = chatsFor(person)[0];
-    if (target) await sendToColleague(target, text);
+    await sendToPerson(admin, ownerId, person, text);
   }
 }
 

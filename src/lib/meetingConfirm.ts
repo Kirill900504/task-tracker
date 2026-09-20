@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { chatsFor, meetingButtons, type ColleagueRow } from "@/lib/colleagues";
-import { sendToColleague } from "@/lib/botDelivery";
+import { meetingButtons, type ColleagueRow } from "@/lib/colleagues";
+import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
 import { fmtDate } from "@/lib/taskDisplay";
 import { voteTally, type MeetingVote } from "@/lib/meetingVotes";
@@ -95,8 +95,7 @@ export async function confirmIfEveryoneAgreed(admin: SupabaseClient, meetingId: 
     const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
     const text = `✅ Встреча назначена: «${meeting.title}»\n${when}\n\nВсе ответили «буду».`;
     for (const person of ((people || []) as ColleagueRow[])) {
-      const target = chatsFor(person)[0];
-      if (target) await sendToColleague(target, text, meetingButtons(meetingId));
+      await sendToPerson(admin, meeting.user_id, person, text, meetingButtons(meetingId));
     }
   }
 

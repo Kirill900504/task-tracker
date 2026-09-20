@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
-import { chatsFor, encodeCallback, type CallbackAction, type ColleagueRow } from "@/lib/colleagues";
+import { encodeCallback, type CallbackAction, type ColleagueRow } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
 import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
 import { ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, personReply, type OwnerReply } from "@/lib/ownerQueries";
@@ -11,7 +11,7 @@ import { recordEvent } from "@/lib/itemHistory";
 import { actorName } from "@/lib/actorName";
 import { actorScope, type BotActor } from "@/lib/botActor";
 import { latecomerText } from "@/lib/meetingNudges";
-import { sendToColleague } from "@/lib/botDelivery";
+import { sendToPerson } from "@/lib/reach";
 
 // Что происходит, когда ПОСТАНОВЩИК нажимает кнопку.
 //
@@ -590,8 +590,7 @@ export async function handleOwnerCallback(
       const person = (Array.isArray(row.assignees) ? row.assignees[0] : row.assignees) as ColleagueRow | null;
       if (!person) continue;
       names.push(person.name);
-      const target = chatsFor(person)[0];
-      if (target && (await sendToColleague(target, text)).ok) sent++;
+      if (await sendToPerson(admin, actor.spaceId, person, text)) sent++;
     }
     // Кому не дошло — говорится вслух: у половины людей мессенджера
     // нет вовсе, и молчаливое «готово» означало бы, что организатор

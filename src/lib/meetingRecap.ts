@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { chatsFor, replyButtons, type ColleagueRow } from "@/lib/colleagues";
-import { sendToColleague } from "@/lib/botDelivery";
+import { replyButtons, type ColleagueRow } from "@/lib/colleagues";
+import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
 import { mergeResult } from "@/lib/meetingLink";
 import { fmtDate } from "@/lib/taskDisplay";
@@ -40,10 +40,9 @@ export async function deliverRecap(admin: SupabaseClient, meeting: MeetingRef, r
   if (ids.length) {
     const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
     for (const person of ((people || []) as ColleagueRow[])) {
-      const target = chatsFor(person)[0];
       // Кнопка «Ответить» здесь не формальность: с итогом чаще всего и
       // спорят, и уточнять его будут именно в этот момент.
-      if (target && (await sendToColleague(target, text, replyButtons("meeting", meeting.id))).ok) sent++;
+      if (await sendToPerson(admin, meeting.user_id, person, text, replyButtons("meeting", meeting.id))) sent++;
     }
   }
 

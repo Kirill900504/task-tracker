@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { forgotPasswordInput, readInput } from "@/lib/apiInput";
 import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
-import { sendToColleague } from "@/lib/botDelivery";
+import { ownerChats, sendToColleague, type OwnerChat } from "@/lib/botDelivery";
 import { originOf, recoveryLink } from "@/lib/recoveryLink";
 
 // «Забыли пароль?» — ссылка приходит в мессенджер, а не письмом.
@@ -65,24 +65,40 @@ export async function POST(req: Request) {
     .select("assignee_id, status")
     .eq("member_id", user.id)
     .maybeSingle();
-  if (!membership || membership.status !== "active") return NextResponse.json(SAME_ANSWER);
 
-  const { data: person } = await admin
-    .from("assignees")
-    .select("id, name, telegram_chat_id, max_user_id")
-    .eq("id", membership.assignee_id)
-    .maybeSingle();
-  const target = person ? chatsFor(person as ColleagueRow)[0] : null;
-  if (!target) return NextResponse.json(SAME_ANSWER);
+  // Строки членства нет — это владелец собственного пространства, и ему
+  // эта дверь нужна больше всех: выдать ему ссылку заново некому (тот, кто
+  // делает это остальным, — он сам), а письмо Supabase ведёт на localhost.
+  // Раньше маршрут здесь просто выходил, то есть «Забыли пароль?» не
+  // работало у Кирилла вовсе. Его чат живёт в учётной записи, а не в
+  // строке списка людей (см. lib/reach).
+  const targets: OwnerChat[] = [];
+  if (!membership) {
+    const { data: mine } = await admin.from("assignees").select("id").eq("user_id", user.id).limit(1);
+    if (!(mine || []).length) return NextResponse.json(SAME_ANSWER);
+    targets.push(...(await ownerChats(admin, user.id)));
+  } else {
+    if (membership.status !== "active") return NextResponse.json(SAME_ANSWER);
+    const { data: person } = await admin
+      .from("assignees")
+      .select("id, name, telegram_chat_id, max_user_id")
+      .eq("id", membership.assignee_id)
+      .maybeSingle();
+    const target = person ? chatsFor(person as ColleagueRow)[0] : null;
+    if (target) targets.push(target);
+  }
+  if (!targets.length) return NextResponse.json(SAME_ANSWER);
 
   const link = await recoveryLink(admin, email, originOf(req));
   if ("error" in link) return NextResponse.json(SAME_ANSWER);
 
-  await sendToColleague(
-    target,
-    `🔑 Новый пароль для трекера\n\n${link.link}\n\n` +
-      "Ссылка действует час и сработает один раз. Если пароль вы не забывали — просто не открывайте её.",
-  );
+  for (const target of targets) {
+    await sendToColleague(
+      target,
+      `🔑 Новый пароль для трекера\n\n${link.link}\n\n` +
+        "Ссылка действует час и сработает один раз. Если пароль вы не забывали — просто не открывайте её.",
+    );
+  }
 
   return NextResponse.json(SAME_ANSWER);
 }
