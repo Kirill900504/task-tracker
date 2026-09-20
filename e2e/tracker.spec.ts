@@ -456,6 +456,45 @@ test("задача переставляется внутри столбца, и 
   await expect(page.locator("#newTaskBtn")).toBeVisible();
 });
 
+// Карточка, прилипшая к курсору.
+//
+// 20.09.2026 Кирилл сделал снимок экрана (Win+Shift+S) посреди
+// перетаскивания, и кнопка мыши отпустилась НЕ над трекером: «эта нижняя
+// строка приклеилась к курсору и летала по экрану вместо курсора».
+// Отпускание в таком случае достаётся тому окну, которое забрало
+// указатель, до страницы оно не доходит вовсе, и перенос остаётся
+// начатым — выйти из него можно только перезагрузкой. Сторож — потеря
+// фокуса окном, и проверяется он именно так: взяли карточку, окно
+// потеряло фокус, поднятая карточка обязана исчезнуть.
+test("перенос отменяется, если окно потеряло фокус посреди него", async ({ page }) => {
+  const title = `E2E прилипание ${Date.now()}`;
+  await login(page);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator("#col-new .task", { hasText: title });
+  await expect(card).toBeVisible();
+  await waitForSaved(page);
+
+  await card.scrollIntoViewIfNeeded();
+  const box = (await card.boundingBox())!;
+  await page.mouse.move(box.x + 60, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 80, box.y + 60, { steps: 6 });
+  await expect(page.locator(".dnd-card-ghost"), "карточку не удалось взять").toBeVisible();
+
+  // Ровно то, что делает снимок экрана: фокус ушёл из окна.
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(page.locator(".dnd-card-ghost"), "карточка осталась висеть на курсоре").toHaveCount(0);
+
+  // И отпущенная кнопка уже ничего не переносит — задача на месте.
+  await page.mouse.up();
+  await expect(page.locator("#col-new .task", { hasText: title })).toBeVisible();
+});
+
 // Цитата в шапке подбирает себе кегль замером (HeaderQuote.tsx), и ошибается
 // этот замер молча: строка либо торчит за край, обрезанная на последнем
 // слове, либо сжимается до нечитаемых десяти пикселей — ровно это Кирилл и

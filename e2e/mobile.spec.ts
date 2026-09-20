@@ -87,6 +87,11 @@ test("a task is finished by swiping the card to the right", async ({ page }) => 
   // работы — у чужой он спросил бы результат (см. quickDone).
   await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
+  // И искать её надо в «В работе», а не в «Новых»: задача, поставленная
+  // самому себе, минует этот столбец — «Новые» означает «отправлена,
+  // ждём ответа человека», а отвечать тут некому (см. lib/kanban). На
+  // телефоне столбец показывается один, поэтому переключаем вкладку.
+  await page.locator(".board-tab", { hasText: "В работе" }).click();
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
 

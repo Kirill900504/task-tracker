@@ -38,6 +38,7 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
+  MeasuringStrategy,
   PointerSensor,
   TouchSensor,
   closestCenter,
@@ -212,6 +213,37 @@ export default function TrackerDnd({
   const [active, setActive] = useState<DragPayload | null>(null);
   const [over, setOver] = useState<DropTarget | null>(null);
 
+  // Карточка, прилипшая к курсору.
+  //
+  // 20.09.2026: «после того как сделал скрин и отпустил левую кнопку мыши,
+  // эта нижняя строка приклеилась к курсору и летала по экрану вместо
+  // курсора». Так и будет с любым переносом, во время которого кнопку
+  // отпустили НЕ над нашим окном: Win+Shift+S, Alt+Tab, всплывшее окно
+  // другой программы. Отпускание достаётся тому, кто забрал указатель, до
+  // нас оно не доходит вовсе, и перенос остаётся начатым навсегда —
+  // выйти из него можно только перезагрузкой страницы.
+  //
+  // Сторож — потеря фокуса окном. Сенсоры dnd-kit умеют отменяться по
+  // Escape, поэтому отмена и делается им: своего публичного «отмени
+  // сейчас» у контекста нет, а лезть во внутренности библиотеки ради
+  // этого — способ сломаться на первом же её обновлении.
+  const draggingRef = useRef(false);
+  useEffect(() => {
+    function cancelStuckDrag() {
+      if (!draggingRef.current) return;
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    }
+    function onHidden() {
+      if (document.hidden) cancelStuckDrag();
+    }
+    window.addEventListener("blur", cancelStuckDrag);
+    document.addEventListener("visibilitychange", onHidden);
+    return () => {
+      window.removeEventListener("blur", cancelStuckDrag);
+      document.removeEventListener("visibilitychange", onHidden);
+    };
+  }, []);
+
   // Порог в 6 пикселей — это разница между «нажал» и «потянул». Без него
   // каждое нажатие на ручку или карточку начинало бы перетаскивание, и
   // обычный щелчок по задаче перестал бы открывать её.
@@ -225,6 +257,7 @@ export default function TrackerDnd({
   );
 
   function handleDragStart(event: DragStartEvent) {
+    draggingRef.current = true;
     setActive(payloadOf(event.active.data));
   }
 
@@ -235,6 +268,7 @@ export default function TrackerDnd({
   function handleDragEnd(event: DragEndEvent) {
     const payload = payloadOf(event.active.data);
     const target = event.over ? targetOf(event.over.data) : null;
+    draggingRef.current = false;
     setActive(null);
     setOver(null);
     if (!payload || !target) return;
@@ -242,6 +276,7 @@ export default function TrackerDnd({
   }
 
   function handleDragCancel() {
+    draggingRef.current = false;
     setActive(null);
     setOver(null);
   }
@@ -262,6 +297,17 @@ export default function TrackerDnd({
       // то, на что он целился. Порог в одну десятую оставляет прокрутку
       // там, где она действительно нужна: у самого края.
       autoScroll={{ threshold: { x: 0.1, y: 0.1 }, acceleration: 8 }}
+      // Мерить списки заново, пока идёт перенос.
+      //
+      // По умолчанию dnd-kit снимает прямоугольники один раз, в начале, — а
+      // список в этот самый момент начинает меняться: соседи расступаются,
+      // столбец становится выше, страница чуть едет. Дальше всё считается
+      // по устаревшим координатам, и щель открывается не там, где курсор:
+      // Кирилл 20.09.2026 описал это точно — «не раздвигались первая и
+      // вторая строка, а ездили синхронно вверх-вниз». Карточки у нас
+      // разной высоты (заголовок в одну строку и в три), поэтому ошибка
+      // накапливается с каждым сдвигом.
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
