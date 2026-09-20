@@ -1409,6 +1409,14 @@ by a running `next start` (and by OneDrive) — stop the server first.
   promise**: it is one observation of one edit, the platform documents
   nothing about it, and the next change may behave differently. Warn the
   people who use MAX before touching that screen again.
+  **While it re-moderates, the Настройки tab goes disabled** — the same
+  thing a brand-new bot does (see the entry above), and it looks exactly
+  like the settings were lost: no link in the field, no token. It is not
+  lost. The token the tracker uses lives in `bot_settings` and keeps
+  working the whole time, and the cabinet fills the fields back in once
+  approval lands. Check whether the bot is actually fine with
+  `platform-api2.max.ru/me` and the webhook subscription, not by looking
+  at that screen.
   The code behind it: `/app` plus `/api/max/miniapp-auth`, same signature
   algorithm as Telegram, verified end to end against production with the
   real bot token (owner and manager signed in, forgeries refused).
