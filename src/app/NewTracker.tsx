@@ -46,6 +46,7 @@ import { useMyMessenger } from "@/hooks/useMyMessenger";
 import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
 import Icon from "@/components/tracker/Icon";
+import BootSkeleton from "@/components/tracker/BootSkeleton";
 import { isMine } from "@/lib/ownership";
 import { withViewTransition } from "@/lib/viewTransition";
 
@@ -586,9 +587,11 @@ export default function NewTracker() {
       </div>
     );
   }
-  if (identity.loading || loading) {
-    return <div style={{ padding: 24 }}>Загрузка…</div>;
-  }
+  // Пока роль и данные едут — каркас трекера, а не слово в углу пустого
+  // экрана (см. BootSkeleton: он и есть ответ на «чёрный экран и
+  // „Загрузка…“»). Каркас уходит в серверный HTML, то есть виден до
+  // того, как выполнится первая строчка JavaScript.
+  if (identity.loading || loading) return <BootSkeleton />;
 
   return (
     <>

@@ -60,9 +60,30 @@ const check = (ok, what) => {
 
 // ---- 1 & 3: the real site, signed out --------------------------------------
 {
+  const startedAt = Date.now();
   const app = await electron.launch({ args: launchArgs, executablePath });
   const win = await app.firstWindow();
   await win.waitForLoadState("domcontentloaded");
+
+  // Окно обязано появиться СРАЗУ, ещё до того, как ответит сайт.
+  //
+  // «При запуске сперва появляется чёрный экран» — это и был промежуток
+  // между запуском и первым кадром сайта. Теперь первым грузится splash.html,
+  // лежащий рядом на диске: если он перестанет открываться (не попал в
+  // сборку, переименован), проверка увидит это здесь, а не Кирилл.
+  const firstFrame = Date.now() - startedAt;
+  const splashShown = /splash\.html/.test(win.url()) || (await win.locator("text=Открываю трекер").count()) > 0;
+  check(splashShown, "заставка показана сразу, за " + firstFrame + " мс от запуска");
+  // Окно показывается сразу после заставки — ждём его появления, а не
+  // ловим в конкретную миллисекунду: показ идёт по завершении загрузки
+  // локального файла, то есть на десятки миллисекунд позже этой строки.
+  let visible = false;
+  for (let i = 0; i < 40 && !visible; i++) {
+    visible = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isVisible() ?? false);
+    if (!visible) await win.waitForTimeout(100);
+  }
+  check(visible, "окно видно, а не ждёт загрузки сайта");
+
   await win.waitForTimeout(6000);
 
   console.log("Окно с боевым сайтом:");

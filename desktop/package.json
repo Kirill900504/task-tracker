@@ -1,6 +1,6 @@
 {
   "name": "rokas-desktop",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": true,
   "description": "Планировщик задач — настольное приложение",
   "main": "main.js",
@@ -26,6 +26,7 @@
     },
     "files": [
       "main.js",
+      "splash.html",
       "offline.html",
       "build/icon.png",
       "build/icon.ico"

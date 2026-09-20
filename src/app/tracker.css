@@ -2411,3 +2411,42 @@
   .columns-single{grid-template-columns:1fr !important;}
   /* Заголовок столбца на телефоне не нужен: его название уже на кнопке. */
   @media (max-width:1000px){ .columns-single .section-title{display:none;} }
+
+  /* ---------- Каркас первых долей секунды (BootSkeleton) --------------
+     Слова Кирилла 20.09.2026: «сперва появляется чёрный экран и в левом
+     верхнем углу слово „Загрузка…“». Данные к этому моменту уже идут из
+     локальной копии — не хватало не скорости, а кадра: человек смотрит
+     не на миллисекунды, а на то, похоже ли это на его трекер. Поэтому
+     здесь та же раскладка, только пустая, и приходит она в первом же
+     HTML, до JavaScript.
+     -------------------------------------------------------------- */
+  .skel{padding:14px 16px 24px; max-width:1800px; margin:0 auto;}
+  .skel-head{display:flex; align-items:center; gap:12px; padding:6px 2px 18px;}
+  .skel-logo{width:38px; height:38px; border-radius:9px; background:var(--paper-soft);}
+  .skel-head-text{display:flex; flex-direction:column; gap:7px;}
+  .skel-layout{display:grid; grid-template-columns:300px minmax(0,1fr) 320px; gap:14px; align-items:start;}
+  .skel-col{display:flex; flex-direction:column; gap:14px; min-width:0;}
+  .skel-panel{
+    background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-lg);
+    padding:14px; display:flex; flex-direction:column; gap:10px; box-shadow:var(--edge);
+  }
+  .skel-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:4px;}
+  .skel-day{aspect-ratio:1; border-radius:var(--radius-sm); background:var(--paper-soft);}
+  .skel-toolbar{display:flex; gap:8px; margin-bottom:14px;}
+  .skel-pill{height:36px; border-radius:999px; background:var(--paper-soft);}
+  .skel-board{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px;}
+  .skel-column{display:flex; flex-direction:column; gap:9px; min-width:0;}
+  .skel-card{
+    background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
+    padding:11px 12px; display:flex; flex-direction:column; gap:7px; box-shadow:var(--edge);
+  }
+  .skel-line{border-radius:6px; background:var(--paper-soft);}
+  /* Одна пульсация на весь каркас: блоки, мигающие вразнобой, читаются как
+     помехи, а не как «сейчас появится». */
+  .skel-line, .skel-day, .skel-pill, .skel-logo{animation:skel-pulse 1.4s ease-in-out infinite;}
+  @keyframes skel-pulse{0%,100%{opacity:.55;} 50%{opacity:.85;}}
+  @media (prefers-reduced-motion: reduce){
+    .skel-line, .skel-day, .skel-pill, .skel-logo{animation:none;}
+  }
+  @media (max-width:1150px){ .skel-layout{grid-template-columns:1fr;} .skel-board{grid-template-columns:1fr 1fr;} }
+  @media (max-width:1000px){ .skel-layout{grid-template-columns:1fr;} .skel-board{grid-template-columns:1fr;} .skel-col:last-child{display:none;} }
