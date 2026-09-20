@@ -384,6 +384,128 @@ try {
   const { data: pendingGone } = await admin.from("assignees").select("pending_action").eq("id", assignee.id).maybeSingle();
   check("память подтверждения освобождается", pendingGone?.pending_action === null, pendingGone);
 
+  // ---- Кнопки владельца ----
+  //
+  // Половина бота, которой не было: нажатие владельца искали среди
+  // коллег, не находили и отвечали «этот чат не подключён». Проверяется
+  // именно то, что он теперь МОЖЕТ, — меню, карточка задачи с его
+  // набором кнопок, приёмка, продление срока и мастер поручения.
+  console.log("\nКнопки владельца:");
+
+  const pressOwner = (id, data) =>
+    post(
+      "/api/telegram/webhook",
+      {
+        update_id: Math.floor(Math.random() * 1e9),
+        callback_query: { id, data, message: { chat: { id: tgChat }, message_id: 20 } },
+      },
+      { "x-telegram-bot-api-secret-token": tgSecret },
+    );
+
+  const menu = await pressOwner("own1", "t:omenu:x");
+  check("меню открывается по кнопке", menu.status === 200, menu);
+
+  const ownerTask = "own" + Math.random().toString(36).slice(2, 8);
+  await admin.from("tasks").insert({
+    id: ownerTask,
+    user_id: userId,
+    title: "Проверка владельческих кнопок",
+    assignee: "Проверочный Коллега",
+    status: "in_progress",
+    deadline: "2026-09-30",
+    approval_state: "awaiting_review",
+  });
+  await admin.from("task_participants").insert({
+    user_id: userId,
+    task_id: ownerTask,
+    assignee_id: assignee.id,
+    role: "executor",
+    done_at: new Date().toISOString(),
+    done_comment: "готово",
+  });
+
+  const card = await pressOwner("own2", "t:oshow:" + ownerTask);
+  check("карточка задачи открывается у постановщика", card.status === 200, card);
+
+  const extend = await pressOwner("own3", "t:plus7:" + ownerTask);
+  const { data: moved } = await admin.from("tasks").select("deadline").eq("id", ownerTask).maybeSingle();
+  check("«+неделя» двигает срок", extend.status === 200 && moved?.deadline === "2026-10-07", moved);
+
+  const accept = await pressOwner("own4", "t:ok:" + ownerTask);
+  const { data: accepted } = await admin.from("tasks").select("status, approval_state").eq("id", ownerTask).maybeSingle();
+  check(
+    "«Принять работу» закрывает задачу той же записью",
+    accept.status === 200 && accepted?.status === "done" && accepted?.approval_state === "accepted",
+    accepted,
+  );
+
+  // Возврат спрашивает слова и ждёт их следующим сообщением.
+  await admin.from("tasks").update({ status: "in_progress", approval_state: "awaiting_review" }).eq("id", ownerTask);
+  await admin.from("task_participants").update({ done_at: new Date().toISOString(), done_comment: "ещё раз" }).eq("task_id", ownerTask);
+  await pressOwner("own5", "t:back:" + ownerTask);
+  const { data: askedBack } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
+  check("«Вернуть» ждёт причину", askedBack?.pending_action?.kind === "review_return", askedBack);
+
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "переделай смету" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: returned } = await admin.from("tasks").select("approval_state, approval_comment").eq("id", ownerTask).maybeSingle();
+  const { data: clearedReports } = await admin.from("task_participants").select("done_at").eq("task_id", ownerTask);
+  check(
+    "причина возвращает задачу и обнуляет отчёты",
+    returned?.approval_state === "returned" && returned?.approval_comment === "переделай смету" && (clearedReports || []).every((r) => !r.done_at),
+    { returned, clearedReports },
+  );
+
+  // Мастер «Поручить»: три шага и задача в конце.
+  await pressOwner("own6", "t:new:start");
+  const { data: wizardStarted } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
+  check("мастер спрашивает, что поручить", wizardStarted?.pending_action?.kind === "new_task", wizardStarted);
+
+  const wizardTitle = "Задача из мастера " + Date.now();
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: wizardTitle } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: wizardWho } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
+  check("название запомнено, спрашивает кому", wizardWho?.pending_action?.title === wizardTitle, wizardWho);
+
+  await pressOwner("own7", "t:nwho:" + assignee.id);
+  await pressOwner("own8", "t:nwhen1:x");
+  const { data: created } = await admin.from("tasks").select("id, assignee, deadline").eq("title", wizardTitle).maybeSingle();
+  check("задача заведена на выбранного человека и срок", !!created && created.assignee === "Проверочный Коллега" && !!created.deadline, created);
+  const { data: createdParts } = await admin.from("task_participants").select("role").eq("task_id", created?.id || "нет");
+  check("и он стоит исполнителем", (createdParts || []).some((r) => r.role === "executor"), createdParts);
+
+  // Встреча: закрыть кнопкой.
+  const ownMeeting = "ownm" + Math.random().toString(36).slice(2, 8);
+  await admin.from("meetings").insert({
+    id: ownMeeting,
+    user_id: userId,
+    date: "2026-09-19",
+    time: "10:00",
+    title: "Проверка итога",
+    participants: ["Проверочный Коллега"],
+    status: "planned",
+  });
+  const closeMeetingPress = await post(
+    "/api/telegram/webhook",
+    {
+      update_id: Math.floor(Math.random() * 1e9),
+      callback_query: { id: "own9", data: "m:mno:" + ownMeeting, message: { chat: { id: tgChat }, message_id: 21 } },
+    },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: closedMeeting } = await admin.from("meetings").select("status").eq("id", ownMeeting).maybeSingle();
+  check("«Без результата» закрывает встречу", closeMeetingPress.status === 200 && closedMeeting?.status === "no_result", closedMeeting);
+
+  await admin.from("tasks").delete().eq("id", ownerTask);
+  if (created?.id) await admin.from("tasks").delete().eq("id", created.id);
+  await admin.from("meetings").delete().eq("id", ownMeeting);
+
   // ---- MAX ----
   console.log("\nMAX webhook:");
   // Секрет вебхука теперь живёт в базе — его придумывает /api/max/setup в
