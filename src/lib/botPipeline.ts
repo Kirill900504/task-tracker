@@ -22,6 +22,7 @@ import { whenButtons, whoButtons, type NewTaskPending } from "@/lib/ownerNewTask
 import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
 import { deliverComment } from "@/lib/commentDelivery";
+import { actorName } from "@/lib/actorName";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
 // мессенджере, а закрывает следующее сообщение владельца.
@@ -601,7 +602,7 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
         await say(ctx, "Эта задача больше не найдена.");
         return;
       }
-      const done = await applyReview(ctx.admin, task, "return", trimmed, { label: "Владелец", userId: account.user_id });
+      const done = await applyReview(ctx.admin, task, "return", trimmed, { label: await actorName(ctx.admin, task.user_id, account.user_id), userId: account.user_id });
       await say(ctx, done.ok ? `↩ Вернул «${task.title}» на доработку — исполнителям сказано.` : done.error);
       return;
     }

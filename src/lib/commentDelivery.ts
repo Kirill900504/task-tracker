@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { chatsFor, replyButtons, type ColleagueRow } from "@/lib/colleagues";
 import { notifyOwner, sendToColleague } from "@/lib/botDelivery";
 import { queueNotice } from "@/lib/noticeQueue";
+import { actorName, withoutSelfMark } from "@/lib/actorName";
 
 // Кто должен услышать про сообщение в обсуждении.
 //
@@ -130,9 +131,14 @@ export async function deliverComment(admin: SupabaseClient, commentId: string): 
   const rows = (people || []) as (ColleagueRow & { user_id: string })[];
   const byId = new Map(rows.map((r) => [r.id, r]));
 
+  // Имя, а не роль и не подставленное «Кирилл». Раньше здесь стояли ровно
+  // эти два слова: своё имя владельца и «Коллега» для всех остальных, —
+  // то есть реплика руководителя приходила подписанной «Коллега» тому,
+  // кто с ним в этой задаче и работает. Имя ищется по строке человека, а
+  // если её нет (реплика пришла логином без строки) — по членству.
   const authorName =
-    (comment.author_assignee_id && byId.get(comment.author_assignee_id)?.name) ||
-    (comment.author_user_id === comment.user_id ? "Кирилл" : "Коллега");
+    withoutSelfMark((comment.author_assignee_id && byId.get(comment.author_assignee_id)?.name) || "") ||
+    (comment.author_user_id ? await actorName(admin, comment.user_id, comment.author_user_id, "Участник") : "Участник");
 
   const fileCount = (comment.attachments || []).length;
   const text = commentText(authorName, comment.item_kind, title, comment.body, fileCount);

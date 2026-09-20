@@ -8,6 +8,7 @@ import { applyReview } from "@/lib/reviewWork";
 import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
 import { recordEvent } from "@/lib/itemHistory";
+import { actorName } from "@/lib/actorName";
 
 // Что происходит, когда владелец нажимает кнопку.
 //
@@ -379,7 +380,7 @@ export async function handleOwnerCallback(
     const task = await loadTask(admin, userId, action.id);
     if (!task) return { toast: "Эта задача не найдена" };
     const done = await applyReview(admin, { id: task.id, title: task.title, user_id: userId }, "approve", "", {
-      label: "Владелец",
+      label: await actorName(admin, userId, userId),
       userId,
     });
     if (!done.ok) return { toast: done.error };

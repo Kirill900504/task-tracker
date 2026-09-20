@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SearchResult } from "@/lib/localSearch";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // Поиск по обсуждениям.
 //
@@ -56,7 +57,7 @@ export function useCommentSearch(query: string): { results: SearchResult[]; sear
 
     return ((data as unknown as Row[]) || []).map((r) => {
       const a = r.assignees;
-      const who = (Array.isArray(a) ? a[0]?.name : a?.name) || "Кирилл";
+      const who = withoutSelfMark((Array.isArray(a) ? a[0]?.name : a?.name) || "") || "Кирилл";
       const when = new Date(r.created_at);
       const date = Number.isNaN(when.getTime())
         ? ""

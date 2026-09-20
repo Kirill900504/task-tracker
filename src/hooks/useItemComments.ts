@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { me } from "@/lib/me";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // Обсуждение внутри задачи или встречи.
 //
@@ -79,7 +80,9 @@ function nameOf(row: CommentRow, meId: string, ownerLabel: string): string {
   if (row.author_user_id && row.author_user_id === meId) return "Вы";
   const a = row.assignees;
   const name = Array.isArray(a) ? a[0]?.name : a?.name;
-  return name || ownerLabel;
+  // «(я)» — пометка для того, кто ищет себя в списке людей. В подписи под
+  // чужой репликой её читает кто угодно, кроме него.
+  return withoutSelfMark(name || "") || ownerLabel;
 }
 
 // Сообщение, которое уже на экране, но ещё не в базе. Пока серверная строка

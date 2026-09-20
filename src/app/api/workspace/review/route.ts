@@ -6,6 +6,7 @@ import { chatsFor, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { recordEvent } from "@/lib/itemHistory";
 import { applyReview, type ReviewAction } from "@/lib/reviewWork";
+import { actorName } from "@/lib/actorName";
 import { fmtDate } from "@/lib/taskDisplay";
 
 // Решение постановщика по отчёту: принять, вернуть, закрыть волевым.
@@ -169,7 +170,7 @@ export async function POST(req: Request) {
     { id: task.id, title: task.title, user_id: task.user_id },
     body.action as ReviewAction,
     comment,
-    { label: isOwner ? "Владелец" : "Постановщик", userId: user.id },
+    { label: await actorName(admin, task.user_id, user.id), userId: user.id },
   );
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
   return NextResponse.json({ ok: true });
