@@ -66,7 +66,12 @@ export async function handleBotCallback(
     // Последний шаг: срок выбран, задачу можно заводить.
     if (outcome.finishNewTask !== undefined) {
       const pending = (await pendingOf(admin, channel, chatId)) as
-        | { kind?: string; title?: string; people?: { name: string; role: "executor" | "coexecutor" | "watcher" }[] }
+        | {
+            kind?: string;
+            title?: string;
+            people?: { name: string; role: "executor" | "coexecutor" | "watcher" }[];
+            fromIdea?: string;
+          }
         | null;
       if (!pending || pending.kind !== "new_task" || !pending.title || !pending.people?.length) {
         return { toast: "Начните заново: «Поручить»" };
@@ -79,6 +84,16 @@ export async function handleBotCallback(
         pending.people,
         resolveWhen(outcome.finishNewTask),
       );
+      // Мысль, ставшая задачей, уходит из ящика — но только теперь, когда
+      // задача действительно заведена. Мастер, брошенный на полпути, не
+      // должен стирать запись.
+      if (pending.fromIdea) {
+        await admin
+          .from("ideas")
+          .update({ done: true, done_at: new Date().toISOString() })
+          .eq("id", pending.fromIdea)
+          .eq("user_id", owner.userId);
+      }
       return { toast: "Поручено", rewriteTo: created.text, rewriteButtons: ownerNav() };
     }
 

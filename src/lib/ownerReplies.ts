@@ -3,9 +3,9 @@ import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { encodeCallback, type CallbackAction } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
 import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
-import { ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, type OwnerReply } from "@/lib/ownerQueries";
+import { ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, type OwnerReply } from "@/lib/ownerQueries";
 import { applyReview } from "@/lib/reviewWork";
-import { startNewTask, whenButtons } from "@/lib/ownerNewTask";
+import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
 
 // Что происходит, когда владелец нажимает кнопку.
@@ -285,7 +285,12 @@ export async function handleOwnerCallback(
   }
 
   if (action.action === "olist") {
-    const reply = action.kind === "meeting" ? await ownerMeetingsReply(admin, userId, today) : await ownerListReply(admin, userId, action.id, today);
+    const reply =
+      action.kind === "meeting"
+        ? await ownerMeetingsReply(admin, userId, today)
+        : action.kind === "idea"
+          ? await ownerIdeasReply(admin, userId)
+          : await ownerListReply(admin, userId, action.id, today);
     return { toast: "Открываю", say: reply.text, sayButtons: reply.buttons };
   }
 
@@ -354,6 +359,59 @@ export async function handleOwnerCallback(
       toast: "Что доделать?",
       askReturn: { taskId: task.id, title: task.title },
       say: `↩ «${task.title}»\n\nНапишите следующим сообщением, что именно доделать, — отправлю исполнителям.`,
+    };
+  }
+
+  // ——— Мысль: превратить в задачу или вычеркнуть.
+  //
+  // Входящий ящик работает в мессенджере так же, как в трекере: мысль
+  // либо становится делом, либо уходит. Третьего с ней не делают, и
+  // потому кнопок ровно две.
+  if (action.action === "ishow" && action.kind === "idea") {
+    const { data } = await admin
+      .from("ideas")
+      .select("id, text, important")
+      .eq("id", action.id)
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    const idea = data as { id: string; text: string; important: boolean } | null;
+    if (!idea) return { toast: "Эта мысль не найдена" };
+    return {
+      toast: "Открываю",
+      say: `${idea.important ? "🚩 " : "💡 "}${idea.text}`,
+      sayButtons: [
+        [
+          { text: "➕ В задачу", data: encodeCallback("idea", "itask", idea.id) },
+          { text: "✓ Вычеркнуть", data: encodeCallback("idea", "idone", idea.id) },
+        ],
+        ...ownerNav(),
+      ],
+    };
+  }
+
+  if (action.action === "idone" && action.kind === "idea") {
+    const { error } = await admin
+      .from("ideas")
+      .update({ done: true, done_at: new Date().toISOString() })
+      .eq("id", action.id)
+      .eq("user_id", userId);
+    if (error) return { toast: "Не получилось" };
+    return { toast: "Вычеркнул", rewriteTo: "✓ Вычеркнуто.", rewriteButtons: ownerNav() };
+  }
+
+  if (action.action === "itask" && action.kind === "idea") {
+    const { data } = await admin.from("ideas").select("id, text").eq("id", action.id).eq("user_id", userId).maybeSingle();
+    const idea = data as { id: string; text: string } | null;
+    if (!idea) return { toast: "Эта мысль не найдена" };
+    // Дальше — обычный мастер, начиная со второго шага: название уже есть.
+    // Сама мысль вычёркивается не сейчас, а когда задача действительно
+    // заведена: брошенный на полпути мастер не должен стирать запись.
+    return {
+      toast: "Кому поручить?",
+      say: `«${idea.text}»\n\nКому поручить?`,
+      sayButtons: await whoButtons(admin, userId),
+      setPending: { kind: "new_task", stage: "who", title: idea.text, fromIdea: idea.id },
     };
   }
 

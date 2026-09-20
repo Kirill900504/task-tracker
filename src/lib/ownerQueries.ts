@@ -106,8 +106,9 @@ export function ownerMenu(): OwnerReply {
       ],
       [
         { text: "📅 Встречи", data: encodeCallback("meeting", "olist", "all") },
-        { text: "👥 Люди", data: encodeCallback("task", "olist", "people") },
+        { text: "💡 Мысли", data: encodeCallback("idea", "olist", "all") },
       ],
+      [{ text: "👥 Люди", data: encodeCallback("task", "olist", "people") }],
       [{ text: "➕ Поручить", data: encodeCallback("task", "new", "start") }],
     ],
   };
@@ -215,6 +216,31 @@ export async function ownerListReply(
     );
   }
   return taskList("📋 Задачи", tasks, today, "Открытых задач нет.");
+}
+
+// Мысли — входящий ящик, и в мессенджере он тот же самый. Записывать их
+// бот умел давно (быстрый ввод разбирает «запиши мысль…»), а вот
+// достать обратно было нечем: список жил только в трекере.
+export async function ownerIdeasReply(admin: SupabaseClient, userId: string): Promise<OwnerReply> {
+  const { data } = await admin
+    .from("ideas")
+    .select("id, text, important, created_at")
+    .eq("user_id", userId)
+    .eq("done", false)
+    .is("deleted_at", null)
+    .order("important", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(PAGE);
+  const ideas = (data || []) as { id: string; text: string; important: boolean }[];
+  if (!ideas.length) return { text: "Мыслей пока нет. Продиктуйте — запишу.", buttons: ownerNav() };
+  const lines = ideas.map((i) => `${i.important ? "🚩" : "•"} ${i.text}`);
+  return {
+    text: `💡 Мысли (${ideas.length}):\n\n${lines.join("\n")}`,
+    buttons: [
+      ...ideas.map((i) => [{ text: `${i.important ? "🚩 " : ""}${short(i.text, 26)}`, data: encodeCallback("idea", "ishow", i.id) }]),
+      ...ownerNav(),
+    ],
+  };
 }
 
 export async function ownerMeetingsReply(admin: SupabaseClient, userId: string, today: string): Promise<OwnerReply> {
