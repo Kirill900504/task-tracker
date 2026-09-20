@@ -163,8 +163,12 @@ export default function TaskAnswer({
               <Icon name="check" size={14} /> Принял
             </button>
           )}
+          {/* Флажка 🏁 здесь больше нет: соседние три кнопки нарисованы
+              контуром из Icon.tsx, а этот рисовала система — и на телефоне
+              рисовала пустым прямоугольником, то есть главная кнопка
+              исполнителя выглядела сломанной. Осмотр 21.09.2026. */}
           <button type="button" className="btn btn-small btn-primary" onClick={() => setPending("done")}>
-            🏁 Сделал
+            <Icon name="flag" size={14} /> Сделал
           </button>
           {!declined && (
             <button type="button" className="btn btn-small" onClick={() => setPending("decline")}>

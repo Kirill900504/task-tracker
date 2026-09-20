@@ -6,6 +6,7 @@ import type { TaskParticipantRole } from "@/lib/taskProgress";
 import type { PersonOption } from "@/hooks/useTaskParticipants";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 // Кто на задаче — одним полем.
 //
@@ -95,6 +96,25 @@ export default function PeoplePicker({
   const identity = useWorkspaceRole();
   const shown = (name: string) => (identity.isOwner ? name : withoutSelfMark(name));
 
+  // На телефоне список свёрнут, пока его не раскроют.
+  //
+  // Осмотр 21.09.2026: четырнадцать имён — это семь рядов кнопок, то есть
+  // ПОЛ-ЭКРАНА телефона в форме новой задачи, и срок с разделом лежат под
+  // ними. Поставить задачу с телефона значило пролистать всю команду.
+  // Поэтому видны первые шестеро, все уже выбранные и своя строка — а
+  // остальные за кнопкой «Ещё N», одно нажатие.
+  // Свою видно всегда нарочно: задачу себе ставят чаще, чем кому бы то ни
+  // было, а по фамилии она может оказаться и последней (порядок людей
+  // общий на весь трекер, см. lib/peopleOrder, и менять его здесь нельзя).
+  const isMobile = useIsMobile();
+  const [expanded, setExpanded] = useState(false);
+  const COLLAPSED_COUNT = 6;
+  const collapsed = isMobile && !expanded && people.length > COLLAPSED_COUNT + 2;
+  const visiblePeople = collapsed
+    ? people.filter((p, i) => i < COLLAPSED_COUNT || !!roleOf(p.id) || p.name.trim().endsWith("(я)"))
+    : people;
+  const hiddenCount = people.length - visiblePeople.length;
+
   return (
     <div className="field people-field">
       <label>
@@ -106,7 +126,7 @@ export default function PeoplePicker({
         )}
       </label>
       <div className="participant-grid" id="fPeople">
-        {people.map((person) => {
+        {visiblePeople.map((person) => {
           const role = roleOf(person.id);
           return (
             <button
@@ -131,6 +151,11 @@ export default function PeoplePicker({
             </button>
           );
         })}
+        {hiddenCount > 0 && (
+          <button type="button" className="participant-chip chip-more" id="morePeopleBtn" onClick={() => setExpanded(true)}>
+            Ещё {hiddenCount}
+          </button>
+        )}
         {onAddPerson && (
           <button type="button" className="participant-chip chip-add" id="addAssigneeBtn" onClick={onAddPerson}>
             + человек
@@ -138,9 +163,15 @@ export default function PeoplePicker({
         )}
       </div>
 
+      {/* На телефоне пояснение короткое: полный текст — четыре строки,
+          и в форме, где до срока и так надо долистать, они читаются один
+          раз в жизни, а место занимают всегда. Смысл при этом не теряется:
+          что делает второе нажатие, сказано и здесь. */}
       <div className="tp-hint">
         {hint ||
-          "Нажмите на человека и выберите роль; нажали второй раз — он снят с задачи. Исполнителей может быть несколько — задача закроется, когда отчитается каждый. Соисполнитель помогает, наблюдатель только видит."}
+          (isMobile
+            ? "Нажмите человека и выберите роль; второе нажатие снимает его с задачи."
+            : "Нажмите на человека и выберите роль; нажали второй раз — он снят с задачи. Исполнителей может быть несколько — задача закроется, когда отчитается каждый. Соисполнитель помогает, наблюдатель только видит.")}
       </div>
 
       {menuFor && (

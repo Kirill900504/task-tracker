@@ -6,6 +6,7 @@
 // dismissable banner instead, listing how many and the most recent message.
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import Icon from "./Icon";
 
 export default function SyncErrorBanner() {
   const [errors, setErrors] = useState<{ ids: string[]; count: number; message: string } | null>(null);
@@ -39,7 +40,7 @@ export default function SyncErrorBanner() {
   return (
     <div className="notif-banner show" id="syncErrorBanner" style={{ display: "flex" }}>
       <span>
-        ⚠ Не всё сохранилось в облако ({errors.count}): {errors.message}
+        <Icon name="warning" size={14} /> Не всё сохранилось в облако ({errors.count}): {errors.message}
       </span>
       <button className="btn btn-small" style={{ marginLeft: 10 }} onClick={dismiss}>
         Скрыть

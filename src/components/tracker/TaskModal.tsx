@@ -395,7 +395,11 @@ export default function TaskModal({
   // лентой обсуждения было бы издевательством.
   const deadlineField = (
     <div className="field">
-      <label>Дедлайн / дата</label>
+      {/* «Срок», а не «Дедлайн / дата»: интерфейс русский весь, и одно
+          английское слово в подписи поля читается как чужое — та же
+          причина, по которой из трекера ушёл моноширинный шрифт. Косая
+          черта с двумя названиями к тому же спрашивала дважды об одном. */}
+      <label>Срок</label>
       {/* Календарь показан сразу, а не спрятан за значком в поле
           «дд.мм.гггг»: срок — это вопрос про день недели и про то, сколько
           до него осталось, и на него отвечает сетка месяца, а не восемь
@@ -715,7 +719,7 @@ export default function TaskModal({
 
           <div className={"stop-recur-row" + (showStopRecur ? " show" : "")} id="stopRecurRow">
             <button className="btn btn-danger-ghost btn-small" id="stopRecurBtn" type="button" onClick={() => void handleStopRecur()}>
-              ⏹ Прекратить повторение
+              <Icon name="ban" size={14} /> Прекратить повторение
             </button>
           </div>
         </div>

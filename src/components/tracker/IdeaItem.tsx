@@ -172,7 +172,7 @@ export default function IdeaItem({
             setConvertAt(e.currentTarget.getBoundingClientRect());
           }}
         >
-          ⇢
+          <Icon name="arrow-right" size={15} />
         </button>
         {linked.length > 0 && (
           <button
@@ -194,7 +194,7 @@ export default function IdeaItem({
             onToggleImportant();
           }}
         >
-          🚩
+          <Icon name="flag" size={15} />
         </button>
         {/* Чужая мысль, присланная мне: единственное, что с ней можно
             сделать, — взять в работу. Заводить себе задачу из браузера
@@ -225,7 +225,7 @@ export default function IdeaItem({
               onDelete();
             }}
           >
-            ×
+            <Icon name="close" size={15} />
           </button>
         )}
       </div>

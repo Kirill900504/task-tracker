@@ -76,18 +76,32 @@ test("на телефоне убрано всё, что дублирует по�
   await login(page);
 
   // Задачи: вместо кнопки во всю ширину — «+», рядом только «Все / Мне /
-  // Я поручил» и «Просрочено». Ни «Загрузки», ни «Завершённых», ни самой
-  // кнопки «Фильтры» (сворачивать стало нечего).
+  // Я поручил». Ни «Загрузки», ни «Завершённых», ни самой кнопки
+  // «Фильтры» (сворачивать стало нечего).
   await expect(page.locator("#newTaskBtn")).toBeVisible();
   const addBox = await page.locator("#newTaskBtn").boundingBox();
   expect(addBox!.width).toBeLessThan(80);
   expect(addBox!.height).toBeGreaterThanOrEqual(40);
-  await expect(page.locator("#filterOverdueBtn")).toBeVisible();
   await expect(page.locator("#mobileFiltersBtn")).toHaveCount(0);
   await expect(page.locator("#loadBtn")).toHaveCount(0);
   await expect(page.locator("#showDoneCheckbox")).toHaveCount(0);
   // И четвёртого столбца доски нет вовсе.
   await expect(page.locator(".board-tab", { hasText: "Завершённые" })).toHaveCount(0);
+
+  // «Просрочено» на телефоне появляется, только когда есть просроченное:
+  // у свежего аккаунта его нет, а пустой значок «внимание» без слова
+  // рядом — это непонятная круглая кнопка (осмотр 21.09.2026).
+  await expect(page.locator("#filterOverdueBtn")).toHaveCount(0);
+
+  // Полоса при этом обязана помещаться целиком: обрезанная кнопка у края
+  // читается как сломанный интерфейс, и именно так выглядело «Просроченс».
+  const bar = await page.locator(".toolbar").boundingBox();
+  expect(bar!.width).toBeLessThanOrEqual(390);
+  const barOverflow = await page.evaluate(() => {
+    const el = document.querySelector(".toolbar")!;
+    return el.scrollWidth - el.clientWidth;
+  });
+  expect(barOverflow).toBeLessThanOrEqual(1);
 
   // Встречи: ни календаря месяца, ни полосы «Встречи N + ✓».
   await page.click('[data-tab="meetings"]');
@@ -291,4 +305,35 @@ test("a notification is closed by its cross on the phone too", async ({ page }) 
 
   await toast.locator(".close").click();
   await expect(toast).toHaveCount(0);
+});
+
+// Доска открывается там, где есть работа.
+//
+// Осмотр 21.09.2026 на телефоне: четыре задачи в работе, а вкладка задач
+// открывалась на «Новых» со словами «Всё разобрано — новых нет». То есть
+// первое, что человек видит при каждом запуске, — пустой экран при полном
+// списке дел. «Новые» означает «отправлена, ждём ответа»: у того, кто
+// ставит задачи себе, этот столбец пуст всегда.
+test("вкладка задач открывается на столбце, где есть работа", async ({ page }) => {
+  const title = `E2E столбец ${Date.now()}`;
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+
+  // Не нажимая ничего: показан столбец, в котором ЕСТЬ задачи, а не
+  // пустой первый. Какой именно — зависит от того, что накопилось в
+  // аккаунте за прогон, и проверять надо не имя столбца, а само правило:
+  // открытая доска не бывает пустой, когда работа есть.
+  const activeCount = await page.locator('.board-tab.active .board-tab-count').innerText();
+  expect(Number(activeCount)).toBeGreaterThan(0);
+  await expect(page.locator('.column .task').first()).toBeVisible();
+
+  // Свой выбор это не отменяет: нажал на пустой столбец — показывается он,
+  // человек спросил именно про него.
+  const empty = page.locator('.board-tab').filter({ hasText: 'На приёмке' });
+  await empty.click();
+  await expect(page.locator('.board-tab.active')).toContainText('На приёмке');
 });

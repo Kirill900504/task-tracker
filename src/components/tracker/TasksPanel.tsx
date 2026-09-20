@@ -133,8 +133,9 @@ export default function TasksPanel({
   const [filterSection, setFilterSection] = useState("all");
   // Окно «Разделы»: названия, ответственные, удаление. Только у админа.
   const [sectionsOpen, setSectionsOpen] = useState(false);
-  // Какой столбец доски показан на телефоне.
-  const [mobileColumn, setMobileColumn] = useState<KanbanColumn>("new");
+  // Какой столбец доски показан на телефоне. Пусто — значит человек ещё не
+  // выбирал сам, и столбец подбирается по работе (см. shownColumn).
+  const [mobileColumn, setMobileColumn] = useState<KanbanColumn | null>(null);
   // Окно «Загрузка»: кто чем занят и у кого горит. Раньше стояло панелью в
   // правой колонке (см. LoadModal — там же причина переезда).
   const [loadOpen, setLoadOpen] = useState(false);
@@ -582,7 +583,19 @@ export default function TasksPanel({
   // включены на компьютере: переключатель один на оба экрана, а правило
   // «завершённые в мобильной версии поскрывай» — про экран.
   const visibleColumns: KanbanColumn[] = showDone && !isMobile ? ["new", "work", "review", "done"] : ["new", "work", "review"];
-  const shownColumn: KanbanColumn = visibleColumns.includes(mobileColumn) ? mobileColumn : "new";
+  // Пока человек сам не выбрал столбец, показывается ПЕРВЫЙ НЕПУСТОЙ.
+  //
+  // Осмотр 21.09.2026 на телефоне: четыре задачи в работе, а трекер
+  // открывается на «Новых» со словами «Всё разобрано — новых нет». То есть
+  // первое, что видит человек при каждом запуске, — пустой экран при
+  // полном списке дел. «Новые» значит «отправлена, ждём ответа» — у того,
+  // кто работает сам на себя, этот столбец пуст всегда, и вкладка задач
+  // для него была бесполезна по умолчанию.
+  // Своего выбора это не отменяет: нажал на столбец — показывается он,
+  // даже пустой (человек спросил именно про него).
+  const firstWithWork = visibleColumns.find((c) => byColumn[c].length > 0);
+  const shownColumn: KanbanColumn =
+    mobileColumn && visibleColumns.includes(mobileColumn) ? mobileColumn : (firstWithWork ?? "new");
 
   function renderColumn(column: KanbanColumn) {
     const meta = KANBAN_COLUMNS.find((c) => c.id === column)!;
@@ -746,16 +759,34 @@ export default function TasksPanel({
                 настоящие вопросы к списку другие: «что горит» и «что уже
                 сделано». Поэтому просроченное и завершённые — двумя
                 нажатиями, и видно, что включено, не открывая ничего. */}
+            {/* На телефоне кнопка появляется, только когда есть о чём
+                говорить (или когда фильтр уже включён — иначе снять его
+                будет нечем). Без слова рядом пустой значок «внимание»
+                читается как непонятная круглая кнопка; с числом он
+                читается как сигнал. На компьютере она стоит всегда:
+                там есть место на слово, и полоса не должна менять состав
+                от того, просрочено сегодня что-нибудь или нет. */}
+            {(!isMobile || onlyOverdue || overdueCount > 0) && (
             <button
               type="button"
               className={"filter-pill overdue" + (onlyOverdue ? " active" : "")}
               id="filterOverdueBtn"
               aria-pressed={onlyOverdue}
               onClick={() => setOnlyOverdue((v) => !v)}
+              title="Только просроченные"
+              aria-label="Только просроченные"
             >
-              <Icon name="warning" size={14} /> Просрочено
+              {/* На телефоне — без слова. Осмотр 21.09.2026: при 390px
+                  полоса не помещалась, и кнопка уезжала за край с
+                  обрубком «Просроченс» — обрезанная надпись читается как
+                  сломанный интерфейс, а знак «внимание» со счётчиком
+                  говорит ровно то же самое. Слово не потеряно: оно в
+                  title и для читалки экрана. */}
+              <Icon name="warning" size={14} />
+              {!isMobile && " Просрочено"}
               {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
             </button>
+            )}
             {/* «Завершённые» — только на компьютере. Слова Кирилла
                 20.09.2026: «смотреть во всех разделах завершённые в
                 мобильной версии поскрывай, это большая информационная
@@ -828,8 +859,8 @@ export default function TasksPanel({
                 <button
                   key={id}
                   type="button"
-                  className={"board-tab" + (mobileColumn === id ? " active" : "")}
-                  aria-pressed={mobileColumn === id}
+                  className={"board-tab" + (shownColumn === id ? " active" : "")}
+                  aria-pressed={shownColumn === id}
                   onClick={() => setMobileColumn(id)}
                 >
                   {meta.title}

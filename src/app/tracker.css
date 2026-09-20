@@ -1125,10 +1125,22 @@
   }
   /* Две кнопки в ряд: вертикальной стопкой четыре штуки были бы выше самой
      мысли. Прижаты вправо, чтобы неполный ряд не висел в воздухе. */
+  /* Кнопки мысли стоят В ОДНУ строку, и ширина у ряда своя, а не заданная
+     числом. Раньше ряд был шириной 52px с переносом — то есть две кнопки
+     сверху, остальные под ними, и крестик «Удалить» оказывался оторван от
+     своих, отдельной строчкой у нижнего края карточки. Выглядело это
+     ровно как то, на что Кирилл жаловался в других местах: «кнопки гуляют
+     как хотят». Ширины теперь ровно столько, сколько нужно кнопкам, а
+     перенос запрещён. */
   .idea-actions{
-    display:flex; flex-wrap:wrap; justify-content:flex-end; align-content:flex-start;
-    gap:3px 2px; width:52px; flex:none;
+    display:flex; flex-wrap:nowrap; justify-content:flex-end; align-items:flex-start;
+    gap:2px; flex:none;
   }
+  /* Единственная кнопка ряда со словами — «В работу» у чужой мысли. Ей
+     своя строка: втиснутая в общий ряд, она отнимала бы ширину у текста
+     самой мысли (то же правило, что у .send-result). */
+  .idea-actions{flex-wrap:wrap;}
+  .idea-actions .idea-take{flex-basis:100%; margin-top:2px;}
   .idea-flag{cursor:pointer; background:none; border:none; font-size:14px; opacity:.4; padding:2px 4px; line-height:1;}
   .idea-flag.active{opacity:1;}
   .idea-flag:hover{opacity:.85;}
@@ -1168,7 +1180,12 @@
   .meeting-chip.readonly{cursor:pointer;}
   .meeting-body{display:flex; flex-direction:column; gap:5px; min-width:0; flex:1;}
   .meeting-head{display:flex; align-items:flex-start; gap:6px; min-width:0;}
-  .meeting-chip .mstatus{font-size:12px; flex:none;}
+  /* Итог встречи — контурный значок, а не эмодзи: ✅ и 🚫 рисует система,
+     своим цветом и своим кеглем, и рядом с подписью в шрифте интерфейса
+     они выглядели наклейками. Цвет теперь несёт сам значок. */
+  .meeting-chip .mstatus{flex:none; display:inline-flex; align-items:center;}
+  .meeting-chip .mstatus.success{color:var(--long-border);}
+  .meeting-chip .mstatus.no_result{color:var(--ink-soft);}
   .meeting-chip .mtitle{
     flex:1; min-width:0; white-space:normal; overflow-wrap:break-word; word-break:normal;
     line-height:1.35; font-weight:600; color:var(--ink);
@@ -1194,7 +1211,12 @@
     box-shadow:var(--shadow-2); padding:8px 10px; min-width:150px; max-width:260px;
     font-family:var(--sans); font-size:12px; color:var(--ink); text-align:left;
   }
-  .people-tooltip .prow{padding:2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .people-tooltip .prow{padding:2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:5px;}
+  /* Идёт, отказался, молчит — тремя разными знаками одного набора.
+     Раньше это были ✅ и ❌ из системного шрифта: две цветные наклейки
+     в списке имён, набранном шрифтом интерфейса. */
+  .people-tooltip .prow .icon{flex:none;}
+  .people-tooltip .prow-dot{color:var(--ink-soft); width:12px; text-align:center;}
   /* Три исхода встречи — одним словом каждый и все в одной строке.
      Значками они были неразличимы: «✓» под встречей одинаково похоже и на
      «прошла успешно», и на «я приду». Целые фразы это объяснили, но встали
@@ -1430,6 +1452,10 @@
   .participant-chip.role-coexecutor{background:var(--accent-soft); color:var(--accent); border-color:var(--accent);}
   .participant-chip.role-watcher{background:var(--paper-soft); color:var(--ink-soft); border-color:var(--ink-soft); font-weight:500;}
   .participant-chip.chip-add{border-style:dashed; color:var(--ink-soft);}
+  /* «Ещё N» — не человек, а продолжение списка, и выглядеть должна иначе
+     от обеих соседок: сплошная, но приглушённая. Пунктир занят кнопкой
+     «+ человек», у которой смысл совсем другой — завести нового. */
+  .participant-chip.chip-more{color:var(--ink-soft); background:var(--paper-soft);}
   .participant-chip.chip-del{color:var(--high); border-color:var(--high-bg);}
   .participant-chip.chip-del:hover{border-color:var(--high); color:var(--high);}
   .chips-compact .participant-chip{padding:5px 9px; min-width:38px; text-align:center;}
@@ -1937,8 +1963,11 @@
     .task-menu-btn:active{color:var(--ink);}
 
     /* Кнопки мысли — под палец, а не под курсор */
-    .idea-actions{width:76px; gap:4px 2px;}
-    .idea-flag, .idea-del{padding:7px 8px; font-size:16px; opacity:.6;}
+    /* Под палец: каждая кнопка ряда — цель не меньше 34px, и ряд всё
+       равно остаётся одной строкой (ширины на четыре кнопки хватает даже
+       на 360px экране). */
+    .idea-actions{gap:2px;}
+    .idea-flag, .idea-del{padding:8px; opacity:.7;}
 
     /* Лист действий снизу: там, где палец, и всегда одного размера,
        в отличие от выпадашки у крохотной иконки. */

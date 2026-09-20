@@ -131,12 +131,12 @@ export default function MeetingChip({
           <span className="mtitle">{meeting.title}</span>
           {meeting.status === "success" && (
             <span className="mstatus success" title="Успешно завершена">
-              ✅
+              <Icon name="check" size={14} />
             </span>
           )}
           {meeting.status === "no_result" && (
             <span className="mstatus no_result" title={meeting.movedToDate ? "Перенесена на " + fmtDate(meeting.movedToDate) : "Без результата"}>
-              🚫
+              <Icon name="ban" size={14} />
             </span>
           )}
         </div>
@@ -152,7 +152,7 @@ export default function MeetingChip({
               onMouseEnter={(e) => setPeopleAnchor(e.currentTarget.getBoundingClientRect())}
               onMouseLeave={() => setPeopleAnchor(null)}
             >
-              👥 {votes ? `${votes.yes.length}/${participants.length}` : confirmed.length > 0 ? `${confirmed.length}/${participants.length}` : participants.length}
+              <Icon name="users" size={13} /> {votes ? `${votes.yes.length}/${participants.length}` : confirmed.length > 0 ? `${confirmed.length}/${participants.length}` : participants.length}
               {votes && votes.no.length > 0 && <span className="mpeople-no"> · {votes.no.length} не смогут</span>}
             </span>
           )}
@@ -234,7 +234,7 @@ export default function MeetingChip({
               const coming = votes ? votes.yes.includes(p) : confirmed.includes(p);
               return (
                 <div className="prow" key={p}>
-                  {coming ? "✅ " : said ? "❌ " : votes ? "· " : ""}
+                  {coming ? <Icon name="check" size={12} /> : said ? <Icon name="close" size={12} /> : votes ? <span className="prow-dot">·</span> : null}{" "}
                   {p}
                   {/* Отказ без причины — не то же самое, что отказ с
                       причиной, и молчать об этом в списке значит выдавать

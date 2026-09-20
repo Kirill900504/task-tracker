@@ -65,7 +65,7 @@ export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | n
             <Icon name="check" size={14} /> Буду
           </button>
           <button type="button" className="btn btn-small" disabled={busy} onClick={() => void run("late", "")}>
-            🕐 Опоздаю
+            <Icon name="clock" size={14} /> Опоздаю
           </button>
           <button type="button" className="btn btn-small" disabled={busy} onClick={() => setAsking(true)}>
             <Icon name="ban" size={14} /> Не смогу
