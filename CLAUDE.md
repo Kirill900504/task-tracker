@@ -559,6 +559,46 @@ inert ВСЁ, что не лежит внутри него, — меню, пор
 то есть написать в обсуждение из мессенджера постановщик не мог вовсе,
 а его свободный текст — поручение, и другой двери нет.
 
+**Меню в боте — одно, и разделы объявлены ОДИН раз** (`lib/botMenu.ts`).
+Прямое следствие правила выше, и оно чуть не стало третьей копией
+одного смысла. Меню было только у постановщика — девять кнопок; у
+получателя их было ДВЕ, при том что «сегодня», «просрочено» и «на
+приёмке» у него давно работали и ждали, чтобы их угадали словом. Раздел,
+к которому нет кнопки, для человека не существует. Очевидный способ это
+починить — написать второе меню рядом с первым — здесь неверен: в этом
+проекте вторая копия расходилась с первой трижды. Поэтому строка таблицы
+`SECTIONS` несёт ОБЕ свои кнопки сразу, `olist` и `list`, и забыть
+половину нельзя. Разные `data` у одного раздела — это и есть правило про
+чат, применённое к меню; `ownerMenu`/`ownerNav`/`navButtons` остались
+именами и зовут одну функцию.
+Что из этого следует, когда добавляете раздел: сперва ответьте, есть ли
+он у получателя ВООБЩЕ. У мыслей, например, нет и не может быть — строки
+`ideas` держатся за `created_by`, а у получателя без входа нет auth-id.
+Кнопка, ведущая к отказу, хуже отсутствующей.
+
+**Мини-приложение: подпись мессенджера — это пароль.**
+`/app` меняет подпись Telegram или MAX на сессию Supabase
+(`lib/miniAppAuth.ts`, проверка в `lib/telegramInitData.ts`), и одна
+функция обслуживает оба: MAX описывает ТОТ ЖЕ алгоритм, вплоть до строки
+«WebAppData». Сделано 20.09.2026, потому что пароль от трекера — та самая
+преграда, из-за которой человек вне офиса не открывает его вовсе.
+Три вещи здесь не косметические. *Проверка тестируется подделками*, а не
+честными данными: подменённый id внутри честно подписанной строки, чужой
+токен, вчерашняя подпись; ошибка тут равна отданному паролю. *Поля не
+перечисляются руками* — в подпись входит всё пришедшее, кроме `hash` и
+`signature`, иначе следующее поле, добавленное Telegram, сломает вход.
+*Сравнение постоянного времени* обязательно: по времени ответа подпись
+подбирается побайтно.
+И граница: сессию получает только тот, у кого вход УЖЕ есть. Остальным —
+слова о том, что бот работает прямо в чате, а не пустой экран. Поэтому
+же кнопка у поля ввода ставится ПОИМЁННО (`syncTelegramAppButtons`, крон
+раз в сутки): трекер тем, кто может войти, список команд всем остальным.
+В MAX ссылки мини-приложения пока нет — её установка отправляет бота на
+модерацию заново (решение Кирилла, см. ниже), и там кнопка работает
+обычной ссылкой во внешний браузер. Поэтому `/app`, открытая без данных
+мессенджера, не объясняется, а уводит: в трекер при живой сессии, на
+форму входа без неё.
+
 **Решение подписывается именем, а не должностью** (`lib/actorName.ts`).
 В хронику писалось «Владелец принял работу» и «Постановщик вернул на
 доработку», а реплика руководителя приходила людям подписанной словом
@@ -1234,16 +1274,11 @@ by a running `next start` (and by OneDrive) — stop the server first.
 
 ## Open threads
 
-- **ПЕРВЫЙ ПРИОРИТЕТ: мессенджер как полноценный трекер.**
-  `docs/bot-menu.md` — задача, поставленная Кириллом 20.09.2026 в тех
-  словах, что бот должен быть «значительно удобнее мобильной версии»:
-  люди вне офиса приложение открывать не станут, а мессенджер у них
-  открыт всегда. Документ называет пять разрывов (у получателя меню нет
-  вовсе — две кнопки против девяти; мыслей у него нет ни словом, ни
-  кнопкой; нет кнопки «Меню» у поля ввода; нет мини-приложения) и
-  порядок работы из четырёх этапов. Ничего из этого ещё НЕ сделано.
-  Прежде чем добавлять боту кнопку, прочитайте: меню должно стать одним
-  на всех, сужаемым ролью, а не вторым набором рядом с `navButtons()`.
+- **Мессенджер как полноценный трекер — СДЕЛАНО 20.09.2026.**
+  `docs/bot-menu.md` — задача в словах Кирилла («значительно удобнее
+  мобильной версии»: люди вне офиса приложение открывать не станут, а
+  мессенджер у них открыт всегда), пять разрывов, которые были, и что с
+  каждым сделано. Читать прежде, чем трогать кнопки бота.
 
 - **Как трекер работает, одним документом.** `docs/how-it-works.md` —
   жизнь задачи, встречи и мысли, кто что может, что кому приходит и чего
@@ -1303,13 +1338,19 @@ by a running `next start` (and by OneDrive) — stop the server first.
   self-applying migration could not apply itself and 0022 went in with
   `scripts/run-migration.mjs` from here; and every call to MAX failed on the
   root CA (see the rule above).
-- **The mini-app link is deliberately empty.** It would be
-  `https://task-tracker-beta-ebon.vercel.app` with the «Открыть» button, and
-  the cabinet says plainly that editing a published bot requires moderation
-  again — the documentation nowhere says whether the bot keeps answering
-  while that runs, and neither does the platform. He was asked on 14.09.2026
-  and chose to live with the bot first and add the mini-app when a day of
-  silence would not hurt. Do not set it on your own initiative.
+- **The mini-app link in the MAX cabinet is still empty, and only that.**
+  The code behind it is done and live since 20.09.2026: `/app` plus
+  `/api/max/miniapp-auth` sign a MAX user in without a password, using the
+  same signature algorithm as Telegram. What is missing is one field in
+  business.max.ru — `https://task-tracker-beta-ebon.vercel.app/app` — and
+  editing a published bot sends it back through moderation, up to a day,
+  with neither the documentation nor the platform saying whether the bot
+  answers meanwhile. He chose on 14.09.2026 to live without it, and on
+  20.09.2026 said «MAX тоже делаем, если что — подождём, пока пройдет
+  модерация». So it goes in on a day when a day of silence is affordable,
+  with the fourteen warned in advance — not on your own initiative, and
+  not in the middle of a working week. Until then the MAX «Открыть
+  трекер» button is an ordinary link that opens the browser, which works.
 - Colleagues are recipients, not users. Making them real users who exchange
   items with each other is his own next big idea, deliberately deferred.
 - **The morning brief is facts first, model second.** GigaChat writes the
