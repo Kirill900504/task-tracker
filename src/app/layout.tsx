@@ -4,6 +4,7 @@ import "./globals.css";
 import "./tracker.css";
 import RegisterSW from "./registerSW";
 import CrashWatch from "./CrashWatch";
+import MiniAppChrome from "./MiniAppChrome";
 import AskProvider from "@/components/Ask";
 
 // Self-hosted at build time by next/font (no runtime request, no layout
@@ -59,6 +60,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Поломка, о которой знает только пострадавший, — это отсутствующий
             орган чувств: см. lib/crashReport.ts. */}
         <CrashWatch />
+        {/* Окно мессенджера: во весь экран, своего цвета и не
+            закрывающееся от прокрутки. Ничего не рисует и вне
+            мини-приложения не делает ничего. */}
+        <MiniAppChrome />
         {/* Вопросы задаёт трекер, а не браузер: окно живёт здесь, чтобы
             быть доступным на любой странице и рисоваться поверх всего. */}
         <AskProvider>{children}</AskProvider>
