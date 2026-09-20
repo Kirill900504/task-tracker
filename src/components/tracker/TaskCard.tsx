@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { CSSProperties, HTMLAttributes } from "react";
 import type { Section, Task } from "@/types/tracker";
 import { fmtDate, isDueSoon, isDueTodayHighlight, isOverdue, recurLabel } from "@/lib/taskDisplay";
+import { withoutSelfMark } from "@/lib/actorName";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSwipeComplete } from "@/hooks/useSwipeComplete";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
@@ -167,7 +168,11 @@ export default function TaskCard({
         </div>
 
         <div className="task-meta">
-          {task.assignee && <span className="task-assignee">{task.assignee}</span>}
+          {/* Имя без пометки «(я)»: на карточке она ничего не добавляет —
+              своя роль в задаче показана цветом, — а у четырнадцати
+              человек читается как чужая опечатка. В базе имя остаётся
+              полным: по нему задачу находят бот и сводки. */}
+          {task.assignee && <span className="task-assignee">{withoutSelfMark(task.assignee)}</span>}
           {authorName && <span className="task-from">от {authorName}</span>}
           {task.deadline && (
             <span className={"task-due" + (late ? " overdue-text" : dueToday ? " due-today-text" : "")}>

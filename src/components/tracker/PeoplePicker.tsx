@@ -5,6 +5,7 @@ import ActionMenu from "./ActionMenu";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import type { PersonOption } from "@/hooks/useTaskParticipants";
 import { withoutSelfMark } from "@/lib/actorName";
+import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 
 // Кто на задаче — одним полем.
 //
@@ -84,6 +85,16 @@ export default function PeoplePicker({
   // правило, стоящее у поля, — обычным требованием формы.
   const hasExecutor = picked.some((p) => p.role === "executor");
 
+  // Пометка «(я)» показывается ТОЛЬКО тому, про кого она написана.
+  //
+  // Это строка владельца, и ему она нужна: список людей — это имена, и
+  // своё среди чужих иначе не найти. Всем остальным она бессмысленна —
+  // «Кирилл (я)» на экране руководителя читается как опечатка, — поэтому
+  // им видно имя. В задачу при этом всегда уходит ПОЛНОЕ имя строки: там
+  // оно должно совпадать с базой буква в букву.
+  const identity = useWorkspaceRole();
+  const shown = (name: string) => (identity.isOwner ? name : withoutSelfMark(name));
+
   return (
     <div className="field people-field">
       <label>
@@ -112,15 +123,10 @@ export default function PeoplePicker({
                 else setMenuFor({ person, anchor: e.currentTarget.getBoundingClientRect() });
               }}
               title={
-                role
-                  ? `${withoutSelfMark(person.name)} — ${ROLE_LABEL[role]}. Нажмите, чтобы снять`
-                  : `Выбрать: ${withoutSelfMark(person.name)}`
+                role ? `${shown(person.name)} — ${ROLE_LABEL[role]}. Нажмите, чтобы снять` : `Выбрать: ${shown(person.name)}`
               }
             >
-              {/* Имя, а не строка базы: пометка «(я)» написана для одного
-                  человека, а список читают все. В задачу при этом уходит
-                  полное имя — там оно должно совпадать буква в букву. */}
-              {withoutSelfMark(person.name)}
+              {shown(person.name)}
               {role && role !== "executor" && <span className="chip-role"> · {ROLE_LABEL[role]}</span>}
             </button>
           );

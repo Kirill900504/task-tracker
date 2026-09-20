@@ -278,7 +278,7 @@ export default function MeetingModal({
             </div>
             <div className="meeting-fact-row">
               <Icon name="users" size={14} />
-              <span>{participants.length ? participants.join(", ") : "никого не позвали"}</span>
+              <span>{participants.length ? participants.map(withoutSelfMark).join(", ") : "никого не позвали"}</span>
             </div>
             {/* Путь к изменению — здесь же, а не «где-то в списке». Кнопка
                 открывает форму новой встречи с тем же составом: перенести и
