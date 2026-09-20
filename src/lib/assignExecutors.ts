@@ -45,6 +45,12 @@ export async function attachExecutors(
   userId: string,
   task: { id: string; title: string; description?: string; deadline?: string | null; priority?: string },
   names: string[],
+  // Кем ставим. По умолчанию исполнителями — так эту функцию звали всегда,
+  // и так её зовут разобранная фраза и форма задачи. Роль понадобилась,
+  // когда задачу стало можно завести «по разделу» (миграция 0036): там у
+  // каждого своя роль, и соисполнитель, записанный исполнителем, держал бы
+  // задачу открытой наравне с тем, кто за неё отвечает.
+  role: "executor" | "coexecutor" | "watcher" = "executor",
 ): Promise<AssignResult> {
   const wanted = [...new Set(names.map((n) => (n || "").trim()).filter(Boolean))];
   if (!wanted.length) return { attached: [], missing: [] };
@@ -71,7 +77,7 @@ export async function attachExecutors(
   if (fresh.length) {
     const { error } = await admin
       .from("task_participants")
-      .insert(fresh.map((person) => ({ task_id: task.id, assignee_id: person.id, role: "executor" })));
+      .insert(fresh.map((person) => ({ task_id: task.id, assignee_id: person.id, role })));
     if (error) return { attached: [], missing, error: error.message };
   }
 
@@ -91,7 +97,7 @@ export async function attachExecutors(
     if (isSelfAssignee(person.name)) continue;
     const target = chatsFor(person)[0];
     if (!target) continue;
-    await sendToColleague(target, taskMessage(task, from), taskButtons(task.id, "executor"));
+    await sendToColleague(target, taskMessage(task, from), taskButtons(task.id, role));
   }
   return { attached, missing };
 }

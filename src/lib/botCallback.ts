@@ -5,6 +5,8 @@ import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague, notifyAuthor } from "@/lib/botDelivery";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
 import { findOwnerByChat, handleOwnerCallback } from "@/lib/ownerReplies";
+import { createTaskFromBot, resolveWhen } from "@/lib/ownerNewTask";
+import { ownerNav } from "@/lib/ownerQueries";
 import type { CallbackOutcome } from "@/lib/colleagueReplies";
 
 // Нажатая кнопка — один разбор на оба мессенджера.
@@ -44,10 +46,40 @@ export async function handleBotCallback(
     // Возврат на доработку ждёт слов: следующее сообщение владельца станет
     // причиной. Помнится там же, где все незакрытые вопросы бота.
     if (outcome.askReturn) {
-      await admin
-        .from(channel.accountsTable)
-        .update({ pending_action: { kind: "review_return", taskId: outcome.askReturn.taskId, title: outcome.askReturn.title } })
-        .eq(channel.chatColumn, chatId);
+      await remember(admin, channel, chatId, {
+        kind: "review_return",
+        taskId: outcome.askReturn.taskId,
+        title: outcome.askReturn.title,
+      });
+    }
+    // Шаг мастера «Поручить»: кому выбрали — помним до выбора срока.
+    if (outcome.setPending) {
+      const previous = await pendingOf(admin, channel, chatId);
+      await remember(admin, channel, chatId, {
+        ...outcome.setPending,
+        // Название спросили на первом шаге; на втором его несёт память, а
+        // не кнопка — в 64 байта callback_data оно не поместилось бы.
+        title: (outcome.setPending as { title?: string }).title ?? (previous as { title?: string } | null)?.title,
+      });
+    }
+
+    // Последний шаг: срок выбран, задачу можно заводить.
+    if (outcome.finishNewTask !== undefined) {
+      const pending = (await pendingOf(admin, channel, chatId)) as
+        | { kind?: string; title?: string; people?: { name: string; role: "executor" | "coexecutor" | "watcher" }[] }
+        | null;
+      if (!pending || pending.kind !== "new_task" || !pending.title || !pending.people?.length) {
+        return { toast: "Начните заново: «Поручить»" };
+      }
+      await remember(admin, channel, chatId, null);
+      const created = await createTaskFromBot(
+        admin,
+        owner.userId,
+        pending.title,
+        pending.people,
+        resolveWhen(outcome.finishNewTask),
+      );
+      return { toast: "Поручено", rewriteTo: created.text, rewriteButtons: ownerNav() };
     }
 
     return {
@@ -60,6 +92,24 @@ export async function handleBotCallback(
   }
 
   return handleColleagueCallback(admin, chatId, action, channel);
+}
+
+async function remember(
+  admin: SupabaseClient,
+  channel: BotChannelConfig,
+  chatId: number,
+  value: Record<string, unknown> | null,
+): Promise<void> {
+  await admin.from(channel.accountsTable).update({ pending_action: value }).eq(channel.chatColumn, chatId);
+}
+
+async function pendingOf(admin: SupabaseClient, channel: BotChannelConfig, chatId: number): Promise<unknown> {
+  const { data } = await admin
+    .from(channel.accountsTable)
+    .select("pending_action")
+    .eq(channel.chatColumn, chatId)
+    .maybeSingle();
+  return (data as { pending_action?: unknown } | null)?.pending_action ?? null;
 }
 
 async function tellAssignees(admin: SupabaseClient, taskId: string, text: string): Promise<void> {

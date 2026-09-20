@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ownerMenu, ownerNav, peopleLoadReply, type OwnerTaskRow } from "./ownerQueries";
 import { addDays, EXTEND_OPTIONS, extendButtons } from "./ownerReplies";
+import { resolveWhen, startNewTask, whenButtons } from "./ownerNewTask";
 
 function task(extra: Partial<OwnerTaskRow> = {}): OwnerTaskRow {
   return { id: "t1", title: "Задача", assignee: "Аня", deadline: null, status: "in_progress", approvalState: "open", priority: "med", ...extra };
@@ -70,5 +71,42 @@ describe("продление срока", () => {
     const rows = extendButtons("t1");
     expect(rows.flat()).toHaveLength(EXTEND_OPTIONS.length + 1);
     expect(rows.flat().at(-1)!.text).toContain("Отмена");
+  });
+});
+
+describe("мастер «Поручить»", () => {
+  // Понедельник 21.09.2026 — точка отсчёта.
+  const monday = new Date("2026-09-21T09:00:00");
+
+  it("«до пятницы» — ближайшая пятница", () => {
+    expect(resolveWhen("fri", monday)).toBe("2026-09-25");
+  });
+
+  it("а сказанное в пятницу означает следующую: сегодня уже поздно", () => {
+    expect(resolveWhen("fri", new Date("2026-09-25T09:00:00"))).toBe("2026-10-02");
+  });
+
+  it("считает «сегодня», «завтра» и «через неделю»", () => {
+    expect(resolveWhen("0", monday)).toBe("2026-09-21");
+    expect(resolveWhen("1", monday)).toBe("2026-09-22");
+    expect(resolveWhen("7", monday)).toBe("2026-09-28");
+  });
+
+  it("и умеет «без срока»", () => {
+    expect(resolveWhen("no", monday)).toBe("");
+  });
+
+  it("первый шаг спрашивает, что поручить, а не кому", () => {
+    // Порядок шагов — от сути к деталям: формулировку можно надиктовать,
+    // а держать её в голове, пока листаешь список людей, не надо.
+    expect(startNewTask().text).toContain("Что поручить");
+    expect(startNewTask().pending.stage).toBe("title");
+  });
+
+  it("сроки предлагаются кнопками, включая «без срока»", () => {
+    const labels = whenButtons().flat().map((b) => b.text);
+    expect(labels).toContain("Сегодня");
+    expect(labels).toContain("До пятницы");
+    expect(labels).toContain("Без срока");
   });
 });

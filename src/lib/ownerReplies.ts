@@ -5,6 +5,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
 import { ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, type OwnerReply } from "@/lib/ownerQueries";
 import { applyReview } from "@/lib/reviewWork";
+import { startNewTask, whenButtons } from "@/lib/ownerNewTask";
 
 // Что происходит, когда владелец нажимает кнопку.
 //
@@ -37,6 +38,12 @@ export type OwnerOutcome = {
   // в pending_action его строки (миграция 0033 сделала то же самое для
   // руководителя).
   askReturn?: { taskId: string; title: string };
+  // Шаг мастера «Поручить», который надо запомнить до следующего нажатия
+  // или сообщения.
+  setPending?: Record<string, unknown>;
+  // Последний шаг: код срока. Саму задачу заводит pipeline — там лежит
+  // незакрытый вопрос с названием и людьми.
+  finishNewTask?: string;
 };
 
 // Найти владельца по чату. Его чат живёт не там, где чаты коллег:
@@ -57,6 +64,25 @@ export async function findOwnerByChat(
     .maybeSingle();
   const row = data as { user_id: string } | null;
   return row ? { userId: row.user_id } : null;
+}
+
+async function sectionPeople(
+  admin: SupabaseClient,
+  userId: string,
+  sectionId: string,
+): Promise<{ name: string; role: "executor" | "coexecutor" | "watcher" }[]> {
+  const { data } = await admin
+    .from("section_assignees")
+    .select("role, assignees(name)")
+    .eq("user_id", userId)
+    .eq("section_id", sectionId);
+  type Row = { role: "executor" | "coexecutor" | "watcher"; assignees: { name: string } | { name: string }[] | null };
+  return ((data || []) as Row[])
+    .map((r) => ({
+      name: (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "",
+      role: r.role,
+    }))
+    .filter((p) => p.name);
 }
 
 type TaskRow = {
@@ -261,6 +287,41 @@ export async function handleOwnerCallback(
       askReturn: { taskId: task.id, title: task.title },
       say: `↩ «${task.title}»\n\nНапишите следующим сообщением, что именно доделать, — отправлю исполнителям.`,
     };
+  }
+
+  // ——— Поручить: три шага, на каждом кнопки (см. lib/ownerNewTask).
+  if (action.action === "new" && action.kind === "task") {
+    const started = startNewTask();
+    return { toast: "Что поручить?", say: started.text, setPending: started.pending };
+  }
+
+  if (action.action === "nwho" && action.kind === "task") {
+    const { data } = await admin.from("assignees").select("name").eq("id", action.id).maybeSingle();
+    const name = (data as { name: string } | null)?.name;
+    if (!name) return { toast: "Этого человека больше нет" };
+    return {
+      toast: name,
+      say: `Кому: ${name}. На когда?`,
+      sayButtons: whenButtons(),
+      setPending: { kind: "new_task", stage: "when", people: [{ name, role: "executor" }] },
+    };
+  }
+
+  if (action.action === "nsec" && action.kind === "task") {
+    const people = await sectionPeople(admin, userId, action.id);
+    if (!people.length) return { toast: "За этим разделом никто не закреплён" };
+    return {
+      toast: "По разделу",
+      say: `Кому: ${people.map((p) => p.name).join(", ")}. На когда?`,
+      sayButtons: whenButtons(),
+      setPending: { kind: "new_task", stage: "when", people },
+    };
+  }
+
+  if (action.action.startsWith("nwhen") && action.kind === "task") {
+    // Сама задача заводится в pipeline: там лежит незакрытый вопрос с
+    // названием и людьми, и там же он снимается.
+    return { toast: "Завожу", finishNewTask: action.action.slice("nwhen".length) };
   }
 
   if (action.action === "ping" && action.kind === "task") {

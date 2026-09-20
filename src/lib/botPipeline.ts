@@ -18,6 +18,7 @@ import { attachExecutors, attachMeetingParticipants, assignNote } from "@/lib/as
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 import { newTaskRow } from "@/lib/newTask";
 import { ownerListReply, ownerMeetingsReply, ownerMenu } from "@/lib/ownerQueries";
+import { whoButtons, type NewTaskPending } from "@/lib/ownerNewTask";
 import { applyReview } from "@/lib/reviewWork";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
@@ -526,9 +527,12 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     // Возврат на доработку: нажали кнопку, теперь пишут, что именно
     // доделать. Правила возврата — общие с трекером (lib/reviewWork):
     // отчёты обнуляются, людям говорится сразу, в хронику пишется строка.
-    const waiting = account.pending_action as PendingAction | ReturnPending;
-    if ((waiting as ReturnPending).kind === "review_return") {
-      const ask = waiting as ReturnPending;
+    // Один столбец памяти на все незакрытые вопросы бота: подтверждение
+    // «да», причина возврата, шаг мастера. Разбирается он по полю kind, и
+    // потому читается сначала как неизвестное.
+    const waiting = account.pending_action as PendingAction | ReturnPending | NewTaskPending;
+    if ((waiting as unknown as ReturnPending).kind === "review_return") {
+      const ask = waiting as unknown as ReturnPending;
       const { data: taskRow } = await ctx.admin
         .from("tasks")
         .select("id, title, user_id")
@@ -545,6 +549,33 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       await say(ctx, done.ok ? `↩ Вернул «${task.title}» на доработку — исполнителям сказано.` : done.error);
       return;
     }
+    // Первый шаг мастера «Поручить»: пришло название. Спрашиваем, кому, —
+    // кнопками, потому что имя, набранное руками, промахивается мимо
+    // списка людей, а имя, названное моделью, промахивается ещё чаще.
+    if ((waiting as unknown as NewTaskPending).kind === "new_task" && (waiting as unknown as NewTaskPending).stage === "title") {
+      const title = trimmed.slice(0, 200);
+      if (!title) {
+        await say(ctx, "Пустое название — не задача. Напишите, что поручить.");
+        return;
+      }
+      await remember(ctx, { pending_action: { kind: "new_task", stage: "who", title } });
+      await ctx.transport.send(ctx.chatId, `«${title}»\n\nКому поручить?`, {
+        buttons: await whoButtons(ctx.admin, account.user_id),
+      });
+      return;
+    }
+
+    // Второй и третий шаги отвечают кнопкой, а не словом. Если человек всё
+    // же написал — не теряем ни шаг, ни написанное: память возвращается на
+    // место, а кнопки показываются снова.
+    if ((waiting as unknown as NewTaskPending).kind === "new_task") {
+      await remember(ctx, { pending_action: waiting });
+      await ctx.transport.send(ctx.chatId, "Выберите кнопкой — или начните заново словом «меню».", {
+        buttons: await whoButtons(ctx.admin, account.user_id),
+      });
+      return;
+    }
+
     await say(ctx, await resolvePendingAction(waiting as PendingAction, trimmed));
     return;
   }
