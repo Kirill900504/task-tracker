@@ -723,12 +723,25 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     return;
   }
 
+  // Владелец как актор — один раз на весь разбор его сообщения.
+  //
+  // Раньше он собирался только внутри ветки незакрытого вопроса, а
+  // выборкам ниже отдавался голый `account.user_id`. Тип этого не поймал:
+  // Supabase без сгенерированных типов отдаёт строку как `any`, и строка
+  // молча проезжала туда, где ждут актора. Кончалось это не пустым
+  // списком, а обратным: `actorScope` читал у строки несуществующие
+  // `isOwner`/`spaceId`, получал undefined в обе колонки, а `.match()`
+  // просто ВЫБРАСЫВАЕТ undefined — то есть запрос уходил вообще без
+  // фильтра по пространству. Проверка 20.09.2026: «сегодня», написанное
+  // словом, показывало 19 задач вместо 8 — чужие пространства целиком.
+  // Кнопки этим не болели: они всегда несли настоящего актора.
+  const asOwner: BotActor = { userId: account.user_id, spaceId: account.user_id, assigneeId: "", isOwner: true };
+
   // Незакрытый вопрос старше всего остального: следующее сообщение — это
   // «да», причина возврата или шаг мастера, а не новая просьба.
   if (account.pending_action) {
     await remember(ctx, { pending_action: null });
     const waiting = account.pending_action;
-    const asOwner: BotActor = { userId: account.user_id, spaceId: account.user_id, assigneeId: "", isOwner: true };
     if (await assignerPending(ctx, asOwner, waiting, trimmed)) return;
     // Остывшее «💬 Ответить» сюда не адресовано: resolvePendingAction
     // разбирает подтверждения («да»), и незнакомая ему память ответила бы
@@ -759,12 +772,12 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     // задачу, — это список, после которого всё равно открывать трекер.
     const which = queryKind === "today" ? "today" : queryKind === "overdue" ? "overdue" : "";
     if (queryKind === "meetings") {
-      const reply = await ownerMeetingsReply(ctx.admin, account.user_id, new Date().toISOString().slice(0, 10));
+      const reply = await ownerMeetingsReply(ctx.admin, asOwner, new Date().toISOString().slice(0, 10));
       await ctx.transport.send(ctx.chatId, reply.text, reply.buttons?.length ? { buttons: reply.buttons } : undefined);
       return;
     }
     if (which) {
-      const reply = await ownerListReply(ctx.admin, account.user_id, which, new Date().toISOString().slice(0, 10));
+      const reply = await ownerListReply(ctx.admin, asOwner, which, new Date().toISOString().slice(0, 10));
       await ctx.transport.send(ctx.chatId, reply.text, reply.buttons?.length ? { buttons: reply.buttons } : undefined);
       return;
     }
