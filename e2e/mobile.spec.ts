@@ -1,14 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { pickAnyExecutor } from "./helpers";
+import { pickAnyExecutor, pickSelfExecutor } from "./helpers";
+import { userFilePath } from "./userFile";
 
 // The phone layout is a different tree, not a narrower one — its own header,
 // its own navigation, its own first screen — so it needs its own tests. The
 // disposable account and the base URL are the same ones the desktop suite
 // uses (see e2e/global-setup.ts).
-const { email, password } = JSON.parse(readFileSync(join(__dirname, ".e2e-user.json"), "utf8"));
+const { email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -83,7 +83,9 @@ test("a task is finished by swiping the card to the right", async ({ page }) => 
   await page.click('[data-tab="tasks"]');
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
-  await pickAnyExecutor(page);
+  // Себе: свайп, как и галочка, закрывает задачу сразу только у своей
+  // работы — у чужой он спросил бы результат (см. quickDone).
+  await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();

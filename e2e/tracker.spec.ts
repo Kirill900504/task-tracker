@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { dayCell, dragOnto, pickAnyExecutor } from "./helpers";
+import { dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor } from "./helpers";
+import { userFilePath } from "./userFile";
 
 // The one smoke test covering the actual "Definition of Done" checklist
 // (login, create task, complete task, create meeting, create idea,
@@ -14,7 +14,7 @@ import { dayCell, dragOnto, pickAnyExecutor } from "./helpers";
 // environment — e.g. `node --env-file=.env.local` isn't usable here since
 // Playwright is its own process; use `npx dotenv-run` or export them first.)
 
-const { id: userId, email, password } = JSON.parse(readFileSync(join(__dirname, ".e2e-user.json"), "utf8"));
+const { id: userId, email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
 
 test("full loop: login, task, meeting, idea, calendar, logout", async ({ page }) => {
   const stamp = Date.now();
@@ -37,7 +37,9 @@ test("full loop: login, task, meeting, idea, calendar, logout", async ({ page })
   // ---- Create task ----
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", taskTitle);
-  await pickAnyExecutor(page);
+  // Себе: ниже она закрывается галочкой, а галочка на чужой работе
+  // спрашивает результат (см. quickDone в TasksPanel).
+  await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
   const taskCard = page.locator(".task", { hasText: taskTitle });
   await expect(taskCard).toBeVisible();
@@ -127,7 +129,10 @@ test("completing a task survives an immediate sign-out", async ({ page }) => {
   await login(page);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
-  await pickAnyExecutor(page);
+  // Задача самому себе: галочка закрывает её сразу, без вопроса о
+  // результате (его спрашивают, когда закрывают чужую работу), а тесту
+  // здесь важна именно мгновенность — он про гонку записи с выходом.
+  await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
   await waitForSaved(page);
 
@@ -301,7 +306,6 @@ test("a weekly recurring task keeps its rule across a reload", async ({ page }) 
   // aria-pressed, по нему и проверяется, что правило вернулось из базы.
   await page.click('#fRecur [data-value="weekly"]');
   await page.click('#fRecurWeekday [data-value="3"]');
-  await page.click('#fPriority [data-value="high"]');
   await page.click("#saveTaskBtn");
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
   await waitForSaved(page);
@@ -310,15 +314,11 @@ test("a weekly recurring task keeps its rule across a reload", async ({ page }) 
   // Правило проверяется по самой карточке, а не по полям формы: у
   // заведённой задачи полей нет вовсе (см. TaskModal — её уже отправили
   // человеку, и править её у себя в окне значит развести то, что записано,
-  // и то, что он видел). Карточка говорит то же самое: пилюля повторения и
-  // пилюля приоритета.
+  // и то, что он видел).
   const card = page.locator(".task", { hasText: title });
   // «По срм» — как кубик пишет «по средам»: и повтор, и день недели
   // одной подписью, то есть проверяются оба сохранённых поля сразу.
   await expect(card.locator(".task-recur")).toContainText("ср");
-  // Важность на доске — точка в углу, а не слово: класс high остался, но
-  // читать его теперь надо вместе с маркером.
-  await expect(card.locator(".task-mark.hot")).toBeVisible();
 });
 
 // Перенос задачи между столбцами — мышью, как человек.
@@ -836,12 +836,12 @@ test("закрытие встречи из списка спрашивает и�
   await expect(chip).toBeVisible();
 
   // Отмена в окне итога оставляет встречу в плане.
-  await chip.locator(".meeting-icon-btn.success").click();
+  await chip.locator(".meeting-act.success").click();
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.click("#askCancelBtn");
   await expect(chip).not.toHaveClass(/resolved/);
 
-  await chip.locator(".meeting-icon-btn.success").click();
+  await chip.locator(".meeting-act.success").click();
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.fill("#askInput", "Договорились по срокам");
   await page.click("#askOkBtn");
@@ -928,21 +928,24 @@ test("разделы переставляются перетаскиванием
   const { data } = await admin.from("sections").select("name, sort_order").in("id", ids).order("sort_order");
   expect((data || []).map((s) => s.name)[0]).toBe(`Гамма${stamp}`);
 
-  // Нажатие без перетаскивания по-прежнему фильтрует, а не переставляет.
-  await src.click();
+  // Нажатие без перетаскивания по-прежнему делает своё дело, а не
+  // переставляет: правая кнопка отбирает задачи раздела (с 20.09.2026
+  // левая заводит задачу — см. следующий тест).
+  await src.click({ button: "right" });
   await expect(src).toHaveClass(/active/);
 
   await admin.from("sections").delete().in("id", ids);
 });
 
-// Разделы: правая кнопка заводит задачу, а правятся они в своём окне.
+// Разделы: левая кнопка заводит задачу, правая отбирает, правятся они в
+// своём окне.
 //
-// До 19.09.2026 правая кнопка открывала меню «переименовать / удалить».
-// Кирилл поменял это местами: «если тыкаешь правой сразу вылазило окно
-// создания новой задачи с уже выделенными исполнителями, ответственными
-// за раздел». Редкое действие ушло в окно «Разделы», частое получило
-// правую кнопку.
-test("правая кнопка по разделу заводит задачу, а переименование живёт в окне «Разделы»", async ({ page }) => {
+// Кнопки менялись местами дважды. 19.09.2026 правая получила «новую
+// задачу» вместо меню «переименовать / удалить», а 20.09.2026 Кирилл
+// поменял и оставшиеся две: «если левой кнопкой мыши — создаётся задача,
+// если правой — делается отбор». Редкое действие живёт в окне «Разделы»,
+// частые — под обеими кнопками мыши.
+test("левая кнопка по разделу заводит задачу, правая отбирает, переименование живёт в окне «Разделы»", async ({ page }) => {
   const stamp = Date.now().toString(36);
   const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -1011,6 +1014,40 @@ test("задача не сохраняется без исполнителя", a
   await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
+});
+
+// Галочка на задаче, поручённой другому, требует результата.
+//
+// Слова Кирилла 20.09.2026: «если задача поставлена не самому себе, а
+// другому участнику, должно требоваться заполнение „Результата“». Своя
+// задача закрывается одним нажатием, чужая работа — нет: человек ждёт
+// ответа, и закрытая молча задача выглядит для него отменённой.
+test("закрыть галочкой задачу другого человека можно только с результатом", async ({ page }) => {
+  const title = `E2E результат ${Date.now()}`;
+  await login(page);
+
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  // pickAnyExecutor ставит ПЕРВОГО человека из списка — не себя, поэтому
+  // задача и оказывается поручённой другому.
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator(".task", { hasText: title });
+  await expect(card).toBeVisible();
+  await waitForSaved(page);
+
+  // Отмена оставляет задачу открытой: закрытие «передумал» не считается.
+  await card.locator(".check").click();
+  await expect(page.locator(".ask-modal")).toContainText("Что сделано");
+  await page.click("#askCancelBtn");
+  await expect(page.locator("#col-new .task", { hasText: title })).toBeVisible();
+
+  // С результатом — задача закрывается и уезжает в «Завершённые».
+  await card.locator(".check").click();
+  await expect(page.locator(".ask-modal")).toBeVisible();
+  await page.fill("#askInput", "Прайс согласован, отправили клиенту");
+  await page.click("#askOkBtn");
+  await expect(page.locator("#col-done .task", { hasText: title })).toBeVisible({ timeout: 15_000 });
 });
 
 // Перенос — единственный путь изменить время и состав назначенной встречи.

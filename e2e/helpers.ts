@@ -34,6 +34,24 @@ export async function pickAnyExecutor(page: Page) {
   await expect(chip).toHaveClass(/role-executor/);
 }
 
+
+// Поставить задачу САМОМУ СЕБЕ — строка со скобками «(я)» в списке людей.
+//
+// Нужно там, где проверяется не участие, а что-то другое: запись в базу,
+// повтор, синхронизация. С 20.09.2026 галочка на задаче, поручённой
+// другому человеку, спрашивает результат и уходит через приёмку — это
+// правильно для работы и лишний шаг для теста, которому важно ровно
+// «нажал и закрылось».
+export async function pickSelfExecutor(page: Page) {
+  const chip = page.locator("#fPeople .participant-chip:not(.chip-add)", { hasText: "(я)" }).first();
+  await expect(chip).toBeVisible({ timeout: 20_000 });
+  await chip.click();
+  const menu = page.locator(".export-menu, .action-sheet").first();
+  await expect(menu).toBeVisible();
+  await menu.locator(".export-item").filter({ hasText: /^Исполнитель/ }).click();
+  await expect(chip).toHaveClass(/role-executor/);
+}
+
 // Перетаскивание — настоящими движениями мыши.
 //
 // dnd-kit слушает pointer-события, поэтому подделывать DragEvent больше не
