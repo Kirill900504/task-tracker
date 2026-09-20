@@ -345,9 +345,12 @@ test("задача переносится в соседний столбец и 
   await expect(page.locator("#col-new .task", { hasText: title })).toBeVisible();
   await waitForSaved(page);
 
-  // В процессе: карточка поднята, на её месте силуэт, столбец-получатель
-  // подсвечен. Проверяется до отпускания, потому что после него всё это
-  // исчезает — а именно это Кирилл и увидит глазами.
+  // В процессе: карточка поднята, на её месте силуэт, а в столбце, куда
+  // целятся, раскрылось место под неё. Проверяется до отпускания, потому
+  // что после него всё это исчезает — а именно это Кирилл и увидит
+  // глазами. Подсветки столбца здесь больше нет намеренно: 20.09.2026 он
+  // попросил убрать «контуры и зонирование», и ответ на «куда встанет»
+  // дают расступившиеся соседи, а не рамка вокруг половины экрана.
   await card.scrollIntoViewIfNeeded();
   const from = (await card.boundingBox())!;
   await page.mouse.move(from.x + 60, from.y + 20);
@@ -360,7 +363,7 @@ test("задача переносится в соседний столбец и 
 
   await expect(page.locator(".dnd-card-ghost .task-title")).toHaveText(title);
   await expect(page.locator(".task.dragging")).toHaveCount(1);
-  await expect(page.locator(".task-column-body.drag-over")).toHaveCount(1);
+  await expect(page.locator("#col-work .task-drop-slot.open")).toHaveCount(1);
 
   await page.mouse.up();
 

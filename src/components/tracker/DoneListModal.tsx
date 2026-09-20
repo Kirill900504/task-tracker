@@ -45,50 +45,56 @@ export default function DoneListModal({
   onClose: () => void;
 }) {
   return (
-    <Modal onClose={onClose} id="doneListModal" className="done-list-modal">
-      <h2>
-        {title} <span className="count">{items.length}</span>
-      </h2>
+    <Modal onClose={onClose} id="doneListModal">
+      {/* `.modal` — коробка окна: фон, рамка и ширина живут на ней, а
+          сам <dialog class="overlay"> это только затемнённый фон с
+          display:flex. Без обёртки содержимое раскладывалось прямо по
+          затемнению в строку, и окно выглядело рассыпавшимся. */}
+      <div className="modal done-list-modal">
+        <h2>
+          {title} <span className="count">{items.length}</span>
+        </h2>
 
-      {!items.length && <div className="empty">{empty}</div>}
+        {!items.length && <div className="empty">{empty}</div>}
 
-      <div className="done-list">
-        {items.map((item) => (
-          <div key={item.id} className="done-list-row">
-            <span className="done-list-mark">
-              <Icon name="check" size={13} />
-            </span>
-            <button
-              type="button"
-              className="done-list-text"
-              disabled={!item.onOpen}
-              onClick={() => {
-                item.onOpen?.();
-                onClose();
-              }}
-            >
-              <span className="done-list-title">{item.title}</span>
-              {(item.when || item.note) && (
-                <span className="done-list-note">
-                  {item.when}
-                  {item.when && item.note ? " · " : ""}
-                  {item.note}
-                </span>
-              )}
-            </button>
-            {item.onRestore && (
-              <button type="button" className="btn btn-small" onClick={item.onRestore}>
-                {restoreLabel}
+        <div className="done-list">
+          {items.map((item) => (
+            <div key={item.id} className="done-list-row">
+              <span className="done-list-mark">
+                <Icon name="check" size={13} />
+              </span>
+              <button
+                type="button"
+                className="done-list-text"
+                disabled={!item.onOpen}
+                onClick={() => {
+                  item.onOpen?.();
+                  onClose();
+                }}
+              >
+                <span className="done-list-title">{item.title}</span>
+                {(item.when || item.note) && (
+                  <span className="done-list-note">
+                    {item.when}
+                    {item.when && item.note ? " · " : ""}
+                    {item.note}
+                  </span>
+                )}
               </button>
-            )}
-          </div>
-        ))}
-      </div>
+              {item.onRestore && (
+                <button type="button" className="btn btn-small" onClick={item.onRestore}>
+                  {restoreLabel}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
 
-      <div className="modal-actions">
-        <button className="btn" type="button" onClick={onClose}>
-          Закрыть
-        </button>
+        <div className="modal-actions">
+          <button className="btn" type="button" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
       </div>
     </Modal>
   );

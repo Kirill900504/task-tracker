@@ -189,7 +189,6 @@
      page flow rather than independently scrolling sticky panes, so whichever
      column is longest — tasks, meetings or ideas — is what carries the page
      down, and there is never a scrollbar inside a scrollbar. */
-  .dash-zone.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
 
   /* ---------- Панели ----------------------------------------------
      Раскладка жёсткая: три колонки, порядок задан в DashboardLayout.
@@ -386,6 +385,18 @@
   .column.collapsed .section-title .collapse-arrow{transform:rotate(-90deg);}
   .column.collapsed > div:not(.section-title){display:none;}
 
+  /* Заголовок столбца стоит ПОСЕРЕДИНЕ него — просьба Кирилла 20.09.2026
+     («отцентруй, чтобы названия были размещены посередине, у завершённых
+     так же»). Стрелка сворачивания при этом уезжает в угол абсолютом, а не
+     остаётся в потоке: `margin-left:auto` растолкал бы название влево, и
+     «посередине» получилось бы только у столбца без стрелки.
+     Отступы по краям одинаковые — иначе центр смещён на ширину стрелки. */
+  .column .section-title{justify-content:center; position:relative; padding:0 18px;}
+  .column .section-title .collapse-arrow{
+    position:absolute; right:0; top:50%; margin-left:0; transform:translateY(-50%);
+  }
+  .column.collapsed .section-title .collapse-arrow{transform:translateY(-50%) rotate(-90deg);}
+
   /* Три столбца: срок, срок и состояние. Третий — «На приёмку»; он уже
      двух первых, потому что задача там долго не задерживается, а место
      нужна тем, где работа идёт. */
@@ -457,6 +468,37 @@
   .filter-pill.overdue.active .filter-pill-count{background:rgba(0,0,0,.18); color:#2A1A15;}
   .filter-pill.done:hover{color:var(--success); border-color:var(--success);}
   .filter-pill.done.active{background:var(--success); border-color:var(--success); color:#0B2116; box-shadow:var(--shadow-1);}
+
+  /* «Загрузка» — та же пилюля, но из двух кнопок: имя открывает окно, ✕
+     снимает фильтр. Крестик живёт ВНУТРИ пилюли, а не отдельной кнопкой
+     рядом: снятие фильтра относится к нему одному, и стоять оно должно
+     там же, где видно, что фильтр включён. Пока фильтра нет, крестика
+     нет тоже — и пилюля неотличима от соседних. */
+  .load-pill{
+    display:inline-flex; align-items:center; border:1px solid var(--line-soft); border-radius:999px;
+    background:var(--paper-soft); box-shadow:var(--edge); overflow:hidden;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .load-pill:hover{border-color:var(--ink-soft);}
+  .load-pill.active{background:var(--accent-soft); border-color:var(--accent);}
+  .load-pill-main{
+    display:inline-flex; align-items:center; gap:6px; min-height:34px;
+    padding:8px 14px; border:none; background:none; cursor:pointer;
+    font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
+    color:var(--ink-soft); max-width:220px; overflow:hidden; text-overflow:ellipsis;
+  }
+  .load-pill:hover .load-pill-main{color:var(--ink);}
+  .load-pill.active .load-pill-main{color:var(--accent); padding-right:6px;}
+  .load-pill-x{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:30px; min-height:34px; padding:0 10px 0 4px;
+    border:none; background:none; cursor:pointer; color:var(--ink-soft);
+  }
+  .load-pill-x:hover{color:var(--high);}
+
+  /* Окно «Загрузка». Уже карточки задачи: в нём одна колонка строк, и
+     широкое окно растянуло бы имя от края до края. */
+  .load-modal{max-width:520px;}
   @media (max-width:768px){ .filter-pill{min-height:34px;} }
   @media (max-width:768px){
     .section-tabs{overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; -webkit-overflow-scrolling:touch;}
@@ -477,35 +519,42 @@
   }
   .task:hover{border-color:var(--accent); box-shadow:var(--shadow-1); transform:translateY(-1px);}
   .task{cursor:grab;}
-  /* Место взятой карточки. Не «полупрозрачная тень» (её Кирилл и назвал
-     колхозом), а пустая рамка ровно того же размера: карточка в этот момент
-     едет под курсором, а здесь показано, что место за ней сохранено. */
+  /* Место взятой карточки — ПУСТОЕ, и это правило дороже, чем кажется.
+     20.09.2026 Кирилл посмотрел на доску во время переноса и сказал:
+     «убери прорисованные границы (сетку перемещений), чтобы блоки просто
+     плавали по чёрному пространству, без всяких контуров и зонирований».
+     Он прав: пунктирная рамка на месте карточки, пунктирное место в
+     соседнем столбце и подсвеченная рамкой зона вокруг него — это три
+     разных контура на экране одновременно, и вместе они читаются как
+     сетка, по которой карточку якобы надо куда-то попасть. Куда она
+     встанет, и так видно: соседи расступаются, а сама карточка едет под
+     курсором. Поэтому место остаётся местом — оно держит высоту, чтобы
+     список не прыгал, — и не рисует ничего. */
   .task.dragging{
-    background:var(--accent-soft); border:1px dashed var(--accent);
+    background:transparent; border-color:transparent;
     box-shadow:none; transform:none;
   }
-  .task.dragging:hover{transform:none;}
+  .task.dragging:hover{transform:none; border-color:transparent;}
   .task.dragging > *{visibility:hidden;}
 
   /* Тело столбца. Пустой столбец обязан принимать сброс — иначе
-     единственную задачу нельзя перенести в опустевший соседний. */
-  .task-column-body{border-radius:10px; transition:background .15s ease, box-shadow .15s ease;}
+     единственную задачу нельзя перенести в опустевший соседний. Заливки и
+     рамки «вот эта зона» здесь нет намеренно (см. правило выше). */
+  .task-column-body{border-radius:10px;}
   .task-column-body.is-empty{min-height:96px;}
-  .task-column-body.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
 
   /* Место, которое раскрывается под карточку из другого столбца.
      Кирилл сказал про прежний вид коротко: «перескакивает резко, нервно».
      Так и было — карточка мгновенно исчезала слева и появлялась справа, оба
      столбца меняли высоту разом. Теперь ничего не переставляется: просто
      растёт высота, и растёт она сама, переходом. Дольше обычных 150 мс —
-     это движение крупное, и на быстром переходе глаз читает его как рывок. */
+     это движение крупное, и на быстром переходе глаз читает его как рывок.
+     Пустое место и есть весь ответ: рисовать в нём рамку незачем. */
   .task-drop-slot{
-    height:0; opacity:0; margin:0;
-    border:1px dashed var(--accent); border-radius:var(--radius-md);
-    background:var(--accent-soft);
-    transition:height .26s cubic-bezier(.2,.8,.3,1), opacity .2s ease, margin .26s cubic-bezier(.2,.8,.3,1);
+    height:0; margin:0;
+    transition:height .26s cubic-bezier(.2,.8,.3,1), margin .26s cubic-bezier(.2,.8,.3,1);
   }
-  .task-drop-slot.open{height:64px; opacity:1; margin-bottom:9px;}
+  .task-drop-slot.open{height:64px; margin-bottom:9px;}
   @media (prefers-reduced-motion: reduce){
     .task-drop-slot{transition:none;}
   }
@@ -644,6 +693,12 @@
     color:var(--ink-soft); font-size:13px; line-height:1.5; padding:22px 18px; text-align:center;
     border:1px dashed var(--line-soft); border-radius:var(--radius-md); background:rgba(255,255,255,.012);
   }
+  /* Кроме столбцов доски: там пунктирный прямоугольник вокруг «пока никто
+     ничего не взял» — это ровно тот контур, который Кирилл попросил убрать
+     20.09.2026. Пустой столбец и должен выглядеть пустым: одна строка
+     текста в чёрном поле, а не размеченная под что-то клетка. Принимать
+     сброс ему это не мешает — высоту держит .task-column-body.is-empty. */
+  .column .empty{border-color:transparent; background:none; padding:18px 12px;}
 
   /* Modal.
      Окно — настоящий <dialog>, открытый через showModal (см. Modal.tsx):
@@ -923,14 +978,14 @@
   /* Ideas: flag + inline edit */
   .idea-item{position:relative; cursor:grab; transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;}
   /* Силуэт на месте взятой мысли — та же логика, что у карточки задачи:
-     сама мысль в это время едет под курсором. */
+     сама мысль в это время едет под курсором, а место за ней пустует и
+     ничего не рисует (см. .task.dragging — там причина целиком). */
   .idea-item.dragging{
-    background:var(--accent-soft); border:1px dashed var(--accent);
+    background:transparent; border-color:transparent;
     box-shadow:none; transform:none;
   }
   .idea-item.dragging > *{visibility:hidden;}
-  #ideaList{border-radius:8px; transition:background .15s ease, box-shadow .15s ease;}
-  #ideaList.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
+  #ideaList{border-radius:8px;}
   @media (prefers-reduced-motion: reduce){ .idea-item.dragging{transform:none;} }
   .idea-item.important{border-color:var(--high); background:var(--high-bg);}
   .idea-item.done{opacity:.55;}
@@ -960,11 +1015,11 @@
   /* Calendar: meetings */
   .cal-dot.meeting{background:var(--today);}
   .cal-filter-note{align-items:center;}
-  #meetingsForDay{margin-top:2px; border-radius:8px; transition:background .15s ease, box-shadow .15s ease;}
-  #meetingsForDay.drag-over{background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent);}
-  /* Взятая встреча — тот же силуэт, что у задачи и у мысли. */
+  #meetingsForDay{margin-top:2px; border-radius:8px;}
+  /* Взятая встреча — тот же силуэт, что у задачи и у мысли: пустое место
+     без рамки и заливки. */
   .meeting-chip.dragging{
-    background:var(--accent-soft); border-color:var(--accent); border-style:dashed;
+    background:transparent; border-color:transparent;
     box-shadow:none; transform:none;
   }
   .meeting-chip.dragging > *{visibility:hidden;}
@@ -1379,7 +1434,7 @@
     border-left:3px solid var(--line); border-radius:0 6px 6px 0;
   }
 
-  /* Панель «Люди»: строка на человека, вся строка — кнопка-фильтр.
+  /* Окно «Загрузка»: строка на человека, вся строка — кнопка-фильтр.
      Цифры справа в одну колонку и табличными цифрами, чтобы четырнадцать
      строк читались столбиком, а не лесенкой. */
   /* Имя строкой, цифры со словами под ним. В строку они больше не
@@ -1584,13 +1639,13 @@
       background:var(--accent);
     }
     /* Свёрнуто — на экране только «Новая задача» и «Фильтры».
-       .toolbar-dd наравне с select: фильтр по исполнителю больше не
-       системный список, а свой (Dropdown), и правило, написанное только под
-       `select`, перестало его прятать — на телефоне он остался висеть в
-       свёрнутой панели. */
+       Список здесь длиннее, чем кажется нужным, и каждая строка в нём
+       стоит отдельного случая: фильтр, забытый в свёрнутой панели, виден
+       на экране и не выключается ничем. */
     .toolbar.collapsed select,
     .toolbar.collapsed .toolbar-dd,
     .toolbar.collapsed .filter-pill,
+    .toolbar.collapsed .load-pill,
     .toolbar.collapsed .view-switch,
     .toolbar.collapsed .check-wrap{display:none;}
     .toolbar select, .toolbar .dd-trigger{min-height:44px; font-size:16px;}

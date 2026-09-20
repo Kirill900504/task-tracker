@@ -19,7 +19,7 @@ import type { useToasts } from "@/hooks/useToasts";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useAsk } from "@/components/Ask";
 import { isMine } from "@/lib/ownership";
-import { useDragState, useDropHandler } from "./dnd/TrackerDnd";
+import { useDropHandler } from "./dnd/TrackerDnd";
 
 export default function MeetingsPanel({
   myUserId = "",
@@ -144,9 +144,13 @@ export default function MeetingsPanel({
 
   // Мысль, брошенная в список встреч, становится встречей. Список принимает
   // только её: задачу сюда несут через день календаря, где спрашивают время.
-  const { active: dragActive } = useDragState();
-  const { setNodeRef: setMeetingsDropRef, isOver } = useDroppable({ id: "meetings", data: { target: { kind: "meetings" } } });
-  const ideaOver = isOver && dragActive?.kind === "idea";
+  //
+  // Подсветки «вот эта зона» у списка нет — по той же причине, по которой
+  // её нет у столбцов доски (см. .task.dragging в tracker.css): контуры
+  // вокруг половины экрана Кирилл попросил убрать 20.09.2026, а мысль,
+  // едущая под курсором над списком встреч, и так говорит, куда она
+  // упадёт.
+  const { setNodeRef: setMeetingsDropRef } = useDroppable({ id: "meetings", data: { target: { kind: "meetings" } } });
   useDropHandler("idea", (ideaId, target) => {
     if (target.kind !== "meetings") return;
     onIdeaDropped(ideaId);
@@ -311,7 +315,7 @@ export default function MeetingsPanel({
         </div>
       )}
 
-      <div id="meetingsForDay" ref={setMeetingsDropRef} className={ideaOver ? "drag-over" : ""}>
+      <div id="meetingsForDay" ref={setMeetingsDropRef}>
         {sorted.length === 0 ? (
           <div className="empty">{meetings.length === 0 ? "Встреч пока нет" : "Нет запланированных встреч"}</div>
         ) : (

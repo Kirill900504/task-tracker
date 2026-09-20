@@ -35,14 +35,14 @@ export function TaskColumnBody({
   const { active, over } = useDragState();
   const { setNodeRef } = useDroppable({ id: "col:" + column, data: { target: { kind: "task-column", column } } });
 
-  // Подсвечивается столбец только тогда, когда в него ДЕЙСТВИТЕЛЬНО что-то
-  // несут. Подсветка «просто потому, что курсор пролетел мимо» — это ровно
-  // тот шум, из-за которого в прежнем виде было не понять, где окажется
-  // карточка.
+  // Целится ли человек в ЭТОТ столбец. Подсветки у столбца больше нет
+  // вовсе — Кирилл 20.09.2026 попросил убрать «контуры и зонирование», и
+  // ответ на «куда встанет» дают расступившиеся соседи, — но знать это
+  // по-прежнему нужно: от этого зависит, раскрывать ли место под карточку
+  // из другого столбца.
   //
   // Считается по ЦЕЛИ, а не по собственному isOver: целью чаще оказывается
-  // карточка внутри столбца, а не столбец сам — и столбец, который при этом
-  // не подсвечен, говорит «сюда нельзя» ровно там, где можно.
+  // карточка внутри столбца, а не столбец сам.
   const aiming = over?.kind === "task-column" ? over.column === column : over?.kind === "task" ? over.column === column : false;
   const welcoming = aiming && (active?.kind === "task" || active?.kind === "idea");
   // Место, которое раскрывается под то, что несут из другого столбца.
@@ -51,7 +51,7 @@ export function TaskColumnBody({
   const showSlot = welcoming && (active?.kind === "idea" || (active?.kind === "task" && active.column !== column));
 
   return (
-    <div ref={setNodeRef} className={"task-column-body" + (welcoming ? " drag-over" : "") + (empty ? " is-empty" : "")}>
+    <div ref={setNodeRef} className={"task-column-body" + (empty ? " is-empty" : "")}>
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         {children}
       </SortableContext>

@@ -120,71 +120,76 @@ export default function SectionsModal({
   }
 
   return (
-    <Modal onClose={onClose} id="sectionsModal" className="team-modal">
-      <h2 id="sectionsTitle">Разделы</h2>
-      <p className="modal-note">
-        Правая кнопка по разделу в трекере заводит новую задачу с теми, кто перечислен здесь. Левая — отбирает задачи этого раздела.
-      </p>
+    <Modal onClose={onClose} id="sectionsModal">
+      {/* `.modal` — сама коробка окна; <dialog class="overlay"> это
+          только затемнённый фон с display:flex, и без обёртки заголовок,
+          строки и кнопки раскладывались по нему в строку. */}
+      <div className="modal">
+        <h2 id="sectionsTitle">Разделы</h2>
+        <p className="modal-note">
+          Правая кнопка по разделу в трекере заводит новую задачу с теми, кто перечислен здесь. Левая — отбирает задачи этого раздела.
+        </p>
 
-      {failed && <div className="ms-answer-error">{failed}</div>}
+        {failed && <div className="ms-answer-error">{failed}</div>}
 
-      {sorted.map((section) => {
-        const bound = links.forSection(section.id);
-        const open = openFor === section.id;
-        return (
-          <div key={section.id} className="section-row">
-            <div className="section-row-head">
-              <span className={"section-dot" + (section.kind === "personal" ? " personal" : "")} />
-              <span className="section-row-name">{section.name}</span>
-              <span className="section-row-count">
-                {bound.length ? `${bound.length} чел.` : "никого"}
-              </span>
-              <button type="button" className="btn btn-small" onClick={() => setOpenFor(open ? null : section.id)}>
-                {open ? "Свернуть" : "Ответственные"}
-              </button>
-              <button type="button" className="btn btn-small" onClick={() => void rename(section)}>
-                Название
-              </button>
-              <button type="button" className="btn btn-small" onClick={() => void changeKind(section)}>
-                {section.kind === "personal" ? "Личный" : "Рабочий"}
-              </button>
-              <button type="button" className="btn btn-small btn-danger" onClick={() => onDelete(section)}>
-                Удалить
-              </button>
-            </div>
-
-            {open && (
-              <div className="section-row-people">
-                {bound.map((row) => {
-                  const name = people.find((p) => p.id === row.assigneeId)?.name || "—";
-                  return (
-                    <span key={row.id} className="section-person">
-                      {name}
-                      <span className="section-person-role">{ROLE_LABEL[row.role].toLowerCase()}</span>
-                      <button
-                        type="button"
-                        className="section-person-x"
-                        title="Убрать из раздела"
-                        onClick={() => void links.remove(row.id)}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  );
-                })}
-                <button type="button" className="btn btn-small" onClick={() => void addPerson(section)}>
-                  <Icon name="users" size={14} /> Добавить
+        {sorted.map((section) => {
+          const bound = links.forSection(section.id);
+          const open = openFor === section.id;
+          return (
+            <div key={section.id} className="section-row">
+              <div className="section-row-head">
+                <span className={"section-dot" + (section.kind === "personal" ? " personal" : "")} />
+                <span className="section-row-name">{section.name}</span>
+                <span className="section-row-count">
+                  {bound.length ? `${bound.length} чел.` : "никого"}
+                </span>
+                <button type="button" className="btn btn-small" onClick={() => setOpenFor(open ? null : section.id)}>
+                  {open ? "Свернуть" : "Ответственные"}
+                </button>
+                <button type="button" className="btn btn-small" onClick={() => void rename(section)}>
+                  Название
+                </button>
+                <button type="button" className="btn btn-small" onClick={() => void changeKind(section)}>
+                  {section.kind === "personal" ? "Личный" : "Рабочий"}
+                </button>
+                <button type="button" className="btn btn-small btn-danger" onClick={() => onDelete(section)}>
+                  Удалить
                 </button>
               </div>
-            )}
-          </div>
-        );
-      })}
 
-      <div className="modal-actions">
-        <button className="btn" type="button" onClick={onClose}>
-          Закрыть
-        </button>
+              {open && (
+                <div className="section-row-people">
+                  {bound.map((row) => {
+                    const name = people.find((p) => p.id === row.assigneeId)?.name || "—";
+                    return (
+                      <span key={row.id} className="section-person">
+                        {name}
+                        <span className="section-person-role">{ROLE_LABEL[row.role].toLowerCase()}</span>
+                        <button
+                          type="button"
+                          className="section-person-x"
+                          title="Убрать из раздела"
+                          onClick={() => void links.remove(row.id)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  })}
+                  <button type="button" className="btn btn-small" onClick={() => void addPerson(section)}>
+                    <Icon name="users" size={14} /> Добавить
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="modal-actions">
+          <button className="btn" type="button" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
       </div>
     </Modal>
   );

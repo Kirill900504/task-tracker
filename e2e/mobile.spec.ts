@@ -50,9 +50,13 @@ test("tabs switch sections and a task can be created from the phone", async ({ p
   await page.click('[data-tab="tasks"]');
   // The filters are folded away — the list is what you came for.
   await expect(page.locator("#newTaskBtn")).toBeVisible();
-  await expect(page.locator("#filterAssignee")).toBeHidden();
+  // Фильтра по исполнителю в полосе больше нет — его заменила «Загрузка»
+  // (окно), а проверяется здесь само сворачивание: «Просрочено» стоит в
+  // полосе всегда и потому годится в свидетели лучше кнопки, которой нет,
+  // пока никому ничего не поручено.
+  await expect(page.locator("#filterOverdueBtn")).toBeHidden();
   await page.click("#mobileFiltersBtn");
-  await expect(page.locator("#filterAssignee")).toBeVisible();
+  await expect(page.locator("#filterOverdueBtn")).toBeVisible();
   await page.click("#mobileFiltersBtn");
 
   await page.click("#newTaskBtn");

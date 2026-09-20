@@ -25,13 +25,13 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { useSectionAssignees } from "@/hooks/useSectionAssignees";
 import { progressShort, taskStage } from "@/lib/taskProgress";
+import { peopleLoad } from "@/lib/peoplePanel";
 import type { useToasts } from "@/hooks/useToasts";
 import SectionTabs from "./SectionTabs";
 import SectionsModal from "./SectionsModal";
-import Dropdown from "./Dropdown";
+import LoadModal from "./LoadModal";
 import { useAsk } from "@/components/Ask";
 import { uid } from "@/lib/uid";
-import { sortNames } from "@/lib/peopleOrder";
 import Icon from "./Icon";
 import { isMine } from "@/lib/ownership";
 import { useAuthors } from "@/hooks/useAuthors";
@@ -135,6 +135,9 @@ export default function TasksPanel({
   const [sectionsOpen, setSectionsOpen] = useState(false);
   // Какой столбец доски показан на телефоне.
   const [mobileColumn, setMobileColumn] = useState<KanbanColumn>("new");
+  // Окно «Загрузка»: кто чем занят и у кого горит. Раньше стояло панелью в
+  // правой колонке (см. LoadModal — там же причина переезда).
+  const [loadOpen, setLoadOpen] = useState(false);
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
   const isMobile = useIsMobile();
   // Кто на задаче — один слой на всю панель: и карточки, и форма
@@ -229,6 +232,14 @@ export default function TasksPanel({
   // Есть ли вообще чужие поручения. Пока их нет, переключатель вида — три
   // кнопки, две из которых ничего не меняют.
   const sharedBoard = tasks.some((t) => !mine(t) || roleOn(t) !== "none");
+
+  // Загрузка людей — считается здесь, а не только в окне: от неё зависит,
+  // показывать ли вообще кнопку и какую цифру на ней писать. Цифра — это
+  // число тех, у кого есть о чём говорить (горит, молчит или ждёт
+  // приёмки), а не число людей: «14» на кнопке не новость, «2» — новость.
+  const load = useMemo(() => peopleLoad(tasks, assignees), [tasks, assignees]);
+  const peopleWithWork = load.length;
+  const hotPeople = load.filter((p) => p.overdue > 0 || p.silent > 0 || p.review > 0).length;
 
   const sectionById = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections]);
 
@@ -375,6 +386,11 @@ export default function TasksPanel({
   // работу. У каждого действия есть тот, кому оно позволено (см.
   // lib/kanban.moveBetween), и отказ говорится словами, а не молчанием.
   //
+  // И только вперёд: назад доска не ходит вовсе (там же, в moveBetween,
+  // написано почему). Возврат на доработку и открытие закрытой задачи
+  // остались кнопкой и галочкой в самой карточке — там, где спрашивают
+  // причину.
+  //
   // Отчёт и приёмка требуют комментария — правило трекера, а не прихоть
   // формы, — поэтому вместо мгновенной записи они открывают карточку на
   // нужном месте. Перетаскивание тут доводит до двери, а не проходит за
@@ -427,27 +443,13 @@ export default function TasksPanel({
       return;
     }
 
-    if (move.action === "reopen") {
-      // Вернуть закрытую в работу — единственный переход, который не
-      // требует ни слова: он ничего не сообщает людям, а только снимает
-      // галочку, которую сам же постановщик и поставил.
-      const before = dragged;
-      actions.saveTask({ ...dragged, status: "in_progress", lastCompletedOn: "", completedAt: "" });
-      toasts.showToast("Задача снова в работе", dragged.title, () => actions.saveTask(before));
-      return;
-    }
-
-    // «Сделал», «Принять работу», «Вернуть на доработку» — все три требуют
-    // комментария, и спрашивает его карточка. Открываем её: человек уже
-    // сказал, что хочет сделать, осталось сказать словами.
+    // «Сделал» и «Принять работу» требуют комментария, и спрашивает его
+    // карточка. Открываем её: человек уже сказал, что хочет сделать,
+    // осталось сказать словами.
     setModalState({ open: true, task: dragged });
     toasts.showToast(
-      move.action === "report" ? "Отчёт — словами" : move.action === "approve" ? "Приёмка — словами" : "Возврат — с причиной",
-      move.action === "report"
-        ? "Напишите, что сделано, в открывшейся карточке."
-        : move.action === "approve"
-          ? "Подтвердите приёмку в открывшейся карточке."
-          : "Напишите, что доделать, в открывшейся карточке.",
+      move.action === "report" ? "Отчёт — словами" : "Приёмка — словами",
+      move.action === "report" ? "Напишите, что сделано, в открывшейся карточке." : "Подтвердите приёмку в открывшейся карточке.",
     );
   }
 
@@ -587,17 +589,78 @@ export default function TasksPanel({
               </button>
             )}
             <div className="search-wrap" id="quickAddSlot" />
-            <Dropdown
-              id="filterAssignee"
-              className="toolbar-dd"
-              title="Фильтр по исполнителю"
-              value={filterAssignee}
-              onChange={onFilterAssigneeChange}
-              options={[
-                { value: "all", label: "Все исполнители" },
-                ...sortNames(assignees).map((a) => ({ value: a, label: a })),
-              ]}
-            />
+            {/* «Загрузка» вместо фильтра по исполнителю.
+
+                Слова Кирилла 20.09.2026: «фильтр по исполнителю получается
+                не нужен, если добавил блок загрузка». Он прав — это был
+                один и тот же вопрос, заданный дважды: список из
+                четырнадцати имён без единой цифры рядом и список тех же
+                людей с цифрами. Осталось второе, и оно же фильтрует.
+
+                Кнопки нет вовсе, пока поручать некому: пустое окно со
+                словами «никому ничего не поручено» — это кнопка, после
+                которой ничего не произошло. */}
+            {peopleWithWork > 0 && (
+              <span className={"load-pill" + (filterAssignee !== "all" ? " active" : "")}>
+                <button
+                  type="button"
+                  className="load-pill-main"
+                  id="loadBtn"
+                  title={filterAssignee === "all" ? "Кто чем занят" : `Показана только загрузка: ${filterAssignee}`}
+                  onClick={() => setLoadOpen(true)}
+                >
+                  <Icon name="users" size={14} /> {filterAssignee === "all" ? "Загрузка" : filterAssignee}
+                  {filterAssignee === "all" && hotPeople > 0 && <span className="filter-pill-count">{hotPeople}</span>}
+                </button>
+                {/* Снять фильтр — там же, где он виден. Иначе единственный
+                    путь обратно ко всей доске лежал бы через окно, а
+                    человек, забывший о фильтре, видел бы доску, на которой
+                    «пропали задачи». */}
+                {filterAssignee !== "all" && (
+                  <button type="button" className="load-pill-x" title="Показать задачи всех" onClick={() => onFilterAssigneeChange("all")}>
+                    <Icon name="close" size={12} />
+                  </button>
+                )}
+              </span>
+            )}
+            {/* Все / Мне / Я поручил.
+
+                Это ответ на вопрос Кирилла о том, как выделять задачи, где
+                он постановщик, «среди всего аврала задач, при условии что
+                там будут 14 человек работать». Не цветом: цвет на карточке
+                уже занят ролью и сроком, а третий смысл превратил бы доску
+                в светофор. «Я поручил» — это не свойство задачи, а режим
+                взгляда на неё, и место такому — переключатель, а не краска.
+
+                Порядок кнопок продиктован им же 20.09.2026 («ВСЕ МНЕ Я
+                ПОРУЧИЛ, именно в таком порядке»), и он логичен: первым
+                стоит то, что включено по умолчанию, а сужения — за ним.
+
+                Появляется только там, где работают вместе: пока поручает и
+                выполняет один человек, все три кнопки показывают одно и то
+                же. */}
+            {sharedBoard && (
+              <div className="view-switch" role="group" aria-label="Чьи задачи показывать">
+                {(
+                  [
+                    ["all", "Все"],
+                    ["mine", "Мне"],
+                    ["assigned", "Я поручил"],
+                  ] as [BoardView, string][]
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={"view-switch-btn" + (view === id ? " active" : "")}
+                    aria-pressed={view === id}
+                    onClick={() => setView(id)}
+                  >
+                    {label}
+                    {id === "assigned" && assignedOverdue > 0 && <span className="filter-pill-count">{assignedOverdue}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* Две кнопки вместо списка приоритетов и галочки.
                 Фильтр «Любой приоритет» открывали, чтобы найти «Высокий», —
                 но высокий приоритет и так виден на карточке цветом, а
@@ -614,40 +677,6 @@ export default function TasksPanel({
               <Icon name="warning" size={14} /> Просрочено
               {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
             </button>
-            {/* Мне / Я поручил / Все.
-
-                Это ответ на вопрос Кирилла о том, как выделять задачи, где
-                он постановщик, «среди всего аврала задач, при условии что
-                там будут 14 человек работать». Не цветом: цвет на карточке
-                уже занят ролью и сроком, а третий смысл превратил бы доску
-                в светофор. «Я поручил» — это не свойство задачи, а режим
-                взгляда на неё, и место такому — переключатель, а не краска.
-
-                Появляется только там, где работают вместе: пока поручает и
-                выполняет один человек, все три кнопки показывают одно и то
-                же. */}
-            {sharedBoard && (
-              <div className="view-switch" role="group" aria-label="Чьи задачи показывать">
-                {(
-                  [
-                    ["mine", "Мне"],
-                    ["assigned", "Я поручил"],
-                    ["all", "Все"],
-                  ] as [BoardView, string][]
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={"view-switch-btn" + (view === id ? " active" : "")}
-                    aria-pressed={view === id}
-                    onClick={() => setView(id)}
-                  >
-                    {label}
-                    {id === "assigned" && assignedOverdue > 0 && <span className="filter-pill-count">{assignedOverdue}</span>}
-                  </button>
-                ))}
-              </div>
-            )}
             <button
               type="button"
               className={"filter-pill done" + (showDone ? " active" : "")}
@@ -741,6 +770,16 @@ export default function TasksPanel({
           onClose={() => setSectionsOpen(false)}
           onSave={actions.saveSection}
           onDelete={(section) => void deleteSectionAsked(section)}
+        />
+      )}
+
+      {loadOpen && (
+        <LoadModal
+          tasks={tasks}
+          assignees={assignees}
+          selected={filterAssignee}
+          onSelect={onFilterAssigneeChange}
+          onClose={() => setLoadOpen(false)}
         />
       )}
 

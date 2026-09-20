@@ -101,18 +101,25 @@ describe("moveBetween", () => {
     expect(moveBetween("work", "review", executor)).toEqual({ action: "report" });
   });
 
-  it("постановщик принимает работу и возвращает её", () => {
+  it("отчитаться можно и минуя «В работе»: сделал раньше, чем нажал «Принял»", () => {
+    expect(moveBetween("new", "review", executor)).toEqual({ action: "report" });
+  });
+
+  it("постановщик принимает работу", () => {
     expect(moveBetween("review", "done", author)).toEqual({ action: "approve" });
-    expect(moveBetween("review", "work", author)).toEqual({ action: "return" });
   });
 
   it("минуя приёмку задачу не закрыть", () => {
     expect(moveBetween("work", "done", author)).toHaveProperty("refused");
   });
 
-  it("закрытую возвращает в работу только постановщик", () => {
-    expect(moveBetween("done", "work", author)).toEqual({ action: "reopen" });
-    expect(moveBetween("done", "work", executor)).toHaveProperty("refused");
+  // Доска ходит в одну сторону: всё, что назад, — отдельное событие с
+  // причиной, и делается оно кнопкой в карточке, а не движением руки.
+  it("назад не переносится ничего — ни постановщиком, ни исполнителем", () => {
+    expect(moveBetween("review", "work", author)).toHaveProperty("refused");
+    expect(moveBetween("done", "work", author)).toHaveProperty("refused");
+    expect(moveBetween("done", "review", author)).toHaveProperty("refused");
+    expect(moveBetween("review", "new", both)).toHaveProperty("refused");
   });
 
   it("в «Новые» ничего не возвращается", () => {

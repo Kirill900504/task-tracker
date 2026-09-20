@@ -38,7 +38,6 @@ import MobileHeader from "@/components/tracker/MobileHeader";
 import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
-import PeoplePanel from "@/components/tracker/PeoplePanel";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
@@ -526,9 +525,13 @@ export default function NewTracker() {
         // же самое списком и занимали высоту правой колонки. «Сегодня»
         // остался там, где он действительно нужен, — на телефоне,
         // отдельной вкладкой: там трёх столбцов нет вовсе.
-        peoplePanel: (
-          <PeoplePanel tasks={tasks} assignees={assignees} selected={filterAssignee} onSelect={setFilterAssignee} />
-        ),
+        //
+        // Панели «Загрузка» здесь тоже больше нет, по его же слову
+        // 20.09.2026: «а оттуда этот блок убери, он мешает». Список «у
+        // кого что горит» не смотрят постоянно — его открывают, когда
+        // задались вопросом, — и теперь он окно под кнопкой «Загрузка» в
+        // полосе над доской (LoadModal). Заодно он появился на телефоне,
+        // где правой колонки нет вовсе.
         ideasPanel: (
           <IdeasPanel
             myUserId={mineOnlyId}
