@@ -8,7 +8,7 @@ import type { PersonOption } from "@/hooks/useTaskParticipants";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
-import Icon from "./Icon";
+import PeoplePicker from "./PeoplePicker";
 
 // «Разделы» — одно окно на всё, что с ними делают.
 //
@@ -22,12 +22,6 @@ import Icon from "./Icon";
 // Всё окно целиком — админское (миграция 0036). Руководителю его не
 // открыть: кнопки, которая его открывает, у него нет, а база откажет в
 // любом случае.
-
-const ROLE_LABEL: Record<TaskParticipantRole, string> = {
-  executor: "Исполнитель",
-  coexecutor: "Соисполнитель",
-  watcher: "Наблюдатель",
-};
 
 export default function SectionsModal({
   sections,
@@ -58,6 +52,10 @@ export default function SectionsModal({
   const [failed, setFailed] = useState("");
 
   const sorted = [...sections].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  // Люди во всех списках трекера идут в одном порядке — по фамилии
+  // (`peopleOrder`), потому что имя у половины стоит впереди, а у половины
+  // позади, и «найди себя» в списке из четырнадцати стоит секунд.
+  const orderedPeople = sortByPeopleOrder(people, (p) => p.name);
 
   async function changeKind(section: Section) {
     const kind = await ask.choose({
@@ -73,35 +71,26 @@ export default function SectionsModal({
     onSave({ ...section, kind: kind === "personal" ? "personal" : "work" });
   }
 
-  async function addPerson(section: Section) {
-    const taken = new Set(links.forSection(section.id).map((r) => r.assigneeId));
-    const free = sortByPeopleOrder(
-      people.filter((p) => !taken.has(p.id)),
-      (p) => p.name,
-    );
-    if (!free.length) {
-      await ask.say({ title: "Все уже здесь", question: "В этом разделе уже перечислены все, кто есть в трекере." });
-      return;
-    }
-    const who = await ask.choose({
-      title: "Ответственный за раздел",
-      question: `Кого добавить в «${section.name}»?`,
-      options: free.slice(0, 12).map((p) => ({ value: p.id, label: p.name })),
-    });
-    if (!who) return;
-    const role = await ask.choose({
-      title: "Кем он будет",
-      question: "Как его подставлять в новую задачу по этому разделу?",
-      options: [
-        { value: "executor", label: "Исполнитель" },
-        { value: "coexecutor", label: "Соисполнитель" },
-        { value: "watcher", label: "Наблюдатель" },
-      ],
-    });
-    if (!role) return;
+  // Люди в разделе выбираются тем же полем, что и люди на задаче
+  // (`PeoplePicker`), и это починка, а не украшение. Прежний путь спрашивал
+  // окном: «кого добавить» списком кнопок и следом «кем он будет». Список
+  // был обрезан двенадцатью — при четырнадцати людях двое просто не
+  // показывались, без единого слова о том, что список неполон, и добавить
+  // их в раздел было нечем. Поле показывает всех сразу и отмечает уже
+  // выбранных их ролью, то есть на тот же вопрос отвечает целиком.
+  async function pick(section: Section, personId: string, role: TaskParticipantRole) {
     try {
       setFailed("");
-      await links.add(section.id, who, role as TaskParticipantRole, ownerId);
+      await links.add(section.id, personId, role, ownerId);
+    } catch (e) {
+      setFailed(e instanceof Error ? e.message : "Не получилось сохранить");
+    }
+  }
+
+  async function drop(rowId: string) {
+    try {
+      setFailed("");
+      await links.remove(rowId);
     } catch (e) {
       setFailed(e instanceof Error ? e.message : "Не получилось сохранить");
     }
@@ -159,26 +148,22 @@ export default function SectionsModal({
 
               {open && (
                 <div className="section-row-people">
-                  {bound.map((row) => {
-                    const name = people.find((p) => p.id === row.assigneeId)?.name || "—";
-                    return (
-                      <span key={row.id} className="section-person">
-                        {name}
-                        <span className="section-person-role">{ROLE_LABEL[row.role].toLowerCase()}</span>
-                        <button
-                          type="button"
-                          className="section-person-x"
-                          title="Убрать из раздела"
-                          onClick={() => void links.remove(row.id)}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    );
-                  })}
-                  <button type="button" className="btn btn-small" onClick={() => void addPerson(section)}>
-                    <Icon name="users" size={14} /> Добавить
-                  </button>
+                  <PeoplePicker
+                    people={orderedPeople}
+                    picked={bound.map((row) => ({
+                      id: row.assigneeId,
+                      name: people.find((p) => p.id === row.assigneeId)?.name || "—",
+                      role: row.role,
+                    }))}
+                    onPick={(person, role) => void pick(section, person.id, role)}
+                    onRemove={(person) => {
+                      const row = bound.find((r) => r.assigneeId === person.id);
+                      if (row) void drop(row.id);
+                    }}
+                    label={`Кто отвечает за «${section.name}»`}
+                    requireExecutor={false}
+                    hint="Этих людей трекер подставит в новую задачу по разделу, каждого с его ролью. Нажали второй раз — человек убран из раздела."
+                  />
                 </div>
               )}
             </div>

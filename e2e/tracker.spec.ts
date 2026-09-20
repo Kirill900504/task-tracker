@@ -1082,6 +1082,22 @@ test("левая кнопка по разделу заводит задачу, �
   const btnBox = (await row.getByRole("button", { name: "Удалить" }).boundingBox())!;
   expect(headBox.height).toBeLessThan(btnBox.height * 1.6);
 
+  // Ответственные за раздел — то же поле, что и люди на задаче, и в нём
+  // видны ВСЕ. Прежнее окно показывало первых двенадцать из списка, и двое
+  // последних для раздела просто не существовали: «когда пытаюсь привязать
+  // человека, показывает не всех людей». Поэтому проверяются именно те, кто
+  // стоит в хвосте списка.
+  await row.getByRole("button", { name: /^Люди/ }).click();
+  const grid = row.locator(".participant-grid");
+  await expect(grid.locator(".participant-chip", { hasText: "Оксана Нишкомаева" })).toBeVisible({ timeout: 20_000 });
+  await expect(grid.locator(".participant-chip", { hasText: "Сергей Титов" })).toBeVisible();
+
+  // И выбор доходит до базы: роль спрашивается тем же меню, что на задаче,
+  // а счётчик на кнопке — это уже сохранённая строка.
+  await grid.locator(".participant-chip", { hasText: "Оксана Нишкомаева" }).click();
+  await page.locator(".export-menu, .action-sheet").first().locator(".export-item", { hasText: "Наблюдатель" }).click();
+  await expect(row.getByRole("button", { name: /^Люди/ })).toContainText("1");
+
   // И удаление — там же, рядом.
   await row.getByRole("button", { name: "Удалить" }).click();
   await expect(page.locator(".ask-modal")).toBeVisible();

@@ -53,6 +53,9 @@ export default function PeoplePicker({
   onPick,
   onRemove,
   onAddPerson,
+  label = "Кто на задаче",
+  hint,
+  requireExecutor = true,
 }: {
   people: PersonOption[];
   picked: PickedPerson[];
@@ -61,6 +64,15 @@ export default function PeoplePicker({
   // «Человека нет в списке» — тот же вопрос, что раньше задавала кнопка «+»
   // рядом с выпадающим списком.
   onAddPerson?: () => void;
+  // Тот же вопрос задают в двух местах: кто на задаче и кто отвечает за
+  // раздел. Поле одно на оба — меняются только подпись, пояснение и то,
+  // обязателен ли исполнитель. Второй такой список писать нельзя: в этом
+  // проекте вторая копия расходилась с первой трижды, а здесь у первой
+  // копии был ещё и обрез на двенадцати людях, который просто прятал
+  // четырнадцатого.
+  label?: string;
+  hint?: string;
+  requireExecutor?: boolean;
 }) {
   const [menuFor, setMenuFor] = useState<{ person: PersonOption; anchor: DOMRect } | null>(null);
   const roleOf = (id: string) => picked.find((p) => p.id === id)?.role;
@@ -74,10 +86,12 @@ export default function PeoplePicker({
   return (
     <div className="field people-field">
       <label>
-        Кто на задаче
-        <span className={"field-req" + (hasExecutor ? " met" : "")}>
-          {hasExecutor ? "исполнитель назначен" : "нужен исполнитель"}
-        </span>
+        {label}
+        {requireExecutor && (
+          <span className={"field-req" + (hasExecutor ? " met" : "")}>
+            {hasExecutor ? "исполнитель назначен" : "нужен исполнитель"}
+          </span>
+        )}
       </label>
       <div className="participant-grid" id="fPeople">
         {people.map((person) => {
@@ -96,7 +110,7 @@ export default function PeoplePicker({
                 if (role) onRemove({ id: person.id, name: person.name, role });
                 else setMenuFor({ person, anchor: e.currentTarget.getBoundingClientRect() });
               }}
-              title={role ? `${person.name} — ${ROLE_LABEL[role]}. Нажмите, чтобы снять с задачи` : `Поставить на задачу: ${person.name}`}
+              title={role ? `${person.name} — ${ROLE_LABEL[role]}. Нажмите, чтобы снять` : `Выбрать: ${person.name}`}
             >
               {person.name}
               {role && role !== "executor" && <span className="chip-role"> · {ROLE_LABEL[role]}</span>}
@@ -111,8 +125,8 @@ export default function PeoplePicker({
       </div>
 
       <div className="tp-hint">
-        Нажмите на человека и выберите роль; нажали второй раз — он снят с задачи. Исполнителей может быть несколько —
-        задача закроется, когда отчитается каждый. Соисполнитель помогает, наблюдатель только видит.
+        {hint ||
+          "Нажмите на человека и выберите роль; нажали второй раз — он снят с задачи. Исполнителей может быть несколько — задача закроется, когда отчитается каждый. Соисполнитель помогает, наблюдатель только видит."}
       </div>
 
       {menuFor && (

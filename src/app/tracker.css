@@ -2374,18 +2374,11 @@
     .section-row-head{grid-template-columns:8px minmax(0,1fr);}
     .section-cell{grid-column:1 / -1; justify-content:flex-start; flex-wrap:wrap;}
   }
-  .section-row-people{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:9px; padding-left:16px;}
-  .section-person{
-    display:inline-flex; align-items:center; gap:6px;
-    background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:var(--radius-sm);
-    padding:4px 6px 4px 10px; font-size:12.5px; color:var(--ink);
-  }
-  .section-person-role{color:var(--ink-soft); font-size:11.5px;}
-  .section-person-x{
-    cursor:pointer; background:none; border:none; color:var(--ink-soft);
-    font-size:15px; line-height:1; padding:2px 4px; min-height:24px;
-  }
-  .section-person-x:hover{color:var(--high);}
+  /* Раскрытые люди раздела — то же поле, что и «Кто на задаче»
+     (`PeoplePicker`), поэтому своей разметки у них больше нет: отступ
+     слева говорит, что это про строку выше, и на этом всё. */
+  .section-row-people{margin-top:9px; padding-left:16px;}
+  .section-row-people .field{margin-bottom:0;}
 
   /* Иконка «завершённые» в шапке панели. Зелёная галочка, как просил
      Кирилл, и цифра рядом — сколько там лежит. Появляется только когда
