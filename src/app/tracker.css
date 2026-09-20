@@ -2338,16 +2338,26 @@
   }
   .section-dot{width:8px; height:8px; border-radius:50%; background:var(--section-work); flex:none;}
   .section-dot.personal{background:var(--section-personal);}
-  /* Поле, а не подпись: название правится на месте. Выглядит оно как
-     название и только под курсором и в фокусе показывает, что это поле, —
-     иначе строка из одиннадцати рамок читается как анкета. */
+  /* Поле, а не подпись: название правится на месте. Одиннадцать полных
+     рамок в столбик превратили бы список в анкету, поэтому в покое видно
+     только пунктирное подчёркивание — оно и говорит, что сюда пишут, —
+     а рамка и подложка появляются под курсором и в фокусе. Без этого
+     намёка поле неотличимо от текста, и возможность, о которой он
+     попросил, читалась бы как её отсутствие. */
   .section-row-name{
     min-width:0; width:100%; font-family:var(--sans); font-size:14px; font-weight:700; color:var(--ink);
-    background:transparent; border:1px solid transparent; border-radius:var(--radius-sm);
+    background:transparent; border:1px solid transparent; border-bottom:1px dashed var(--line);
+    border-radius:var(--radius-sm) var(--radius-sm) 0 0;
     padding:5px 8px; text-overflow:ellipsis;
   }
-  .section-row-name:hover{border-color:var(--line-soft); background:var(--paper-soft);}
-  .section-row-name:focus{outline:none; border-color:var(--accent); background:var(--paper-soft);}
+  .section-row-name:hover{
+    border-color:var(--line-soft); border-bottom-style:solid; background:var(--paper-soft);
+    border-radius:var(--radius-sm);
+  }
+  .section-row-name:focus{
+    outline:none; border-color:var(--accent); border-bottom-style:solid; background:var(--paper-soft);
+    border-radius:var(--radius-sm);
+  }
   .section-cell{display:flex; align-items:center; justify-content:flex-end; gap:6px;}
   .section-cell .btn-small{flex:none; min-height:30px; display:inline-flex; align-items:center; gap:6px;}
   /* Ширина у обеих постоянная: «Личный» короче «Рабочего», а число
