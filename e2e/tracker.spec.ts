@@ -809,6 +809,44 @@ test("an invite link appears under the person it was asked for", async ({ page }
 // что окно своё (page.on("dialog") не срабатывает ни разу) и что оно умеет
 // то, чего системное не умело, — отказываться от пустого обязательного
 // ответа, не закрываясь.
+// Щелчок мимо окна не выбрасывает заполненную форму.
+//
+// 20.09.2026: «почти заполнил задачу, случайно тыкнул мимо окна и потерял
+// всю заполненную форму, и всё по новой заполнять». Щелчок мимо — самое
+// лёгкое движение из возможных, а цена у него была наибольшей: десяток
+// полей исчезал без вопроса и без отмены. Закрывают «Отменой» и Escape,
+// оба нарочно; у окон, которые только показывают, щелчок мимо остался.
+test("щелчок мимо не закрывает форму, но закрывает окно-список", async ({ page }) => {
+  const title = `E2E щелчок мимо ${Date.now()}`;
+  await login(page);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+
+  // Форма задачи: набранное остаётся на месте.
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await page.mouse.click(40, 500);
+  await expect(page.locator("#fTitle")).toBeVisible();
+  await expect(page.locator("#fTitle")).toHaveValue(title);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#fTitle")).toHaveCount(0);
+
+  // Форма встречи — то же правило.
+  await page.click("#addMeetingBtn");
+  await page.fill("#mTitle", title);
+  await page.mouse.click(40, 500);
+  await expect(page.locator("#mTitle")).toHaveValue(title);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#mTitle")).toHaveCount(0);
+
+  // А окно, которое только показывает, закрывается щелчком мимо: терять
+  // там нечего. «Завершённые» у мыслей есть не всегда, поэтому берём
+  // «Команду» — она есть у владельца всегда.
+  await page.click("#teamBtn");
+  await expect(page.locator("#teamOverlay .modal")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#teamOverlay")).toHaveCount(0);
+});
+
 test("вопросы задаются окном трекера, а не браузера", async ({ page }) => {
   const title = `E2E окно ${Date.now()}`;
   let nativeDialogs = 0;
