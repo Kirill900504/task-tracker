@@ -1167,16 +1167,17 @@
     transition:background .12s ease, color .12s ease, border-color .12s ease;
   }
   .mini-cal-day:hover{background:var(--paper-soft); border-color:var(--accent); color:var(--accent);}
-  .mini-cal-day.other{color:var(--ink-soft); opacity:.4; font-weight:500;}
-  /* Сегодня — точкой под числом, а не рамкой: рамка вокруг «18» и рамка
-     выбранного дня выглядят одинаково, и «сегодня» читалось как «выбрано».
-     Точка не спорит ни с чем и остаётся видимой на выбранном дне. */
-  .mini-cal-day.today{position:relative; color:var(--accent); font-weight:800;}
-  .mini-cal-day.today::after{
-    content:""; position:absolute; left:50%; bottom:4px; transform:translateX(-50%);
-    width:4px; height:4px; border-radius:50%; background:currentColor;
-  }
-  .mini-cal-day.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:800;}
+  .mini-cal-day.other{color:#606366; opacity:1; font-weight:500;}
+  /* Сегодня — рамкой, выбранный день — заливкой, ровно как в календаре
+     слева (.cal-day.today / .cal-day.selected). Была точка под числом, и
+     заведена она была из осторожности — «рамка сегодня похожа на рамку
+     выбранного», — но выбранный день здесь не в рамке, а залит фирменным
+     цветом, так что спорить им не о чем. Просьба Кирилла 20.09.2026:
+     «чтобы календарь выглядел красиво, например, как на главной странице
+     в блоке календарь — чтобы однотипный был». Две сетки месяца на одном
+     экране обязаны выглядеть одной и той же вещью. */
+  .mini-cal-day.today{color:var(--accent); font-weight:700; border-color:var(--accent);}
+  .mini-cal-day.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:700; box-shadow:var(--shadow-1);}
   @media (max-width:768px){ .mini-cal{max-width:none;} .mini-cal-day{min-height:38px;} }
   /* Всплывающий вариант (в карточке задачи): строка с датой, календарь — по
      нажатию. Разворачивать его там всегда значило растянуть форму на
@@ -1187,13 +1188,37 @@
      так календарь может уйти на СВОЮ строку под кнопками, а не растянуть
      ту, в которой стоит триггер. */
   .mini-cal-wrap{display:contents;}
-  /* Своя строка во всю ширину — и в строке сроков задачи (flex), и в поле
-     даты встречи (обычный блок). */
-  /* order — чтобы календарь встал ПОСЛЕ всех кнопок строки, а не сразу за
-     своим триггером: иначе он разрезает ряд пополам и «Сегодня / Завтра /
-     Через неделю» уезжают под сетку месяца, где их уже не видно. */
-  .mini-cal-inline{flex-basis:100%; width:100%; margin-top:10px; order:99;}
-  .mini-cal-inline .mini-cal{max-width:340px;}
+  /* Шторка: затемнение на всё окно и карточка календаря по центру него.
+     Всплывает мягко — подложка проявляется, сама карточка приезжает
+     сверху на десяток пикселей и слегка подрастает. Это те самые «плавно
+     и мягко», о которых просил Кирилл, и одновременно единственный
+     способ не спорить с кнопками формы: они явно за шторкой, а не
+     наполовину под сеткой месяца.
+
+     position:fixed внутри <dialog> считается от окна браузера, а не от
+     формы, — поэтому шторку не обрежет ни прокрутка формы, ни её
+     overflow, и центр у неё всегда настоящий. */
+  .cal-sheet-scrim{
+    position:fixed; inset:0; z-index:120;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+    background:rgba(12,15,17,.6); backdrop-filter:blur(2px);
+    animation:cal-sheet-fade .16s ease-out;
+  }
+  .cal-sheet{animation:cal-sheet-in .2s cubic-bezier(.2,.9,.3,1);}
+  .cal-sheet .mini-cal{
+    width:min(360px, 92vw); max-width:none; padding:16px;
+    background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-2), var(--edge);
+  }
+  .cal-sheet .mini-cal-day{min-height:36px;}
+  @keyframes cal-sheet-fade{from{opacity:0;} to{opacity:1;}}
+  @keyframes cal-sheet-in{
+    from{opacity:0; transform:translateY(-10px) scale(.97);}
+    to{opacity:1; transform:none;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .cal-sheet-scrim, .cal-sheet{animation:none;}
+  }
   .mini-cal-trigger{
     padding:8px 14px; border:1px solid var(--line-soft); border-radius:999px;
     background:var(--paper-soft); color:var(--ink); cursor:pointer; box-shadow:var(--edge);
@@ -1202,7 +1227,12 @@
   }
   .mini-cal-trigger:hover, .mini-cal-trigger.open{border-color:var(--accent); color:var(--accent);}
   .mini-cal-trigger.open{background:var(--accent-soft);}
-  @media (max-width:768px){ .mini-cal-inline .mini-cal{max-width:none;} }
+  /* На телефоне шторка прижимается к краям и даёт дню палец целиком. */
+  @media (max-width:768px){
+    .cal-sheet-scrim{padding:12px;}
+    .cal-sheet .mini-cal{width:100%;}
+    .cal-sheet .mini-cal-day{min-height:40px;}
+  }
 
   /* Working-hours time picker: one tap per slot, wrapping over a few rows. */
   .time-grid{display:flex; flex-wrap:wrap; gap:5px;}
