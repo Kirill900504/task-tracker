@@ -72,10 +72,83 @@ export type PersonOption = { id: string; name: string };
 // сделанный в окне создания и ждущий своей строки (см. attachOnCreate).
 export type PendingParticipant = { assigneeId: string; name: string; role: TaskParticipantRole };
 
+
+// Кто на задачах — с прошлого запуска, чтобы доска не перекладывалась на
+// глазах.
+//
+// Столбец задачи выводится из строк участия (см. lib/kanban), а они
+// приезжают отдельным запросом — на полсекунды позже самих задач. Всё это
+// время доска показывает ПРАВДОПОДОБНУЮ НЕПРАВДУ: всё лежит в «Новых», а
+// потом, через секунду, карточки прыгают по местам. Замер 20.09.2026:
+// доска готова за 274 мс, а на своём месте карточка оказывается через
+// 1100. Кирилл это и назвал задержкой в работе трекера.
+//
+// Поэтому ответ прошлого запуска лежит рядом, под ключом своего auth-id
+// (его пишет useWorkspaceRole), и отдаётся первым кадром. Свежий приходит
+// следом и заменяет его — как и везде в трекере: сначала известное,
+// потом точное.
+const CACHE_KEY = "kkt_participants";
+
+type Cached = { userId: string; grouped: Record<string, Participant[]>; people: PersonOption[] };
+
+function myUserId(): string {
+  try {
+    const raw = localStorage.getItem("kkt_identity");
+    return raw ? JSON.parse(raw).userId || "" : "";
+  } catch {
+    return "";
+  }
+}
+
+function readCache(): Cached | null {
+  if (typeof localStorage === "undefined") return null;
+  const uid = myUserId();
+  if (!uid) return null;
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as Cached;
+    return saved.userId === uid ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+// Запись — не чаще раза в пару секунд. Сохранять тут есть что (сотня
+// килобайт на трекер с сотнями задач), а зовётся это на каждое движение
+// в таблице участия: нажал «Принял» один человек — перечитали все.
+// Сериализация в такой момент попадает ровно туда, где человек ждёт
+// отклика, а потерять последнюю секунду изменений не страшно: они
+// приедут сетью на следующем запуске.
+let lastWrite = 0;
+
+function writeCache(grouped: Record<string, Participant[]>, people: PersonOption[]) {
+  const uid = myUserId();
+  if (!uid) return;
+  const now = Date.now();
+  if (now - lastWrite < 2000) return;
+  lastWrite = now;
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ userId: uid, grouped, people }));
+  } catch {
+    /* переполнилось или приватный режим — просто следующий старт будет как раньше */
+  }
+}
+
 export function useTaskParticipants() {
-  const [byTask, setByTask] = useState<Record<string, Participant[]>>({});
-  const [people, setPeople] = useState<PersonOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Начальное значение — прошлый ответ, если он есть: см. readCache.
+  // Читается РОВНО один раз, в ленивом инициализаторе, и это не стиль.
+  //
+  // Строка `const cached = readCache()` в теле компонента выполняется на
+  // каждой перерисовке — то есть разбирает сотню килобайт JSON десятки раз
+  // в секунду, пока человек печатает. Экран от этого встаёт намертво:
+  // доска не появлялась и за пять секунд, а выглядело это как «трекер не
+  // открывается». Поймано своим же e2e через двадцать минут после того,
+  // как кэш был написан.
+  const [cached] = useState(() => (typeof window === "undefined" ? null : readCache()));
+  const [byTask, setByTask] = useState<Record<string, Participant[]>>(() => cached?.grouped ?? {});
+  const [people, setPeople] = useState<PersonOption[]>(() => cached?.people ?? []);
+  const [loading, setLoading] = useState(!cached);
 
   // Fetching and applying are split on purpose: the React compiler lint
   // refuses a function that sets state being called straight from an effect
@@ -129,6 +202,7 @@ export function useTaskParticipants() {
     const { grouped, people: list } = await fetchAll();
     setByTask(grouped);
     setPeople(list);
+    writeCache(grouped, list);
     setLoading(false);
   }, [fetchAll]);
 
@@ -138,6 +212,7 @@ export function useTaskParticipants() {
       if (cancelled) return;
       setByTask(grouped);
       setPeople(list);
+      writeCache(grouped, list);
       setLoading(false);
     });
 
@@ -164,6 +239,7 @@ export function useTaskParticipants() {
           if (cancelled) return;
           setByTask(grouped);
           setPeople(list);
+          writeCache(grouped, list);
         });
       })
       .subscribe();
