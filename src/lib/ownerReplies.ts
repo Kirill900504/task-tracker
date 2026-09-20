@@ -7,6 +7,7 @@ import { ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNa
 import { applyReview } from "@/lib/reviewWork";
 import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
+import { recordEvent } from "@/lib/itemHistory";
 
 // Что происходит, когда владелец нажимает кнопку.
 //
@@ -318,6 +319,15 @@ export async function handleOwnerCallback(
     if (!next) return { toast: "Не получилось посчитать дату" };
     const { error } = await admin.from("tasks").update({ deadline: next }).eq("id", action.id);
     if (error) return { toast: "Не получилось сохранить" };
+    // Тот же след, что и у переноса срока из трекера. Без него история
+    // задачи зависит от того, откуда нажали кнопку, — а спрашивают у неё
+    // одно и то же: сколько раз эту задачу двигали и когда.
+    await recordEvent(admin, {
+      userId,
+      kind: "task",
+      itemId: action.id,
+      text: `📅 Срок ${task.deadline ? "перенесён с " + fmtDate(task.deadline) + " на " : "поставлен на "}${fmtDate(next)}`,
+    });
     return {
       toast: "Срок продлён",
       rewriteTo: `📅 Срок «${task.title}» — до ${fmtDate(next)}.`,
@@ -477,7 +487,7 @@ export async function handleOwnerCallback(
   }
 
   if (action.action === "nwho" && action.kind === "task") {
-    const { data } = await admin.from("assignees").select("name").eq("id", action.id).maybeSingle();
+    const { data } = await admin.from("assignees").select("name").eq("id", action.id).eq("user_id", userId).maybeSingle();
     const name = (data as { name: string } | null)?.name;
     if (!name) return { toast: "Этого человека больше нет" };
     return {
