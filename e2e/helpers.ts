@@ -92,3 +92,29 @@ export async function dragOnto(page: Page, source: Locator, target: Locator) {
 export function dayCell(page: Page, day: number): Locator {
   return page.locator(`.cal-day:not(.other-month):text-is("${day}")`).first();
 }
+
+// Дождаться, пока элемент перестанет ездить, и отдать его прямоугольник.
+//
+// Нужно там, где по элементу СНАЧАЛА жмут, а потом ведут мышь: между
+// замером и нажатием страница живёт своей жизнью — приезжают задачи,
+// растут столбцы, появляется полоса «Загрузка», — и кнопка успевает
+// съехать на десяток пикселей вниз. Нажатие тогда приходится мимо,
+// перетаскивание не начинается вовсе, а тест сообщает, что порядок не
+// изменился: правда, но не та, которую он проверял. В одиночном прогоне
+// этого почти не бывает (страница пустая), в общем — бывает постоянно,
+// и выглядит как случайность.
+//
+// Playwright умеет ждать «стабильности» сам, но только внутри своих
+// действий (click, hover): между двумя нашими вызовами эта гарантия не
+// живёт. Поэтому ждём явно — два одинаковых замера подряд.
+export async function settled(locator: Locator, tries = 20): Promise<{ x: number; y: number; width: number; height: number }> {
+  let prev = await locator.boundingBox();
+  for (let i = 0; i < tries; i++) {
+    await locator.page().waitForTimeout(100);
+    const now = await locator.boundingBox();
+    if (!now) throw new Error('элемент исчез, пока ждали, когда он остановится');
+    if (prev && Math.abs(prev.x - now.x) < 1 && Math.abs(prev.y - now.y) < 1) return now;
+    prev = now;
+  }
+  throw new Error('элемент так и не перестал двигаться');
+}

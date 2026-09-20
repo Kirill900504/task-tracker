@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
-import { dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor } from "./helpers";
+import { dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, settled } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // The one smoke test covering the actual "Definition of Done" checklist
@@ -986,16 +986,14 @@ test("разделы переставляются перетаскиванием
   await expect(page.locator("#sectionTabs .section-tab", { hasText: `Гамма${stamp}` })).toBeVisible({ timeout: 20_000 });
 
   const src = page.locator("#sectionTabs .section-tab", { hasText: `Гамма${stamp}` });
-  // Наводимся через hover, а не movем по снятым заранее координатам:
-  // hover сам дожидается, пока кнопка перестанет ездить. В общем прогоне
-  // страница живая — приезжают задачи, столбцы растут, полоса разделов
-  // съезжает вниз, — и прямоугольник, снятый секундой раньше, к моменту
-  // нажатия указывает мимо. Тогда нажатие приходится на пустоту, перенос
-  // не начинается вовсе, и тест сообщает «порядок не изменился», хотя
-  // менять его никто и не пробовал.
-  await src.hover();
+  // Сначала дождаться, пока кнопка перестанет ездить, и только потом
+  // браться за неё: в общем прогоне страница живая — приезжают задачи,
+  // растут столбцы, появляется полоса «Загрузка», — и между замером и
+  // нажатием кнопка успевает съехать. Нажатие тогда приходится мимо,
+  // перенос не начинается вовсе (см. settled в helpers).
+  const a = await settled(src);
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
-  const a = (await src.boundingBox())!;
   // Порог в четыре пикселя — сначала преодолеть его, и только потом
   // целиться: до него движение не считается переносом вовсе.
   await page.mouse.move(a.x + a.width / 2 - 10, a.y + a.height / 2, { steps: 4 });
