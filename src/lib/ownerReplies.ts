@@ -3,7 +3,7 @@ import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { encodeCallback, type CallbackAction } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
 import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
-import { ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, type OwnerReply } from "@/lib/ownerQueries";
+import { ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, personReply, type OwnerReply } from "@/lib/ownerQueries";
 import { applyReview } from "@/lib/reviewWork";
 import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
@@ -359,6 +359,25 @@ export async function handleOwnerCallback(
       toast: "Что доделать?",
       askReturn: { taskId: task.id, title: task.title },
       say: `↩ «${task.title}»\n\nНапишите следующим сообщением, что именно доделать, — отправлю исполнителям.`,
+    };
+  }
+
+  // ——— Человек: что на нём и что ему ещё поручить.
+  if (action.action === "oper" && action.kind === "task") {
+    const reply = await personReply(admin, userId, action.id, today);
+    return { toast: "Открываю", say: reply.text, sayButtons: reply.buttons };
+  }
+
+  // «Поручить ему» — тот же мастер, но человек уже выбран: спрашиваем
+  // сразу, что поручить, и следом на когда.
+  if (action.action === "npers" && action.kind === "task") {
+    const { data } = await admin.from("assignees").select("name").eq("id", action.id).eq("user_id", userId).maybeSingle();
+    const name = (data as { name: string } | null)?.name;
+    if (!name) return { toast: "Этого человека больше нет" };
+    return {
+      toast: name,
+      say: `➕ Что поручить: ${name}? Напишите или надиктуйте.`,
+      setPending: { kind: "new_task", stage: "title", people: [{ name, role: "executor" }] },
     };
   }
 

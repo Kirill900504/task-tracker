@@ -157,7 +157,7 @@ function taskList(title: string, tasks: OwnerTaskRow[], today: string, empty: st
 
 // Кто чем занят — тот же вопрос, что и панель «Загрузка» в трекере, и тот
 // же ответ: строка на человека, у которого есть о чём сказать.
-export function peopleLoadReply(tasks: OwnerTaskRow[], today: string): OwnerReply {
+export function peopleLoadReply(tasks: OwnerTaskRow[], today: string, ids: Record<string, string> = {}): OwnerReply {
   const byName = new Map<string, { open: number; overdue: number; review: number }>();
   for (const t of tasks) {
     const name = (t.assignee || "").trim();
@@ -172,16 +172,21 @@ export function peopleLoadReply(tasks: OwnerTaskRow[], today: string): OwnerRepl
   }
   if (!byName.size) return { text: "Никому ничего не поручено.", buttons: ownerNav() };
 
-  const lines = [...byName.entries()]
-    .sort((a, b) => b[1].overdue - a[1].overdue || b[1].open - a[1].open)
-    .map(([name, r]) => {
-      const bits: string[] = [];
-      if (r.overdue) bits.push(`⚠ ${r.overdue} просрочено`);
-      if (r.review) bits.push(`🔍 ${r.review} на приёмке`);
-      if (r.open) bits.push(`${r.open} в работе`);
-      return `${name}\n   ${bits.join(" · ")}`;
-    });
-  return { text: `👥 Загрузка:\n\n${lines.join("\n")}`, buttons: ownerNav() };
+  const sorted = [...byName.entries()].sort((a, b) => b[1].overdue - a[1].overdue || b[1].open - a[1].open);
+  const lines = sorted.map(([name, r]) => {
+    const bits: string[] = [];
+    if (r.overdue) bits.push(`⚠ ${r.overdue} просрочено`);
+    if (r.review) bits.push(`🔍 ${r.review} на приёмке`);
+    if (r.open) bits.push(`${r.open} в работе`);
+    return `${name}\n   ${bits.join(" · ")}`;
+  });
+  // Имя — кнопка: «а что там у Игоря» задаётся сразу после того, как
+  // увидел цифру напротив него, и ответ должен быть на расстоянии одного
+  // нажатия, а не поиска в списке задач.
+  const rows = sorted
+    .filter(([name]) => ids[name])
+    .map(([name]) => [{ text: short(name, 24), data: encodeCallback("task", "oper", ids[name]) }]);
+  return { text: `👥 Загрузка:\n\n${lines.join("\n")}`, buttons: [...rows, ...ownerNav()] };
 }
 
 export async function ownerListReply(
@@ -190,7 +195,14 @@ export async function ownerListReply(
   which: string,
   today: string,
 ): Promise<OwnerReply> {
-  if (which === "people") return peopleLoadReply(await ownerTasks(admin, userId), today);
+  if (which === "people") {
+    // Идентификаторы нужны кнопкам: в списке задач человек назван именем,
+    // а открывается его карточка по строке в списке людей.
+    const { data: people } = await admin.from("assignees").select("id, name").eq("user_id", userId);
+    const ids: Record<string, string> = {};
+    for (const person of ((people || []) as { id: string; name: string }[])) ids[person.name] = person.id;
+    return peopleLoadReply(await ownerTasks(admin, userId), today, ids);
+  }
 
   const tasks = await ownerTasks(admin, userId);
 
@@ -239,6 +251,22 @@ export async function ownerIdeasReply(admin: SupabaseClient, userId: string): Pr
     buttons: [
       ...ideas.map((i) => [{ text: `${i.important ? "🚩 " : ""}${short(i.text, 26)}`, data: encodeCallback("idea", "ishow", i.id) }]),
       ...ownerNav(),
+    ],
+  };
+}
+
+export async function personReply(admin: SupabaseClient, userId: string, assigneeId: string, today: string): Promise<OwnerReply> {
+  const { data } = await admin.from("assignees").select("name").eq("id", assigneeId).eq("user_id", userId).maybeSingle();
+  const name = (data as { name: string } | null)?.name;
+  if (!name) return { text: "Этого человека больше нет в списке.", buttons: ownerNav() };
+
+  const mine = (await ownerTasks(admin, userId)).filter((t) => (t.assignee || "").trim() === name);
+  const reply = taskList(`📋 ${name}`, mine, today, `За ${name} сейчас ничего не числится.`);
+  return {
+    text: reply.text,
+    buttons: [
+      [{ text: "➕ Поручить ему", data: encodeCallback("task", "npers", assigneeId) }],
+      ...(reply.buttons || []),
     ],
   };
 }

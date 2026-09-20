@@ -18,7 +18,7 @@ import { attachExecutors, attachMeetingParticipants, assignNote } from "@/lib/as
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 import { newTaskRow } from "@/lib/newTask";
 import { ownerListReply, ownerMeetingsReply, ownerMenu } from "@/lib/ownerQueries";
-import { whoButtons, type NewTaskPending } from "@/lib/ownerNewTask";
+import { whenButtons, whoButtons, type NewTaskPending } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
 
@@ -590,6 +590,17 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       const title = trimmed.slice(0, 200);
       if (!title) {
         await say(ctx, "Пустое название — не задача. Напишите, что поручить.");
+        return;
+      }
+      // Человек мог быть выбран заранее — «Поручить ему» из его карточки.
+      // Тогда шаг «кому» уже пройден, и спрашивать его второй раз значит
+      // переспрашивать то, что человек только что нажал.
+      const chosen = (waiting as unknown as { people?: { name: string; role: "executor" | "coexecutor" | "watcher" }[] }).people;
+      if (chosen?.length) {
+        await remember(ctx, { pending_action: { kind: "new_task", stage: "when", title, people: chosen } });
+        await ctx.transport.send(ctx.chatId, `«${title}» — ${chosen.map((p) => p.name).join(", ")}. На когда?`, {
+          buttons: whenButtons(),
+        });
         return;
       }
       await remember(ctx, { pending_action: { kind: "new_task", stage: "who", title } });
