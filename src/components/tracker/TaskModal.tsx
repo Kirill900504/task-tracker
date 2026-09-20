@@ -61,7 +61,6 @@ function emptyForm(task: Task | null, prefill?: TaskPrefill) {
     desc: task?.desc ?? prefill?.desc ?? "",
     assignee: task?.assignee ?? prefill?.assignee ?? "",
     sectionId: task?.sectionId ?? prefill?.sectionId ?? "",
-    priority: task?.priority ?? prefill?.priority ?? "med",
     term: task?.term ?? "short",
     deadline: task?.deadline ?? prefill?.deadline ?? "",
     recur: task?.recur ?? "none",
@@ -96,6 +95,7 @@ export default function TaskModal({
   onRejectReschedule,
   onPersonAdded,
   canEdit = true,
+  isAdmin = true,
   myAssigneeId = "",
   onAcceptWork,
   onReportWork,
@@ -137,6 +137,14 @@ export default function TaskModal({
   // Что остаётся у чужой задачи: прочитать, написать в обсуждение — и
   // ответить по ней, если она поручена тебе (см. TaskAnswer ниже).
   canEdit?: boolean;
+  // Справочники трекера — люди и разделы — заводит администратор, и
+  // только он. Слова Кирилла 20.09.2026: «кнопки с возможностью добавить
+  // раздел или человека должны быть только у меня, как у администратора,
+  // у остальных они должны быть скрыты». Это та же граница, что у строки
+  // разделов под доской (SectionTabs.canEdit) и у «Команды»: список людей
+  // общий на всё пространство, и человек, заведённый кем угодно, появится
+  // у всех четырнадцати.
+  isAdmin?: boolean;
   // Моя строка в списке людей. По ней карточка находит, стою ли я на этой
   // задаче и чего от меня ждут (см. lib/ownership.myAssigneeId).
   myAssigneeId?: string;
@@ -270,7 +278,9 @@ export default function TaskModal({
       desc: form.desc.trim(),
       assignee: isEditing ? form.assignee : primary?.name || "",
       sectionId: form.sectionId,
-      priority: form.priority as Task["priority"],
+      // Приоритета в форме больше нет (см. ниже): у заведённой задачи
+      // сохраняется то, что в ней уже стоит, у новой — обычный.
+      priority: task?.priority ?? "med",
       term: form.term as Task["term"],
       status: task?.status ?? "in_progress",
       deadline: form.deadline,
@@ -430,7 +440,7 @@ export default function TaskModal({
   );
 
   return (
-    <Modal id="overlay" onClose={onClose}>
+    <Modal id="overlay" onClose={onClose} dismissOnBackdrop={false}>
       <div className="modal">
         {/* Заведённая задача — не черновик.
 
@@ -528,7 +538,7 @@ export default function TaskModal({
             picked={picked}
             onPick={pickPerson}
             onRemove={removePerson}
-            onAddPerson={() => void handleAddAssignee()}
+            onAddPerson={isAdmin ? () => void handleAddAssignee() : undefined}
           />
         )}
 
@@ -573,16 +583,22 @@ export default function TaskModal({
             onSelect={(id) => setForm((f) => ({ ...f, sectionId: id }))}
             extra={
               <>
-                <button
-                  type="button"
-                  className="participant-chip chip-add"
-                  id="addSectionBtn"
-                  title="Добавить раздел"
-                  onClick={() => void handleAddSection()}
-                >
-                  + раздел
-                </button>
-                {form.sectionId && (
+                {/* Завести и удалить раздел может только администратор:
+                    разделы — структура пространства, общая на всех, и
+                    база откажет остальным (миграция 0031). Кнопка,
+                    ведущая к молчаливому отказу, хуже отсутствующей. */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="participant-chip chip-add"
+                    id="addSectionBtn"
+                    title="Добавить раздел"
+                    onClick={() => void handleAddSection()}
+                  >
+                    + раздел
+                  </button>
+                )}
+                {isAdmin && form.sectionId && (
                   <button
                     type="button"
                     className="participant-chip chip-del"
@@ -598,30 +614,17 @@ export default function TaskModal({
           />
         </div>
 
-        <div className="row2">
-          <div className="field">
-            <label>Приоритет</label>
-            <ChipChoice
-              id="fPriority"
-              value={form.priority}
-              // Средний слева, высокий справа: обычное — первым, исключение —
-              // вторым. Так просил Кирилл, и так же читается срочность рядом.
-              options={[
-                { value: "med", label: "Средний" },
-                { value: "high", label: "Высокий" },
-              ]}
-              onSelect={(v) => setForm((f) => ({ ...f, priority: v as Task["priority"] }))}
-            />
-          </div>
-          {/* Поля «Срочность» здесь больше нет. Слова Кирилла 19.09.2026:
-              «долгосрочные и краткосрочные задачи соединить просто в
-              „Задачи“, критерий краткосрочности или долгосрочности вообще
-              удали». Он прав и по сути: срочность выставлялась руками,
-              задача с ней жила месяцами, и в итоге столбец говорил не о
-              работе, а о том, в каком настроении её заводили. Где задача
-              сейчас — теперь видно по доске, а это выводится из дела, а не
-              из ярлыка (lib/kanban). */}
-        </div>
+        {/* Ни «Приоритета», ни «Срочности» здесь больше нет — оба поля
+            ушли по одной и той же причине и по прямым словам Кирилла:
+            «долгосрочные и краткосрочные задачи соединить просто в
+            „Задачи“, критерий краткосрочности или долгосрочности вообще
+            удали» (19.09.2026) и «удали везде приоритетности, они не
+            нужны» (20.09.2026). Оба выставлялись руками при заведении и
+            дальше жили сами по себе: задача со «средним» приоритетом
+            лежала месяцами рядом с «высоким», и слово говорило не о деле,
+            а о настроении, в котором его записали. Что горит — отвечает
+            срок, где задача сейчас — доска, а она выводится из работы
+            (lib/kanban). */}
 
         {deadlineField}
 
@@ -764,7 +767,7 @@ export default function TaskModal({
                 className="btn"
                 id="sendTaskBtn"
                 type="button"
-                title="Отправить задачу коллеге в мессенджер"
+                title="Отправить задачу участнику в мессенджер"
                 onClick={(e) => setSendAt(e.currentTarget.getBoundingClientRect())}
               >
                 <Icon name="send" size={15} /> Отправить

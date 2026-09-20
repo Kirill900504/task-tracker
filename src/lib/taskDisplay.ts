@@ -1,6 +1,6 @@
 // Pure task-list display logic, ported from legacy-tracker.js's client-side
 // recurrence/sort/label helpers (isDueToday, isTaskDueOnDate, isOverdue,
-// isDueTodayHighlight, mostRecentOccurrence, rankOf/sortFn, priorityLabel/
+// isDueTodayHighlight, mostRecentOccurrence, rankOf/sortFn,
 // Class, recurLabel). Deliberately NOT the same functions as
 // src/lib/taskLogic.ts — those are the server's Moscow-fixed-offset mirror
 // used by the reminders cron; this file is the browser's local-time version
@@ -139,13 +139,6 @@ export function isDueTodayHighlight(task: Task, now: Date = new Date()): boolean
   return isDueToday(task, now);
 }
 
-export function priorityLabel(p: Task["priority"]): string {
-  return p === "high" ? "Высокий" : "Средний";
-}
-export function priorityClass(p: Task["priority"]): string {
-  return p === "high" ? "pill-high" : "pill-med";
-}
-
 export function recurLabel(t: Task): string {
   if (t.recur === "none") return "";
   if (t.recur === "daily") return "🔁 Ежедневно";
@@ -177,7 +170,12 @@ export function rankOf(t: Task, now: Date = new Date()): number {
 
 // Manual drag order always wins (once the user has ever dragged anything in
 // a column); otherwise sorted by urgency group, then deadline, then
-// priority, then insertion order (id) as a stable tie-break.
+// insertion order (id) as a stable tie-break.
+//
+// Приоритета в этом списке больше нет: поле ушло из трекера целиком
+// (20.09.2026, «удали везде приоритетности»), и сортировать по значению,
+// которого никто не задаёт, значит менять порядок задач по данным
+// многолетней давности.
 export function taskSortFn(a: Task, b: Task, now: Date = new Date()): number {
   const am = a.manualOrder != null;
   const bm = b.manualOrder != null;
@@ -194,7 +192,6 @@ export function taskSortFn(a: Task, b: Task, now: Date = new Date()): number {
     if (ad !== bd) return ad < bd ? -1 : 1;
   }
 
-  if (a.priority !== b.priority) return a.priority === "high" ? -1 : 1;
   if (a.id !== b.id) return a.id < b.id ? -1 : 1;
   return 0;
 }

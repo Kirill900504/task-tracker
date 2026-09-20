@@ -189,7 +189,12 @@ export default function AskProvider({ children }: { children: ReactNode }) {
       {pending &&
         typeof document !== "undefined" &&
         (
-          <Modal variant="ask-overlay" onClose={cancel}>
+          // Вопрос с полем ввода щелчком мимо не отменяется: в него пишут —
+          // отчёт, причину, результат, — и потерять написанное движением
+          // руки здесь так же обидно, как в форме задачи (см.
+          // dismissOnBackdrop в Modal.tsx). У «да/нет» и у выбора терять
+          // нечего, там щелчок мимо остаётся отменой.
+          <Modal variant="ask-overlay" onClose={cancel} dismissOnBackdrop={pending.kind !== "ask"}>
             <div className="modal ask-modal">
               <h2>{pending.title || defaultTitle(pending.kind)}</h2>
               <p className="ask-question">{pending.question}</p>

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { me as whoAmI } from "@/lib/me";
 
 // Задача и встреча, выросшая из неё.
 //
@@ -15,8 +16,10 @@ export async function linkTaskAndMeeting(
   when: string,
 ): Promise<void> {
   const db = createClient();
-  const { data: me } = await db.auth.getUser();
-  const author = me?.user?.id || null;
+  // Кто я — из сессии, а не запросом в сеть (см. lib/me.ts): сохранение
+  // встречи и так делает несколько обращений к облаку, и лишний круг
+  // здесь — это те самые доли секунды между «Сохранить» и экраном.
+  const author = (await whoAmI()).userId || null;
 
   const rows = [
     {

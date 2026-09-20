@@ -17,6 +17,7 @@ export default function TodayScreen({
   meetings,
   sections,
   onToggleTask,
+  canCompleteTask,
   onOpenTask,
   onOpenMeeting,
   onGoToTasks,
@@ -26,6 +27,10 @@ export default function TodayScreen({
   meetings: Meeting[];
   sections: Section[];
   onToggleTask: (task: Task) => void;
+  // Закрыть задачу галочкой может только тот, кто её поставил, — то же
+  // правило, что и на доске (см. TaskCard.canComplete). Исполнителю здесь
+  // остаётся открыть карточку и ответить в ней.
+  canCompleteTask?: (task: Task) => boolean;
   onOpenTask: (task: Task) => void;
   onOpenMeeting: (meeting: Meeting) => void;
   // Необязателен: на телефоне это переход на вкладку «Задачи», а на
@@ -38,7 +43,7 @@ export default function TodayScreen({
   // Sending straight from the first screen: what you are about to miss is
   // exactly what you most often want to hand to someone.
   const [sendTask, setSendTask] = useState<Task | null>(null);
-  const sendMenuFor = (task: Task) => [{ id: "send", label: "✈ Отправить коллеге", onSelect: () => setSendTask(task) }];
+  const sendMenuFor = (task: Task) => [{ id: "send", label: "✈ Отправить участнику", onSelect: () => setSendTask(task) }];
   const data = buildToday(tasks, meetings);
   const sectionOf = (t: Task) => sections.find((s) => s.id === t.sectionId) ?? null;
   const nothing = !data.overdue.length && !data.dueToday.length && !data.meetingsToday.length && !data.meetingsTomorrow.length;
@@ -69,6 +74,7 @@ export default function TodayScreen({
               task={task}
               section={sectionOf(task)}
               onToggleDone={() => onToggleTask(task)}
+              canComplete={canCompleteTask ? canCompleteTask(task) : true}
               onOpen={() => onOpenTask(task)}
               menuItems={sendMenuFor(task)}
             />
@@ -85,6 +91,7 @@ export default function TodayScreen({
               task={task}
               section={sectionOf(task)}
               onToggleDone={() => onToggleTask(task)}
+              canComplete={canCompleteTask ? canCompleteTask(task) : true}
               onOpen={() => onOpenTask(task)}
               menuItems={sendMenuFor(task)}
             />

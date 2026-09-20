@@ -325,7 +325,6 @@
   /* Точка загруженности — крупнее и ближе к цифре: она отвечает на
      «что в этот день», и увидеть её надо, не приглядываясь. */
   .cal-dot{width:5px; height:5px; border-radius:50%; background:var(--med); display:inline-block; margin-top:1px;}
-  .cal-dot.high{background:var(--high);}
   .cal-day.drag-over{border-color:var(--today); background:var(--today-bg);}
   .cal-filter-note{display:flex; align-items:center; gap:8px; margin-top:7px; font-size:12px; color:var(--ink-soft); flex-wrap:wrap;}
 
@@ -474,25 +473,32 @@
      рядом: снятие фильтра относится к нему одному, и стоять оно должно
      там же, где видно, что фильтр включён. Пока фильтра нет, крестика
      нет тоже — и пилюля неотличима от соседних. */
+  /* Ширина у пилюли постоянная, и это правило, а не вкус: внутри неё
+     текст меняется («Загрузка» → имя человека) и появляется крестик, то
+     есть при каждом выборе полоса кнопок справа уезжала бы. Слова Кирилла
+     20.09.2026: «не хочу, чтобы нажатие одной кнопки двигало другие
+     кнопки или разделы». Поэтому ширина задана, длинное имя обрезается
+     многоточием, а место под крестик зарезервировано всегда. */
   .load-pill{
-    display:inline-flex; align-items:center; border:1px solid var(--line-soft); border-radius:999px;
+    position:relative; display:inline-flex; align-items:center;
+    width:164px; flex:none; border:1px solid var(--line-soft); border-radius:999px;
     background:var(--paper-soft); box-shadow:var(--edge); overflow:hidden;
     transition:border-color .15s ease, background .15s ease;
   }
   .load-pill:hover{border-color:var(--ink-soft);}
   .load-pill.active{background:var(--accent-soft); border-color:var(--accent);}
   .load-pill-main{
-    display:inline-flex; align-items:center; gap:6px; min-height:34px;
-    padding:8px 14px; border:none; background:none; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px; min-height:34px; width:100%;
+    padding:8px 30px 8px 14px; border:none; background:none; cursor:pointer;
     font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
-    color:var(--ink-soft); max-width:220px; overflow:hidden; text-overflow:ellipsis;
+    color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis;
   }
   .load-pill:hover .load-pill-main{color:var(--ink);}
-  .load-pill.active .load-pill-main{color:var(--accent); padding-right:6px;}
+  .load-pill.active .load-pill-main{color:var(--accent);}
   .load-pill-x{
+    position:absolute; right:0; top:0; bottom:0;
     display:inline-flex; align-items:center; justify-content:center;
-    min-width:30px; min-height:34px; padding:0 10px 0 4px;
-    border:none; background:none; cursor:pointer; color:var(--ink-soft);
+    width:30px; border:none; background:none; cursor:pointer; color:var(--ink-soft);
   }
   .load-pill-x:hover{color:var(--high);}
 
@@ -619,7 +625,6 @@
   }
   /* Важность — точка. Слово «Высокий» повторялось на каждом втором кубике
      и стоило целой пилюли. */
-  .task-mark.hot{width:7px; height:7px; border-radius:50%; background:var(--high); margin-top:4px;}
   .task-mark.outgoing{color:var(--ink-soft); font-size:12px;}
   /* «!» за три рабочих дня до срока. Приглушённый кружок, а не красный
      знак: Кирилл просил «аккуратно и не раздражающе», и предупреждение,
@@ -677,7 +682,6 @@
        потому что своего цвета у неё нет и не нужно. */
     color:var(--ink-soft); background:var(--paper-soft); border:1px solid var(--line);
   }
-  .pill-high{background:var(--accent); color:#F3F8FA;}
   .pill-med{background:var(--med-bg); color:var(--med);}
   .pill-recur{color:var(--ink-soft);}
   .pill-date{color:var(--ink-soft); background:rgba(0,0,0,.18); border:1px solid var(--line);}
@@ -740,10 +744,19 @@
   .pop-layer > *{pointer-events:auto;}
   .overlay.open{display:flex; animation:overlay-in .15s ease-out;}
   @keyframes overlay-in{from{opacity:0;} to{opacity:1;}}
+  /* Одна форма на все окна трекера.
+     Слова Кирилла 20.09.2026: «окна не должны быть растянуты от потолка
+     до пола, они должны быть более-менее стандартизированной однотипной
+     формы». До этого высоту окна задавало его содержимое: список из
+     двадцати семи вычеркнутых мыслей уезжал за оба края экрана, а форма
+     задачи и короткий вопрос выглядели двумя разными вещами. Теперь у
+     всех один потолок, и длинное содержимое прокручивается ВНУТРИ окна,
+     а не растягивает его. */
   .modal{
     background:var(--paper); border-radius:var(--radius-lg); width:100%; max-width:580px;
     padding:26px; border:1px solid var(--line-soft); box-shadow:var(--shadow-2), var(--edge);
     animation:modal-in .18s cubic-bezier(.2,.9,.3,1.1);
+    max-height:min(82vh, 780px); overflow-y:auto; overscroll-behavior:contain;
     /* Vertically centred when it fits, top-aligned (and scrollable) when it
        doesn't — `margin:auto` does both, which `align-items:center` alone
        would not: that clips the top of a modal taller than the viewport. */
@@ -751,6 +764,14 @@
   }
   @keyframes modal-in{from{opacity:0; transform:translateY(8px) scale(.98);} to{opacity:1; transform:none;}}
   .modal h2{margin:0 0 20px; font-size:20px; font-family:var(--display); font-weight:800; letter-spacing:-.015em; color:var(--ink);}
+  /* Цифра в заголовке окна — та же плашка, что у заголовков панелей и
+     столбцов доски: «Вычеркнутые мысли 27» голой цифрой читается как
+     часть названия. */
+  .modal h2 .count{
+    display:inline-block; margin-left:8px; vertical-align:2px;
+    background:var(--accent-soft); color:var(--accent); border-radius:999px; padding:2px 9px;
+    font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.4;
+  }
   /* Описание заведённой задачи — текст, а не поле: править его там уже
      нечего (см. TaskModal). Переносы сохраняются, потому что их писали. */
   .task-card-desc{
@@ -837,7 +858,17 @@
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
   .select-with-add{display:flex; gap:6px;}
   .select-with-add select{flex:1;}
-  .modal-actions{display:flex; justify-content:space-between; margin-top:18px; gap:8px;}
+  /* Кнопки окна держатся у его нижнего края и не уезжают в прокрутку.
+     У окна теперь есть потолок (см. .modal), а значит длинная форма
+     прокручивается внутри — и «Сохранить» оказалась бы ниже видимой
+     части, то есть кнопкой, которую надо сначала найти. Отрицательный
+     bottom и отступы по краям съедают те же 26px, что и padding окна,
+     чтобы полоса кнопок шла от края до края. */
+  .modal-actions{
+    display:flex; justify-content:space-between; margin-top:18px; gap:8px;
+    position:sticky; bottom:-26px; margin-left:-26px; margin-right:-26px;
+    padding:12px 26px 0; background:var(--paper);
+  }
   .modal-actions .left{display:flex; gap:8px;}
 
   /* Окно вопроса (Ask.tsx) — то, что раньше рисовал сам браузер.
@@ -1023,26 +1054,35 @@
     box-shadow:none; transform:none;
   }
   .meeting-chip.dragging > *{visibility:hidden;}
+  /* Встреча в списке устроена как задача на доске: название, строка
+     фактов, действия. Одно и то же место для одного и того же смысла —
+     просьба Кирилла 20.09.2026 про «однотипное расположение ключевой
+     информации о событии». */
   .meeting-chip{
-    display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:5px 9px;
+    display:flex; align-items:flex-start; gap:8px;
     background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:var(--radius-md);
-    padding:7px 9px; margin-top:5px; font-size:12.5px; cursor:grab; box-shadow:var(--edge);
+    padding:9px 10px; margin-top:6px; font-size:12.5px; cursor:grab; box-shadow:var(--edge);
     transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
   }
   .meeting-chip:hover{border-color:var(--today); box-shadow:var(--shadow-1); transform:translateY(-1px);}
   .meeting-chip.selected-day{border-color:var(--today); background:var(--today-bg);}
   .meeting-chip.resolved{opacity:.6;}
+  /* Чужую встречу не таскают: перенос — право того, кто её назначил. */
+  .meeting-chip.readonly{cursor:pointer;}
+  .meeting-body{display:flex; flex-direction:column; gap:5px; min-width:0; flex:1;}
+  .meeting-head{display:flex; align-items:flex-start; gap:6px; min-width:0;}
   .meeting-chip .mstatus{font-size:12px; flex:none;}
-  .meeting-chip .mwhen{
-    display:flex; flex-direction:column; align-items:flex-start; flex:none;
-    min-width:44px; line-height:1.35;
+  .meeting-chip .mtitle{
+    flex:1; min-width:0; white-space:normal; overflow-wrap:break-word; word-break:normal;
+    line-height:1.35; font-weight:600; color:var(--ink);
+  }
+  /* Строка фактов — ровно то же, что «исполнитель · срок» у задачи. */
+  .meeting-meta{
+    display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px;
+    font-variant-numeric:tabular-nums lining-nums;
   }
   .meeting-chip .mdate{color:var(--ink-soft); font-family:var(--display); font-size:11.5px; white-space:nowrap;}
-  .meeting-chip .mtime{color:var(--today); font-family:var(--display); font-weight:700; white-space:nowrap;}
-  .meeting-chip .mtitle{
-    flex:1; min-width:120px; white-space:normal; overflow-wrap:break-word; word-break:normal;
-    line-height:1.4; padding-top:1px;
-  }
+  .meeting-chip .mtime{color:var(--today); font-family:var(--display); font-weight:700; font-size:11.5px; white-space:nowrap;}
   .meeting-chip .mpeople{
     color:var(--ink-soft); font-family:var(--display); font-size:11px; white-space:nowrap;
     flex:none; cursor:default; padding:2px 3px; border-radius:4px;
@@ -1058,23 +1098,26 @@
     font-family:var(--sans); font-size:12px; color:var(--ink); text-align:left;
   }
   .people-tooltip .prow{padding:2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .meeting-del{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; flex:none;}
-  .meeting-del:hover{color:var(--high);}
-  .meeting-quick-actions{display:flex; gap:4px; flex:none; align-items:center;}
-  /* Одна форма на все три ответа: квадрат в размер строки, одноцветный знак,
-     цвет — только под курсором и под пальцем. 26px — минимум, по которому
-     на телефоне попадают не глядя (см. правило про размер целей касания). */
-  .meeting-icon-btn{
-    width:26px; height:26px; flex:none; display:inline-flex; align-items:center; justify-content:center;
+  /* Четыре решения по встрече — словами и сеткой 2×2.
+     Значками они были неразличимы: «✓» под встречей одинаково похоже и на
+     «прошла успешно», и на «я приду», а крестик удаления у края карточки
+     читался как «закрыть». Сетка, а не flex-wrap: панель узкая, и общий
+     перенос рвал бы ряд каждый раз в новом месте — то самое «кнопки
+     гуляют как хотят». 32px высоты — палец попадает не глядя. */
+  .meeting-actions{display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:2px;}
+  .meeting-act{
+    min-height:32px; padding:6px 8px; display:inline-flex; align-items:center; justify-content:center;
     background:var(--paper-soft); border:1px solid var(--line); border-radius:var(--radius-sm);
-    color:var(--ink-soft); cursor:pointer; font-size:13px; line-height:1; padding:0;
+    color:var(--ink-soft); cursor:pointer; font-family:var(--display); font-size:11.5px; font-weight:600;
+    line-height:1.1; text-align:center;
     transition:color .15s ease, border-color .15s ease, background .15s ease;
   }
-  .meeting-icon-btn:hover{background:var(--paper); color:var(--ink); border-color:var(--ink-soft);}
-  .meeting-icon-btn.success:hover{color:var(--success); border-color:var(--success);}
-  .meeting-icon-btn.noresult:hover{color:var(--high); border-color:var(--high);}
-  .meeting-icon-btn.reschedule:hover{color:var(--accent); border-color:var(--accent);}
-  .meeting-icon-btn:active{transform:scale(.94);}
+  .meeting-act:hover{background:var(--paper); color:var(--ink); border-color:var(--ink-soft);}
+  .meeting-act.success:hover{color:var(--success); border-color:var(--success);}
+  .meeting-act.noresult:hover{color:var(--high); border-color:var(--high);}
+  .meeting-act.reschedule:hover{color:var(--accent); border-color:var(--accent);}
+  .meeting-act.danger:hover{color:var(--high); border-color:var(--high);}
+  .meeting-act:active{transform:scale(.97);}
 
   /* ---------- Свой выпадающий список (Dropdown.tsx) ---------- */
   /* Раскрытый системный `<select>` рисует не трекер, а операционная
@@ -1626,7 +1669,11 @@
     .overlay{padding:0; align-items:stretch; z-index:400;}
     .modal{
       max-width:none; width:100%; margin:0; border-radius:0; border:0;
-      min-height:100%; padding:16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+      /* На телефоне окно и должно быть во весь экран: там нет ни фона,
+         который стоило бы показывать, ни места на поля. Общий потолок в
+         82vh отсюда снимается — иначе под окном осталась бы полоса
+         пустоты. */
+      min-height:100%; max-height:none; padding:16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
       display:flex; flex-direction:column;
     }
     .modal h2{font-size:18px;}
@@ -2304,7 +2351,17 @@
 
   /* Список завершённого в отдельном окне. */
   .done-list-modal{max-width:560px;}
+  /* Список прокручивается внутри окна, а не растягивает его.
+     20.09.2026 Кирилл открыл «Прошедшие встречи» и «Вычеркнутые мысли» и
+     назвал их «отвратительными окнами непонятного формата»: окно
+     выезжало за экран сверху и снизу, а длинное название без пробелов
+     («11111…») раздвигало его вбок вместе с горизонтальной полосой
+     прокрутки. Оба лечатся здесь: высота ограничена, а любое слово
+     переносится по буквам, если иначе не помещается. */
   .done-list{display:flex; flex-direction:column; gap:2px; margin:12px 0 4px;}
+  /* Прокрутка у окна одна (см. .modal): вторая, своя у списка, означала бы
+     две полосы рядом и содержимое, которое не долистать ни одной из них. */
+  .done-list-title, .done-list-note{overflow-wrap:anywhere;}
   .done-list-row{
     display:flex; align-items:center; gap:10px;
     padding:8px 10px; border-radius:var(--radius-sm);

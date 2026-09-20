@@ -587,6 +587,26 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       // start without a connection has something to show straight away.
       const cached = await loadSnapshot(uid);
 
+      // И не только без связи: со связью тоже — СРАЗУ.
+      //
+      // Слова Кирилла 20.09.2026: «после нажатия на ярлык трекера секунд на
+      // 3–5 идёт эта загрузка, исправь, чтобы он открывался моментально».
+      // Копия прошлого запуска лежала здесь всё это время и ждала ошибки
+      // сети, чтобы пригодиться, — а человек ждал пять запросов к облаку,
+      // глядя на слово «Загрузка…». Теперь она рисуется первым кадром, а
+      // сеть догоняет и заменяет её, когда ответит.
+      //
+      // Что НЕЛЬЗЯ сломать этим ускорением: работу, начатую в эти секунды.
+      // Пришедший ответ перезаписывает списки целиком, и задача, заведённая
+      // между первым кадром и ответом сети, исчезла бы вместе с ними.
+      // Механизм для этого уже есть — тот самый, что переносит работу,
+      // сделанную офлайн (applyLocalChanges ниже): ему нужна пара «что
+      // показано» и «что подтвердила база». После быстрого старта эта пара
+      // живёт в liveRef/shadowRef и включает всё, что человек успел
+      // сделать, поэтому она и берётся источником вместо самой копии.
+      const fastStart = !!cached;
+      if (cached) startFromCache(cached, { offline: false });
+
       const loadAll = (ms?: number) =>
         withTimeout(
           Promise.all([
@@ -641,6 +661,10 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       let loadedAssignees = (results[3].data as { name: string }[]).map((r) => r.name);
       let loadedSections = (results[4].data as SectionRow[]).map(sectionFromRow);
 
+      // Что было на экране и что из этого база уже подтвердила — снимается
+      // ДО перезаписи shadow ниже (см. комментарий про быстрый старт).
+      const localBefore = fastStart ? { live: { ...liveRef.current }, shadow: { ...shadowRef.current } } : null;
+
       // Baseline "already in the database" snapshot, taken before any
       // startup reconciliation below, so persistAll() only pushes what's
       // genuinely new (default-assignee seeding, back-filled names).
@@ -656,12 +680,14 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       // re-applied on top of what the server has now — item by item, so a
       // row changed on another device in the meantime is not overwritten by
       // a stale local copy of it (see offlineMerge.ts).
-      if (cached && hasUnsyncedWork(cached.live as unknown as Record<string, unknown[]>, cached.shadow as unknown as Record<string, unknown[]>)) {
-        loadedTasks = applyLocalChanges(loadedTasks, cached.live.tasks, cached.shadow.tasks);
-        loadedMeetings = applyLocalChanges(loadedMeetings, cached.live.meetings, cached.shadow.meetings);
-        loadedIdeas = applyLocalChanges(loadedIdeas, cached.live.ideas, cached.shadow.ideas);
-        loadedSections = applyLocalChanges(loadedSections, cached.live.sections, cached.shadow.sections);
-        loadedAssignees = applyLocalNameChanges(loadedAssignees, cached.live.assignees, cached.shadow.assignees);
+      const local: { live: TrackerLists; shadow: TrackerLists } | null =
+        localBefore ?? (cached ? { live: cached.live, shadow: cached.shadow } : null);
+      if (local && hasUnsyncedWork(local.live as unknown as Record<string, unknown[]>, local.shadow as unknown as Record<string, unknown[]>)) {
+        loadedTasks = applyLocalChanges(loadedTasks, local.live.tasks, local.shadow.tasks);
+        loadedMeetings = applyLocalChanges(loadedMeetings, local.live.meetings, local.shadow.meetings);
+        loadedIdeas = applyLocalChanges(loadedIdeas, local.live.ideas, local.shadow.ideas);
+        loadedSections = applyLocalChanges(loadedSections, local.live.sections, local.shadow.sections);
+        loadedAssignees = applyLocalNameChanges(loadedAssignees, local.live.assignees, local.shadow.assignees);
       }
 
       if (loadedAssignees.length === 0) loadedAssignees = DEFAULT_ASSIGNEES.slice();
@@ -714,7 +740,10 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     // Everything the last session had, straight from IndexedDB. The shadow
     // goes back exactly as it was stored, so the difference between the two
     // is still the unsent work — and the ordinary retry will send it.
-    function startFromCache(cached: Snapshot) {
+    // offline:false — это быстрый старт при живой сети (см. bootOnce):
+    // копия показывается первым кадром, и баннера «нет связи» при этом
+    // быть не должно.
+    function startFromCache(cached: Snapshot, opts: { offline?: boolean } = {}) {
       liveRef.current = {
         tasks: cached.live.tasks,
         meetings: cached.live.meetings,
@@ -734,8 +763,9 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       setIdeas(cached.live.ideas);
       setAssignees(cached.live.assignees);
       setSections(cached.live.sections);
-      setOffline(true);
-      offlineRef.current = true;
+      const offline = opts.offline ?? true;
+      setOffline(offline);
+      offlineRef.current = offline;
       setLoadError(null);
       setLoading(false);
     }

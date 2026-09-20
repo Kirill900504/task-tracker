@@ -66,6 +66,43 @@ export type WorkspaceIdentity = {
   loading: boolean;
 };
 
+// Ответ прошлого запуска.
+//
+// Кирилл 20.09.2026: «после нажатия на ярлык трекера секунд на 3–5 идёт эта
+// загрузка, исправь, чтобы он открывался моментально». Одна из этих секунд
+// уходила сюда: пока не известно, владелец это или руководитель, трекер не
+// начинает грузить данные вовсе — пространство, которое надо читать, ещё
+// неизвестно.
+//
+// Ответ при этом не меняется месяцами. Поэтому он запоминается на этой
+// машине и в следующий раз отдаётся сразу, а сеть спрашивается фоном и
+// поправляет, если что-то и правда изменилось (человека сделали
+// администратором, пригласили в другое пространство). Ключ — свой
+// auth-id: под другим входом чужой ответ не подойдёт и прочитан не будет.
+const CACHE_KEY = "kkt_identity";
+
+type Cached = Omit<WorkspaceIdentity, "loading">;
+
+function readCache(userId: string): Cached | null {
+  if (!userId || typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as Cached;
+    return saved.userId === userId ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(value: Cached) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(value));
+  } catch {
+    /* приватный режим — просто не запомним, старт будет как раньше */
+  }
+}
+
 export function useWorkspaceRole(): WorkspaceIdentity {
   const [state, setState] = useState<Omit<WorkspaceIdentity, "loading">>({
     role: "owner",
@@ -82,11 +119,23 @@ export function useWorkspaceRole(): WorkspaceIdentity {
   useEffect(() => {
     let cancelled = false;
     const db = createClient();
+    // getSession, а не getUser: первый читает сессию, которая и так лежит в
+    // браузере, второй идёт в сеть спрашивать, жив ли токен (см. lib/me.ts —
+    // там это уже стоило «секундной задержки»). Права от этого не слабеют:
+    // их проверяет база по настоящему auth.uid(), а не по тому, что решил
+    // браузер.
     db.auth
-      .getUser()
+      .getSession()
       .then(async ({ data }) => {
-        const userId = data?.user?.id;
+        const userId = data?.session?.user?.id;
         if (!userId) return null;
+        // Известный ответ — на экран немедленно, не дожидаясь двух запросов
+        // ниже. Они всё равно выполнятся и поправят его, если он устарел.
+        const known = readCache(userId);
+        if (known && !cancelled) {
+          setState(known);
+          setLoading(false);
+        }
         const { data: row } = await db
           .from("workspace_members")
           .select("owner_id, assignee_id, status, role, assignees(name)")
@@ -116,7 +165,7 @@ export function useWorkspaceRole(): WorkspaceIdentity {
             // выдавать права, которых оно не называет.
             const memberRole: MemberRole =
               member.role === "admin" || member.role === "developer" ? member.role : "manager";
-            setState({
+            const fresh: Cached = {
               role: "manager",
               memberRole,
               assigneeId: member.assignee_id,
@@ -125,18 +174,28 @@ export function useWorkspaceRole(): WorkspaceIdentity {
               userId,
               isAdmin: memberRole !== "manager",
               isOwner: false,
-            });
+            };
+            setState(fresh);
+            writeCache(fresh);
           } else {
             // Строки членства нет — это его собственное пространство.
-            setState((s) => ({
-              ...s,
-              userId,
-              ownerId: userId,
+            //
+            // Объект собирается целиком, а не правкой предыдущего: в
+            // функциональный setState нельзя класть запись в localStorage,
+            // React вправе вызвать его дважды, — а записать ответ надо
+            // ровно тот, что ушёл на экран.
+            const fresh: Cached = {
+              role: "owner",
+              memberRole: "owner",
               assigneeId: selfAssigneeId,
+              name: "",
+              ownerId: userId,
+              userId,
               isAdmin: true,
               isOwner: true,
-              memberRole: "owner",
-            }));
+            };
+            setState(fresh);
+            writeCache(fresh);
           }
         }
         setLoading(false);

@@ -163,7 +163,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal id="teamOverlay" onClose={onClose}>
+    <Modal id="teamOverlay" onClose={onClose} dismissOnBackdrop={false}>
       <div className="modal">
         <h2>Команда</h2>
 

@@ -364,6 +364,64 @@ export default function TasksPanel({
     }
   }
 
+  // Кого ещё, кроме меня, эта задача касается как исполнителя.
+  const otherExecutors = (t: Task) =>
+    participants.forTask(t.id).filter((p) => p.role === "executor" && p.assigneeId !== myMemberAssigneeId);
+
+  // Быстрая галочка на карточке.
+  //
+  // Слова Кирилла 20.09.2026: «если задача поставлена не самому себе, а
+  // другому участнику, должно требоваться заполнение „Результата“. То есть
+  // если ты увидел, что поставленную тобой задачу уже выполнили и тебя
+  // устраивает результат, сам её закрываешь лёгким способом».
+  //
+  // Разница между двумя случаями не в строгости, а в том, кто ещё об этом
+  // узнает. Задача самому себе — заметка: галочка и всё. Задача, отданная
+  // человеку, закрывается ЗА него: он ждёт ответа, и «закрыто» без единого
+  // слова выглядит как «задачу молча отменили». Поэтому спрашивается
+  // результат, и дальше это уже не правка статуса, а обычный путь трекера:
+  // если по задаче отчитались — приёмка, если нет — волевое закрытие. Оба
+  // идут через /api/workspace/review, то есть человеку уходит сообщение, а
+  // в хронику задачи — строка.
+  async function quickDone(t: Task) {
+    if (!mine(t)) {
+      toasts.showToast("Это не ваша задача", "Откройте её — там кнопки «Принял» и «Сделал».");
+      return;
+    }
+    // Снятие галочки — отдельный разговор (см. toggleDone: у принятой
+    // задачи это ещё и открытие заново).
+    if (t.status === "done" || !otherExecutors(t).length) {
+      toggleDone(t);
+      return;
+    }
+
+    const onReview = stageOf(t) === "awaiting_review";
+    const comment = await ask.ask({
+      title: onReview ? "Принять работу" : "Закрыть задачу",
+      question: onReview ? `Что принимаем по задаче «${t.title}»?` : `Что сделано по задаче «${t.title}»?`,
+      note: onReview
+        ? "Исполнители отчитались — ваши слова придут им вместе с закрытием."
+        : "Задачу делает другой человек, и она закроется без его отчёта. Напишите результат — он это увидит.",
+      placeholder: "Например: прайс согласован, отправили клиенту",
+      okText: onReview ? "Принять" : "Закрыть",
+      required: "Без результата закрывать нельзя.",
+    });
+    if (!comment?.trim()) return;
+
+    try {
+      if (onReview) await participants.approve(t.id, comment.trim());
+      else await participants.forceClose(t.id, comment.trim());
+    } catch (e) {
+      toasts.showToast(e instanceof Error ? e.message : "Не получилось закрыть задачу");
+      return;
+    }
+    // Маршрут ставит done сам; здесь то же самое ставится локально, чтобы
+    // карточка уехала в «Завершённые» сразу, не дожидаясь эха. Обе стороны
+    // говорят одно и то же, поэтому перезаписать друг друга не могут (см.
+    // правило про приёмку в CLAUDE.md).
+    toggleDone({ ...t, approvalState: "accepted", approvalComment: comment.trim() });
+  }
+
   function deleteTask(t: Task) {
     actions.deleteTask(t.id);
     toasts.showToast("Задача удалена", t.title, () => actions.restoreTask(t));
@@ -513,7 +571,7 @@ export default function TasksPanel({
     }
     // Sending is in here rather than only in the editor because on a phone
     // «скинуть Ане» should not cost opening a form and closing it again.
-    items.push({ id: "send", label: "Отправить коллеге", icon: "send", onSelect: () => setSendTask(t) });
+    items.push({ id: "send", label: "Отправить участнику", icon: "send", onSelect: () => setSendTask(t) });
     return items;
   }
 
@@ -550,7 +608,13 @@ export default function TasksPanel({
                       role={role}
                       outgoing={mine(t) && role === "none" && sharedBoard}
                       dimOverdue={!showsOverdue(role, !sharedBoard || view === "assigned")}
-                      onToggleDone={() => toggleDone(t)}
+                      onToggleDone={() => void quickDone(t)}
+                      // Галочка — право постановщика: закрыть задачу
+                      // значит сказать «принято», а это его слово.
+                      // Исполнитель отвечает кнопками в самой карточке
+                      // («Принял», «Сделал»), и показывать ему галочку,
+                      // после которой придёт отказ, незачем.
+                      canComplete={mine(t)}
                       onOpen={() => setModalState({ open: true, task: t })}
                       isDragging={isDragging}
                       dragProps={dragProps}
@@ -593,7 +657,10 @@ export default function TasksPanel({
                 id="mobileFiltersBtn"
                 onClick={() => setFiltersOpen((v) => !v)}
               >
-                {filtersOpen ? "Скрыть фильтры" : "Фильтры"}
+                {/* Текст не меняется вместе с состоянием: «Скрыть фильтры»
+                    шире «Фильтров», и кнопка при нажатии толкала соседнюю.
+                    Что фильтры раскрыты, видно по ним самим. */}
+                Фильтры
                 {filtersActive && <span className="toolbar-filter-dot" />}
               </button>
             )}
@@ -699,8 +766,13 @@ export default function TasksPanel({
                 if (isMobile) setMobileColumn(next ? "done" : "new");
               }}
             >
+              {/* Счётчика здесь нет намеренно. Он появлялся ровно в момент
+                  нажатия — то есть кнопка становилась шире, а вся полоса
+                  справа от неё уезжала под курсором. Слова Кирилла
+                  20.09.2026: «не хочу, чтобы в трекере нажатие одной кнопки
+                  двигало другие кнопки или разделы». Сколько завершённых, и
+                  так написано в заголовке открывшегося столбца. */}
               <Icon name="check" size={14} /> Завершённые
-              {showDone && byColumn.done.length > 0 && <span className="filter-pill-count">{byColumn.done.length}</span>}
             </button>
           </div>
         );
@@ -809,6 +881,9 @@ export default function TasksPanel({
           // Своя задача — та, которую поставил сам. У владельца свои все:
           // пространство его, и колонка created_by у старых задач пуста.
           canEdit={mine(modalTask)}
+          // Справочники (люди, разделы) заводит администратор — см.
+          // TaskModal.isAdmin.
+          isAdmin={isAdmin}
           task={modalTask}
           prefill={modalPrefill}
           sections={sections}

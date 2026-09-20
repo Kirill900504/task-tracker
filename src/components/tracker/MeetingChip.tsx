@@ -9,6 +9,21 @@ import { awaitsRecap } from "@/lib/calendarLogic";
 import { sanitizeAssigneeList } from "@/lib/trackerRows";
 import { useAsk } from "@/components/Ask";
 
+// Карточка встречи в списке — устроена как карточка задачи.
+//
+// Слова Кирилла 20.09.2026: «чтобы внешнее моделирование встреч и задач
+// было однотипное по расположению ключевой информации о событии». Было не
+// так: у задачи название сверху, а под ним строка фактов (кто, когда), у
+// встречи же дата с временем стояли слева столбиком, участники убегали
+// вправо, а три действия были значками ✓ ✕ ⇢ без единого слова — и
+// крестик удаления отдельно, четвёртым, у самого края.
+//
+// Теперь порядок тот же, что у задачи: название, под ним строка «дата ·
+// время · участники», под ней действия. Действия — с подписями: «✓» под
+// встречей может значить и «прошла», и «я буду», и разницу между ними
+// значком не объяснить. Подписи стоят сеткой 2×2, а не общим flex-wrap:
+// панель узкая, и перенос по месту рвал бы ряд каждый раз в новом месте.
+
 export default function MeetingChip({
   meeting,
   selectedDay,
@@ -18,6 +33,9 @@ export default function MeetingChip({
   onQuickReschedule,
   votes,
   justCreated,
+  // Моя ли это встреча. Чужую нельзя ни перенести, ни удалить, ни закрыть
+  // итогом — это решения того, кто её назначил (см. MeetingsPanel).
+  canManage = true,
 }: {
   meeting: Meeting;
   selectedDay: string | null;
@@ -30,6 +48,7 @@ export default function MeetingChip({
   // слоем (см. useMeetingVotes).
   votes?: { yes: string[]; no: { name: string; reason: string }[]; pending: string[] };
   justCreated?: boolean;
+  canManage?: boolean;
 }) {
   // The participants tooltip lives in <body> and is positioned from the
   // anchor's rect, exactly as legacy's showPeopleTooltip() did: the meetings
@@ -49,7 +68,7 @@ export default function MeetingChip({
   // Прошла, а чем кончилась — не сказано. Пока итога нет, встреча не
   // уходит из списка: она ещё требует одного действия.
   const waitingRecap = awaitsRecap(meeting);
-  const showQuickActions = !meeting.status || meeting.status === "planned";
+  const showQuickActions = canManage && (!meeting.status || meeting.status === "planned" || waitingRecap);
 
   // Placed by writing to the DOM once it has been measured (its own size
   // decides whether it fits below the anchor), before paint — the same
@@ -66,8 +85,13 @@ export default function MeetingChip({
   // Встречу несут на день календаря — это перенос. Порядок в списке у встреч
   // свой (по времени), переставлять их руками нечего, поэтому draggable, а
   // не sortable.
+  //
+  // Чужую не несут вовсе: перенос — право того, кто назначил, и карточка,
+  // которая поднимается и не ложится, объясняет ровно столько же, сколько
+  // перечёркнутый круг, то есть ничего.
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: "meeting:" + meeting.id,
+    disabled: !canManage,
     data: { payload: { kind: "meeting", id: meeting.id, title: meeting.title } },
   });
 
@@ -79,43 +103,97 @@ export default function MeetingChip({
         (meeting.status && meeting.status !== "planned" ? " resolved" : "") +
         (waitingRecap ? " awaits-recap" : "") +
         (justCreated ? " just-created" : "") +
-        (isDragging ? " dragging" : "")
+        (isDragging ? " dragging" : "") +
+        (canManage ? "" : " readonly")
       }
       ref={setNodeRef}
       {...attributes}
       {...listeners}
       onClick={onOpen}
     >
-      <div style={{ display: "flex", minWidth: 0, flex: "1 1 100%", gap: 8 }}>
-        <span className="mwhen">
+      <div className="meeting-body">
+        <div className="meeting-head">
+          <span className="mtitle">{meeting.title}</span>
+          {meeting.status === "success" && (
+            <span className="mstatus success" title="Успешно завершена">
+              ✅
+            </span>
+          )}
+          {meeting.status === "no_result" && (
+            <span className="mstatus no_result" title={meeting.movedToDate ? "Перенесена на " + fmtDate(meeting.movedToDate) : "Без результата"}>
+              🚫
+            </span>
+          )}
+        </div>
+
+        {/* Строка фактов — то же место, что у задачи занимают исполнитель и
+            срок: когда это, во сколько и сколько человек идёт. */}
+        <div className="meeting-meta">
           <span className="mdate">{fmtDate(meeting.date)}</span>
           <span className="mtime">{meeting.time || "--:--"}</span>
-        </span>
-        <span className="mtitle">{meeting.title}</span>
-        {meeting.status === "success" && (
-          <span className="mstatus success" title="Успешно завершена">
-            ✅
-          </span>
-        )}
-        {meeting.status === "no_result" && (
-          <span className="mstatus no_result" title={meeting.movedToDate ? "Перенесена на " + fmtDate(meeting.movedToDate) : "Без результата"}>
-            🚫
-          </span>
+          {participants.length > 0 && (
+            <span
+              className="mpeople"
+              onMouseEnter={(e) => setPeopleAnchor(e.currentTarget.getBoundingClientRect())}
+              onMouseLeave={() => setPeopleAnchor(null)}
+            >
+              👥 {votes ? `${votes.yes.length}/${participants.length}` : confirmed.length > 0 ? `${confirmed.length}/${participants.length}` : participants.length}
+              {votes && votes.no.length > 0 && <span className="mpeople-no"> · {votes.no.length} не смогут</span>}
+            </span>
+          )}
+          {proposed && <span className="pill pill-proposed">предложена</span>}
+          {waitingRecap && <span className="pill pill-recap">нужен итог</span>}
+        </div>
+
+        {/* Четыре решения по встрече, все со словами. Значки ✓ ✕ ⇢ стояли
+            здесь раньше и читались только тем, кто уже знает, что они
+            значат; крестик удаления при этом жил отдельно у края карточки
+            и выглядел как «закрыть», а не как «удалить». */}
+        {showQuickActions && (
+          <div className="meeting-actions">
+            <button
+              className="meeting-act success"
+              onClick={(e) => {
+                e.stopPropagation();
+                onQuickStatus("success");
+              }}
+            >
+              Прошла успешно
+            </button>
+            <button
+              className="meeting-act noresult"
+              onClick={(e) => {
+                e.stopPropagation();
+                onQuickStatus("no_result");
+              }}
+            >
+              Без результата
+            </button>
+            <button
+              className="meeting-act reschedule"
+              onClick={(e) => {
+                e.stopPropagation();
+                onQuickReschedule();
+              }}
+            >
+              Перенести
+            </button>
+            <button
+              className="meeting-act danger"
+              onClick={(e) => {
+                e.stopPropagation();
+                void (async () => {
+                  const yes = await ask.confirm({ question: `Удалить встречу «${meeting.title}»?`, okText: "Удалить", danger: true });
+                  if (yes) onDelete();
+                })();
+              }}
+            >
+              Удалить встречу
+            </button>
+          </div>
         )}
       </div>
 
-      {participants.length > 0 && (
-        <span
-          className="mpeople"
-          onMouseEnter={(e) => setPeopleAnchor(e.currentTarget.getBoundingClientRect())}
-          onMouseLeave={() => setPeopleAnchor(null)}
-        >
-          {proposed && <span className="pill pill-proposed">предложена</span>}
-          {waitingRecap && <span className="pill pill-recap">нужен итог</span>}
-          👥 {votes ? `${votes.yes.length}/${participants.length}` : confirmed.length > 0 ? `${confirmed.length}/${participants.length}` : participants.length}
-          {votes && votes.no.length > 0 && <span className="mpeople-no"> · {votes.no.length} не смогут</span>}
-        </span>
-      )}
       {peopleAnchor && (
         <PopLayer>
           <div ref={tooltipRef} id="peopleTooltip" className="people-tooltip" style={{ display: "block", top: -9999, left: -9999 }}>
@@ -140,64 +218,6 @@ export default function MeetingChip({
           </div>
         </PopLayer>
       )}
-
-      {/* Три ответа на встречу — три одинаковые кнопки.
-          Были три цветные картинки разного размера (✅ 🚫 📅): каждая рисуется
-          шрифтом эмодзи, то есть своим цветом, своей шириной и своей высотой,
-          и рядом они читались как три случайные наклейки, а не как один
-          выбор из трёх. Теперь форма одна, знак одноцветный, а цвет
-          появляется под курсором — там, где он что-то значит. */}
-      {showQuickActions && (
-        <div className="meeting-quick-actions">
-          <button
-            className="meeting-icon-btn success"
-            title="Встреча прошла успешно"
-            aria-label="Встреча прошла успешно"
-            onClick={(e) => {
-              e.stopPropagation();
-              onQuickStatus("success");
-            }}
-          >
-            ✓
-          </button>
-          <button
-            className="meeting-icon-btn noresult"
-            title="Встреча без результата"
-            aria-label="Встреча без результата"
-            onClick={(e) => {
-              e.stopPropagation();
-              onQuickStatus("no_result");
-            }}
-          >
-            ✕
-          </button>
-          <button
-            className="meeting-icon-btn reschedule"
-            title="Перенести встречу"
-            aria-label="Перенести встречу"
-            onClick={(e) => {
-              e.stopPropagation();
-              onQuickReschedule();
-            }}
-          >
-            ⇢
-          </button>
-        </div>
-      )}
-
-      <button
-        className="meeting-del"
-        title="Удалить встречу"
-        onClick={(e) => {
-          e.stopPropagation();
-          void (async () => {
-            const yes = await ask.confirm({ question: `Удалить встречу «${meeting.title}»?`, okText: "Удалить", danger: true });
-            if (yes) onDelete();
-          })();
-        }}
-      >
-        ×
-      </button>
     </div>
   );
 }

@@ -15,7 +15,7 @@
 // tracker does), and the handful of rules that make a browser engine behave
 // like an application rather than a tab.
 
-const { app, BrowserWindow, Menu, shell, dialog } = require("electron");
+const { app, BrowserWindow, Menu, nativeTheme, shell, dialog } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -128,6 +128,16 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    // Тёмная рамка окна вместо светлой системной.
+    //
+    // Слова Кирилла 20.09.2026: «можно ли заменить верхнюю полоску границы
+    // приложения (шапку) на шапку в тёмном фирменном стиле?» Можно, и
+    // одной строкой: Windows красит заголовок окна по теме приложения, а
+    // не по теме системы, если приложение о своей теме заявило. Свою
+    // шапку рисовать не нужно — с ней пришлось бы двигать всю шапку
+    // трекера, чтобы кнопки «Команда» и «Выйти» не оказались под
+    // системными «свернуть/закрыть».
+    nativeTheme.themeSource = "dark";
     buildMenu();
     createWindow();
     checkForUpdates();

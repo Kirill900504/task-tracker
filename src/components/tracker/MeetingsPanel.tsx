@@ -310,6 +310,7 @@ export default function MeetingsPanel({
               onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
               votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
+              canManage={isMine(m, myUserId)}
             />
           ))}
         </div>
@@ -329,6 +330,7 @@ export default function MeetingsPanel({
               onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
               votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
+              canManage={isMine(m, myUserId)}
               justCreated={justCreatedId === m.id}
             />
           ))

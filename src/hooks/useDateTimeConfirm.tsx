@@ -60,7 +60,9 @@ export function useDateTimeConfirm() {
     <div
       className="overlay open"
       id="confirmDateTimeOverlay"
-      onClick={(e) => e.target === e.currentTarget && finish(null)}
+      // Щелчок мимо окна ничего не отменяет — здесь выбирают дату и время
+      // переноса, то есть заполняют форму, пусть и короткую (см. правило
+      // про dismissOnBackdrop в Modal.tsx). Отменяют «Отменой» и Escape.
     >
       <div className="modal" style={{ maxWidth: 360 }}>
         <h2>Подтвердите действие</h2>

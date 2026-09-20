@@ -121,7 +121,6 @@ export default function CalendarPanel({
         {gridDates.map((cd) => {
           const ds = dateStr(cd);
           const dueTasks = tasks.filter((t) => t.status !== "done" && isTaskDueOnDate(t, cd));
-          const hasHigh = dueTasks.some((t) => t.priority === "high");
           const dayMeetings = meetings.filter((m) => m.date === ds);
           return (
             <CalendarDay
@@ -136,7 +135,7 @@ export default function CalendarPanel({
               onClick={(rect) => setPopover({ date: ds, anchor: rect })}
             >
               {cd.getDate()}
-              {dueTasks.length > 0 && <div className={"cal-dot" + (hasHigh ? " high" : "")} />}
+              {dueTasks.length > 0 && <div className="cal-dot" />}
               {dayMeetings.length > 0 && <div className="cal-dot meeting" style={{ marginTop: dueTasks.length ? 2 : 3 }} />}
             </CalendarDay>
           );

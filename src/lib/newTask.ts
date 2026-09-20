@@ -26,6 +26,10 @@ export type NewTaskRow = {
   title: string;
   description: string;
   assignee: string;
+  // Колонка осталась в базе, но трекер её больше не показывает и не
+  // спрашивает (20.09.2026: «удали везде приоритетности»), поэтому
+  // newTaskRow всегда пишет "med". Тип оставлен широким нарочно: по нему
+  // ещё читают строки, заведённые до этого дня.
   priority: "high" | "med";
   term: "short" | "long";
   status: "in_progress";
@@ -40,6 +44,8 @@ export function newTaskRow(input: {
   title: string;
   description?: string;
   assignee?: string;
+  // Принимается и игнорируется: у зовущих (разбор фразы в боте) поле ещё
+  // встречается в старых данных, и падать из-за него незачем.
   priority?: string;
   term?: string;
   deadline?: string | null;
@@ -53,7 +59,7 @@ export function newTaskRow(input: {
     title: input.title,
     description: input.description || "",
     assignee: (input.assignee || "").trim(),
-    priority: input.priority === "high" ? "high" : "med",
+    priority: "med",
     term: input.term === "long" ? "long" : "short",
     // Новая задача всегда в работе: «done» у только что созданной означало
     // бы, что её завели уже сделанной, и такого пути здесь нет.

@@ -13,14 +13,13 @@ export type TaskFields = {
   // Остальные исполнители той же задачи. Фраза «поручи Игорю и Никите»
   // раньше превращалась в две одинаковые задачи — по одной на каждого.
   executors?: string[];
-  priority: "high" | "med";
   term: "short" | "long";
   deadline: string;
 };
 export type MeetingFields = { title: string; date: string; time: string; participants: string[] };
 export type IdeaFields = { text: string; important: boolean };
 // One action item pulled out of dictated meeting notes, awaiting confirmation.
-export type ExtractedTask = { title: string; assignee: string; deadline: string; priority: "high" | "med" };
+export type ExtractedTask = { title: string; assignee: string; deadline: string };
 // The still-open meeting a dictated recap turned out to be about, when the
 // server matched one — offered for closing along with the action items.
 export type MatchedMeeting = { id: string; title: string; date: string; result: string };
@@ -327,7 +326,7 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
   function confirmNotes() {
     if (!notes) return;
     for (const t of notes.tasks) {
-      api?.createTask({ title: t.title, description: "", assignee: t.assignee, priority: t.priority, term: "short", deadline: t.deadline });
+      api?.createTask({ title: t.title, description: "", assignee: t.assignee, term: "short", deadline: t.deadline });
     }
     if (notes.meeting && notes.summary) {
       api?.closeMeetingWithResult({ id: notes.meeting.id, summary: notes.summary });
@@ -405,7 +404,6 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
             <div className="qap-row">
               {taskPreview.assignee && <span className="task-assignee">{taskPreview.assignee}</span>}
               {taskPreview.deadline && <span className="pill pill-date">{taskPreview.deadline}</span>}
-              {taskPreview.priority === "high" && <span className="pill pill-high">Высокий</span>}
             </div>
             <div className="qap-actions">
               <button className="btn btn-primary btn-small" onClick={confirmTask}>Сохранить</button>
@@ -451,7 +449,6 @@ export default function QuickAdd({ provider }: { provider: QuickAddProvider }) {
                 <span style={{ color: "var(--ink)" }}>{t.title}</span>
                 {t.assignee && <span className="task-assignee">{t.assignee}</span>}
                 {t.deadline && <span className="pill pill-date">{t.deadline}</span>}
-                {t.priority === "high" && <span className="pill pill-high">Высокий</span>}
               </div>
             ))}
             <div className="qap-actions">

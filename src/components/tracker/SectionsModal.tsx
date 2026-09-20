@@ -120,7 +120,7 @@ export default function SectionsModal({
   }
 
   return (
-    <Modal onClose={onClose} id="sectionsModal">
+    <Modal onClose={onClose} id="sectionsModal" dismissOnBackdrop={false}>
       {/* `.modal` — сама коробка окна; <dialog class="overlay"> это
           только затемнённый фон с display:flex, и без обёртки заголовок,
           строки и кнопки раскладывались по нему в строку. */}

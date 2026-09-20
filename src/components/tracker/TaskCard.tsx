@@ -18,9 +18,11 @@ import type { TaskStage } from "@/lib/taskProgress";
 // гармонично смотрелось, УБРАТЬ НЕНУЖНОЕ!»
 //
 // Что ушло и почему:
-//   «Высокий»/«Средний» словом — приоритет теперь точка в углу. Слово
-//     занимало пятую часть ширины, повторялось на каждой карточке и
-//     читалось дольше, чем цвет.
+//   Приоритет — целиком. Сначала со слова «Высокий» он ужался до точки в
+//     углу, а 20.09.2026 ушёл совсем: «удали везде приоритетности, они не
+//     нужны». Точку он же и не смог опознать («это что?»), и это
+//     справедливо: важность выставлялась один раз при заведении и дальше
+//     ничего о задаче не говорила. Что горит — говорит срок.
 //   «0 из 2 · ждём: Кирилл, Юра» — на доске осталось «0/2». Имена
 //     помещались через раз, а нужны они в тот момент, когда карточку уже
 //     открыли.
@@ -43,6 +45,7 @@ export default function TaskCard({
   outgoing,
   dimOverdue,
   onToggleDone,
+  canComplete = true,
   onOpen,
   isDragging,
   dragProps,
@@ -65,6 +68,10 @@ export default function TaskCard({
   // наблюдатель, или это его собственное поручение другому.
   dimOverdue?: boolean;
   onToggleDone: () => void;
+  // Есть ли у меня право закрыть эту задачу одним движением. Галочка и
+  // свайп — это «принято», слово постановщика; исполнителю вместо них
+  // кнопки в самой карточке, где спрашивают, что именно сделано.
+  canComplete?: boolean;
   onOpen: () => void;
   isDragging?: boolean;
   // Всё, чем dnd-kit делает карточку перетаскиваемой: ссылка на узел,
@@ -88,7 +95,7 @@ export default function TaskCard({
   const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
   // Finishing something is the action of the day — on a phone it is a
   // swipe to the right, and reopening it is the same swipe again.
-  const swipe = useSwipeComplete(onToggleDone, isMobile);
+  const swipe = useSwipeComplete(onToggleDone, isMobile && canComplete);
 
   // Просрочка есть или нет — вопрос к задаче; кричать о ней этому
   // человеку или нет — вопрос к его роли (см. lib/myRole). Поэтому две
@@ -105,7 +112,6 @@ export default function TaskCard({
       className={
         "task" +
         (task.status === "done" ? " done" : "") +
-        (task.priority === "high" ? " high" : "") +
         (overdue ? " overdue" : "") +
         (dueToday ? " due-today" : "") +
         (isDragging ? " dragging" : "") +
@@ -129,21 +135,29 @@ export default function TaskCard({
 
       <div className="task-body">
         <div className="task-head">
-          <div
-            className={"check" + (task.status === "done" ? " checked" : "")}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleDone();
-            }}
-          >
-            {task.status === "done" ? "✓" : ""}
-          </div>
+          {canComplete && (
+            <div
+              className={"check" + (task.status === "done" ? " checked" : "")}
+              title={task.status === "done" ? "Вернуть задачу в работу" : "Закрыть задачу"}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleDone();
+              }}
+            >
+              {task.status === "done" ? "✓" : ""}
+            </div>
+          )}
           <div className="task-title">{task.title}</div>
-          {/* Маркеры угла, в порядке важности. Их не бывает больше двух
-              сразу: «горит» и «просрочено» исключают друг друга. */}
+          {/* Маркеры угла. Их осталось два, и подписаны они целыми
+              фразами: 20.09.2026 Кирилл спросил про них прямо — «это
+              что?», — а значок, который надо расшифровывать, не работает.
+              Точка приоритета отсюда ушла вместе с самим приоритетом. */}
           <span className="task-marks">
-            {outgoing && <span className="task-mark outgoing" title="Вы поручили это другому">↗</span>}
-            {task.priority === "high" && <span className="task-mark hot" title="Высокий приоритет" />}
+            {outgoing && (
+              <span className="task-mark outgoing" title="Это поручили вы — ждём ответа исполнителя">
+                ↗
+              </span>
+            )}
             {soon && (
               <span className="task-mark soon" title="Срок через три рабочих дня или меньше">
                 !

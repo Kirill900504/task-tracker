@@ -158,7 +158,7 @@ export default function MeetingModal({
   const proposed = isEditing && meeting.status === "proposed";
 
   return (
-    <Modal id="meetingOverlay" onClose={onClose}>
+    <Modal id="meetingOverlay" onClose={onClose} dismissOnBackdrop={false}>
       <div className="modal">
         <h2 id="meetingModalTitle">{isEditing ? "Встреча" : isMove ? "Перенос встречи" : "Новая встреча"}</h2>
         {isMove && (
@@ -368,7 +368,7 @@ export default function MeetingModal({
                 className="btn"
                 id="sendMeetingBtn"
                 type="button"
-                title="Отправить встречу коллеге в мессенджер"
+                title="Отправить встречу участнику в мессенджер"
                 onClick={(e) => setSendAt(e.currentTarget.getBoundingClientRect())}
               >
                 <Icon name="send" size={15} /> Отправить

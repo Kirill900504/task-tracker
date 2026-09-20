@@ -46,6 +46,7 @@ import { useMyMessenger } from "@/hooks/useMyMessenger";
 import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
 import Icon from "@/components/tracker/Icon";
+import { isMine } from "@/lib/ownership";
 import { withViewTransition } from "@/lib/viewTransition";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -93,6 +94,11 @@ export default function NewTracker() {
   );
   const { loading, loadError, tasks, meetings, ideas, sections, assignees, syncStatus, offline, actions } =
     useTrackerData({ enabled: ready, workspace });
+  // Как меня зовут в списке людей. Своя строка помечена «(я)» — другого
+  // способа связать логин с человеком в браузере нет (см. правило про
+  // задачу самому себе в lib/kanban). Нужно на экране «Сегодня», чтобы
+  // отличить «моя задача» от «я поручил её другому».
+  const myName = assignees.find((a) => a.trim().endsWith("(я)")) || "";
   const isMobile = useIsMobile();
   const toasts = useToasts();
   const dateTimeConfirm = useDateTimeConfirm();
@@ -328,7 +334,6 @@ export default function NewTracker() {
         desc: f.description,
         assignee: f.assignee,
         executors: f.executors || [],
-        priority: f.priority,
         deadline: f.deadline,
       }),
     prefillNewMeeting: (f) => setOpenMeetingRequest({ title: f.title, date: f.date, time: f.time, participants: f.participants }),
@@ -340,7 +345,9 @@ export default function NewTracker() {
         desc: f.description,
         assignee: f.assignee,
         sectionId: "",
-        priority: f.priority,
+        // Приоритета в трекере больше нет — колонка осталась в базе, и
+        // новые строки просто пишут в неё обычное значение.
+        priority: "med",
         term: f.term,
         status: "in_progress",
         deadline: f.deadline,
@@ -648,7 +655,25 @@ export default function NewTracker() {
                 tasks={tasks}
                 meetings={meetings}
                 sections={sections}
-                onToggleTask={(task) => actions.saveTask({ ...task, status: task.status === "done" ? "in_progress" : "done", completedAt: task.status === "done" ? "" : new Date().toISOString() })}
+                // Правило галочки здесь то же, что на доске: закрывает
+                // задачу постановщик, а не тот, кому она поручена. И если
+                // делает её другой человек, закрытие требует результата —
+                // значит не галочкой, а карточкой, где есть приёмка и
+                // волевое закрытие. Исполнители известны панели задач, а
+                // не этому экрану, поэтому здесь сравнивается имя в поле
+                // «Исполнитель»: приближение в сторону строгости, то есть
+                // лишний раз откроется карточка, а не закроется молча
+                // чужая работа.
+                canCompleteTask={(task) => isMine(task, mineOnlyId)}
+                onToggleTask={(task) => {
+                  const someoneElse = task.status !== "done" && !!task.assignee && task.assignee !== myName;
+                  if (someoneElse) {
+                    setOpenExistingTaskId(task.id);
+                    toasts.showToast("Нужен результат", "Задачу делает другой человек — закройте её в карточке, написав, что сделано.");
+                    return;
+                  }
+                  actions.saveTask({ ...task, status: task.status === "done" ? "in_progress" : "done", completedAt: task.status === "done" ? "" : new Date().toISOString() });
+                }}
                 onOpenTask={(task) => setOpenExistingTaskId(task.id)}
                 onOpenMeeting={(meeting) => setOpenExistingMeetingId(meeting.id)}
                 onGoToTasks={() => setMobileTab("tasks")}

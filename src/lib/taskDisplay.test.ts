@@ -125,10 +125,13 @@ describe("rankOf / taskSortFn", () => {
     expect([a, b].sort((x, y) => taskSortFn(x, y, now)).map((t) => t.id)).toEqual(["b", "a"]);
   });
 
-  it("high priority sorts before medium within the same group/date", () => {
-    const med = baseTask({ id: "a", priority: "med" });
-    const high = baseTask({ id: "b", priority: "high" });
-    expect([med, high].sort((x, y) => taskSortFn(x, y, now)).map((t) => t.id)).toEqual(["b", "a"]);
+  // Приоритет на порядок больше не влияет: поле ушло из трекера целиком
+  // (20.09.2026), и задачи одной группы и одной даты стоят в порядке
+  // заведения — по id, а не по значению, которого никто не задаёт.
+  it("одинаковые по сроку задачи стоят в порядке заведения, важность ни при чём", () => {
+    const first = baseTask({ id: "a", priority: "med" });
+    const second = baseTask({ id: "b", priority: "high" });
+    expect([second, first].sort((x, y) => taskSortFn(x, y, now)).map((t) => t.id)).toEqual(["a", "b"]);
   });
 });
 
