@@ -573,8 +573,8 @@ try {
   const empty = await post(owner, "/api/workspace/rename-person", { assigneeId: personA.id, name: "   " });
   check("пустое имя не проходит", empty.status === 400, empty);
 
-  const foreign = await post(mgrB, "/api/workspace/rename-person", { assigneeId: personA.id, name: "Чужой" });
-  check("руководитель переименовать людей не может", foreign.status === 403, foreign);
+  const notYours = await post(mgrB, "/api/workspace/rename-person", { assigneeId: personA.id, name: "Чужой" });
+  check("руководитель переименовать людей не может", notYours.status === 403, notYours);
 
   const clash = await post(owner, "/api/workspace/rename-person", { assigneeId: personA.id, name: "Тест Витковский" });
   check("двух людей с одним именем не завести", clash.status === 400, clash);
