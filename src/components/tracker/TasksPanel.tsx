@@ -570,6 +570,33 @@ export default function TasksPanel({
     } else if (onTaskToMeeting) {
       items.push({ id: "meeting", label: "Назначить встречу", icon: "calendar", onSelect: () => onTaskToMeeting(t.id) });
     }
+    // «Принял» — прямо отсюда, и это единственный ответ исполнителя,
+    // который здесь возможен.
+    //
+    // Остальные («Сделал», «Не могу», «Прошу перенос») требуют слов, и
+    // делать их молча нельзя — они открывают карточку, где есть поле для
+    // комментария. А «Принял» не требует ничего: это «вижу, взял», и
+    // ради него открывать форму, листать её и закрывать — три действия
+    // вместо одного. На телефоне это тот самый путь «нашёл задачу →
+    // открыл карточку → нашёл кнопку», который здесь длиннее всего.
+    const myRow = participants.forTask(t.id).find((p) => p.assigneeId === myMemberAssigneeId);
+    if (myRow && myRow.role === "executor" && !myRow.acceptedAt && !myRow.declinedAt && t.status !== "done") {
+      items.unshift({
+        id: "accept",
+        label: "Принял в работу",
+        icon: "check",
+        onSelect: () => {
+          void (async () => {
+            try {
+              await participants.acceptWork(myRow.id);
+              toasts.showToast("Взяли в работу", t.title);
+            } catch (e) {
+              toasts.showToast("Не получилось", e instanceof Error ? e.message : "");
+            }
+          })();
+        },
+      });
+    }
     // Sending is in here rather than only in the editor because on a phone
     // «скинуть Ане» should not cost opening a form and closing it again.
     items.push({ id: "send", label: "Отправить участнику", icon: "send", onSelect: () => setSendTask(t) });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderWithAt, slotAt, type SectionSlot } from "./sectionOrder";
+import { orderWithAt, slotAt, type SectionSlot, type SectionSnapshot } from "./sectionOrder";
 
 // Ряд из четырёх разделов в одну строку: центры через 100 пикселей.
 const ROW: SectionSlot[] = [
@@ -10,10 +10,13 @@ const ROW: SectionSlot[] = [
 ];
 
 const ids = ROW.map((s) => s.id);
+// Ряд стоит там же, где стоял при снимке: сдвиг страницы проверяется
+// отдельным случаем ниже.
+const SNAP: SectionSnapshot = { slots: ROW, rowX: 50, rowY: 40 };
 
 // Один «шаг руки»: где оказался указатель — там и считается новый порядок.
 function dragTo(from: string, x: number, y = 50): string[] {
-  return orderWithAt(ids, from, slotAt(ROW, x, y, from));
+  return orderWithAt(ids, from, slotAt(SNAP, x, y, from, SNAP.rowX, SNAP.rowY));
 }
 
 describe("перестановка раздела считается по снимку ряда", () => {
@@ -53,11 +56,26 @@ describe("перестановка раздела считается по сни
       { id: "d", x: 200, y: 90 },
     ];
     // Указатель в начале ВТОРОЙ строки: первая пройдена целиком.
-    expect(slotAt(wrapped, 60, 90, "d")).toBe(2);
+    const snap: SectionSnapshot = { slots: wrapped, rowX: 50, rowY: 40 };
+    expect(slotAt(snap, 60, 90, "d", snap.rowX, snap.rowY)).toBe(2);
     expect(orderWithAt(["a", "b", "c", "d"], "d", 2)).toEqual(["a", "b", "d", "c"]);
   });
 
+  // Страница уехала под рукой: появилась плашка «1 на сегодня», закрылся
+  // тост, сработала прокрутка. Места в снимке остались прежними, а ряд на
+  // экране — нет, и без поправки указатель и снимок начинают говорить о
+  // разных экранах: рука над рядом, а по снимку она уже под ним. Раздел
+  // после этого встаёт куда угодно, и со стороны это «перетаскивание
+  // сработало наполовину».
+  it("ряд, уехавший вниз под рукой, не сбивает расчёт", () => {
+    // Ряд опустился на 40 пикселей; рука пришла туда же, куда и целилась —
+    // к началу ряда, то есть левее первого места и на 40 ниже.
+    const shifted = slotAt(SNAP, 60, 90, "d", SNAP.rowX, SNAP.rowY + 40);
+    expect(shifted).toBe(0);
+    expect(orderWithAt(ids, "d", shifted)).toEqual(["d", "a", "b", "c"]);
+  });
+
   it("пустой ряд не двигает ничего", () => {
-    expect(slotAt([], 100, 50, "a")).toBe(-1);
+    expect(slotAt({ slots: [], rowX: 0, rowY: 0 }, 100, 50, "a", 0, 0)).toBe(-1);
   });
 });

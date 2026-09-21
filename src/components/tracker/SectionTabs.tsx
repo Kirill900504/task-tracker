@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import Icon from "./Icon";
-import { orderWithAt, slotAt, type SectionSlot } from "@/lib/sectionOrder";
+import { orderWithAt, slotAt, type SectionSnapshot } from "@/lib/sectionOrder";
 import type { Section } from "@/types/tracker";
 
 // Разделы кнопками под панелью задач: выбрать, завести новый, переставить.
@@ -78,7 +78,7 @@ export default function SectionTabs({
   // Где какая кнопка стояла В МОМЕНТ НАЧАЛА переноса — снимок, по которому
   // считается позиция вставки, пока перенос идёт. См. длинный комментарий
   // у slotAt: без него перенос терял шаги.
-  const slots = useRef<SectionSlot[]>([]);
+  const slots = useRef<SectionSnapshot>({ slots: [], rowX: 0, rowY: 0 });
   // Было ли перетаскивание: если было, нажатие не должно ещё и переключать
   // фильтр — человек переставлял, а не выбирал.
   const moved = useRef(false);
@@ -103,10 +103,17 @@ export default function SectionTabs({
     holdTimer.current = null;
     // Снимок ряда — один раз, здесь. Дальше он не пересчитывается нарочно:
     // см. slotAt.
-    slots.current = [...document.querySelectorAll<HTMLElement>("#sectionTabs [data-section-id]")].map((el) => {
-      const r = el.getBoundingClientRect();
-      return { id: el.dataset.sectionId!, x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    });
+    const row = document.getElementById("sectionTabs")?.getBoundingClientRect();
+    slots.current = {
+      slots: [...document.querySelectorAll<HTMLElement>("#sectionTabs [data-section-id]")].map((el) => {
+        const r = el.getBoundingClientRect();
+        return { id: el.dataset.sectionId!, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }),
+      // Где стоял сам ряд: пока его ведут, страница может уехать — см.
+      // SectionSnapshot.
+      rowX: row?.left ?? 0,
+      rowY: row?.top ?? 0,
+    };
     setDragId(id);
     setPreview(sorted.map((s) => s.id));
     // Дальнейшие события приходят сюда, даже если указатель ушёл с кнопки.
@@ -148,10 +155,11 @@ export default function SectionTabs({
     // Куда встанет раздел, если отпустить здесь, — считается по снимку
     // ряда, а не по тому, что сейчас под указателем (см. lib/sectionOrder:
     // там записано, чем это отличается и что ломалось раньше).
-    const to = slotAt(slots.current, e.clientX, e.clientY, dragId);
+    const row = document.getElementById("sectionTabs")?.getBoundingClientRect();
+    const to = slotAt(slots.current, e.clientX, e.clientY, dragId, row?.left ?? 0, row?.top ?? 0);
     if (to < 0) return;
     const next = orderWithAt(
-      slots.current.map((s) => s.id),
+      slots.current.slots.map((s) => s.id),
       dragId,
       to,
     );

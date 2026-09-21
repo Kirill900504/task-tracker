@@ -372,3 +372,36 @@ test("в мини-приложении подключается скрипт м�
   // дело асинхронное и к правилу отношения не имеет.
   await expect(page.locator("#tg-webapp-script")).toHaveCount(1, { timeout: 15_000 });
 });
+
+// «Принял» — из списка, не открывая карточку.
+//
+// Это единственный ответ исполнителя, которому не нужны слова: «вижу,
+// взял». Остальные — «Сделал», «Не могу», «Прошу перенос» — требуют
+// комментария и потому открывают карточку. Ради «Принял» открывать форму,
+// листать её и закрывать — три действия вместо одного, и на телефоне
+// именно этот путь длиннее всего.
+test("«Принял» есть в меню карточки и не требует открывать её", async ({ page }) => {
+  const title = `E2E принял ${Date.now()}`;
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+
+  const card = page.locator(".task", { hasText: title });
+  await expect(card).toBeVisible();
+  // Участие доезжает ОТДЕЛЬНОЙ строкой, и до неё меню о роли ничего не
+  // знает — пункта в нём просто нет. Ждём не время, а признак: карточка
+  // красится в цвет своей роли ровно тогда, когда строка участия дошла.
+  await expect(card).toHaveClass(/role-executor/, { timeout: 20_000 });
+
+  await card.locator("[data-task-menu]").click();
+  await page.click(".action-sheet .export-item:has-text('Принял в работу')");
+  await expect(page.locator(".toast", { hasText: "Взяли в работу" })).toBeVisible({ timeout: 15_000 });
+
+  // Принято — значит второй раз предлагать нечего.
+  await expect(page.locator(".modal")).toHaveCount(0);
+  await card.locator("[data-task-menu]").click();
+  await expect(page.locator(".action-sheet .export-item", { hasText: "Принял в работу" })).toHaveCount(0);
+});
