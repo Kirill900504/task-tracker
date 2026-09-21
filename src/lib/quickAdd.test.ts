@@ -87,7 +87,7 @@ describe("sanitizeAgainstKnown", () => {
 });
 
 describe("resolveKnownName", () => {
-  const KNOWN = ["Кирилл (я)", "Игорь Витковский", "Наталья Мамакова", "Никита Козлов", "Юра Нодберг"];
+  const KNOWN = ["Кирилл (я)", "Игорь Витковский", "Наталья Мамакова", "Никита Козлов", "Юрий Нодберг"];
 
   it("keeps a name that is already exactly right", () => {
     expect(resolveKnownName("Никита Козлов", KNOWN)).toBe("Никита Козлов");

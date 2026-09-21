@@ -221,7 +221,7 @@ export function isSelfAssignee(name: string): boolean {
 export const DEFAULT_ASSIGNEES: string[] = [
   "Кирилл (я)",
   "Игорь Витковский",
-  "Юра Нодберг",
+  "Юрий Нодберг",
   "Евгений Макаров",
   "Станислав Синецкий",
   "Наталья Мамакова",
