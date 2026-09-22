@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { isoDate, addDays, nextWeekdayMap, sanitizeAgainstKnown, resolveKnownName } from "./quickAdd";
+import { nextWeekdayMap, sanitizeAgainstKnown, resolveKnownName, nameWasSaid } from "./quickAdd";
+import { isoDate, addDays } from "./whenDate";
 
 describe("isoDate / addDays", () => {
   it("formats using local calendar fields (not UTC)", () => {
@@ -83,6 +84,20 @@ describe("sanitizeAgainstKnown", () => {
     const input: Record<string, unknown> = { assignee: "Юрий Черкашин", executors: ["Юрий Черкашин", "Кирилл (я)"] };
     sanitizeAgainstKnown(input, known);
     expect(input.executors).toEqual(["Кирилл (я)"]);
+  });
+});
+
+describe("nameWasSaid", () => {
+  it("recognises a name from a matching word in the phrase, even a different case ending", () => {
+    expect(nameWasSaid("Никита Козлов", "поручи Никите Козлову смету")).toBe(true);
+  });
+
+  it("says false when the name was never mentioned", () => {
+    expect(nameWasSaid("Игорь Витковский", "поручи Никите смету")).toBe(false);
+  });
+
+  it("says false when the phrase is empty — nothing was heard to compare against", () => {
+    expect(nameWasSaid("Игорь Витковский", "")).toBe(false);
   });
 });
 

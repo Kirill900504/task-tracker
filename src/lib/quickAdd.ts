@@ -1,19 +1,11 @@
 import { gigaChatComplete } from "@/lib/gigachat/client";
 import { cleanTitle } from "@/lib/itemTitle";
 import { sharesPrefix } from "@/lib/stem";
+import { WEEKDAYS, addDays, isoDate, moscowToday, normalizeDeadline } from "@/lib/whenDate";
 
 // Shared natural-language parsing used by both the web quick-add bar
 // (/api/quick-add) and the Telegram bot (/api/telegram/webhook) — one
 // prompt, one behavior, regardless of where the message came from.
-
-const WEEKDAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
-
-export function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-export function addDays(now: Date, days: number): Date {
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
-}
 
 // Free-tier models are unreliable at weekday arithmetic in their head — even
 // a full calendar table in the prompt got ignored in testing. Handing over
@@ -42,10 +34,17 @@ function systemPrompt(now: Date, assignees: string[]) {
     "",
     '1) {"type":"task","title":string,"description":string,"assignee":string,"executors":string[],"deadline":string}',
     "   — что-то, что нужно сделать. assignee: СКОПИРУЙ имя буква-в-букву из списка исполнителей выше. Если точного совпадения нет — пустая строка. Категорически запрещено писать любое имя, которого нет в списке дословно.",
+    // Главная ошибка бота 21.09.2026: «Позвонить Паше Котову» уехало
+    // ЧУЖОМУ человеку. Модель считает исполнителем любого, кто назван в
+    // фразе, — а названный чаще всего тот, КОМУ звонят, а не тот, кто
+    // звонит. Пишущий по умолчанию говорит о себе.
+    "   assignee заполняется, ТОЛЬКО если сказано, кому поручают: «поручи Никите…», «пусть Наталья…», «Игорю — смету», «передай Сергею…».",
+    "   Человек, о котором идёт речь ВНУТРИ дела, исполнителем НЕ является: «позвонить Паше», «встретиться с Игорем», «спросить у Натальи», «съездить к Сергею», «написать Оксане» — это дело самого пишущего, assignee оставь ПУСТЫМ, и имя из фразы оттуда не убирай (оно часть названия).",
+    "   Сомневаешься, поручают это кому-то или делают сами, — assignee пустой. Пустой исполнитель означает «сам пишущий», и это правильный ответ по умолчанию.",
     "   executors: ОСТАЛЬНЫЕ исполнители той же задачи, если их несколько, теми же именами из списка. Обычно пустой массив.",
     "   ОДНА задача на нескольких человек — это ОДИН объект: первый исполнитель в assignee, остальные в executors. НИКОГДА не создавай несколько одинаковых задач, по одной на каждого человека.",
-    "   deadline: дата из таблицы выше в формате YYYY-MM-DD. Пустая строка, если дата не названа.",
-    "   title: КОРОТКО, что сделать — 2–7 слов, без обращения к тебе («создай», «поставь») и без имени исполнителя, оно уже в assignee. Подробности, если они были сказаны, положи в description, а не в название.",
+    "   deadline: дата из таблицы выше, РОВНО в формате YYYY-MM-DD. Пустая строка, если дата не названа. Слова «today», «tomorrow», «сегодня», «завтра» сюда писать нельзя — только дату числом.",
+    "   title: КОРОТКО, что сделать — 2–7 слов, без обращения к тебе («создай», «поставь») и без имени ТОГО, КОМУ ПОРУЧЕНО, оно уже в assignee. Имя того, о ком идёт речь в самом деле («позвонить Паше Котову»), в названии остаётся. Подробности, если они были сказаны, положи в description, а не в название.",
     "",
     '2) {"type":"meeting","title":string,"date":string,"time":string,"participants":string[]}',
     "   — явно названы дата/время встречи. date: YYYY-MM-DD из таблицы выше. time: HH:MM (24ч) или пустая строка. participants: имена буква-в-букву из списка выше, без придуманных.",
@@ -91,11 +90,16 @@ function systemPrompt(now: Date, assignees: string[]) {
     "",
     "Примеры формы ответа:",
     'Одно поручение → [{"type":"task","title":"...","description":"","assignee":"","executors":[],"deadline":""}]',
-    // Два имени в одной задаче модель уверенно понимала как две задачи —
-    // и заводила два одинаковых поручения, по одному на человека. Пример
-    // с ответом нужнее любого запрета: он показывает форму.
-    '«сделайте вдвоём с Никитой» (одна задача, двое) → [{"type":"task","title":"...","description":"","assignee":"Игорь Витковский","executors":["Никита Козлов"],"deadline":""}]',
-    '«Игорю — смету, Никите — остатки» (два разных дела) → [{"type":"task","title":"смета",...,"assignee":"Игорь Витковский","executors":[]}, {"type":"task","title":"остатки",...,"assignee":"Никита Козлов","executors":[]}]',
+    // Имена в примерах — подстановки, а не люди, и это не стиль.
+    // 21.09.2026 модель на фразе «позвонить Паше Котову», где Паши в
+    // списке нет, взяла имя ПРЯМО ОТСЮДА: тут стояло настоящее «Игорь
+    // Витковский», и задача уехала ему. Пример учит форме ответа и не
+    // должен подсказывать содержание.
+    "«сделайте вдвоём» (одна задача, двое) → [{\"type\":\"task\",\"title\":\"...\",\"description\":\"\",\"assignee\":\"<первый из списка>\",\"executors\":[\"<второй из списка>\"],\"deadline\":\"\"}]",
+    "«<имя А> — смету, <имя Б> — остатки» (два разных дела) → [{\"type\":\"task\",\"title\":\"смета\",...,\"assignee\":\"<имя А>\",\"executors\":[]}, {\"type\":\"task\",\"title\":\"остатки\",...,\"assignee\":\"<имя Б>\",\"executors\":[]}]",
+    // Дело для себя — самый частый случай в личном боте, и до 21.09.2026
+    // примера на него не было ни одного: все показывали поручение.
+    '«позвонить Паше Котову» (дело для себя, Паша — тот, КОМУ звонят) → [{"type":"task","title":"Позвонить Паше Котову","description":"","assignee":"","executors":[],"deadline":""}]',
     'Несколько поручений одной фразой → [{"type":"task",...}, {"type":"idea",...}, {"type":"idea",...}, {"type":"meeting",...}]',
     // The question type needs its own example: without one the model kept
     // trying to *answer* counting questions ("сколько задач на Наталье?") in
@@ -181,17 +185,47 @@ export function resolveKnownName(candidate: string, known: string[]): string | n
   return matches.length === 1 ? matches[0] : null;
 }
 
-export function sanitizeAgainstKnown(input: Record<string, unknown>, known: string[]): string[] {
+// Прозвучало ли это имя в том, что человек НА САМОМ ДЕЛЕ сказал.
+//
+// Сторож против имени, взятого моделью из воздуха — из примера в
+// подсказке, из прошлого сообщения, из ниоткуда. 21.09.2026 «Создай
+// задачу на сегодня позвонить Паше Котову» превратилось в задачу Игорю
+// Витковскому: Игорь стоял в примере промпта, он есть в списке людей, и
+// обе прежние проверки его пропустили — обе спрашивали «такой человек
+// существует?», а надо было спросить «его вообще называли?».
+//
+// Сравнение то же, что у resolveKnownName: слова от четырёх общих букв,
+// чтобы «Никите Козлову» узнавало «Никита Козлов». Имя, которого в
+// фразе нет, вычёркивается МОЛЧА — сказать «пропустил Игоря» человеку,
+// который Игоря не упоминал, значит объяснять ему чужую ошибку.
+export function nameWasSaid(name: string, said: string): boolean {
+  const heard = nameTokens(said);
+  if (!heard.length) return false;
+  return nameTokens(name).some((t) => heard.some((h) => sharesPrefix(h, t, 4)));
+}
+
+// `said` — исходная фраза человека. Без неё проверка «имя прозвучало» не
+// делается вовсе: у зовущих, которые фразы не имеют (старые тесты,
+// разбор по кускам), поведение остаётся прежним.
+export function sanitizeAgainstKnown(input: Record<string, unknown>, known: string[], said = ""): string[] {
   const dropped: string[] = [];
+  const invented = (name: string) => !!said && !nameWasSaid(name, said);
   // Название приводится в порядок здесь же, рядом с именами, и по той же
   // причине: модель просили о коротком названии, но проверить это может
   // только код. Без этого в календарь попадает сказанная фраза целиком,
   // вместе со словом «Создай» в начале, — так там и оказались строки на
   // двести символов.
   if (typeof input.title === "string") input.title = cleanTitle(input.title);
+  // Срок и дата встречи — тоже факт, и проверяет их код: модель кладёт
+  // сюда то слово, которое в соседнем словаре означает день («today»), и
+  // дальше оно проходит насквозь до самой базы (см. normalizeDeadline).
+  const today = moscowToday();
+  for (const field of ["deadline", "date"]) {
+    if (typeof input[field] === "string") input[field] = normalizeDeadline(input[field], today);
+  }
   if (typeof input.assignee === "string" && input.assignee) {
-    const resolved = resolveKnownName(input.assignee, known);
-    if (!resolved) dropped.push(input.assignee);
+    const resolved = invented(input.assignee) ? null : resolveKnownName(input.assignee, known);
+    if (!resolved && !invented(input.assignee)) dropped.push(input.assignee);
     input.assignee = resolved || "";
   }
   // Участники встречи и соисполнители задачи чистятся одинаково: и то и
@@ -202,6 +236,7 @@ export function sanitizeAgainstKnown(input: Record<string, unknown>, known: stri
     const kept: string[] = [];
     for (const n of value) {
       if (typeof n !== "string") continue;
+      if (invented(n)) continue;
       const resolved = resolveKnownName(n, known);
       if (resolved && !kept.includes(resolved)) kept.push(resolved);
       else if (!resolved) dropped.push(n);
@@ -217,7 +252,10 @@ export type QuickAddItem = { tool: string; input: Record<string, unknown>; dropp
 export type QuickAddParsed = { items: QuickAddItem[] };
 
 export async function parseQuickAdd(text: string, assignees: string[]): Promise<QuickAddParsed> {
-  const system = systemPrompt(new Date(), assignees);
+  // Сегодня — по Москве, а не по часам сервера: на Vercel это UTC, и с
+  // полуночи до трёх ночи «на сегодня» означало вчерашнее число, то есть
+  // задачу, просроченную в момент создания.
+  const system = systemPrompt(moscowToday(), assignees);
 
   let parsed: unknown[] | null = null;
   let lastError = "";
@@ -246,7 +284,10 @@ export async function parseQuickAdd(text: string, assignees: string[]): Promise<
     if (!tool) continue; // an unknown type from one element shouldn't sink the whole batch
     const { type: _omit, ...input } = p as Record<string, unknown>;
     void _omit;
-    const droppedNames = sanitizeAgainstKnown(input, assignees);
+    // Фраза человека едет в проверку вместе с разбором: без неё нельзя
+    // отличить имя, которое он назвал, от имени, которое модель взяла из
+    // подсказки (см. nameWasSaid).
+    const droppedNames = sanitizeAgainstKnown(input, assignees, text);
     items.push({ tool, input, droppedNames });
   }
   if (!items.length) throw new Error("Не удалось разобрать ни одного элемента");

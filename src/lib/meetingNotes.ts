@@ -1,5 +1,6 @@
 import { gigaChatComplete } from "@/lib/gigachat/client";
-import { isoDate, addDays, nextWeekdayMap, sanitizeAgainstKnown } from "@/lib/quickAdd";
+import { nextWeekdayMap, sanitizeAgainstKnown } from "@/lib/quickAdd";
+import { WEEKDAYS, addDays, isoDate, resolveWhen } from "@/lib/whenDate";
 import { stem, sharesPrefix } from "@/lib/stem";
 
 // "Разбор итогов встречи": you come out of a meeting, dictate what was
@@ -11,8 +12,6 @@ import { stem, sharesPrefix } from "@/lib/stem";
 // about a meeting is exactly the kind of input where a model will
 // occasionally invent a task out of a passing remark, so a human check
 // stands between it and the tracker.
-
-const WEEKDAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 
 export type ExtractedTask = {
   title: string;
@@ -55,39 +54,6 @@ function systemPrompt(now: Date, assignees: string[]): string {
     "НЕ превращай в задачи обсуждения, наблюдения, идеи «на будущее» и то, что уже сделано. Только то, что осталось сделать.",
     "Если поручений в рассказе нет вообще — верни пустой массив tasks, но summary всё равно заполни.",
   ].join("\n");
-}
-
-// Turns the model's one-word "when" into a real date. All calendar maths
-// lives here rather than in the prompt — see the `when` field's comment.
-const WEEKDAY_INDEX: Record<string, number> = {
-  sunday: 0,
-  monday: 1,
-  tuesday: 2,
-  wednesday: 3,
-  thursday: 4,
-  friday: 5,
-  saturday: 6,
-};
-
-export function resolveWhen(when: string, now: Date): string {
-  const key = String(when || "").trim().toLowerCase();
-  if (!key || key === "none") return "";
-  if (key === "today") return isoDate(now);
-  if (key === "tomorrow") return isoDate(addDays(now, 1));
-  if (key === "day_after") return isoDate(addDays(now, 2));
-  if (key === "next_week") return isoDate(addDays(now, 7));
-  // "На этой неделе" without a day named: the end of the working week is the
-  // most useful reading of it, and never a date already in the past.
-  if (key === "this_week") {
-    const daysToFriday = (5 - now.getDay() + 7) % 7;
-    return isoDate(addDays(now, daysToFriday));
-  }
-  const target = WEEKDAY_INDEX[key];
-  if (target === undefined) return "";
-  // The next occurrence of that weekday, today included (a Monday task said
-  // to be "к понедельнику" on a Monday means today, not a week out).
-  const delta = (target - now.getDay() + 7) % 7;
-  return isoDate(addDays(now, delta));
 }
 
 function extractJsonObject(raw: string): Record<string, unknown> {

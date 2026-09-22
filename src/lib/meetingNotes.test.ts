@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { resolveWhen, mergeMissedTasks, MAX_EXTRA_TASKS, type ExtractedTask } from "./meetingNotes";
+import { mergeMissedTasks, MAX_EXTRA_TASKS, type ExtractedTask } from "./meetingNotes";
+import { resolveWhen } from "./whenDate";
 
 // The model returns a label ("friday"), never a date — turning that into a
 // real date is this function's job, precisely because the model got the
