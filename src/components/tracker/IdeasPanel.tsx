@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Idea } from "@/types/tracker";
-import { sortIdeasForList } from "@/lib/ideaDisplay";
+import { doneIdeasNewestFirst, sortIdeasForList } from "@/lib/ideaDisplay";
 import { isMine } from "@/lib/ownership";
 import { formatIdeaCreatedAt } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
@@ -54,7 +54,8 @@ export default function IdeasPanel({
   // по иконке с галочкой: перечёркнутые строки посреди списка мыслей —
   // это шум там, где ищут, что записать дальше.
   const visible = sortIdeasForList(ideas, false);
-  const done = ideas.filter((i) => i.done);
+  // Свежевычеркнутые сверху — тем же правилом, что у доски и встреч.
+  const done = doneIdeasNewestFirst(ideas);
 
   // Фокус — побочное действие над DOM, а не состояние, поэтому эффект
   // здесь на своём месте (правило React-компилятора запрещает setState в
@@ -155,7 +156,14 @@ export default function IdeasPanel({
           items={done.map((idea) => ({
             id: idea.id,
             title: idea.text,
-            when: idea.createdAt,
+            // Дата — та, по которой список отсортирован, то есть КОГДА
+            // вычеркнули. Показывать дату записи под списком «свежие
+            // сверху» значит показывать числа вразнобой: мысль, записанная
+            // в августе и закрытая вчера, стояла бы наверху с августовским
+            // числом, и порядок читался бы как случайный. У мыслей,
+            // вычеркнутых до появления колонки done_at, даты закрытия нет —
+            // там остаётся дата записи, как было.
+            when: idea.doneAt ? formatIdeaCreatedAt(idea.doneAt) : idea.createdAt,
             onRestore: isMine(idea, myUserId) ? () => actions.saveIdea({ ...idea, done: false, doneAt: "" }) : undefined,
           }))}
           onClose={() => setDoneOpen(false)}

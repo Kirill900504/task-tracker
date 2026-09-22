@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Idea } from "@/types/tracker";
-import { sortIdeasForList } from "./ideaDisplay";
+import { doneIdeasNewestFirst, sortIdeasForList } from "./ideaDisplay";
 
 function baseIdea(overrides: Partial<Idea>): Idea {
   return { id: "i1", text: "test", important: false, done: false, createdAt: "01.09.2026 10:00", doneAt: "", ...overrides };
@@ -41,6 +41,28 @@ describe("sortIdeasForList", () => {
     const original = list.slice();
     sortIdeasForList(list, true);
     expect(list).toEqual(original);
+  });
+});
+
+describe("doneIdeasNewestFirst", () => {
+  it("ставит наверх вычеркнутое последним, а не записанное первым", () => {
+    // Старая мысль, закрытая только что, обязана оказаться выше свежей,
+    // закрытой неделю назад: список открывают, чтобы вернуть последнее.
+    const старая = baseIdea({ id: "старая", done: true, createdAt: "01.08.2026 10:00", doneAt: "2026-09-21T09:00:00.000Z" });
+    const свежая = baseIdea({ id: "свежая", done: true, createdAt: "15.09.2026 10:00", doneAt: "2026-09-14T09:00:00.000Z" });
+    expect(doneIdeasNewestFirst([старая, свежая]).map((i) => i.id)).toEqual(["старая", "свежая"]);
+  });
+
+  it("не пускает в список живые мысли", () => {
+    const живая = baseIdea({ id: "живая" });
+    const вычеркнутая = baseIdea({ id: "вычеркнутая", done: true, doneAt: "2026-09-20T09:00:00.000Z" });
+    expect(doneIdeasNewestFirst([живая, вычеркнутая]).map((i) => i.id)).toEqual(["вычеркнутая"]);
+  });
+
+  it("мысли без даты вычёркивания уходят вниз, а не наверх", () => {
+    const давняя = baseIdea({ id: "давняя", done: true, doneAt: "" });
+    const вчерашняя = baseIdea({ id: "вчерашняя", done: true, doneAt: "2026-09-20T09:00:00.000Z" });
+    expect(doneIdeasNewestFirst([давняя, вчерашняя]).map((i) => i.id)).toEqual(["вчерашняя", "давняя"]);
   });
 });
 
