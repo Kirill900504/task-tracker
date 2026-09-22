@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { snapshotList, sameJson, diffRows, diffAssignees, upsertById, removeById, type WithId } from "./trackerSync";
+import { snapshotList, sameJson, sameLists, diffRows, diffAssignees, upsertById, removeById, type WithId } from "./trackerSync";
 
 type Item = WithId & { status: string };
 const toRow = (x: Item) => ({ id: x.id, status: x.status });
@@ -113,5 +113,37 @@ describe("diffAssignees", () => {
 
   it("is empty when nothing changed", () => {
     expect(diffAssignees(["Аня"], ["Аня"])).toEqual({ added: [], removed: [] });
+  });
+});
+
+describe("sameLists", () => {
+  it("считает одинаковыми объекты, у которых поля записаны в разном порядке", () => {
+    // Ровно этот случай и есть настоящий: задачу собирают две функции —
+    // taskFromRow из строки базы и форма задачи, — и порядок ключей у них
+    // разный. Без этого догон объявлял бы доску изменившейся каждую минуту
+    // и перерисовывал её под рукой у человека.
+    const fromDb = [{ id: "a", title: "смета", due: "2026-09-22" }];
+    const fromForm = [{ due: "2026-09-22", title: "смета", id: "a" }];
+
+    expect(sameJson(fromDb, fromForm)).toBe(false);
+    expect(sameLists(fromDb, fromForm)).toBe(true);
+  });
+
+  it("видит настоящее изменение", () => {
+    expect(sameLists([{ id: "a", status: "open" }], [{ id: "a", status: "done" }])).toBe(false);
+  });
+
+  it("видит новую строку и пропавшую", () => {
+    expect(sameLists([{ id: "a" }], [{ id: "a" }, { id: "b" }])).toBe(false);
+    expect(sameLists([{ id: "a" }, { id: "b" }], [{ id: "a" }])).toBe(false);
+  });
+
+  it("порядок самих строк — это изменение: доска сортируется им", () => {
+    expect(sameLists([{ id: "a" }, { id: "b" }], [{ id: "b" }, { id: "a" }])).toBe(false);
+  });
+
+  it("вложенные объекты сравниваются так же", () => {
+    expect(sameLists([{ id: "a", recur: { days: [1, 2], kind: "week" } }], [{ id: "a", recur: { kind: "week", days: [1, 2] } }])).toBe(true);
+    expect(sameLists([{ id: "a", recur: { days: [1, 2] } }], [{ id: "a", recur: { days: [2, 1] } }])).toBe(false);
   });
 });

@@ -2,6 +2,7 @@
 
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { onRevive } from "@/lib/revive";
 
 // Список, который нужен сразу нескольким окнам, — один на всех.
 //
@@ -105,9 +106,15 @@ export function createSharedStore<T>(empty: T, load: () => Promise<T | null>, wa
   // Канал живёт, только пока на список кто-то смотрит: держать сокет ради
   // окна, которое закрыли, незачем.
   let channel: RealtimeChannel | null = null;
+  let stopRevive: (() => void) | null = null;
 
   function listen() {
     if (channel || !watch.length || typeof window === "undefined") return;
+    // Подписка умирает молча (см. lib/revive.ts), и справочник после этого
+    // остаётся вчерашним: человек, подключивший бота, в открытых окнах так
+    // и числится неподключённым. Поэтому у списка есть и второй путь к
+    // правде — поводы перечитать.
+    stopRevive ||= onRevive(() => void refresh());
     const db = createClient();
     const ch = db.channel(`shared-${watch.join("-")}`);
     for (const table of watch) {
@@ -115,10 +122,16 @@ export function createSharedStore<T>(empty: T, load: () => Promise<T | null>, wa
         void refresh();
       });
     }
-    channel = ch.subscribe();
+    // Подъём канала — повод перечитать: пока он поднимался, события не
+    // приходили, а догонять пропущенное realtime не умеет.
+    channel = ch.subscribe((status) => {
+      if (status === "SUBSCRIBED") void refresh();
+    });
   }
 
   function stopListening() {
+    stopRevive?.();
+    stopRevive = null;
     if (!channel) return;
     void createClient().removeChannel(channel);
     channel = null;

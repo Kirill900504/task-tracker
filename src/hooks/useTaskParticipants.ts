@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
+import { onRevive } from "@/lib/revive";
 import { assignPerson, waitForTaskRow } from "@/lib/assignWork";
 import type { TaskParticipant, TaskParticipantRole } from "@/lib/taskProgress";
 
@@ -208,13 +209,17 @@ export function useTaskParticipants() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchAll().then(({ grouped, people: list }) => {
-      if (cancelled) return;
-      setByTask(grouped);
-      setPeople(list);
-      writeCache(grouped, list);
-      setLoading(false);
-    });
+    // Перечитать всё — и по подписке, и по поводам из lib/revive.
+    function reload() {
+      fetchAll().then(({ grouped, people: list }) => {
+        if (cancelled) return;
+        setByTask(grouped);
+        setPeople(list);
+        writeCache(grouped, list);
+        setLoading(false);
+      });
+    }
+    reload();
 
     // Somebody pressing «Сделал» in Telegram has to move the card here
     // without a reload — the same reason every other table the UI watches is
@@ -234,14 +239,7 @@ export function useTaskParticipants() {
       // между «лишняя подписка» и «белый экран» такая, что выбор
       // очевиден.
       .channel("task-participants:" + Math.random().toString(36).slice(2))
-      .on("postgres_changes", { event: "*", schema: "public", table: "task_participants" }, () => {
-        fetchAll().then(({ grouped, people: list }) => {
-          if (cancelled) return;
-          setByTask(grouped);
-          setPeople(list);
-          writeCache(grouped, list);
-        });
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_participants" }, reload)
       // И за самим списком людей — тоже.
       //
       // Этот хук отдаёт форме задачи не только участие, но и то, ИЗ КОГО
@@ -252,18 +250,23 @@ export function useTaskParticipants() {
       // выполниться раньше вставки, оставлял поле «Кто на задаче» с одной
       // кнопкой «+ человек» — и до перезагрузки страницы поставить задачу
       // было НЕКОМУ. На свежем аккаунте это происходило каждый раз.
-      .on("postgres_changes", { event: "*", schema: "public", table: "assignees" }, () => {
-        fetchAll().then(({ grouped, people: list }) => {
-          if (cancelled) return;
-          setByTask(grouped);
-          setPeople(list);
-          writeCache(grouped, list);
-        });
-      })
-      .subscribe();
+      .on("postgres_changes", { event: "*", schema: "public", table: "assignees" }, reload)
+      // Каждый подъём канала — повод перечитать: пока он поднимался (или
+      // лежал), события просто не приходили, а догонять пропущенное
+      // realtime не умеет.
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") reload();
+      });
+
+    // Столбец задачи выводится ИЗ ЭТИХ строк, а не хранится в ней, — то
+    // есть подписка, тихо умершая под спящим ноутбуком, оставляет карточку
+    // в «Новых» после того, как человек нажал «Принял» в мессенджере.
+    // Отсюда тот же догон, что и у самих задач (см. lib/revive.ts).
+    const stopRevive = onRevive(reload);
 
     return () => {
       cancelled = true;
+      stopRevive();
       void db.removeChannel(channel);
     };
   }, [fetchAll]);

@@ -23,6 +23,33 @@ export function sameJson(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+// Тот же вопрос, но про два списка, пришедших РАЗНЫМИ дорогами.
+//
+// Нужен догону (см. lib/revive.ts и catchUp в useTrackerData): перечитанный
+// список сравнивается с тем, что уже на экране, и до экрана доходит только
+// то, что действительно изменилось — иначе доска перерисовывалась бы раз в
+// минуту просто так, в том числе посреди перетаскивания карточки.
+//
+// Ключи сортируются, и это главное отличие от sameJson: один и тот же
+// объект собирают две функции — строка базы через taskFromRow и форма
+// задачи, — а порядок полей у них разный. JSON.stringify считает такую
+// пару разной, и без сортировки «изменилось» значило бы «перечитали».
+export function sameLists(a: unknown[], b: unknown[]): boolean {
+  return stableJson(a) === stableJson(b);
+}
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, val) =>
+    val && typeof val === "object" && !Array.isArray(val)
+      ? Object.fromEntries(
+          Object.keys(val as Record<string, unknown>)
+            .sort()
+            .map((k) => [k, (val as Record<string, unknown>)[k]]),
+        )
+      : val,
+  );
+}
+
 export interface DiffResult<R> {
   upserts: R[];
   deleteIds: string[];

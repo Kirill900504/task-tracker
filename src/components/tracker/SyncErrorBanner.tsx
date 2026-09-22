@@ -8,6 +8,17 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Icon from "./Icon";
 
+// Строка, из которой ничего не следует.
+//
+// «[object Object]» — это отказ базы, потерянный по дороге сюда (см.
+// lib/syncError.ts: он был объектом, а его превращали в строку). Такие
+// строки в базе уже лежат, и показывать их как есть — значит пугать
+// человека тем, чего он всё равно не прочитает.
+function unreadable(message: string): boolean {
+  const text = (message || "").trim();
+  return !text || /^\[object .*\]$/i.test(text);
+}
+
 export default function SyncErrorBanner() {
   const [errors, setErrors] = useState<{ ids: string[]; count: number; message: string } | null>(null);
 
@@ -40,7 +51,10 @@ export default function SyncErrorBanner() {
   return (
     <div className="notif-banner show" id="syncErrorBanner" style={{ display: "flex" }}>
       <span>
-        <Icon name="warning" size={14} /> Не всё сохранилось в облако ({errors.count}): {errors.message}
+        <Icon name="warning" size={14} /> Не всё сохранилось в облако ({errors.count}):{" "}
+        {unreadable(errors.message)
+          ? "что именно отказало, в тот раз не записалось. Если повторится — здесь будет написано, какая таблица и почему."
+          : errors.message}
       </span>
       <button className="btn btn-small" style={{ marginLeft: 10 }} onClick={dismiss}>
         Скрыть

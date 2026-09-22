@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { onRevive } from "@/lib/revive";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { me } from "@/lib/me";
 import type { MeetingVote } from "@/lib/meetingVotes";
@@ -98,10 +99,22 @@ export function useMeetingVotes() {
       .on("postgres_changes", { event: "*", schema: "public", table: "meeting_participants" }, () => {
         fetchAll().then(apply);
       })
-      .subscribe();
+      // Каждый подъём канала — повод перечитать: пока он поднимался, события
+      // не приходили, а догонять пропущенное realtime не умеет.
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") fetchAll().then(apply);
+      });
+
+    // И те же поводы, что у всего остального (см. lib/revive.ts): подписка
+    // умирает молча, а «Буду / Опоздаю / Не смогу» соседа после этого не
+    // появляется до перезагрузки страницы.
+    const stopRevive = onRevive(() => {
+      fetchAll().then(apply);
+    });
 
     return () => {
       cancelled = true;
+      stopRevive();
       void db.removeChannel(channel);
     };
   }, [fetchAll]);

@@ -21,8 +21,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient, isRoutedThroughProxy } from "@/lib/supabase/client";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { diffAssignees, diffRows, removeById, snapshotList, upsertById } from "@/lib/trackerSync";
+import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
+import { diffAssignees, diffRows, removeById, sameLists, snapshotList, upsertById } from "@/lib/trackerSync";
+import { describeDbError, syncFailure } from "@/lib/syncError";
 import { refreshRecurringStatuses } from "@/lib/taskDisplay";
 import {
   DEFAULT_ASSIGNEES,
@@ -43,6 +44,7 @@ import type { Idea, Meeting, Section, Task } from "@/types/tracker";
 import { clearSnapshot, loadSnapshot, saveSnapshot, type Snapshot, type TrackerLists } from "@/lib/offlineStore";
 import { applyLocalChanges, applyLocalNameChanges, hasUnsyncedWork } from "@/lib/offlineMerge";
 import { cacheShell } from "@/lib/shellCache";
+import { onRevive } from "@/lib/revive";
 
 type Shadow = {
   tasks: Task[];
@@ -149,8 +151,14 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
   const userIdRef = useRef<string | null>(null);
   const offlineRef = useRef(false);
   const realtimeReadyRef = useRef(false);
+  // Открытый канал живёт в клиенте Supabase, а клиент — один на всю
+  // вкладку; поэтому канал надо снимать руками, когда трекер уходит с
+  // экрана (см. subscribeRealtime).
+  const channelRef = useRef<RealtimeChannel | null>(null);
   const snapshotWritingRef = useRef(false);
   const snapshotDirtyRef = useRef(false);
+  // Перечитать всё и слить с экраном — см. catchUp() внутри boot-эффекта.
+  const catchUpRef = useRef<() => void>(() => {});
 
   // Mirror the tracker into IndexedDB on every change. Both the live lists
   // and the shadow go in: that pair is what lets the next start tell work
@@ -229,11 +237,11 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         const { upserts, deleteIds } = diffRows(sectionsNow, shadowRef.current.sections, sectionToRow);
         if (upserts.length) {
           const { error } = await db.from("sections").upsert(upserts as SectionRow[]);
-          if (error) throw error;
+          if (error) throw syncFailure("Разделы", "запись", error);
         }
         if (deleteIds.length) {
           const { error } = await db.from("sections").delete().in("id", deleteIds);
-          if (error) throw error;
+          if (error) throw syncFailure("Разделы", "удаление", error);
         }
         shadowRef.current.sections = snapshotList(sectionsNow);
       })
@@ -242,11 +250,11 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         const { upserts, deleteIds } = diffRows(tasksNow, shadowRef.current.tasks.filter(mine), stamp(taskToRow));
         if (upserts.length) {
           const { error } = await db.from("tasks").upsert(upserts as TaskRow[]);
-          if (error) throw error;
+          if (error) throw syncFailure("Задачи", "запись", error);
         }
         if (deleteIds.length) {
           const { error } = await db.from("tasks").delete().in("id", deleteIds);
-          if (error) throw error;
+          if (error) throw syncFailure("Задачи", "удаление", error);
         }
         // В тень кладётся ВЕСЬ список, а не отфильтрованный: тень — это
         // «что было в прошлый раз», и чужие строки в ней должны остаться,
@@ -258,11 +266,11 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         const { upserts, deleteIds } = diffRows(meetingsNow, shadowRef.current.meetings.filter(mine), stamp(meetingToRow));
         if (upserts.length) {
           const { error } = await db.from("meetings").upsert(upserts as MeetingRow[]);
-          if (error) throw error;
+          if (error) throw syncFailure("Встречи", "запись", error);
         }
         if (deleteIds.length) {
           const { error } = await db.from("meetings").delete().in("id", deleteIds);
-          if (error) throw error;
+          if (error) throw syncFailure("Встречи", "удаление", error);
         }
         shadowRef.current.meetings = snapshotList(liveRef.current.meetings);
       })
@@ -271,11 +279,11 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         const { upserts, deleteIds } = diffRows(ideasNow, shadowRef.current.ideas.filter(mine), stamp(ideaToRow));
         if (upserts.length) {
           const { error } = await db.from("ideas").upsert(upserts as IdeaRow[]);
-          if (error) throw error;
+          if (error) throw syncFailure("Мысли", "запись", error);
         }
         if (deleteIds.length) {
           const { error } = await db.from("ideas").delete().in("id", deleteIds);
-          if (error) throw error;
+          if (error) throw syncFailure("Мысли", "удаление", error);
         }
         shadowRef.current.ideas = snapshotList(liveRef.current.ideas);
       })
@@ -299,13 +307,18 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
             added.map((name) => ({ name })),
             { onConflict: "user_id,name" },
           );
-          if (error) throw error;
+          if (error) throw syncFailure("Люди", "запись", error);
         }
         shadowRef.current.assignees = assigneesNow.slice();
       })
       .catch(async (err: unknown) => {
         hadError = true;
-        const message = err instanceof Error ? err.message : String(err);
+        // describeDbError, а не String(err): отказ Supabase — это обычный
+        // объект, и String() превращал его в «[object Object]». Именно эту
+        // строку читает потом баннер над доской, то есть единственное
+        // объяснение поломки терялось ровно по дороге к тому, кому оно
+        // адресовано (см. lib/syncError.ts).
+        const message = describeDbError(err);
         console.error("Supabase sync error:", err);
         try {
           await db.from("sync_errors").insert({ message });
@@ -343,6 +356,13 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
   useEffect(() => {
     persistAllRef.current = persistAll;
   }, [persistAll]);
+
+  // Догон (см. ниже) живёт в эффекте, который запускается один раз, —
+  // ссылка нужна ему по той же причине, что и persistAllRef.
+  const queueSnapshotSaveRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    queueSnapshotSaveRef.current = queueSnapshotSave;
+  }, [queueSnapshotSave]);
 
   // ---- Soft delete / restore — bypass the diff entirely, same reasoning as
   // legacy-tracker.js's softDeleteRow()/restoreRow(): an ordinary upsert
@@ -552,6 +572,21 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     const db = createClient();
     dbRef.current = db;
 
+    // Что лежит в облаке прямо сейчас. Одно и то же чтение на старте и на
+    // догоне — иначе это была бы вторая правда об одном и том же (в этом
+    // проекте вторая копия расходилась с первой трижды).
+    const loadAll = (ms?: number) =>
+      withTimeout(
+        Promise.all([
+          db.from("tasks").select("*").is("deleted_at", null),
+          db.from("meetings").select("*").is("deleted_at", null),
+          db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }),
+          db.from("assignees").select("*").order("created_at", { ascending: true }),
+          db.from("sections").select("*").order("sort_order", { ascending: true }),
+        ]),
+        ms,
+      );
+
     let booting = false;
     async function boot() {
       if (booting) return;
@@ -624,18 +659,6 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       // человек, открывший трекер в самолёте, восемь секунд смотрел бы на
       // копию как на живые данные — ровно до таймаута первого запроса.
       if (cached) startFromCache(cached, { offline: typeof navigator !== "undefined" && !navigator.onLine });
-
-      const loadAll = (ms?: number) =>
-        withTimeout(
-          Promise.all([
-            db.from("tasks").select("*").is("deleted_at", null),
-            db.from("meetings").select("*").is("deleted_at", null),
-            db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }),
-            db.from("assignees").select("*").order("created_at", { ascending: true }),
-            db.from("sections").select("*").order("sort_order", { ascending: true }),
-          ]),
-          ms,
-        );
 
       let results;
       try {
@@ -814,6 +837,104 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       setLoading(false);
     }
 
+    // ---- Догон: перечитать всё и слить с тем, что на экране.
+    //
+    // Зачем он нужен, хотя есть realtime, написано в lib/revive.ts:
+    // коротко — подписка умирает молча, и до 22.09.2026 единственным
+    // способом узнать об изменении в базе был F5. Здесь — «что перечитать»,
+    // там — «когда».
+    //
+    // Это НЕ второй boot: boot читает сессию, поднимает копию из IndexedDB,
+    // рисует первый кадр и подписывается. Догон делает ровно одно — берёт
+    // пять списков и накладывает на них то, что человек успел изменить и
+    // что база ещё не подтвердила. Пара «что показано / что подтверждено»
+    // и функция слияния те же самые, которыми переносится работа, сделанная
+    // офлайн: третьего способа слить два состояния в этом файле быть не
+    // должно.
+    let catchingUp = false;
+    async function catchUp() {
+      // Офлайном занят свой повтор — он зовёт целый boot, и два чтения
+      // одновременно только мешали бы друг другу.
+      if (cancelled || catchingUp || offlineRef.current || !userIdRef.current) return;
+      catchingUp = true;
+      try {
+        let results;
+        try {
+          results = await loadAll();
+        } catch {
+          // Молчание сети здесь ничего не значит: на экране рабочие данные,
+          // а не копия, и следующий повод придёт через минуту.
+          return;
+        }
+        if (cancelled || results.some((r) => r.error)) return;
+
+        const server: TrackerLists = {
+          tasks: (results[0].data as TaskRow[]).map(taskFromRow),
+          meetings: (results[1].data as MeetingRow[]).map(meetingFromRow),
+          ideas: (results[2].data as IdeaRow[]).map(ideaFromRow),
+          assignees: (results[3].data as { name: string }[]).map((r) => r.name),
+          sections: (results[4].data as SectionRow[]).map(sectionFromRow),
+        };
+
+        // Снимается ДО перезаписи shadow — это и есть несохранённая работа.
+        const before = { live: { ...liveRef.current }, shadow: { ...shadowRef.current } };
+        shadowRef.current = {
+          tasks: snapshotList(server.tasks),
+          meetings: snapshotList(server.meetings),
+          ideas: snapshotList(server.ideas),
+          assignees: server.assignees.slice(),
+          sections: snapshotList(server.sections),
+        };
+
+        const next: TrackerLists = hasUnsyncedWork(
+          before.live as unknown as Record<string, unknown[]>,
+          before.shadow as unknown as Record<string, unknown[]>,
+        )
+          ? {
+              tasks: applyLocalChanges(server.tasks, before.live.tasks, before.shadow.tasks),
+              meetings: applyLocalChanges(server.meetings, before.live.meetings, before.shadow.meetings),
+              ideas: applyLocalChanges(server.ideas, before.live.ideas, before.shadow.ideas),
+              assignees: applyLocalNameChanges(server.assignees, before.live.assignees, before.shadow.assignees),
+              sections: applyLocalChanges(server.sections, before.live.sections, before.shadow.sections),
+            }
+          : server;
+
+        // И только то, что действительно изменилось, доходит до экрана.
+        // Иначе доска перерисовывалась бы раз в минуту просто так — а под
+        // рукой в этот момент может ехать карточка (см. правило про
+        // измерение списков во время переноса: перерисовка в середине
+        // жеста роняет его).
+        liveRef.current = next;
+        let touched = false;
+        if (!sameLists(before.live.tasks, next.tasks)) {
+          setTasks(next.tasks);
+          touched = true;
+        }
+        if (!sameLists(before.live.meetings, next.meetings)) {
+          setMeetings(next.meetings);
+          touched = true;
+        }
+        if (!sameLists(before.live.ideas, next.ideas)) {
+          setIdeas(next.ideas);
+          touched = true;
+        }
+        if (!sameLists(before.live.assignees, next.assignees)) {
+          setAssignees(next.assignees);
+          touched = true;
+        }
+        if (!sameLists(before.live.sections, next.sections)) {
+          setSections(next.sections);
+          touched = true;
+        }
+        // Копия для следующего запуска должна догонять вместе с экраном:
+        // иначе трекер открылся бы на кадре, который уже неверен.
+        if (touched) queueSnapshotSaveRef.current();
+      } finally {
+        catchingUp = false;
+      }
+    }
+    catchUpRef.current = catchUp;
+
     // ---- Realtime: merge changes from another tab/device into both the
     // live list and a CLONED copy in shadow (never the same object
     // reference — see snapshotList()'s doc comment for why).
@@ -828,7 +949,24 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
 
       realtimeReadyRef.current = true;
       const filter = `user_id=eq.${uid}`;
-      db.channel("tracker-sync")
+      // Имя канала — своё на каждую подписку, и это не украшение.
+      //
+      // 21.09.2026 трекер упал у руководителя словами «cannot add
+      // postgres_changes callbacks for realtime:tracker-sync after
+      // subscribe()». Имя здесь было постоянным, а `db.channel(name)`
+      // НЕ создаёт канал, если канал с таким именем уже есть, — он
+      // отдаёт прежний, и `.on()` на подписанном канале бросает
+      // исключение. Клиент Supabase в браузере один на всю вкладку
+      // (createBrowserClient — синглтон), поэтому канал переживал уход
+      // трекера с экрана: второе открытие страницы било в тот же канал.
+      // Падало это в эффекте, то есть уносило весь экран, — та же
+      // авария, что чинили в useTaskParticipants и useMeetingVotes, и
+      // ровно в том месте, куда её правку не донесли.
+      //
+      // Поэтому: своё имя — и обязательно removeChannel в уборке, иначе
+      // каждая навигация оставляет за собой живой websocket.
+      channelRef.current = db
+        .channel("tracker-sync:" + Math.random().toString(36).slice(2))
         .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter }, (payload) => {
           if (payload.eventType === "DELETE" || (payload.new as { deleted_at?: string })?.deleted_at) {
             const id = (payload.old as { id: string })?.id ?? (payload.new as { id: string }).id;
@@ -889,7 +1027,17 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
           }
           setSections(liveRef.current.sections);
         })
-        .subscribe();
+        // Подписка говорит о себе, и это половина починки задержек.
+        //
+        // Пока сокет поднимается, переподключается или лежит, события
+        // просто не приходят — и раньше об этом не знал никто. Realtime не
+        // умеет догонять пропущенное: он рассказывает только о том, что
+        // случилось при нём. Поэтому каждый подъём канала — повод
+        // перечитать всё разом, а каждое падение — повод не считать экран
+        // свежим и дождаться следующего подъёма.
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") catchUpRef.current();
+        });
     }
 
     boot();
@@ -914,10 +1062,19 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       if (!cancelled && offlineRef.current) boot();
     }, 15000);
 
+    // И догон — на случай, когда связь есть, а свежести нет (см.
+    // lib/revive.ts). Когда подписка не поднялась вовсе — на сети, которая
+    // не пускает к Supabase напрямую, — он остаётся единственным путём для
+    // всего, что приходит извне, поэтому спрашивает чаще.
+    const stopRevive = onRevive(() => catchUpRef.current(), {
+      everyMs: isRoutedThroughProxy() ? 20_000 : 60_000,
+    });
+
     return () => {
       cancelled = true;
       window.removeEventListener("online", onOnline);
       clearInterval(offlineRetry);
+      stopRevive();
     };
     // Intentionally run once on mount — re-running boot() on every render
     // would re-subscribe realtime channels and re-fetch everything. The one

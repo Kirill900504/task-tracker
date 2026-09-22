@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { onRevive } from "@/lib/revive";
 import { me } from "@/lib/me";
 import { withoutSelfMark } from "@/lib/actorName";
 
@@ -170,11 +171,14 @@ export function useItemComments(kind: ItemKind, itemId: string) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchAll().then((list) => {
-      if (cancelled) return;
-      setComments(list);
-      setLoading(false);
-    });
+    function pull() {
+      fetchAll().then((list) => {
+        if (cancelled) return;
+        setComments(list);
+        setLoading(false);
+      });
+    }
+    pull();
 
     const db = createClient();
     const channel = db
@@ -192,10 +196,21 @@ export function useItemComments(kind: ItemKind, itemId: string) {
           if (!cancelled) setComments(list);
         });
       })
-      .subscribe();
+      // Каждый подъём канала — повод перечитать: пока он поднимался,
+      // события не приходили, а догонять пропущенное realtime не умеет.
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") pull();
+      });
+
+    // И те же поводы, что у всего остального (см. lib/revive.ts). Здесь это
+    // заметнее всего: обсуждение — это переписка, и реплика, пришедшая в
+    // открытую карточку, не должна ждать перезагрузки. Реже, чем у доски:
+    // лента тянет за собой подписанные ссылки на файлы.
+    const stopRevive = onRevive(pull, { everyMs: 120_000 });
 
     return () => {
       cancelled = true;
+      stopRevive();
       void db.removeChannel(channel);
     };
   }, [fetchAll, kind, itemId]);
