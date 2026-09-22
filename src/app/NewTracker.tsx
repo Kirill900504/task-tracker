@@ -716,6 +716,9 @@ export default function NewTracker() {
                 }}
                 onOpenTask={(task) => setOpenExistingTaskId(task.id)}
                 onOpenMeeting={(meeting) => setOpenExistingMeetingId(meeting.id)}
+                // Чтобы карточка знала, кем я в ней числюсь, и красилась
+                // тем же тоном, что на доске.
+                myAssigneeId={identity.assigneeId}
                 onGoToTasks={() => setMobileTab("tasks")}
                 showToast={toasts.showToast}
               />

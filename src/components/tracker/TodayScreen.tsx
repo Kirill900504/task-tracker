@@ -6,6 +6,8 @@ import TaskCard from "./TaskCard";
 import SendMenu from "./SendMenu";
 import { buildToday } from "@/lib/todayScreen";
 import { fmtDate } from "@/lib/taskDisplay";
+import { useTaskParticipants } from "@/hooks/useTaskParticipants";
+import { myRoleOn } from "@/lib/myRole";
 
 // The phone's first screen: what is overdue, what is due today, who you are
 // meeting. The same cards as everywhere else — tapping opens the same
@@ -21,6 +23,7 @@ export default function TodayScreen({
   onOpenTask,
   onOpenMeeting,
   onGoToTasks,
+  myAssigneeId = "",
   showToast,
 }: {
   tasks: Task[];
@@ -36,6 +39,9 @@ export default function TodayScreen({
   // Необязателен: на телефоне это переход на вкладку «Задачи», а на
   // компьютере панель задач и так стоит рядом — вести из неё некуда.
   onGoToTasks?: () => void;
+  // Моя строка в списке людей: по ней карточка узнаёт, кем я в задаче
+  // числюсь, и красится тем же тоном, что на доске.
+  myAssigneeId?: string;
   // How the outcome of a send is said out loud here — the same toast stack
   // the rest of the tracker answers with.
   showToast: (message: string) => void;
@@ -46,6 +52,17 @@ export default function TodayScreen({
   const sendMenuFor = (task: Task) => [{ id: "send", label: "✈ Отправить участнику", onSelect: () => setSendTask(task) }];
   const data = buildToday(tasks, meetings);
   const sectionOf = (t: Task) => sections.find((s) => s.id === t.sectionId) ?? null;
+  // Тон карточки здесь тот же, что на доске, и по той же причине: этот
+  // экран показывает ВСЁ, у чего срок сегодня или раньше, — и своё, и
+  // чужое, — а без цвета «где моя работа» приходится открывать каждую.
+  //
+  // Участники спрашиваются своим хуком, а не приходят пропсом: держит их
+  // панель задач, и подниматься за ними в NewTracker значило бы тащить
+  // список участия через весь корень ради цвета на втором экране. Цена
+  // известна и мала — вторая подписка на ту же таблицу (имя канала у хука
+  // своё на каждый вызов ровно для этого, см. useTaskParticipants).
+  const participants = useTaskParticipants();
+  const roleOf = (t: Task) => myRoleOn(participants.forTask(t.id), myAssigneeId);
   const nothing = !data.overdue.length && !data.dueToday.length && !data.meetingsToday.length && !data.meetingsTomorrow.length;
 
   return (
@@ -73,6 +90,7 @@ export default function TodayScreen({
               key={task.id}
               task={task}
               section={sectionOf(task)}
+              role={roleOf(task)}
               onToggleDone={() => onToggleTask(task)}
               canComplete={canCompleteTask ? canCompleteTask(task) : true}
               onOpen={() => onOpenTask(task)}
@@ -90,6 +108,7 @@ export default function TodayScreen({
               key={task.id}
               task={task}
               section={sectionOf(task)}
+              role={roleOf(task)}
               onToggleDone={() => onToggleTask(task)}
               canComplete={canCompleteTask ? canCompleteTask(task) : true}
               onOpen={() => onOpenTask(task)}
