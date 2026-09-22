@@ -1415,3 +1415,43 @@ test("окно ПК перестраивается ступенями, а не �
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(page.locator("#mobileNav")).toBeVisible();
 });
+
+// Вычеркнутое — свежим вверх.
+//
+// Окно показывало мысли в порядке записи, и вычеркнутая минуту назад
+// оказывалась в самом низу списка из тридцати строк — то есть ровно там,
+// где её не ищут: открывают это окно, чтобы вернуть последнее.
+test("вычеркнутые мысли идут свежими сверху", async ({ page }) => {
+  const stamp = Date.now();
+  const first = `E2E вычерк раньше ${stamp}`;
+  const second = `E2E вычерк позже ${stamp}`;
+
+  await login(page);
+
+  // Две мысли, записанные по очереди: первая — раньше.
+  for (const text of [first, second]) {
+    await page.fill("#ideaInput", text);
+    await page.locator("#ideaInput").press("Enter");
+    await expect(page.locator(".idea-item", { hasText: text })).toBeVisible();
+  }
+  await waitForSaved(page);
+
+  // А вычёркиваются в обратном порядке — сначала та, что записана раньше.
+  for (const text of [first, second]) {
+    await page.locator(".idea-item", { hasText: text }).locator(".idea-check").click();
+    await expect(page.locator(".idea-item", { hasText: text })).toHaveCount(0);
+  }
+  await waitForSaved(page);
+
+  await page.click("#ideasDoneBtn");
+  const rows = page.locator(".done-list-row");
+  await expect(rows.filter({ hasText: first })).toHaveCount(1);
+
+  // Порядок считается по номерам строк, а не по первым двум в списке:
+  // у тестового аккаунта тут лежит и всё вычеркнутое прежними прогонами.
+  const titles = await rows.locator(".done-list-title").allInnerTexts();
+  const iFirst = titles.findIndex((t) => t.includes(first));
+  const iSecond = titles.findIndex((t) => t.includes(second));
+  expect(iSecond).toBeGreaterThanOrEqual(0);
+  expect(iSecond, "вычеркнутая последней должна стоять выше").toBeLessThan(iFirst);
+});
