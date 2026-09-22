@@ -33,6 +33,38 @@ export async function recoveryLink(
   return { link: `${base}/reset-password?token_hash=${encodeURIComponent(data.properties.hashed_token)}` };
 }
 
+// Ссылка «открыть трекер, не вводя пароль».
+//
+// Та же механика, что у восстановления, и намеренно в том же файле: обе
+// собираются из `hashed_token`, обе ведут на НАШ домен, и разойтись им
+// нельзя. Разница одна — тип: `magiclink` пускает внутрь сразу, а
+// `recovery` высаживает на форму нового пароля.
+//
+// Зачем это понадобилось (22.09.2026). В MAX кнопки мини-приложения нет —
+// её установка отправляет бота на повторную модерацию, и это решение
+// Кирилла, — поэтому ссылка из чата открывается во ВНЕШНЕМ браузере
+// телефона. Там нет ни подписи мессенджера, ни сессии: человек упирается
+// в форму входа и корпоративный пароль, которого не помнит. То есть
+// трекер, ради которого всё затевалось, для половины людей заканчивался
+// на этом экране.
+//
+// Граница у ссылки ровно та же, что у мини-приложения: она открывает
+// СУЩЕСТВУЮЩИЙ вход, а не заводит новый. Кому входа не давали — тому и
+// ссылка не выдаётся; уходит она только в чат, уже привязанный к этому
+// человеку владельцем, то есть туда же, куда и его задачи.
+export async function signInLink(
+  admin: SupabaseClient,
+  email: string,
+  origin: string,
+): Promise<{ link: string } | { error: string }> {
+  const { data, error } = await admin.auth.admin.generateLink({ type: "magiclink", email });
+  if (error || !data?.properties?.hashed_token) {
+    return { error: error?.message || "Supabase не отдал одноразовый код" };
+  }
+  const base = origin.replace(/\/+$/, "");
+  return { link: `${base}/enter?token_hash=${encodeURIComponent(data.properties.hashed_token)}` };
+}
+
 // Адрес, который человек увидит в браузере. За прокси Vercel в request.url
 // лежит внутренний адрес, поэтому спрашиваем заголовки.
 export function originOf(req: Request): string {

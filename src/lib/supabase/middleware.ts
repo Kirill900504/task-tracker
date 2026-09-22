@@ -54,6 +54,11 @@ export async function updateSession(request: NextRequest) {
   // трекер. Отправить её на /login значит показать форму входа вместо
   // входа, который в эту секунду происходит сам.
   if (request.nextUrl.pathname.startsWith("/app")) return supabaseResponse;
+  // Вход по ссылке из мессенджера — ровно то же самое и по той же причине:
+  // сессии у человека нет, она появляется прямо здесь, из одноразового
+  // кода в адресе. Отправить его на /login значит показать форму входа
+  // тому, кто в эту секунду входит (см. /enter).
+  if (request.nextUrl.pathname.startsWith("/enter")) return supabaseResponse;
   if (request.nextUrl.pathname.endsWith("/miniapp-auth")) return supabaseResponse;
   // The messengers and the external cron pinger call these with their own
   // secret-token checks, not a browser session — never gate them behind
