@@ -32,6 +32,18 @@ function hasNotificationApi(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
 }
 
+// A due task used to announce itself TWICE: a system notification in the
+// corner of the screen and an in-app toast over the board, word for word
+// the same. The system one is the better of the two — it arrives when the
+// tracker is behind another window, which is exactly when a reminder is
+// worth anything — so the toast is now only what is left when the browser
+// cannot deliver one. Not removed outright: without permission (or without
+// the API at all) dropping it would mean no reminder whatsoever, and
+// silence is worse than a duplicate.
+function canNativeNotify(): boolean {
+  return hasNotificationApi() && Notification.permission === "granted";
+}
+
 export function useNotifications({
   tasks,
   meetings,
@@ -69,7 +81,7 @@ export function useNotifications({
   }
 
   function browserNotify(title: string, body: string) {
-    if (hasNotificationApi() && Notification.permission === "granted") {
+    if (canNativeNotify()) {
       try {
         new Notification(title, { body });
       } catch {
@@ -108,13 +120,13 @@ export function useNotifications({
       dueTodayCount++;
       const toastKey = `toast_${t.id}_${today}`;
       const nativeKey = `native_${t.id}_${today}`;
-      if (!notifiedRef.current[toastKey]) {
+      if (!canNativeNotify() && !notifiedRef.current[toastKey]) {
         markNotified(toastKey);
         showToast("Задача на сегодня", label + (t.assignee ? " — " + t.assignee : ""));
       }
       if (!notifiedRef.current[nativeKey]) {
         browserNotify("Задача на сегодня: " + t.title, t.assignee || "");
-        if (hasNotificationApi() && Notification.permission === "granted") markNotified(nativeKey);
+        if (canNativeNotify()) markNotified(nativeKey);
       }
     });
 
@@ -136,8 +148,11 @@ export function useNotifications({
     function fireOnce(key: string, fn: () => void, requireGranted?: boolean) {
       if (notifiedRef.current[key]) return;
       fn();
-      if (!requireGranted || (hasNotificationApi() && Notification.permission === "granted")) markNotified(key);
+      if (!requireGranted || canNativeNotify()) markNotified(key);
     }
+    // Same rule as the due-task reminder above: the toast is the stand-in
+    // for a system notification, not its twin.
+    const toastOnly = !canNativeNotify();
 
     meetings.forEach((m) => {
       if (m.date !== today || !m.time) return;
@@ -147,11 +162,11 @@ export function useNotifications({
       const who = m.participants.length ? " · " + m.participants.join(", ") : "";
 
       if (nowMin >= mMin - 15 && nowMin < mMin) {
-        fireOnce(`toast_meet15_${m.id}_${today}`, () => showToast("Встреча через 15 минут", `${m.time} — ${m.title}${who}`));
+        if (toastOnly) fireOnce(`toast_meet15_${m.id}_${today}`, () => showToast("Встреча через 15 минут", `${m.time} — ${m.title}${who}`));
         fireOnce(`native_meet15_${m.id}_${today}`, () => browserNotify("Через 15 минут: " + m.title, m.time + who), true);
       }
       if (nowMin >= mMin && nowMin <= mMin + 1) {
-        fireOnce(`toast_meet0_${m.id}_${today}`, () => showToast("Встреча начинается", `${m.time} — ${m.title}${who}`));
+        if (toastOnly) fireOnce(`toast_meet0_${m.id}_${today}`, () => showToast("Встреча начинается", `${m.time} — ${m.title}${who}`));
         fireOnce(`native_meet0_${m.id}_${today}`, () => browserNotify("Встреча сейчас: " + m.title, m.time + who), true);
       }
     });
