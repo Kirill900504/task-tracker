@@ -1,5 +1,5 @@
 import type { BotButton } from "@/lib/botTransport";
-import { encodeCallback } from "@/lib/colleagues";
+import { encodeCallback, screenButtons } from "@/lib/colleagues";
 import { miniAppUrl } from "@/lib/trackerUrl";
 
 // Меню бота — одно на всех, сужаемое ролью.
@@ -136,8 +136,12 @@ export function menuButtons(who: MenuAudience): BotButton[][] {
   return rows;
 }
 
+// Меню — всегда экран, чем бы его ни открыли: нажатием или словом «меню».
+// Поэтому его кнопки помечены здесь, а не только на обратном пути через
+// handleBotCallback. Иначе меню, вызванное словом, отвечало бы новым
+// сообщением — ровно тем, от чего экран и заводился.
 export function botMenu(who: MenuAudience): { text: string; buttons: BotButton[][] } {
-  return { text: "Что показать?", buttons: menuButtons(who) };
+  return { text: "Что показать?", buttons: screenButtons(menuButtons(who)) };
 }
 
 // Нижний ряд под любым экраном — дверь обратно в меню.

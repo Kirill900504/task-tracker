@@ -14,7 +14,7 @@ import { answerTrackerQuestion } from "@/lib/telegramAssistant";
 import { extractMeetingNotes } from "@/lib/meetingNotes";
 import { findMeetingForNotes } from "@/lib/meetingLink";
 import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
-import { attachExecutors, attachMeetingParticipants, assignNote } from "@/lib/assignExecutors";
+import { attachExecutors, attachMeetingParticipants, assignNote, selfAssigneeName } from "@/lib/assignExecutors";
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 import { newTaskRow } from "@/lib/newTask";
 import { ownerListReply, ownerMeetingsReply, ownerMenu } from "@/lib/ownerQueries";
@@ -23,7 +23,7 @@ import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
 import { deliverComment } from "@/lib/commentDelivery";
 import { actorScope, findActorByChat, type BotActor } from "@/lib/botActor";
-import { actorName } from "@/lib/actorName";
+import { actorName, withoutSelfMark } from "@/lib/actorName";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
 // мессенджере, а закрывает следующее сообщение владельца.
@@ -83,9 +83,12 @@ function fmtDate(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
+// Имена, которые человек назвал, а в трекере их нет. «Список
+// исполнителей» здесь было неверно наполовину: та же строка выходит под
+// встречей, где люди не исполнители, а приглашённые.
 function droppedNote(dropped: string[]): string {
   if (!dropped.length) return "";
-  return "\n⚠ Не нашёл в списке исполнителей, пропустил: " + dropped.join(", ");
+  return "\n⚠ Не нашёл среди людей трекера, пропустил: " + dropped.join(", ");
 }
 
 function say(ctx: BotContext, text: string) {
@@ -148,12 +151,24 @@ async function remember(ctx: BotContext, patch: Record<string, unknown>) {
 
 async function respondToTool(ctx: BotContext, userId: string, tool: string, input: Record<string, unknown>, droppedNames: string[]) {
   if (tool === "create_task") {
+    // Не назвали, кому, — значит себе.
+    //
+    // 21.09.2026 Кирилл написал боту «создай задачу на сегодня позвонить
+    // Паше Котову» и получил задачу, поставленную ЧУЖОМУ человеку: модель
+    // взяла имя из примера в подсказке (закрыто сторожем nameWasSaid), а
+    // пустое поле «Исполнитель» до этого дня означало задачу без единого
+    // исполнителя — то есть карточку, которой в трекере быть не может
+    // («без исполнителя запрети создавать»). Его слова: «задачи в моём
+    // боте должны создаваться только на меня, если я не указываю адресата
+    // сам». Это и есть умолчание: свой бот — про свои дела.
+    const named = String(input.assignee || "").trim();
+    const onMyself = named ? "" : await selfAssigneeName(ctx.admin, userId);
     const row = newTaskRow({
       id: uid(),
       userId,
       title: String(input.title || ""),
       description: String(input.description || ""),
-      assignee: String(input.assignee || ""),
+      assignee: named || onMyself,
       deadline: (input.deadline as string) || null,
     });
     const { error } = await ctx.admin.from("tasks").insert(row);
@@ -173,20 +188,34 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     // И только те, кто действительно назначен. Раньше здесь стояло имя из
     // поля даже тогда, когда строка участия не завелась: ответ подтверждал
     // назначение, которого не было, а выяснялось это неделей позже.
-    const shown = assigned.attached;
-    if (shown.length === 1) lines.push("Исполнитель: " + shown[0]);
-    if (shown.length > 1) lines.push("Исполнители: " + shown.join(", "));
+    //
+    // Пометка «(я)» — служебная: она написана для того, чтобы владелец
+    // нашёл себя в списке из пятнадцати имён, и в чате выглядит опечаткой.
+    // Своя задача так и подписывается — «вы», — и заодно говорит, почему
+    // она ваша: адресата не называли.
+    const shown = assigned.attached.map(withoutSelfMark);
+    if (onMyself && shown.length === 1) lines.push("Исполнитель: вы — адресата не назвали");
+    else if (shown.length === 1) lines.push("Исполнитель: " + shown[0]);
+    else if (shown.length > 1) lines.push("Исполнители: " + shown.join(", "));
     await say(ctx, lines.join("\n") + droppedNote(droppedNames) + assignNote(assigned));
     return;
   }
 
   if (tool === "create_meeting") {
+    // Встреча без названия — строка «✓ Встреча: «»» в чате и пустая
+    // карточка в списке, которую не отличить от соседних (так и вышло
+    // 21.09.2026). Название модель придумывает не всегда — когда в фразе
+    // нет темы, её и правда нет, — поэтому его подставляет код: время и
+    // участники в карточке уже есть, а слово «Встреча» хотя бы называет,
+    // что это.
+    const said = Array.isArray(input.participants) ? (input.participants as unknown[]).filter((n): n is string => typeof n === "string") : [];
+    const title = String(input.title || "").trim() || (said.length ? "Встреча: " + said.map(withoutSelfMark).join(", ") : "Встреча");
     const row = {
       id: uid(),
       user_id: userId,
       date: String(input.date || ""),
       time: String(input.time || ""),
-      title: String(input.title || ""),
+      title,
       participants: Array.isArray(input.participants) ? input.participants : [],
       status: "planned",
       result: "",
@@ -211,7 +240,7 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
       (row.participants as unknown[]).filter((n): n is string => typeof n === "string"),
     );
     const lines = [`✓ Встреча: «${row.title}»`, `${fmtDate(row.date)}${row.time ? ", " + row.time : ""}`];
-    if (invited.attached.length) lines.push("Участники: " + invited.attached.join(", "));
+    if (invited.attached.length) lines.push("Участники: " + invited.attached.map(withoutSelfMark).join(", "));
     await say(ctx, lines.join("\n") + droppedNote(droppedNames) + assignNote(invited));
     return;
   }
@@ -285,11 +314,18 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
       return;
     }
 
+    // Поручение, у которого не назван исполнитель, — дело того, кто
+    // рассказывает. То же умолчание, что у задачи одной фразой: задачи
+    // без исполнителя в трекере не бывает, и «без исполнителя» в списке
+    // означало карточку, с которой потом нечего спросить.
+    const mine = await selfAssigneeName(ctx.admin, userId);
+    if (mine) for (const t of tasks) if (!t.assignee) t.assignee = mine;
+
     // Never created straight away: a monologue is exactly the input where a
     // model can turn a passing remark into a task, so the list is shown and
     // waits for an explicit "да" (handled by resolvePendingAction).
     const lines = tasks.map((t, i) => {
-      const bits = [t.assignee || "без исполнителя"];
+      const bits = [withoutSelfMark(t.assignee) || "без исполнителя"];
       if (t.deadline) bits.push("до " + fmtDate(t.deadline));
       return `${i + 1}) ${t.title} — ${bits.join(", ")}`;
     });
@@ -476,7 +512,9 @@ async function offerTask(
     .filter((it) => it.tool === "create_task")
     .map((it) => ({
       title: String(it.input.title || "").trim(),
-      assignee: String(it.input.assignee || "").trim(),
+      // Не назвал, кому, — значит себе. У руководителя своя строка в
+      // списке людей есть (в отличие от владельца), и это ровно она.
+      assignee: String(it.input.assignee || "").trim() || colleague.name,
       deadline: (it.input.deadline as string) || "",
     }))
     .filter((t) => t.title);
@@ -488,13 +526,16 @@ async function offerTask(
     .eq("id", colleague.id);
 
   const lines = tasks.map((t, i) => {
-    const bits = [t.assignee || "без исполнителя"];
+    const bits = [t.assignee === colleague.name ? "вам" : t.assignee || "без исполнителя"];
     if (t.deadline) bits.push("до " + fmtDate(t.deadline));
     return `${i + 1}) ${t.title} — ${bits.join(", ")}`;
   });
+  // «Записать?» когда задача своя: слово «поручить» про собственное дело
+  // звучит как чужое, а вопрос читают быстро и отвечают «да» не глядя.
+  const allMine = tasks.every((t) => t.assignee === colleague.name);
   await say(
     ctx,
-    `Поручить?\n${lines.join("\n")}\n\nОтветьте «да» — любой другой ответ отменит.`,
+    `${allMine ? "Записать?" : "Поручить?"}\n${lines.join("\n")}\n\nОтветьте «да» — любой другой ответ отменит.`,
   );
   return true;
 }
@@ -555,7 +596,14 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
       await say(ctx, "Эта встреча больше не найдена.");
       return true;
     }
-    await closeMeeting(ctx.admin, meeting, "success", trimmed);
+    // Актор передаётся ради задачи, из которой встреча выросла: успешный
+    // итог принимает по ней работу, если она ждала приёмки (см.
+    // approveTaskFromMeeting). Без него это правило работало бы в трекере и
+    // молчало в мессенджере — то есть было бы наполовину.
+    await closeMeeting(ctx.admin, meeting, "success", trimmed, {
+      label: await actorName(ctx.admin, actor.spaceId, actor.userId),
+      userId: actor.userId,
+    });
     await say(ctx, "📝 Итог записан и разослан тем, кто был.");
     return true;
   }

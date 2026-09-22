@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { signInLink } from "@/lib/recoveryLink";
+import { trackerUrl } from "@/lib/trackerUrl";
 import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback, meetingButtons, taskButtons } from "@/lib/colleagues";
 import { botMenu, navRow } from "@/lib/botMenu";
@@ -20,7 +22,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 // Что видит коллега — только своё: выборки идут по его строке участия, а не
 // по пространству. Читать чужие задачи он не вправе и в трекере.
 
-export type ColleagueQuery = "tasks" | "today" | "overdue" | "meetings" | "review" | "menu" | "help";
+export type ColleagueQuery = "tasks" | "today" | "overdue" | "meetings" | "review" | "menu" | "help" | "enter";
 
 const TRIGGERS: Record<ColleagueQuery, string[]> = {
   tasks: ["/tasks", "мои задачи", "задачи", "мои", "что на мне", "мои дела"],
@@ -33,6 +35,10 @@ const TRIGGERS: Record<ColleagueQuery, string[]> = {
   // отдельным словом для того, кто уже видел меню и всё равно не понял.
   menu: ["/menu", "меню", "menu", "разделы", "start", "/start"],
   help: ["/help", "помощь", "команды", "что умеешь"],
+  // Вход в трекер без пароля. Слов много нарочно: человек, который не
+  // может войти, пишет боту то, что первым придёт в голову, и «не могу
+  // войти» должно сработать так же, как «вход».
+  enter: ["/enter", "вход", "войти", "трекер", "открыть трекер", "не могу войти", "забыл пароль", "пароль"],
 };
 
 export function matchColleagueCommand(text: string): ColleagueQuery | null {
@@ -203,6 +209,53 @@ export function navButtons(): BotButton[][] {
   return navRow("recipient");
 }
 
+// «Откройте трекер» — ссылкой, по которой входят без пароля.
+//
+// Это ответ на то, чем для половины людей трекер заканчивался. В MAX
+// кнопки мини-приложения нет (её установка отправляет бота на повторную
+// модерацию — решение Кирилла), поэтому ссылка из чата открывается во
+// внешнем браузере: ни подписи мессенджера, ни сессии, и человек упирается
+// в корпоративный пароль, которого не помнит.
+//
+// Граница ровно та же, что у мини-приложения: ссылка открывает
+// СУЩЕСТВУЮЩИЙ вход, а не заводит новый. У коллеги без входа в трекер его
+// и не появится — ему бот и есть трекер, и сказать об этом надо словами, а
+// не пустым отказом.
+//
+// Уходит она в тот чат, откуда пришёл вопрос, — то есть туда же, куда и
+// его задачи, и привязывал этот чат владелец. Живёт час и сгорает при
+// первом открытии: это условие Supabase, и менять его незачем.
+export async function signInReply(admin: SupabaseClient, assigneeId: string): Promise<BotReply> {
+  const { data: member } = await admin
+    .from("workspace_members")
+    .select("member_id, status")
+    .eq("assignee_id", assigneeId)
+    .maybeSingle();
+
+  if (!member?.member_id || member.status === "revoked") {
+    return {
+      text:
+        "Входа в трекер у вас пока нет — и он не нужен: всё, что от вас ждут, приходит сюда, и отвечать можно прямо отсюда.\n\n" +
+        "Если трекер нужен целиком, попросите Кирилла прислать приглашение.",
+      buttons: navButtons(),
+    };
+  }
+
+  const { data: user } = await admin.auth.admin.getUserById(member.member_id as string);
+  const email = user?.user?.email;
+  if (!email) return { text: "Не получилось собрать ссылку — скажите об этом Кириллу.", buttons: navButtons() };
+
+  const made = await signInLink(admin, email, trackerUrl());
+  if ("error" in made) return { text: "Не получилось собрать ссылку — скажите об этом Кириллу.", buttons: navButtons() };
+
+  return {
+    text:
+      `🔑 Вход в трекер — по этой ссылке, пароль вводить не нужно:\n\n${made.link}\n\n` +
+      "Она одноразовая и живёт час. Понадобится снова — напишите «вход».",
+    buttons: navButtons(),
+  };
+}
+
 export async function replyForColleague(
   admin: SupabaseClient,
   colleague: { id: string; name: string },
@@ -211,6 +264,7 @@ export async function replyForColleague(
 ): Promise<BotReply> {
   if (kind === "menu") return botMenu("recipient");
   if (kind === "help") return { text: colleagueCommandsHelp(colleague.name), buttons: navButtons() };
+  if (kind === "enter") return signInReply(admin, colleague.id);
 
   if (kind === "meetings") {
     const meetings = await myMeetings(admin, colleague.id, today);

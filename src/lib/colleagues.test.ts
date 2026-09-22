@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { encodeCallback, decodeCallback, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, rescheduleButtons, chatsFor } from "@/lib/colleagues";
+import { encodeCallback, decodeCallback, screenButtons, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, rescheduleButtons, chatsFor } from "@/lib/colleagues";
 
 describe("callback data", () => {
   it("survives a round trip", () => {
@@ -9,6 +9,38 @@ describe("callback data", () => {
 
   it("stays inside Telegram's 64-byte limit for a real id", () => {
     expect(encodeCallback("meeting", "yes", "tg" + "m".repeat(20)).length).toBeLessThanOrEqual(64);
+  });
+
+  // Экран переписывает сам себя, и знать об этом он может только по
+  // нажатой кнопке: та же «☰ Меню» стоит и под утренней сводкой, которую
+  // переписывать нельзя. Отсюда знак в данных — и его надо суметь снять.
+  it("remembers that a button was pressed inside a screen", () => {
+    const marked = screenButtons([[{ text: "📋 Задачи", data: encodeCallback("task", "olist", "all") }]]);
+    expect(decodeCallback(marked[0][0].data)).toEqual({ kind: "task", action: "olist", id: "all", fromScreen: true });
+  });
+
+  it("leaves a button pressed under a sent task alone", () => {
+    expect(decodeCallback(encodeCallback("task", "acc", "abc123"))?.fromScreen).toBeUndefined();
+  });
+
+  // Экраны вкладываются друг в друга, и один и тот же ряд проходит через
+  // пометку не по одному разу: второй знак сделал бы действие «~olist»,
+  // которого не разбирает никто, — то есть молчащую кнопку.
+  it("does not mark the same button twice", () => {
+    const once = screenButtons([[{ text: "☰ Меню", data: encodeCallback("task", "omenu", "x") }]]);
+    expect(screenButtons(once)).toEqual(once);
+  });
+
+  // Кнопка мини-приложения боту ничего не возвращает: переписывать по ней
+  // нечего, а знак в данных остался бы мусором.
+  it("leaves a mini-app button untouched", () => {
+    const rows = screenButtons([[{ text: "🚀 Открыть трекер", data: encodeCallback("task", "omenu", "x"), app: "https://example.invalid/app" }]]);
+    expect(rows[0][0].data).toBe(encodeCallback("task", "omenu", "x"));
+  });
+
+  it("keeps a marked button inside Telegram's 64-byte limit", () => {
+    const rows = screenButtons([[{ text: "x", data: encodeCallback("task", "oshow", "t" + "9".repeat(35)) }]]);
+    expect(rows[0][0].data.length).toBeLessThanOrEqual(64);
   });
 
   it("understands all three kinds", () => {

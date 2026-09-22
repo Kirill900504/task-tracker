@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { resolveWhen } from "@/lib/meetingNotes";
+import { resolveWhen } from "@/lib/whenDate";
 import { moscowNow, dateStr } from "@/lib/taskLogic";
 import { plural } from "@/lib/plural";
 

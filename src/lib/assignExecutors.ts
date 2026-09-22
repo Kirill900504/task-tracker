@@ -34,10 +34,23 @@ export type AssignResult = {
   error?: string;
 };
 
-async function ownerDisplayName(admin: SupabaseClient, userId: string): Promise<string> {
+// Строка САМОГО владельца в списке людей — та, что помечена «(я)».
+//
+// Отдельной строки с чатом у него нет и не будет (см. lib/reach), но имя
+// в списке есть, и именно им подписывается поле «Исполнитель», когда
+// задача — его собственная. Нужна она серверу ровно там, где надо
+// поставить задачу «на себя»: имя должно совпадать с базой буква в
+// букву, иначе триггер 0024 не найдёт человека и задача окажется
+// назначенной только на словах.
+export async function selfAssigneeName(admin: SupabaseClient, userId: string): Promise<string> {
   const { data } = await admin.from("assignees").select("name").eq("user_id", userId);
   const self = ((data || []) as { name: string }[]).find((a) => isSelfAssignee(a.name));
-  return self ? self.name.replace(/\(я\)\s*$/, "").trim() || "трекера" : "трекера";
+  return self?.name || "";
+}
+
+async function ownerDisplayName(admin: SupabaseClient, userId: string): Promise<string> {
+  const self = await selfAssigneeName(admin, userId);
+  return self.replace(/\(я\)\s*$/, "").trim() || "трекера";
 }
 
 export async function attachExecutors(

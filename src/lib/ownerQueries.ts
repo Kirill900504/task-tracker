@@ -222,11 +222,17 @@ export async function ownerListReply(
 
   if (which === "help") return { text: assignerHelp(), buttons: ownerNav() };
 
-  const tasks = await ownerTasks(admin, actor);
+  // Встречи нужны только «сегодняшнему» экрану, но спросить их ВМЕСТЕ с
+  // задачами дешевле, чем после: два вопроса в базу, заданные подряд,
+  // стоят двух полётов туда и обратно, а заданные разом — одного.
+  const [tasks, todayMeetings] = await Promise.all([
+    ownerTasks(admin, actor),
+    which === "today" ? ownerMeetings(admin, actor, today) : Promise.resolve([] as OwnerMeetingRow[]),
+  ]);
 
   if (which === "today") {
     const due = tasks.filter((t) => t.deadline && t.deadline <= today);
-    const meetings = (await ownerMeetings(admin, actor, today)).filter((m) => m.date === today);
+    const meetings = todayMeetings.filter((m) => m.date === today);
     const reply = taskList("📌 На сегодня", due, today, "На сегодня ничего не назначено 🎉");
     if (!meetings.length) return reply;
     const lines = meetings.map((m) => `• ${m.time ? m.time + " — " : ""}${m.title}`);

@@ -35,7 +35,25 @@ export function replyButtons(kind: "task" | "meeting", itemId: string): BotButto
 
 // Кто это нажал и что именно — упаковано в данные кнопки, у которых
 // Telegram ограничивает длину 64 байтами, поэтому только вид, действие и id.
-export type CallbackAction = { kind: SendKind; action: string; id: string };
+//
+// Плюс один байт на ответ «откуда нажали» — см. SCREEN_MARK ниже.
+export type CallbackAction = { kind: SendKind; action: string; id: string; fromScreen?: boolean };
+
+// Кнопка, нажатая ВНУТРИ экрана бота, помечена этим знаком в действии.
+//
+// Меню, список, карточка — это один экран, который бот переписывает на
+// месте, а не лента из новых сообщений: «чтобы при нажатии кнопок не
+// выдавало новым сообщением следующие стадии, а выдавало следующие уровни
+// выборов» (Кирилл, 22.09.2026). Чтобы переписать нажатое сообщение, надо
+// знать, что оно и есть экран: та же кнопка «☰ Меню» стоит и под утренней
+// сводкой, и под присланной задачей, — а их переписать нельзя, это чужой
+// текст, за которым человек сюда и пришёл.
+//
+// Отсюда знак в самих данных кнопки: экран помечает свои кнопки при
+// отправке (screenButtons), и нажатие приходит обратно со знаком. Ни
+// таблицы, ни лишнего запроса это не стоит, а память о том, какое
+// сообщение было экраном, жила бы в базе и разъезжалась бы с чатом.
+const SCREEN_MARK = "~";
 
 export function encodeCallback(kind: SendKind, action: string, id: string): string {
   return `${kind[0]}:${action}:${id}`;
@@ -47,7 +65,27 @@ export function decodeCallback(data: string): CallbackAction | null {
   const kindLetter = parts[0];
   const kind = kindLetter === "t" ? "task" : kindLetter === "m" ? "meeting" : kindLetter === "i" ? "idea" : null;
   if (!kind || !parts[1] || !parts[2]) return null;
-  return { kind, action: parts[1], id: parts[2] };
+  const fromScreen = parts[1].startsWith(SCREEN_MARK);
+  const action = fromScreen ? parts[1].slice(SCREEN_MARK.length) : parts[1];
+  if (!action) return null;
+  return { kind, action, id: parts[2], ...(fromScreen ? { fromScreen: true } : {}) };
+}
+
+// Те же кнопки, но помеченные как кнопки экрана.
+//
+// Кнопка мини-приложения (`app`) не помечается: она не возвращает боту
+// ничего и переписывать по ней нечего. Дважды помеченная не удваивает
+// знак — экраны вкладываются друг в друга, и ряд «← Назад» проходит здесь
+// не один раз.
+export function screenButtons(rows: BotButton[][]): BotButton[][] {
+  return rows.map((row) =>
+    row.map((b) => {
+      if (b.app) return b;
+      const parts = b.data.split(":");
+      if (parts.length !== 3 || parts[1].startsWith(SCREEN_MARK)) return b;
+      return { ...b, data: `${parts[0]}:${SCREEN_MARK}${parts[1]}:${parts[2]}` };
+    }),
+  );
 }
 
 export function taskMessage(task: { title: string; description?: string; deadline?: string | null; priority?: string }, from: string): string {

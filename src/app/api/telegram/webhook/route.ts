@@ -4,7 +4,7 @@ import { downloadTelegramFile, telegramTransport } from "@/lib/telegram";
 import { decodeCallback, findColleagueByChat } from "@/lib/colleagues";
 import { handleColleagueFile } from "@/lib/colleagueReplies";
 import { deliverCallbackNotice, handleBotCallback } from "@/lib/botCallback";
-import { handleLinkCode, handleText, type BotContext } from "@/lib/botPipeline";
+import type { BotContext } from "@/lib/botPipeline";
 import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
 
 // Telegram's side of the bot: the update format, voice files, and Telegram's
@@ -51,10 +51,12 @@ export async function POST(req: Request) {
       toast: outcome.toast,
       rewriteTo: outcome.rewriteTo,
       rewriteButtons: outcome.rewriteButtons,
+      more: Boolean(outcome.say),
     });
-    // Отдельным сообщением: список, карточка или «пишите — отправлю в
-    // обсуждение». Переписать нажатое сообщение здесь нельзя — под ним
-    // остаются кнопки, которые ещё понадобятся.
+    // Отдельным сообщением — и только там, где переписать нажатое нельзя:
+    // под присланной задачей или под утренней сводкой. Нажатие внутри
+    // экрана бота сюда не доходит вовсе, его ответ уехал выше в
+    // `rewriteTo` (см. asScreen в lib/botCallback).
     if (outcome.say) {
       await transport.send(pressedChatId, outcome.say, outcome.sayButtons?.length ? { buttons: outcome.sayButtons } : undefined);
     }
@@ -158,6 +160,15 @@ export async function POST(req: Request) {
   if (typeof text !== "string" || !text.trim()) {
     return NextResponse.json({ ok: true });
   }
+
+  // Разбор ТЕКСТА подгружается только для текста — тот же приём, что у
+  // распознавания голоса выше, и по той же причине, доведённой до конца.
+  // За `botPipeline` стоит половина проекта: быстрый ввод, поиск, ассистент,
+  // разбор надиктованных встреч, а за ними GigaChat. Нажатию кнопки не
+  // нужно ничего из этого, но холодный контейнер честно грузил и
+  // разбирал весь этот граф ПЕРЕД тем, как ответить на нажатие, — и
+  // человек смотрел на часики лишнюю секунду за чужую работу.
+  const { handleLinkCode, handleText } = await import("@/lib/botPipeline");
 
   if (text.startsWith("/start")) {
     await handleLinkCode(ctx, text.replace("/start", ""), message?.from?.username || null);

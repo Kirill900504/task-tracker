@@ -212,7 +212,7 @@ export function maxTransport(): BotTransport {
     channel: "max",
     label: "MAX",
     send: (chatId, text, options) => sendMaxMessage(chatId, text, options),
-    async resolveCallback({ callbackId, chatId, toast, rewriteTo, rewriteButtons }) {
+    async resolveCallback({ callbackId, chatId, toast, rewriteTo, rewriteButtons, more }) {
       // One call where the message can carry the outcome; a separate line in
       // the chat where it cannot, so a press is never silent.
       if (rewriteTo) {
@@ -220,7 +220,10 @@ export function maxTransport(): BotTransport {
         return;
       }
       await answerMaxCallback(callbackId);
-      if (toast) await sendMaxMessage(chatId, toast);
+      // Молчать нельзя — нажатие без ответа читается как сломанная кнопка,
+      // — но и повторять «Открываю» перед самим ответом незачем: он уже
+      // едет следом (см. `more` в botTransport).
+      if (toast && !more) await sendMaxMessage(chatId, toast);
     },
   };
 }

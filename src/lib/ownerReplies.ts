@@ -631,7 +631,14 @@ export async function handleOwnerCallback(
     const meeting = await loadMeeting(admin, actor, action.id);
     if (!meeting) return { toast: "Эта встреча не найдена" };
     const outcome = action.action === "mok" ? "success" : "no_result";
-    await closeMeeting(admin, meeting, outcome, "");
+    // Актор — ради задачи, из которой встреча выросла: успешная встреча
+    // принимает по ней работу, если она ждала приёмки. Итога здесь нет
+    // (его дописывают отдельной кнопкой), поэтому комментарий приёмки
+    // сочинит approveTaskFromMeeting — назвав встречу.
+    await closeMeeting(admin, meeting, outcome, "", {
+      label: await actorName(admin, actor.spaceId, actor.userId),
+      userId: actor.userId,
+    });
     return {
       toast: outcome === "success" ? "Закрыл" : "Без результата",
       rewriteTo:

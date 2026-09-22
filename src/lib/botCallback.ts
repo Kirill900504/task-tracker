@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig } from "@/lib/botTransport";
 import type { CallbackAction } from "@/lib/colleagues";
-import { meetingButtons, type ColleagueRow } from "@/lib/colleagues";
+import { meetingButtons, screenButtons, type ColleagueRow } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { sendToPerson } from "@/lib/reach";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
@@ -36,7 +36,50 @@ import type { CallbackOutcome } from "@/lib/colleagueReplies";
 // Не могу» живут на строке человека и работают у всех, включая владельца
 // (ему тоже ставят задачи).
 
+// Экран вместо ленты.
+//
+// Один и тот же ответ бота — список, карточка, меню — до 22.09.2026
+// приходил НОВЫМ сообщением: три нажатия подряд оставляли в чате три
+// сообщения, из которых живо только последнее. Слова Кирилла: «чтобы при
+// нажатии кнопок не выдавало новым сообщением следующие стадии, а выдавало
+// следующие уровни выборов… чтоб не засорять историю чата бота».
+//
+// Правило здесь одно и живёт в одном месте: если нажали ВНУТРИ экрана
+// (кнопка помечена — см. screenButtons), то следующий уровень занимает
+// место прежнего, а не встаёт под ним. Нажали под присланной задачей или
+// под утренней сводкой — уровень открывается новым сообщением, потому что
+// переписывать чужой текст нельзя: за ним человек сюда и пришёл.
+//
+// Второе следствие, без которого первое не работает: кнопки нового уровня
+// сами становятся кнопками экрана. Забыть это — значит получить экран,
+// который переписывается один раз, а дальше снова разрастается лентой.
+export function asScreen(action: CallbackAction, outcome: CallbackOutcome): CallbackOutcome {
+  const next: CallbackOutcome = { ...outcome };
+  const wasScreen = action.fromScreen === true;
+  if (wasScreen && next.say && !next.rewriteTo) {
+    next.rewriteTo = next.say;
+    next.rewriteButtons = next.sayButtons;
+    next.say = undefined;
+    next.sayButtons = undefined;
+  }
+  if (next.sayButtons?.length) next.sayButtons = screenButtons(next.sayButtons);
+  // Кнопки переписанного сообщения помечаются только тогда, когда это
+  // сообщение — экран. У присланной задачи «Принял» тоже переписывает
+  // сообщение, но оно остаётся задачей, а не уровнем меню.
+  if (next.rewriteButtons?.length && wasScreen) next.rewriteButtons = screenButtons(next.rewriteButtons);
+  return next;
+}
+
 export async function handleBotCallback(
+  admin: SupabaseClient,
+  chatId: number,
+  action: CallbackAction,
+  channel: BotChannelConfig,
+): Promise<CallbackOutcome> {
+  return asScreen(action, await routeBotCallback(admin, chatId, action, channel));
+}
+
+async function routeBotCallback(
   admin: SupabaseClient,
   chatId: number,
   action: CallbackAction,

@@ -5,7 +5,7 @@ import { russianFetch } from "@/lib/russianCa";
 import { maxSettings } from "@/lib/botSettings";
 import { decodeCallback } from "@/lib/colleagues";
 import { deliverCallbackNotice, handleBotCallback } from "@/lib/botCallback";
-import { handleLinkCode, handleText, type BotContext } from "@/lib/botPipeline";
+import type { BotContext } from "@/lib/botPipeline";
 import { MAX_CHANNEL } from "@/lib/botTransport";
 
 // MAX's side of the bot. Everything past "what did this person say" is the
@@ -108,6 +108,7 @@ export async function POST(req: Request) {
       toast: outcome.toast,
       rewriteTo: outcome.rewriteTo,
       rewriteButtons: outcome.rewriteButtons,
+      more: Boolean(outcome.say),
     });
     // В MAX это тем более обязательно: всплывающих подсказок там нет, и без
     // этого сообщения нажатие «Ответить» или «Мои задачи» выглядело бы как
@@ -126,6 +127,7 @@ export async function POST(req: Request) {
     const ctx: BotContext = { admin, transport, channel: MAX_CHANNEL, chatId };
     // The code travels in the link the person tapped; without one this is
     // just someone opening the bot, and handleLinkCode says how to connect.
+    const { handleLinkCode } = await import("@/lib/botPipeline");
     await handleLinkCode(ctx, String(update.payload || ""), user?.username || null);
     return NextResponse.json({ ok: true });
   }
@@ -166,6 +168,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
   }
+
+  // Подгружается только для текста — см. тот же импорт в вебхуке Telegram:
+  // за botPipeline стоит GigaChat и половина ассистента, а нажатию кнопки
+  // ничего этого не нужно.
+  const { handleLinkCode, handleText } = await import("@/lib/botPipeline");
 
   if (text.startsWith("/start")) {
     await handleLinkCode(ctx, text.replace("/start", ""), message?.sender?.username || null);

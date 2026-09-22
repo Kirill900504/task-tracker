@@ -51,23 +51,21 @@ export async function findActorByChat(
   chatId: number,
   channel: BotChannelConfig,
 ): Promise<BotActor | null> {
-  const { data: account } = await admin
-    .from(channel.accountsTable)
-    .select("user_id")
-    .eq(channel.chatColumn, chatId)
-    .limit(1)
-    .maybeSingle();
+  // Оба вопроса задаются РАЗОМ, а не один после другого. Функция живёт в
+  // облаке, база — в другом здании, и каждый вопрос стоит своего полёта
+  // туда и обратно; последовательные вопросы, не зависящие друг от друга,
+  // складывают эти полёты в задержку, которую человек видит как «бот
+  // думает». Ответ здесь всё равно один: чат либо в таблице аккаунтов,
+  // либо в строке человека, и владелец старше (см. ниже).
+  const [{ data: account }, { data: person }] = await Promise.all([
+    admin.from(channel.accountsTable).select("user_id").eq(channel.chatColumn, chatId).limit(1).maybeSingle(),
+    admin.from("assignees").select("id, user_id").eq(channel.chatColumn, chatId).limit(1).maybeSingle(),
+  ]);
   const ownerRow = account as { user_id: string } | null;
   if (ownerRow) {
     return { userId: ownerRow.user_id, spaceId: ownerRow.user_id, assigneeId: "", isOwner: true };
   }
 
-  const { data: person } = await admin
-    .from("assignees")
-    .select("id, user_id")
-    .eq(channel.chatColumn, chatId)
-    .limit(1)
-    .maybeSingle();
   const row = person as { id: string; user_id: string } | null;
   if (!row) return null;
 
