@@ -104,12 +104,26 @@ test("принятая задача открывается заново кноп
   await page.fill("#myWorkDone", "Готово, проверяйте");
   await page.locator(".ms-answer-actions .btn", { hasText: "Отправить отчёт" }).click();
 
-  // Отчитались все — появляется приёмка. Она закрывает и задачу, и окно.
+  // Отчёт отправлен — карточка закрывается сама, и задача уезжает на
+  // приёмку. Кирилл 22.09.2026: «при нажатии сделал задача автоматически
+  // закрывалась и улетала на проверку»; до этого окно оставалось висеть
+  // над задачей, которой в этом столбце уже нет, и читалось как «а что,
+  // не сработало?».
+  await expect(page.locator("#overlay")).toHaveCount(0, { timeout: 15_000 });
+  const onReview = page.locator("#col-review .task", { hasText: title });
+  await expect(onReview).toBeVisible({ timeout: 15_000 });
+
+  // Принимает работу постановщик, и для этого карточку открывают заново —
+  // уже из «На приёмке».
+  await onReview.click();
   const approve = page.locator(".tp-review-actions .btn", { hasText: "Принять" });
   await expect(approve).toBeVisible({ timeout: 15_000 });
   await approve.click();
   await page.click("#askOkBtn");
-  await expect(page.locator("#taskOverlay")).toHaveCount(0);
+  // Приёмка тоже закрывает окно (#overlay — это id у <dialog> самой
+  // карточки; прежний `#taskOverlay` не существовал в разметке вовсе, то
+  // есть проверка проходила всегда и не проверяла ничего).
+  await expect(page.locator("#overlay")).toHaveCount(0, { timeout: 15_000 });
   await expect(page.locator("#col-done .task", { hasText: title })).toBeVisible({ timeout: 15_000 });
 
   // И вот то, ради чего тест: из «Завершённых» есть выход.
