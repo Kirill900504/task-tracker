@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
 import { addDaysIso, awaitsRecap, sortMeetingsForList } from "@/lib/calendarLogic";
@@ -37,6 +37,7 @@ export default function MeetingsPanel({
   onOpenMeetingHandled,
   onRequestedMeetingSaved,
   onIdeaDropped,
+  onTaskDropped,
   justCreatedId,
 }: {
   // Свой auth-id: чужую встречу видно, потому что тебя на неё позвали, но
@@ -68,6 +69,9 @@ export default function MeetingsPanel({
   // is only consumed once its meeting actually exists.
   onRequestedMeetingSaved?: (meeting: Meeting) => void;
   onIdeaDropped: (ideaId: string) => void;
+  // Задача, принесённая в блок встреч: открывает форму встречи, заполненную
+  // по ней, и оставляет саму задачу на доске.
+  onTaskDropped: (taskId: string) => void;
   justCreatedId?: string | null;
 }) {
   // Голосование по встречам — один слой на всю панель, как участники у
@@ -86,6 +90,13 @@ export default function MeetingsPanel({
   // Быстрый ⇢ в списке при этом никуда не делся: там переносят, ничего не
   // меняя, и два шага вместо одного были бы там потерей.
   const [movingFrom, setMovingFrom] = useState<Meeting | null>(null);
+  // Перенос УЖЕ сохранён, и окно закрывается по-настоящему.
+  //
+  // Ref, а не состояние, потому что читает это closeModal, вызванный формой
+  // в ту же долю секунды после onSave: новое состояние к этому моменту ещё
+  // не доехало, и окно вернулось бы к прежней встрече — той самой, которую
+  // только что закрыли как перенесённую.
+  const movedSavedRef = useRef(false);
   // Окно с прошедшими встречами.
   const [doneOpen, setDoneOpen] = useState(false);
 
@@ -100,10 +111,28 @@ export default function MeetingsPanel({
   const modalMeeting = modalState.open ? modalState.meeting : requestedMeeting;
   const modalPrefill = modalState.open ? modalState.prefill : (openMeetingRequest ?? undefined);
   function closeModal() {
-    setModalState({ open: false, meeting: null });
-    // Закрыли форму, не сохранив — переноса не было, и старая встреча
-    // остаётся в плане нетронутой.
+    // Escape закрывает ОДИН уровень, а не всю стопку.
+    //
+    // Слова Кирилла 21.09.2026: «открываешь встречу → нажимаешь „перенести
+    // время“ → решаешь, что не хочешь, и жмёшь „esc“ — закрываются все
+    // уровни до начальной страницы, это неправильно… требовалось два раза
+    // нажать esc, чтобы вернуться на главную».
+    //
+    // Так и выходило, и причина в том, что перенос — не второе окно поверх
+    // первого, а ТО ЖЕ окно, переключённое с встречи на форму новой. Для
+    // браузера уровень один, и Escape честно закрывал его целиком. Поэтому
+    // уровень приходится помнить самим: форма переноса закрывается назад,
+    // во встречу, из которой её открыли, и только следующий Escape (или
+    // «Отмена») закрывает встречу.
+    if (movingFrom && !movedSavedRef.current) {
+      const back = movingFrom;
+      setMovingFrom(null);
+      setModalState({ open: true, meeting: back });
+      return;
+    }
+    movedSavedRef.current = false;
     setMovingFrom(null);
+    setModalState({ open: false, meeting: null });
     if (openMeetingRequest !== null) onOpenMeetingHandled();
     if (openExistingMeetingId) onOpenExistingHandled?.();
   }
@@ -114,7 +143,12 @@ export default function MeetingsPanel({
     // тем же способом, что и быстрый ⇢, включая отмену. Порядок важен:
     // сначала новая должна попасть в состояние, иначе отмена восстановит
     // старую в мир, где следующей ещё нет.
-    if (movingFrom) closeAsMoved(movingFrom, m);
+    if (movingFrom) {
+      // Перенос состоялся — окно после этого закрывается целиком, а не
+      // возвращается к прежней встрече (см. closeModal).
+      movedSavedRef.current = true;
+      closeAsMoved(movingFrom, m);
+    }
     // Строки голосования держатся за списком участников, а не редактируются
     // рядом с ним: два списка одних и тех же людей расходятся за неделю.
     void votes.sync(m.id, m.participants).then((added) => {
@@ -144,18 +178,39 @@ export default function MeetingsPanel({
     if (!modalState.open && openMeetingRequest !== null) onRequestedMeetingSaved?.(m);
   }
 
-  // Мысль, брошенная в список встреч, становится встречей. Список принимает
-  // только её: задачу сюда несут через день календаря, где спрашивают время.
+  // Мысль или задача, брошенная в блок встреч, становится встречей.
   //
-  // Подсветки «вот эта зона» у списка нет — по той же причине, по которой
+  // Задача сюда бросается из ЛЮБОГО столбца доски — и из «Новых», и из «В
+  // работе», и из «На приёмке». Слова Кирилла 21.09.2026: «при переносе
+  // задачи во встречу встреча не создаётся… встречи должны мочь
+  // создаваться и из списка новых задач, и из списка задач в работе, и из
+  // списка „на приёмку“, так как я допускаю, что окончательная приёмка
+  // задачи возможна только после личного разговора». До сих пор зона
+  // принимала только мысль, а задачу приходилось нести на день календаря —
+  // то есть путь был, но не тот, который пробуют первым: блок встреч
+  // ближе, крупнее и назван словом «Встречи».
+  //
+  // Задача при этом НЕ исчезает. Встреча — разговор О задаче, а не замена
+  // ей: после встречи к задаче возвращаются и совершают по ней итоговое
+  // действие (а успешная встреча совершает его сама — см.
+  // lib/meetingRecap.approveTaskFromMeeting).
+  //
+  // Зона — вся панель, а не только список под шапкой. Встреч может не быть
+  // вовсе (у Кирилла на снимке «ВСТРЕЧИ 0»), и тогда список — это одна
+  // строка «Встреч пока нет»: целиться в неё мышью значит промахиваться.
+  //
+  // Подсветки «вот эта зона» у панели нет — по той же причине, по которой
   // её нет у столбцов доски (см. .task.dragging в tracker.css): контуры
-  // вокруг половины экрана Кирилл попросил убрать 20.09.2026, а мысль,
-  // едущая под курсором над списком встреч, и так говорит, куда она
-  // упадёт.
+  // вокруг половины экрана Кирилл попросил убрать 20.09.2026, а карточка,
+  // едущая под курсором над встречами, и так говорит, куда она упадёт.
   const { setNodeRef: setMeetingsDropRef } = useDroppable({ id: "meetings", data: { target: { kind: "meetings" } } });
   useDropHandler("idea", (ideaId, target) => {
     if (target.kind !== "meetings") return;
     onIdeaDropped(ideaId);
+  });
+  useDropHandler("task", (taskId, target) => {
+    if (target.kind !== "meetings") return;
+    onTaskDropped(taskId);
   });
 
   // Список — только то, что впереди. Закрытые и перенесённые смотрят в
@@ -188,11 +243,21 @@ export default function MeetingsPanel({
     // самого Кирилла, — а «о чём договорились» и есть то единственное, ради
     // чего половина участников на встречу шла. Не дошло — встреча всё равно
     // закрыта: рассылка не должна ронять сохранение.
-    if (status !== "planned" && resultText.trim()) {
+    //
+    // Уходит теперь при ЛЮБОМ разрешённом исходе, а не только когда итог
+    // написан словами, и несёт `outcome`. Причина — правило «успешная
+    // встреча принимает свою задачу»: чем кончилась встреча, знает только
+    // вкладка (статус — колонка движка синхронизации, маршруту она не
+    // видна), а задача из «На приёмке» должна закрыться и тогда, когда
+    // итог оставили пустым.
+    //
+    // Проверяются именно два исхода, а не «всё, кроме planned»: у статуса
+    // есть и «предложена», и её рассылать итогом нечем.
+    if (status === "success" || status === "no_result") {
       void fetch("/api/workspace/recap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meetingId: m.id, result: resultText.trim() }),
+        body: JSON.stringify({ meetingId: m.id, result: resultText.trim(), outcome: status }),
       }).catch(() => {});
     }
     toasts.showToast(status === "planned" ? "Встреча возвращена в план" : "Итог встречи сохранён и отправлен участникам", m.title, () =>
@@ -277,7 +342,7 @@ export default function MeetingsPanel({
   }
 
   return (
-    <div className="panel dash-panel" id="meetingsPanel" data-panel-id="meetingsPanel">
+    <div className="panel dash-panel" id="meetingsPanel" data-panel-id="meetingsPanel" ref={setMeetingsDropRef}>
       {/* На телефоне этой строки нет вовсе.
           Слова Кирилла 20.09.2026: «убрать полоску с „встречи“, количество
           встреч и кнопкой для создания новой, это всё лишнее, так как итак
@@ -334,7 +399,7 @@ export default function MeetingsPanel({
         </div>
       )}
 
-      <div id="meetingsForDay" ref={setMeetingsDropRef}>
+      <div id="meetingsForDay">
         {sorted.length === 0 ? (
           <div className="empty">{meetings.length === 0 ? "Встреч пока нет" : "Нет запланированных встреч"}</div>
         ) : (
@@ -391,6 +456,9 @@ export default function MeetingsPanel({
           // Моя строка голосования: по ней в карточке появляются «Буду /
           // Опоздаю / Не смогу». Раньше они были только на отдельном экране.
           myVote={modalMeeting ? votes.forMeeting(modalMeeting.id).find((v) => v.assigneeId === meId) || null : null}
+          // Ответы всех, кого позвали: в сводке встречи они стоят прямо у
+          // имён. Панель их и так держит — лишнего запроса не появляется.
+          votes={modalMeeting ? votes.forMeeting(modalMeeting.id) : []}
           onAnswer={(response, reason) =>
             modalMeeting
               ? votes.answer(

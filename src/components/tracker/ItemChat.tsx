@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { REACTIONS, useItemComments, type ItemKind } from "@/hooks/useItemComments";
 import { useAsk } from "@/components/Ask";
 import ChatMessageMenu, { type ChatMenuAction } from "./ChatMessageMenu";
@@ -31,6 +31,52 @@ function timeLabel(iso: string): string {
 
 const SOURCE_MARK: Record<string, string> = { telegram: " · из Telegram", max: " · из MAX", app: "" };
 
+// Имя автора — своим цветом, одним и тем же у одного человека.
+//
+// В переписке на четырнадцать человек имя, набранное тем же серым, что и
+// всё вокруг, не отвечает на вопрос «кто это писал» — его приходится
+// ЧИТАТЬ. Цвет отвечает раньше чтения, и именно так устроены групповые
+// чаты в Telegram и MAX, на которые Кирилл и попросил равняться. Цвет
+// считается из имени, а не назначается: список людей меняется, а подпись
+// одного и того же человека меняться не должна.
+const NAME_COLORS = ["#6FB1D4", "#C99BE0", "#7FC9A0", "#E0A96D", "#E08B9E", "#8FA6E8", "#5FC2C2", "#D0B45F"];
+
+function colorOf(name: string): string {
+  let sum = 0;
+  for (let i = 0; i < name.length; i++) sum = (sum * 31 + name.charCodeAt(i)) % 100000;
+  return NAME_COLORS[sum % NAME_COLORS.length];
+}
+
+// Кружок с буквами вместо фотографии: снимков людей в трекере нет и не
+// предвидится, а без чего-то слева реплики теряют своего автора, как
+// только их становится больше трёх.
+function initialsOf(name: string): string {
+  const words = name.replace(/\(.*?\)/g, "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  if (words.length === 1) return words[0].slice(0, 1).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+// Один день — одна разделительная строка, как в мессенджере.
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Сегодня";
+  if (d.toDateString() === yesterday.toDateString()) return "Вчера";
+  const months = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+  const sameYear = d.getFullYear() === today.getFullYear();
+  return `${d.getDate()} ${months[d.getMonth()]}${sameYear ? "" : " " + d.getFullYear()}`;
+}
+
+function sameDay(a: string, b: string): boolean {
+  const x = new Date(a);
+  const y = new Date(b);
+  return !Number.isNaN(x.getTime()) && !Number.isNaN(y.getTime()) && x.toDateString() === y.toDateString();
+}
+
 export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: string }) {
   // «По задаче» в обсуждении встречи — мелочь, но именно из таких мелочей
   // складывается ощущение, что окно собрано из чужих кусков.
@@ -49,6 +95,18 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
   // ошибиться файлом легко.
   const [pending, setPending] = useState<File[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Лента прокручивается к последнему сообщению — как любой мессенджер.
+  //
+  // Без этого переписка открывается на первой реплике, и чтобы увидеть то,
+  // ради чего карточку открыли, надо листать вниз через весь разговор.
+  // Прокручиваем на каждое изменение длины ленты: и при открытии, и когда
+  // пришло чужое сообщение, и когда отправили своё.
+  const feed = useRef<HTMLDivElement>(null);
+  const count = comments.length;
+  useEffect(() => {
+    const el = feed.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [count]);
 
   // Долгое нажатие на телефоне открывает то же меню, что правая кнопка на
   // компьютере: 450 мс — граница, на которой обычное нажатие ещё не
@@ -174,96 +232,147 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
         </div>
       )}
 
-      {comments.map((c) =>
-        // Хроника — не реплика. Её никто не писал, её нельзя править, на неё
-        // не ставят реакции, и выглядеть она должна как отметка на полях, а
-        // не как чьё-то сообщение. Именно она отвечает на вопрос «а что
-        // просили доделать» после второго возврата: состояние задачи этого
-        // уже не помнит (см. itemHistory.ts).
-        c.system ? (
-          <div className="chat-event" key={c.id}>
-            <span className="chat-event-text">{c.body}</span>
-            <span className="chat-event-time">{timeLabel(c.createdAt)}</span>
-          </div>
-        ) : (
-        // Сообщение, которое ещё едет в облако, меню не открывает: править и
-        // убирать нечего — строки, к которой это относится, пока нет. Видно
-        // это по бледности, и длится обычно меньше мига.
-        <div
-          className={
-            "chat-msg" +
-            (c.mine ? " mine" : "") +
-            (c.sending ? " sending" : "") +
-            (menuFor?.id === c.id ? " menu-open" : "")
-          }
-          key={c.id}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            if (c.sending) return;
-            setMenuFor({ id: c.id, at: { x: e.clientX, y: e.clientY } });
-          }}
-          {...(c.sending ? {} : longPressProps(c.id))}
-        >
-          <div className="chat-msg-head">
-            <span className="chat-author">{c.authorName}</span>
-            <span className="chat-time">
-              {timeLabel(c.createdAt)}
-              {c.editedAt ? " · изменено" : ""}
-              {SOURCE_MARK[c.source] || ""}
-            </span>
-          </div>
-          {c.body && <div className="chat-body">{c.body}</div>}
+      {/* Лента — как в мессенджере: своё справа, чужое слева.
+          Слова Кирилла 21.09.2026: «сделай современный чат, с возможностью
+          быстро переписываться с функциями чата и удобным отображением
+          имён участников, режим чата как в телеграм или МАХ (когда твои
+          сообщения справа, сообщения коллег слева)».
 
-          {c.attachments.length > 0 && (
-            <div className="chat-files">
-              {c.attachments.map((a) => (
-                <a
-                  key={a.path}
-                  className={"chat-file" + (a.type.startsWith("image/") ? " image" : "")}
-                  href={a.url || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={a.name}
-                >
-                  {/* Фотографию показываем, остальное называем: акт и
-                      выгрузку узнают по имени, а установленную кассу — нет.
-                      eslint-disable-next-line @next/next/no-img-element */}
-                  {a.type.startsWith("image/") && a.url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={a.url} alt={a.name} />
-                  ) : (
-                    <span className="chat-file-name">
-                      <Icon name="clip" size={14} /> {a.name}
-                    </span>
-                  )}
-                </a>
-              ))}
-            </div>
-          )}
+          Раньше это был ровный столбец одинаковых карточек, и «кто это
+          сказал» приходилось читать подписью над каждой. У переписки на
+          четырнадцать человек сторона отвечает на этот вопрос раньше
+          чтения, цвет имени — вторым, а кружок с буквами держит чужие
+          реплики в одном столбце, когда авторов больше двух.
 
-          {/* Под сообщением — только реакции, которые уже стоят. «изменить»,
-              «убрать» и кнопка выбора эмодзи отсюда ушли в меню по правой
-              кнопке: три служебных слова под КАЖДОЙ репликой — это ветка,
-              которую читаешь через подписи к ней. Пустая строка не
-              рисуется вовсе, поэтому обсуждение без реакций выглядит
-              обсуждением, а не панелью управления. */}
-          {c.reactions.length > 0 && (
-            <div className="chat-foot">
-              {c.reactions.map((r) => (
-                <button
-                  key={r.emoji}
-                  type="button"
-                  className={"chat-reaction" + (r.mine ? " mine" : "")}
-                  title={r.mine ? "Убрать реакцию" : "Поддержать"}
-                  onClick={() => void react(c.id, r.emoji, !r.mine)}
-                >
-                  {r.emoji} {r.count}
-                </button>
-              ))}
-            </div>
-          )}
+          Прежний довод («переписка на две стороны на узкой карточке
+          читается хуже, чем ровный столбец») оказался неверен на практике:
+          окно задачи не такое узкое, а пузыри уже столбца карточек, и
+          именно поэтому в мессенджерах на телефоне сделано так же. */}
+      {!loading && comments.length > 0 && (
+        <div className="chat-feed" ref={feed}>
+          {comments.map((c, i) => {
+            const prev = comments[i - 1];
+            const newDay = !prev || !sameDay(prev.createdAt, c.createdAt);
+            // Подряд идущие реплики одного человека — без повторной подписи
+            // и без второго кружка: так в любом мессенджере, и так три
+            // фразы подряд остаются одной репликой, а не тремя карточками.
+            const sameAuthor = !!prev && !prev.system && !c.system && prev.authorName === c.authorName && !newDay;
+            const day = newDay ? dayLabel(c.createdAt) : "";
+            return (
+              <div className="chat-line-group" key={c.id}>
+                {day && (
+                  <div className="chat-day">
+                    <span>{day}</span>
+                  </div>
+                )}
+                {/* Хроника — не реплика. Её никто не писал, её нельзя
+                    править, на неё не ставят реакции, и стоит она по
+                    середине ленты отметкой на полях — как служебные строки
+                    в мессенджере. Именно она отвечает на «а что просили
+                    доделать» после второго возврата: состояние задачи этого
+                    уже не помнит (см. itemHistory.ts). */}
+                {c.system ? (
+                  <div className="chat-event">
+                    <span className="chat-event-text">{c.body}</span>
+                    <span className="chat-event-time">{timeLabel(c.createdAt)}</span>
+                  </div>
+                ) : (
+                  <div className={"chat-row" + (c.mine ? " mine" : "") + (sameAuthor ? " tight" : "")}>
+                    {!c.mine &&
+                      (sameAuthor ? (
+                        <span className="chat-avatar hidden" aria-hidden />
+                      ) : (
+                        <span className="chat-avatar" style={{ background: colorOf(c.authorName) }} title={c.authorName}>
+                          {initialsOf(c.authorName)}
+                        </span>
+                      ))}
+                    {/* Сообщение, которое ещё едет в облако, меню не
+                        открывает: править и убирать нечего — строки, к
+                        которой это относится, пока нет. Видно это по
+                        бледности, и длится обычно меньше мига. */}
+                    <div
+                      className={
+                        "chat-msg" +
+                        (c.mine ? " mine" : "") +
+                        (c.sending ? " sending" : "") +
+                        (menuFor?.id === c.id ? " menu-open" : "")
+                      }
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (c.sending) return;
+                        setMenuFor({ id: c.id, at: { x: e.clientX, y: e.clientY } });
+                      }}
+                      {...(c.sending ? {} : longPressProps(c.id))}
+                    >
+                      {!c.mine && !sameAuthor && (
+                        <div className="chat-author" style={{ color: colorOf(c.authorName) }}>
+                          {c.authorName}
+                        </div>
+                      )}
+                      {c.body && <div className="chat-body">{c.body}</div>}
+
+                      {c.attachments.length > 0 && (
+                        <div className="chat-files">
+                          {c.attachments.map((a) => (
+                            <a
+                              key={a.path}
+                              className={"chat-file" + (a.type.startsWith("image/") ? " image" : "")}
+                              href={a.url || "#"}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={a.name}
+                            >
+                              {/* Фотографию показываем, остальное называем: акт и
+                                  выгрузку узнают по имени, а установленную кассу — нет. */}
+                              {a.type.startsWith("image/") && a.url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={a.url} alt={a.name} />
+                              ) : (
+                                <span className="chat-file-name">
+                                  <Icon name="clip" size={14} /> {a.name}
+                                </span>
+                              )}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Время — в углу пузыря, как в мессенджере: оно
+                          нужно взглядом, а не чтением, и строки над
+                          сообщением ради него больше нет. */}
+                      <span className="chat-time">
+                        {timeLabel(c.createdAt)}
+                        {c.editedAt ? " · изм." : ""}
+                        {SOURCE_MARK[c.source] || ""}
+                      </span>
+
+                      {/* Под сообщением — только реакции, которые уже стоят.
+                          «изменить», «убрать» и выбор эмодзи живут в меню по
+                          правой кнопке: три служебных слова под КАЖДОЙ
+                          репликой — это ветка, которую читаешь через подписи
+                          к ней. */}
+                      {c.reactions.length > 0 && (
+                        <div className="chat-foot">
+                          {c.reactions.map((r) => (
+                            <button
+                              key={r.emoji}
+                              type="button"
+                              className={"chat-reaction" + (r.mine ? " mine" : "")}
+                              title={r.mine ? "Убрать реакцию" : "Поддержать"}
+                              onClick={() => void react(c.id, r.emoji, !r.mine)}
+                            >
+                              {r.emoji} {r.count}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-        ),
       )}
 
       {/* Меню сообщения — одно на всю ветку, а не по штуке на реплику:

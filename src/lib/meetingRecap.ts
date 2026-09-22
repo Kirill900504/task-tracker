@@ -4,6 +4,7 @@ import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
 import { mergeResult } from "@/lib/meetingLink";
 import { fmtDate } from "@/lib/taskDisplay";
+import { applyReview } from "@/lib/reviewWork";
 
 // Итог встречи — одно правило на трекер и на бота.
 //
@@ -68,6 +69,11 @@ export async function closeMeeting(
   meeting: MeetingRef,
   outcome: "success" | "no_result",
   result: string,
+  // Кто закрывает. Нужен только ради задачи, из которой встреча выросла:
+  // принять по ней работу вправе постановщик, и в хронике должно стоять его
+  // имя, а не слово «Постановщик». Без актора приёмка просто не случается —
+  // это мягче, чем закрыть чужую работу от ничьего имени.
+  who?: { label: string; userId: string },
 ): Promise<void> {
   await admin
     .from("meetings")
@@ -87,4 +93,79 @@ export async function closeMeeting(
       text: outcome === "success" ? "✅ Встреча закрыта" : "⚪ Встреча закрыта без результата",
     });
   }
+
+  if (outcome === "success" && who) await approveTaskFromMeeting(admin, meeting, result, who);
+}
+
+// Встреча прошла успешно — значит задача, ради которой собирались, принята.
+//
+// Слова Кирилла 21.09.2026: «если мы перемещаем задачу из приёмки во встречу
+// и встреча проходит успешно, тогда должно работать правило, что при
+// успешно закрытой встрече автоматом… с таким же комментарием должна
+// закрываться и задача из приёмки». Это не удобство: работу принимают
+// разговором, а нажатие — всего лишь запись о нём. Пока записи не было,
+// задача оставалась в «На приёмке» после встречи, на которой её как раз и
+// приняли, и утренняя сводка спрашивала о ней снова.
+//
+// Три границы, и каждая из них нужна.
+//
+// *Только из «На приёмке».* Успешная встреча по задаче, которая ещё в
+// работе, означает «договорились, как делать», а не «сделано», — и закрыть
+// её значило бы отчитаться за исполнителя. Столбец считается здесь так же,
+// как его считает доска (lib/kanban): либо приёмка уже объявлена, либо
+// отчитались все исполнители. Вторая проверка обязательна: `awaiting_review`
+// проставляет только ответ через маршрут, а «все отчитались» бывает и без
+// него.
+//
+// *Только постановщиком.* Собрать встречу вправе каждый, принять работу —
+// тот, кто её поручил. Встреча, собранная кем-то ещё, итог в задачу всё
+// равно допишет (deliverRecap выше), но закрывать её не станет.
+//
+// *Комментарий тот же самый.* Два разных текста об одном решении расходятся,
+// и человек, получивший «принято», потом не находит, за что именно.
+export async function approveTaskFromMeeting(
+  admin: SupabaseClient,
+  meeting: MeetingRef,
+  result: string,
+  who: { label: string; userId: string },
+): Promise<boolean> {
+  if (!meeting.from_task_id) return false;
+
+  const { data: row } = await admin
+    .from("tasks")
+    .select("id, title, user_id, created_by, approval_state, status")
+    .eq("id", meeting.from_task_id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  const task = row as {
+    id: string;
+    title: string;
+    user_id: string;
+    created_by: string | null;
+    approval_state: string | null;
+    status: string | null;
+  } | null;
+  if (!task) return false;
+
+  // Уже закрыта — второй раз «принято» не говорят: исполнителю ушло бы
+  // второе сообщение об одном и том же решении.
+  if (task.status === "done" || task.approval_state === "accepted") return false;
+  if (who.userId !== task.user_id && who.userId !== task.created_by) return false;
+
+  if (task.approval_state !== "awaiting_review") {
+    const { data: parts } = await admin
+      .from("task_participants")
+      .select("done_at")
+      .eq("task_id", task.id)
+      .eq("role", "executor");
+    const executors = (parts || []) as { done_at: string | null }[];
+    if (!executors.length || executors.some((p) => !p.done_at)) return false;
+  }
+
+  // Пустой итог оставил бы исполнителя с голым «✅ Принято» без единого
+  // слова о том, откуда это взялось, — а взялось оно со встречи, на которой
+  // его самого могло и не быть.
+  const comment = result.trim() || `Принято по итогам встречи «${meeting.title}»`;
+  const done = await applyReview(admin, { id: task.id, title: task.title, user_id: task.user_id }, "approve", comment, who);
+  return done.ok;
 }

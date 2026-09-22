@@ -48,6 +48,10 @@ export default function AnswerForm({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    send();
+  }
+
+  function send() {
     if (!text.trim()) {
       setError(emptyHint);
       return;
@@ -69,6 +73,16 @@ export default function AnswerForm({
         value={text}
         placeholder={placeholder}
         onChange={(e) => setText(e.target.value)}
+        // Enter отправляет отчёт, Shift+Enter переносит строку — одно
+        // правило на все поля трекера, где пишут результат (см. Ask.tsx и
+        // обсуждение). Отчёт почти всегда одна фраза, и нажатие Enter в
+        // конце неё — то, что рука делает сама.
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            if (!busy) send();
+          }
+        }}
       />
       {date && (
         <div className="ms-answer-date">

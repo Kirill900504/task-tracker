@@ -7,6 +7,8 @@ import SendMenu from "./SendMenu";
 import { buildToday } from "@/lib/todayScreen";
 import { fmtDate } from "@/lib/taskDisplay";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
+import { useAuthors } from "@/hooks/useAuthors";
+import { authorLabel } from "@/lib/authorName";
 import { myRoleOn } from "@/lib/myRole";
 
 // The phone's first screen: what is overdue, what is due today, who you are
@@ -63,6 +65,17 @@ export default function TodayScreen({
   // своё на каждый вызов ровно для этого, см. useTaskParticipants).
   const participants = useTaskParticipants();
   const roleOf = (t: Task) => myRoleOn(participants.forTask(t.id), myAssigneeId);
+  // «Кто поручил → кому» — здесь то же, что на доске: одно правило на все
+  // места, где показывается кубик задачи (см. TaskCard).
+  const authors = useAuthors();
+  const people = participants.people.map((p) => p.name);
+  const authorOf = (t: Task) => authorLabel(t.createdBy, authors, people);
+  const executorsOf = (t: Task) =>
+    participants
+      .forTask(t.id)
+      .filter((p) => p.role === "executor")
+      .map((p) => p.name)
+      .filter(Boolean);
   const nothing = !data.overdue.length && !data.dueToday.length && !data.meetingsToday.length && !data.meetingsTomorrow.length;
 
   return (
@@ -95,6 +108,8 @@ export default function TodayScreen({
               canComplete={canCompleteTask ? canCompleteTask(task) : true}
               onOpen={() => onOpenTask(task)}
               menuItems={sendMenuFor(task)}
+              authorName={authorOf(task)}
+              executors={executorsOf(task)}
             />
           ))}
         </section>
@@ -113,6 +128,8 @@ export default function TodayScreen({
               canComplete={canCompleteTask ? canCompleteTask(task) : true}
               onOpen={() => onOpenTask(task)}
               menuItems={sendMenuFor(task)}
+              authorName={authorOf(task)}
+              executors={executorsOf(task)}
             />
           ))}
         </section>

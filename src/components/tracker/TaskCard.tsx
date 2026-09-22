@@ -53,6 +53,7 @@ export default function TaskCard({
   justCreated,
   menuItems,
   authorName,
+  executors,
 }: {
   task: Task;
   section: Section | null;
@@ -89,14 +90,35 @@ export default function TaskCard({
   // Всё, что мышь делает перетаскиванием: поднять карточку выше, собрать по
   // ней встречу, отправить коллеге. Показывается только на телефоне.
   menuItems?: ActionMenuItem[];
-  // Имя постановщика, когда поручение пришло от другого человека.
+  // Кто поставил задачу. Показывается ВСЕГДА, а не только когда поручение
+  // чужое: слова Кирилла 21.09.2026 — «в коротких блоках задач тоже должен
+  // быть выделен постановщик задачи и все исполнители». При четырнадцати
+  // постановщиках «чья это задача» — первый вопрос к кубику, и до сих пор
+  // он оставался без ответа у всего, что человек завёл сам.
   authorName?: string;
+  // Все исполнители, а не только имя из поля «Исполнитель». Соисполнители
+  // и наблюдатели сюда не идут — по его же словам: «соисполнителей и
+  // наблюдателей выводить не надо».
+  executors?: string[];
 }) {
   const isMobile = useIsMobile();
-  const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
-  // Finishing something is the action of the day — on a phone it is a
-  // swipe to the right, and reopening it is the same swipe again.
-  const swipe = useSwipeComplete(onToggleDone, isMobile && canComplete);
+  // Меню карточки: открыто ли и от чего. Якорь нужен только на
+  // компьютере — на телефоне меню и так полоса у нижнего края, — поэтому
+  // его открывает и жест, у которого прямоугольника нет.
+  const [menu, setMenu] = useState<{ anchor: DOMRect | null } | null>(null);
+  // Два жеста по карточке, по одному на сторону. Вправо — закрыть (это
+  // делают двадцать раз в день, и обратно тем же движением). Влево — то же
+  // меню, что у «⋮»: на телефоне путь до него длиннее всего, а сама точка
+  // размером с горошину у края карточки.
+  const hasMenu = isMobile && !!menuItems?.length;
+  const swipe = useSwipeComplete({
+    onComplete: isMobile && canComplete ? onToggleDone : undefined,
+    // Жест открывает то же меню, что и кнопка, но без якоря: на телефоне
+    // ActionMenu разворачивается полосой у нижнего края, и прямоугольник
+    // ему там не нужен (см. его же isMobile-ветку).
+    onActions: hasMenu ? () => setMenu({ anchor: null }) : undefined,
+    enabled: isMobile && (canComplete || hasMenu),
+  });
 
   // Просрочка есть или нет — вопрос к задаче; кричать о ней этому
   // человеку или нет — вопрос к его роли (см. lib/myRole). Поэтому две
@@ -132,6 +154,14 @@ export default function TaskCard({
   // числюсь, а подпись на каждом кубике заняла бы строку у всех
   // четырнадцати. Подсказка не занимает ничего и появляется ровно тогда,
   // когда вопрос возник.
+  // Кому поручено: все исполнители, а не одно имя из поля. Строки участия
+  // приезжают отдельным запросом, и пока их нет, ответ даёт `assignee` —
+  // короткая запись того же самого.
+  const who = (executors?.length ? executors : task.assignee ? [task.assignee] : [])
+    .map((name) => withoutSelfMark(name))
+    .filter(Boolean)
+    .join(", ");
+
   const roleHint =
     role === "executor"
       ? "Вы исполнитель"
@@ -209,15 +239,25 @@ export default function TaskCard({
         </div>
 
         <div className="task-meta">
-          {/* Имя без пометки «(я)»: на карточке она ничего не добавляет —
-              своя роль в задаче показана цветом, — а у четырнадцати
-              человек читается как чужая опечатка. В базе имя остаётся
-              полным: по нему задачу находят бот и сводки. */}
-          {task.assignee && <span className="task-assignee">{withoutSelfMark(task.assignee)}</span>}
-          {authorName && <span className="task-from">от {authorName}</span>}
+          {/* «Кто поручил → кому» одной строкой.
+              Стрелка вместо двух подписей: «от Кирилла» и «Игорю» рядом
+              занимали половину кубика словами, а направление читается
+              само. Имена без пометки «(я)»: она написана для одного
+              человека, а доску смотрят все. В базе имя остаётся полным —
+              по нему задачу находят бот и сводки. */}
+          {(authorName || who) && (
+            <span className="task-who" title={authorName ? `${authorName} → ${who || "не назначен"}` : undefined}>
+              {authorName && <span className="task-from">{authorName}</span>}
+              {authorName && who && <span className="task-arrow">→</span>}
+              {who && <span className="task-assignee">{who}</span>}
+            </span>
+          )}
+          {/* Срок — со словом «до»: голая дата на кубике читается как
+              «дата чего?», и Кирилл попросил показывать дедлайн «в удобной
+              форме». Просроченное и сегодняшнее говорят о себе сами. */}
           {task.deadline && (
             <span className={"task-due" + (late ? " overdue-text" : dueToday ? " due-today-text" : "")}>
-              {late ? "просрочено " : dueToday ? "сегодня" : ""}
+              {late ? "просрочено " : dueToday ? "сегодня" : "до "}
               {dueToday ? "" : fmtDate(task.deadline)}
             </span>
           )}
@@ -239,13 +279,13 @@ export default function TaskCard({
           data-task-menu={task.id}
           onClick={(e) => {
             e.stopPropagation();
-            setMenuAt(e.currentTarget.getBoundingClientRect());
+            setMenu({ anchor: e.currentTarget.getBoundingClientRect() });
           }}
         >
           ⋮
         </button>
       )}
-      {menuAt && !!menuItems?.length && <ActionMenu anchor={menuAt} title={task.title} items={menuItems} onClose={() => setMenuAt(null)} />}
+      {menu && !!menuItems?.length && <ActionMenu anchor={menu.anchor} title={task.title} items={menuItems} onClose={() => setMenu(null)} />}
     </div>
   );
 
@@ -254,8 +294,23 @@ export default function TaskCard({
   // The swipe hint lives behind the card, so it appears from under it as
   // the card slides.
   return (
-    <div className={"swipe-wrap" + (swipe.armed ? " armed" : "")}>
-      <div className="swipe-hint">{task.status === "done" ? "↩ вернуть" : "✓ готово"}</div>
+    <div
+      className={
+        "swipe-wrap" +
+        // Куда ведут прямо сейчас: подсказки лежат друг на друге, и видна
+        // должна быть та, к которой едет карточка.
+        (swipe.offset > 0 ? " to-right" : swipe.offset < 0 ? " to-left" : "") +
+        (swipe.armed ? " armed" : "") +
+        (swipe.armedLeft ? " armed-left" : "")
+      }
+    >
+      {/* Подсказки лежат ПОД карточкой, каждая у своего края, и проступают
+          из-под неё по мере движения: жест объясняет себя сам, а не
+          требует, чтобы о нём знали заранее. */}
+      {(canComplete || swipe.offset > 0) && (
+        <div className="swipe-hint">{task.status === "done" ? "↩ вернуть" : "✓ готово"}</div>
+      )}
+      {hasMenu && <div className="swipe-hint left">действия ⋮</div>}
       {card}
     </div>
   );

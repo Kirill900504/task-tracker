@@ -2,45 +2,66 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
-// Swipe a card to the right to finish it — the one action worth a gesture,
-// because it is the one you do twenty times a day.
+// Свайп по карточке: вправо — закрыть, влево — действия.
 //
-// Deliberately only this one. A swipe that deletes is how things disappear
-// from a pocket without anyone meaning it; deleting stays behind a card and
-// a confirmation.
+// Вправо — то единственное, что стоит жеста: это делают двадцать раз в
+// день. Влево — меню, то же самое, что открывает «⋮» у края карточки, и
+// добавлено оно 22.09.2026 по просьбе Кирилла: на телефоне путь «нашёл
+// задачу → попал в точку размером с горошину → выбрал» самый длинный в
+// трекере, а свободным оставался ровно один жест.
 //
-// Touch only: with a mouse the same drag is how a card is moved between
-// columns, and hijacking that would break the desktop.
+// Удаления среди них нет и не будет: свайпом вещи исчезают из кармана
+// так, что никто этого не хотел. Удаление остаётся за карточкой и
+// вопросом.
+//
+// Только палец: мышью тот же жест переносит карточку между столбцами, и
+// перехватывать его значит сломать компьютер.
 
 const TRIGGER_PX = 90;
-// Below this the movement is treated as the start of a scroll, not a swipe.
+// Ниже этого движение считается началом прокрутки, а не жестом.
 const DIRECTION_LOCK_PX = 10;
 
-export function useSwipeComplete(onComplete: () => void, enabled: boolean) {
+export function useSwipeComplete({
+  onComplete,
+  onActions,
+  enabled,
+}: {
+  // Вправо. Нет — значит вправо тянуть некуда: закрывать задачу вправе
+  // постановщик, и у исполнителя этого жеста не должно быть вовсе.
+  onComplete?: () => void;
+  // Влево. Нет — значит у карточки нет меню, и тянуть влево тоже некуда.
+  onActions?: () => void;
+  enabled: boolean;
+}) {
   const [offset, setOffset] = useState(0);
-  // The distance also lives in a ref: the release handler runs in the same
-  // closure as the moves that preceded it, so reading it from state would
-  // read whatever it was before the gesture — zero, always.
+  // Расстояние живёт ещё и в ref: обработчик отпускания выполняется в том
+  // же замыкании, что и движения до него, и состояние прочиталось бы
+  // таким, каким было ДО жеста, то есть нулём.
   const offsetRef = useRef(0);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const decidedRef = useRef<"none" | "swipe" | "scroll">("none");
-  // Kept current without re-binding listeners on every render.
+  // Держатся свежими, не перевешивая слушателей на каждую перерисовку.
   const completeRef = useRef(onComplete);
+  const actionsRef = useRef(onActions);
   useEffect(() => {
     completeRef.current = onComplete;
-  }, [onComplete]);
+    actionsRef.current = onActions;
+  }, [onComplete, onActions]);
 
-  // The release is caught on the window, not on the card. By the time the
-  // finger lifts, the card has moved out from under it and the pointerup can
-  // land anywhere — bound to the card alone, the gesture would simply never
-  // finish, which is exactly what it did.
+  // Отпускание ловится на окне, а не на карточке. К этому моменту карточка
+  // уехала из-под пальца, и pointerup может прийти куда угодно: привязанный
+  // к самой карточке, жест просто никогда не заканчивался — ровно это он и
+  // делал.
   const finish = useCallback(() => {
-    const swiped = decidedRef.current === "swipe" && offsetRef.current >= TRIGGER_PX;
+    const gone = offsetRef.current;
+    const swiped = decidedRef.current === "swipe";
     startRef.current = null;
     decidedRef.current = "none";
     offsetRef.current = 0;
     setOffset(0);
-    if (swiped) completeRef.current();
+    if (!swiped) return;
+    if (gone >= TRIGGER_PX) completeRef.current?.();
+    else if (gone <= -TRIGGER_PX) actionsRef.current?.();
   }, []);
 
   useEffect(() => {
@@ -70,22 +91,30 @@ export function useSwipeComplete(onComplete: () => void, enabled: boolean) {
 
     if (decidedRef.current === "none") {
       if (Math.abs(dx) < DIRECTION_LOCK_PX && Math.abs(dy) < DIRECTION_LOCK_PX) return;
-      // Whichever axis moved further decides what this gesture is, once.
+      // Какая ось ушла дальше — тем жест и становится, один раз.
       decidedRef.current = Math.abs(dx) > Math.abs(dy) ? "swipe" : "scroll";
     }
     if (decidedRef.current !== "swipe") return;
+    // Начавшийся жест — наш: без этого страница уезжает вбок вместе с
+    // карточкой, а на телефоне это ещё и «назад» в истории браузера.
+    if (e.cancelable) e.preventDefault();
 
-    // Rightwards only, and with a ceiling so the card never leaves the screen.
-    const next = Math.max(0, Math.min(dx, TRIGGER_PX + 30));
+    // Каждая сторона открыта настолько, насколько ей есть что предложить:
+    // без меню влево тянуть некуда, без права закрыть — вправо. Потолок
+    // не даёт карточке уехать с экрана.
+    const max = TRIGGER_PX + 30;
+    const next = Math.max(actionsRef.current ? -max : 0, Math.min(dx, completeRef.current ? max : 0));
     offsetRef.current = next;
     setOffset(next);
   }
 
   return {
-    // Spread onto the card.
+    // Раскладывается на карточку.
     handlers: enabled ? { onPointerDown, onPointerMove } : {},
-    // Applied as a transform, plus a hint that shows through underneath.
+    // Применяется трансформацией, а из-под карточки проступает подсказка.
     offset,
+    // Доведён ли жест до срабатывания — и в какую сторону.
     armed: offset >= TRIGGER_PX,
+    armedLeft: offset <= -TRIGGER_PX,
   };
 }

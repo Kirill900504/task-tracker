@@ -6,8 +6,6 @@
 // #fTitle, #saveTaskBtn, etc.) so the existing e2e patterns keep working
 // against the new UI with minimal changes.
 import { useState } from "react";
-import { useColleagues } from "@/hooks/useColleagues";
-import SendMenu from "./SendMenu";
 import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
 import TaskParticipants from "./TaskParticipants";
@@ -23,6 +21,11 @@ import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
 import Icon from "./Icon";
+import ItemFacts from "./ItemFacts";
+import { useAuthors } from "@/hooks/useAuthors";
+import { authorLabel } from "@/lib/authorName";
+import { withoutSelfMark } from "@/lib/actorName";
+import { fmtDate } from "@/lib/taskDisplay";
 
 // Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
 // «Понедельник…Воскресенье» подряд не помещаются никуда, а «Пн Вт Ср» читают
@@ -53,6 +56,17 @@ function isoInDays(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Дата и время — одной строкой, для сводки и для отчётов. Час и минуты
+// здесь не педантизм: «сделал вчера в 18:40» и «сделал сегодня в 9:05» —
+// разные ответы на вопрос, почему работа встала.
+function whenCreated(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function emptyForm(task: Task | null, prefill?: TaskPrefill) {
@@ -153,10 +167,9 @@ export default function TaskModal({
   onDeclineWork?: (participantId: string, reason: string) => Promise<void>;
   onAskReschedule?: (participantId: string, to: string, reason: string) => Promise<void>;
 }) {
-  const { colleagues } = useColleagues();
   const ask = useAsk();
-  const [sendState, setSendState] = useState("");
-  const [sendAt, setSendAt] = useState<DOMRect | null>(null);
+  // Кто из логинов какой человек — по этому имени подписан постановщик.
+  const authors = useAuthors();
   const [form, setForm] = useState(() => emptyForm(task, prefill));
   // Состав новой задачи держится здесь до сохранения: строки участия
   // ссылаются на задачу, а её ещё нет в базе (см. PendingParticipants).
@@ -194,6 +207,22 @@ export default function TaskModal({
   // правило в CLAUDE.md — это стоило половины дня).
   const myPart = myAssigneeId ? participants.find((p) => p.assigneeId === myAssigneeId) || null : null;
 
+  // Состав по ролям — для сводки. Имена без пометки «(я)»: она написана
+  // для одного человека, а карточку читают все.
+  const namesWithRole = (role: TaskParticipantRole) =>
+    participants.filter((p) => p.role === role).map((p) => withoutSelfMark(p.name || ""));
+  const executorNames = namesWithRole("executor");
+  const coexecutorNames = namesWithRole("coexecutor");
+  const watcherNames = namesWithRole("watcher");
+
+  // Кто и когда отчитался. Порядок — по времени отчёта: последний сверху
+  // читался бы как «главный», а их складывают в том порядке, в котором
+  // работу сдавали.
+  const reports = participants
+    .filter((p) => p.doneAt)
+    .map((p) => ({ ...p, name: withoutSelfMark(p.name || "") }))
+    .sort((a, b) => (a.doneAt || "").localeCompare(b.doneAt || ""));
+
   // Кто сейчас на задаче — одинаково для новой и для сохранённой, чтобы
   // поле людей было одно и то же в обоих случаях. У новой это набранный
   // состав, у сохранённой — настоящие строки участия.
@@ -230,12 +259,18 @@ export default function TaskModal({
     if (form.assignee.trim() === p.name) setForm((f) => ({ ...f, assignee: "" }));
   }
 
-  // Offered as soon as the task exists and there is anyone to send it to.
-  // It used to require the assignee to be connected, which made the ordinary
-  // «покажи это Ане» impossible: the menu now offers the assignee first and
-  // everyone else after (see SendMenu).
-  const linkedNames = colleagues.filter((c) => c.linked && !c.isMe).map((c) => c.name);
-  const canSend = isEditing && linkedNames.length > 0;
+  // Кнопки «Отправить» в карточке больше нет.
+  //
+  // Слова Кирилла 21.09.2026: «что значит эта нижняя серая дополнительная
+  // кнопка „отправить“? там предлагается выбор кому отправить вне задачи???
+  // что за бред? где логика? удали её за ненадобностью». Он прав: задача
+  // уходит исполнителю в момент назначения (assignWork.ts), и это одно из
+  // трёх уведомлений, которые нельзя отключить. Вторая кнопка рядом с
+  // «Сохранить» предлагала послать ту же задачу кому-то ЕЩЁ — человеку, не
+  // имеющему к ней отношения, — то есть отвечала на вопрос, которого в
+  // карточке никто не задаёт, и выглядела вторым способом поручить.
+  // Показать задачу постороннему по-прежнему можно из списка (✈ в меню
+  // карточки), где это и есть отдельное действие, а не часть формы.
 
   function save() {
     const title = form.title.trim();
@@ -482,7 +517,71 @@ export default function TaskModal({
             onReport={(comment) => onReportWork?.(myPart.id, comment) ?? Promise.resolve()}
             onDecline={(reason) => onDeclineWork?.(myPart.id, reason) ?? Promise.resolve()}
             onAskReschedule={(to, reason) => onAskReschedule?.(myPart.id, to, reason) ?? Promise.resolve()}
+            onReported={onClose}
           />
+        )}
+
+        {/* Главное о задаче — одной короткой таблицей, сразу под названием.
+            Слова Кирилла 21.09.2026: «требуется компактное окно с основной
+            информацией о задаче, в которое входит: кто постановщик →
+            напротив дата постановки задачи, кто исполнитель → напротив
+            крайний срок выполнения (дедлайн), далее соисполнители
+            (списком), далее наблюдатели (списком)».
+            До этого ответ на «кто это поручил и когда» в карточке не стоял
+            вовсе: постановщика показывала только маленькая подпись на
+            кубике доски, а даты постановки не было нигде. */}
+        {task && (
+          <ItemFacts
+            id="taskFacts"
+            rows={[
+              {
+                left: { label: "Постановщик", value: authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name)) },
+                right: { label: "Дата постановки", value: whenCreated(task.createdAt || "") || "—", muted: !task.createdAt },
+              },
+              {
+                left: {
+                  label: executorNames.length > 1 ? "Исполнители" : "Исполнитель",
+                  value: executorNames.length ? executorNames.join(", ") : "не назначен",
+                  muted: !executorNames.length,
+                },
+                right: {
+                  label: "Крайний срок",
+                  value: task.deadline ? fmtDate(task.deadline) : "без срока",
+                  muted: !task.deadline,
+                },
+              },
+              ...(coexecutorNames.length
+                ? [{ wide: { label: "Соисполнители", value: coexecutorNames.join(", ") } } as const]
+                : []),
+              ...(watcherNames.length ? [{ wide: { label: "Наблюдатели", value: watcherNames.join(", ") } } as const] : []),
+            ]}
+          />
+        )}
+
+        {/* Результат — то, ради чего приёмку вообще открывают.
+            Кирилл просил «поле Результат с датой и временем проведения»,
+            чтобы постановщик «мог прочесть данные по результату и принять
+            решение». Отчёты лежали в списке участников мелкой строкой
+            рядом с ролью и кнопкой «убрать» — то есть там, где их читают
+            последними. Теперь это отдельный блок, и в нём написано, кто
+            отчитался, когда и что именно сделано. */}
+        {task && reports.length > 0 && (
+          <div className="results" id="taskResults">
+            <div className="results-head">Результат</div>
+            {reports.map((r) => (
+              <div className="result-item" key={r.id}>
+                <div className="result-line">
+                  <span className="result-who">{r.name}</span>
+                  <span className="result-when">{whenCreated(r.doneAt || "")}</span>
+                </div>
+                <div className="result-text">{r.doneComment || "без комментария"}</div>
+              </div>
+            ))}
+            {/* Файлы к результату кладут в обсуждение ниже: корзина, права
+                и подписанные ссылки у него уже есть, а второй загрузчик
+                рядом означал бы два места, где лежит одно и то же. */}
+            <div className="results-note">Документы к результату прикладывают в обсуждении — там же, где их обсуждают.</div>
+          </div>
         )}
 
         {isEditing && !canEdit && (
@@ -726,21 +825,6 @@ export default function TaskModal({
         </>
         )}
 
-        {sendState && <div className="send-result" id="taskSendResult">{sendState}</div>}
-        {sendAt && task && (
-          <SendMenu
-            kind="task"
-            id={task.id}
-            /* Все, кто на задаче, а не только имя из поля: меню ставит
-               «кого это касается» вперёд, и после того как исполнителей
-               стало несколько, один из них перестал быть всем списком. */
-            concerns={[form.assignee, ...participants.map((p) => p.name)].filter(Boolean)}
-            anchor={sendAt}
-            onClose={() => setSendAt(null)}
-            onResult={setSendState}
-          />
-        )}
-
         <div className="modal-actions">
           <div className="left">
             {isEditing && canEdit && (
@@ -766,17 +850,6 @@ export default function TaskModal({
             )}
           </div>
           <div className="left">
-            {canSend && (
-              <button
-                className="btn"
-                id="sendTaskBtn"
-                type="button"
-                title="Отправить задачу участнику в мессенджер"
-                onClick={(e) => setSendAt(e.currentTarget.getBoundingClientRect())}
-              >
-                <Icon name="send" size={15} /> Отправить
-              </button>
-            )}
             <button className="btn" id="cancelBtn" onClick={onClose}>
               {canEdit ? "Отмена" : "Закрыть"}
             </button>

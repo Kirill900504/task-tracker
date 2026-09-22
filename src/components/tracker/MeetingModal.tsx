@@ -4,9 +4,7 @@
 // meetingSaveBtn/deleteMeetingBtn/setMeetingStatus/performReschedule in
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
 import { useMemo, useState } from "react";
-import { useColleagues } from "@/hooks/useColleagues";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
-import SendMenu from "./SendMenu";
 import ItemChat from "./ItemChat";
 import MeetingAnswer from "./MeetingAnswer";
 import type { MeetingVoteRow } from "@/hooks/useMeetingVotes";
@@ -23,7 +21,11 @@ import { sortNames } from "@/lib/peopleOrder";
 import Modal from "./Modal";
 import Icon from "./Icon";
 import ChipChoice from "./ChipChoice";
+import ItemFacts from "./ItemFacts";
 import { busyStarts, minutesOf, slotOf } from "@/lib/meetingTime";
+import { useAuthors } from "@/hooks/useAuthors";
+import { authorLabel } from "@/lib/authorName";
+import { isCurrent, voteTally } from "@/lib/meetingVotes";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS: string[] = (() => {
@@ -33,6 +35,29 @@ const TIME_SLOTS: string[] = (() => {
   }
   return out;
 })();
+
+// Дни, на которые встречи назначают чаще всего, — теми же тремя кнопками,
+// что и срок задачи (см. TaskModal.QUICK_DEADLINES).
+const QUICK_DAYS = [
+  { label: "Сегодня", days: 0 },
+  { label: "Завтра", days: 1 },
+  { label: "Через неделю", days: 7 },
+];
+
+function isoInDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Когда встречу назначили — числом и временем, как в карточке задачи.
+function whenCreated(iso: string | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 function outcomeLabel(status: MeetingStatus): string {
   if (status === "proposed") return "Предложена";
@@ -57,6 +82,7 @@ export default function MeetingModal({
   isMove,
   dayMeetings = [],
   myVote = null,
+  votes = [],
   onAnswer,
 }: {
   meeting: Meeting | null;
@@ -89,6 +115,10 @@ export default function MeetingModal({
   // просто листает время.
   dayMeetings?: Meeting[];
   myVote?: MeetingVoteRow | null;
+  // Ответы всех, кого позвали: «буду», «не смогу с причиной», «опоздаю»,
+  // молчание. Показываются прямо у имён в сводке — Кирилл просил видеть
+  // состав «с заполненными реакциями по факту отклика участников».
+  votes?: MeetingVoteRow[];
   onAnswer?: (response: "yes" | "no" | "late", reason: string) => Promise<void>;
 }) {
   const isEditing = !!meeting;
@@ -96,25 +126,29 @@ export default function MeetingModal({
   const [title, setTitle] = useState(meeting?.title ?? prefill?.title ?? "");
   const [time, setTime] = useState(meeting?.time || prefill?.time || "10:00");
   const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? prefill?.participants ?? []));
-  const { colleagues } = useColleagues();
   // Кто я в этом пространстве — нужно ровно для одного: не предлагать
   // позвать самого себя (см. selectableAssignees). Ответ прошлого запуска
   // хук отдаёт сразу, сеть поправляет его фоном.
   const identity = useWorkspaceRole();
+  // Кто из логинов какой человек: по этому имени и подписана строка
+  // «Назначил». У владельца created_by пуст, и это значит «он сам» — см.
+  // lib/authorName.
+  const authors = useAuthors();
   const ask = useAsk();
-  const [sendState, setSendState] = useState("");
-  const [sendAt, setSendAt] = useState<DOMRect | null>(null);
   const [result, setResult] = useState(meeting?.result ?? "");
-  // Назначаем сразу или сперва спрашиваем.
+  // Выбора «Назначаю / Предлагаю время» в форме больше нет.
   //
-  // Раньше это решал не человек, а его место в системе: у владельца
-  // встреча становилась назначенной, у руководителя — всегда только
-  // предложением, и выйти из предложения он не мог ничем. Вопрос
-  // Кирилла 20.09.2026 был именно об этом: «а если Макаров хочет
-  // организовать встречу с Есиной и Мамаковой? он что не может
-  // назначить?». Может. Но выбор остаётся — он и есть разница между
-  // «в 15:00 у нас планёрка» и «давайте в 15:00, кто может?».
-  const [asProposal, setAsProposal] = useState(false);
+  // Слова Кирилла 21.09.2026: «параметр „как собираем“ убираем. все
+  // встречи должны работать путём назначения. и если у кого-то не
+  // получается присутствовать, организатор встречи принимает решение,
+  // переговорив с человеком, который не может, на другое время».
+  //
+  // То есть предложение было лишним шагом к тому же результату: встреча
+  // всё равно назначается, а несогласие решается разговором и переносом,
+  // а не состоянием в базе. Сам статус `proposed` в базе остаётся —
+  // предложить встречу по-прежнему можно из мессенджера, и уже
+  // предложенные никуда не делись (для них ниже есть кнопка «Назначить»).
+  // Новая встреча из трекера всегда назначенная.
   // Полчаса или час. Слова Кирилла 20.09.2026: «удобный способ выбирать
   // 30 минут или час» — и это не украшение формы, а то, из чего считается
   // занятость людей: час встречи вынимает из их дня час, а не точку.
@@ -180,11 +214,11 @@ export default function MeetingModal({
     setParticipants((prev) => (prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name]));
   }
 
-  // Same as the task modal: offered whenever anyone is connected, not only
-  // when a participant is — a meeting is often worth showing to someone who
-  // is not in it (see SendMenu, which puts the participants first anyway).
-  const linkedNames = colleagues.filter((c) => c.linked && !c.isMe).map((c) => c.name);
-  const canSend = isEditing && linkedNames.length > 0;
+  // Кнопки «Отправить» в карточке встречи нет по той же причине, по
+  // которой её нет в карточке задачи (см. TaskModal): встречу получают те,
+  // кого на неё позвали, в момент сохранения, а вторая кнопка рядом с
+  // «Сохранить» предлагала послать её кому-то ЕЩЁ — вопрос, которого в
+  // карточке никто не задаёт.
 
   function save() {
     const trimmedTitle = title.trim();
@@ -211,11 +245,9 @@ export default function MeetingModal({
       durationMin: isEditing ? meeting.durationMin || 30 : durationMin,
       title: isEditing ? meeting.title : trimmedTitle,
       participants: isEditing ? meeting.participants : sanitizeAssigneeList(participants),
-      // Назначена или предложена — как выбрал тот, кто собирает. Раньше
-      // это зависело от того, кто он: владелец назначал, руководитель мог
-      // только предложить и не мог назначить никогда. Право занимать чужое
-      // время у участников одинаковое, а отказаться может каждый.
-      status: meeting?.status ?? (asProposal ? "proposed" : "planned"),
+      // Новая встреча — назначенная, всегда (см. комментарий про «Как
+      // собираем» выше). У сохранённой статус остаётся её собственный.
+      status: meeting?.status ?? "planned",
       result: meeting ? result.trim() : "",
       movedToDate: meeting?.movedToDate ?? "",
       resolvedAt: meeting?.resolvedAt ?? "",
@@ -236,6 +268,36 @@ export default function MeetingModal({
 
   const resolved = isEditing && meeting.status && meeting.status !== "planned" && meeting.status !== "proposed";
   const proposed = isEditing && meeting.status === "proposed";
+
+  // Кто собрал и когда — для сводки сохранённой встречи.
+  const organizer = authorLabel(meeting?.createdBy, authors, assignees);
+  const createdLabel = whenCreated(meeting?.createdAt);
+
+  // Отклик человека — значком у его имени. «Буду», «опоздаю», «не смогу» и
+  // молчание — четыре разных ответа, и три из них раньше в карточке не были
+  // видны вовсе: состав перечислялся строкой через запятую.
+  //
+  // Ответ, данный до переноса, ответом не считается (isCurrent): человек,
+  // который мог во вторник, о четверге не сказал ничего.
+  const round = meeting?.voteRound || 1;
+  function voteOf(name: string): { state: string; mark: string; title: string } {
+    const row = votes.find((v) => v.name === name);
+    if (!row || row.response === "none" || !isCurrent(row, round)) {
+      return { state: "none", mark: "•", title: `${withoutSelfMark(name)} — пока не ответил` };
+    }
+    if (row.response === "no") {
+      return { state: "no", mark: "✕", title: `${withoutSelfMark(name)} не сможет${row.reason ? ": " + row.reason : ""}` };
+    }
+    if (row.late) return { state: "late", mark: "🕐", title: `${withoutSelfMark(name)} будет, но опоздает` };
+    return { state: "yes", mark: "✓", title: `${withoutSelfMark(name)} будет` };
+  }
+
+  // «3 из 5» — короткий ответ на «собралась ли встреча». Считается по тем,
+  // кого спрашивают (организатор и наблюдатели не в счёт, см. mustVote).
+  const tally = voteTally(votes, round);
+  const answeredLabel = tally.expected
+    ? `${tally.answered} из ${tally.expected}` + (tally.no.length ? ` · не смогут: ${tally.no.length}` : "")
+    : "ответов не ждём";
 
   return (
     <Modal id="meetingOverlay" onClose={onClose} dismissOnBackdrop={false}>
@@ -266,20 +328,65 @@ export default function MeetingModal({
         {isEditing && myVote && onAnswer && !resolved && <MeetingAnswer me={myVote} onAnswer={onAnswer} />}
 
         {isEditing ? (
-          <div className="field meeting-facts">
-            <label>Встреча</label>
+          <>
+            {/* Сводка встречи — той же формы, что сводка задачи.
+                Слова Кирилла 21.09.2026: «окно созданной встречи должно
+                быть однотипным с окном созданной задачи, только информация
+                там должна быть: кто назначил встречу → напротив дата
+                создания встречи, кто участники встречи (с заполненными
+                реакциями по факту отклика участников) → напротив дата и
+                время встречи, и результат встречи, который заполняет автор
+                встречи». Ровно это и стоит ниже, тем же компонентом, что и
+                у задачи (ItemFacts) — «однотипность» значит одно и то же
+                место, а не похожую разметку. */}
             <div className="meeting-fact-title">{title}</div>
-            <div className="meeting-fact-row">
-              <Icon name="calendar" size={14} />
-              <span>
-                {fmtDate(date)}
-                {time ? `, ${time}` : ""}
-              </span>
-            </div>
-            <div className="meeting-fact-row">
-              <Icon name="users" size={14} />
-              <span>{participants.length ? participants.map(withoutSelfMark).join(", ") : "никого не позвали"}</span>
-            </div>
+            <ItemFacts
+              id="meetingFacts"
+              rows={[
+                {
+                  left: { label: "Назначил", value: organizer },
+                  right: { label: "Дата создания", value: createdLabel || "—", muted: !createdLabel },
+                },
+                {
+                  left: {
+                    label: "Когда",
+                    value: (
+                      <>
+                        {fmtDate(date)}
+                        {time ? `, ${time}` : ""}
+                        <span className="fact-note"> · {meeting.durationMin === 60 ? "1 час" : "30 минут"}</span>
+                      </>
+                    ),
+                  },
+                  right: {
+                    label: "Ответили",
+                    value: answeredLabel,
+                    muted: !participants.length,
+                  },
+                },
+                {
+                  wide: {
+                    label: "Участники",
+                    value: participants.length ? (
+                      <span className="fact-people">
+                        {participants.map((name) => {
+                          const vote = voteOf(name);
+                          return (
+                            <span className={"fact-person vote-" + vote.state} key={name} title={vote.title}>
+                              <span className="fact-person-mark">{vote.mark}</span>
+                              {withoutSelfMark(name)}
+                            </span>
+                          );
+                        })}
+                      </span>
+                    ) : (
+                      "никого не позвали"
+                    ),
+                    muted: !participants.length,
+                  },
+                },
+              ]}
+            />
             {/* Путь к изменению — здесь же, а не «где-то в списке». Кнопка
                 открывает форму новой встречи с тем же составом: перенести и
                 заодно поправить, кого зовём, — одно действие. */}
@@ -288,22 +395,49 @@ export default function MeetingModal({
                 <Icon name="calendar" size={15} /> Перенести — и поправить время или состав
               </button>
             )}
-          </div>
+          </>
         ) : (
           <>
-            <div className="field">
-              <label>Дата</label>
-              {/* Сразу календарём, а не полем «дд.мм.гггг»: встречу назначают на
-                  день недели («в четверг»), а не на число, и сетка месяца
-                  отвечает на этот вопрос сама. */}
-              <MiniCalendar popover id="mDate" value={date} onChange={setDate} />
-            </div>
-
+            {/* Название — первым полем.
+                Слова Кирилла 21.09.2026: «при создании встречи окно
+                названия встречи должно быть выше всех, потом идёт дата,
+                время, участники, сколько займёт». Он прав и по порядку
+                мысли: встречу сперва называют («планёрка по опту»), а уже
+                потом решают, когда она и кто на ней. Календарь, стоявший
+                первым, спрашивал о дате того, кто ещё не сказал, о чём
+                собираемся. */}
             <div className="field">
               <label>Название встречи</label>
               <div className="input-with-mic">
                 <AutoGrowTextarea id="mTitle" placeholder="Например: Совещание по опту" value={title} onChange={setTitle} singleLine />
                 <MicButton value={title} onChange={setTitle} title="Надиктовать название" />
+              </div>
+            </div>
+
+            <div className="field">
+              <label>Дата</label>
+              {/* Сразу календарём, а не полем «дд.мм.гггг»: встречу назначают на
+                  день недели («в четверг»), а не на число, и сетка месяца
+                  отвечает на этот вопрос сама.
+
+                  Рядом — три кнопки самых частых дней, ровно как у срока
+                  задачи. Слова Кирилла 21.09.2026: «в поле дата так же
+                  добавь после ручного выбора даты быстрые кнопки „сегодня“,
+                  „завтра“, „через неделю“». Половина встреч назначается на
+                  завтра, и открывать ради этого сетку месяца — лишнее
+                  движение. */}
+              <div className="deadline-row">
+                <MiniCalendar popover id="mDate" value={date} onChange={setDate} />
+                {QUICK_DAYS.map((q) => (
+                  <button
+                    key={q.label}
+                    type="button"
+                    className={"participant-chip" + (date && date === isoInDays(q.days) ? " selected" : "")}
+                    onClick={() => setDate(isoInDays(q.days))}
+                  >
+                    {q.label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -365,13 +499,6 @@ export default function MeetingModal({
               </div>
             </div>
 
-            {/* Назначаю или предлагаю — выбор того, кто собирает, а не его
-                звания. «Назначаю» — обычный случай: время стоит у всех в
-                календаре, напоминания идут, ответы «буду / не смогу»
-                собираются как обычно. «Предлагаю» — когда за время не
-                ручаешься: оно ничьего дня не занимает, а как только все
-                ответят «буду», встреча назначается сама и всем об этом
-                говорят (lib/meetingConfirm). */}
             <div className="field">
               <label>Сколько займёт</label>
               <ChipChoice
@@ -390,23 +517,6 @@ export default function MeetingModal({
               </div>
             </div>
 
-            <div className="field">
-              <label>Как собираем</label>
-              <ChipChoice
-                id="mKind"
-                value={asProposal ? "proposal" : "planned"}
-                onSelect={(v) => setAsProposal(v === "proposal")}
-                options={[
-                  { value: "planned", label: "Назначаю" },
-                  { value: "proposal", label: "Предлагаю время" },
-                ]}
-              />
-              <div className="field-hint">
-                {asProposal
-                  ? "Время ни у кого не занимается. Когда все ответят «буду» — встреча назначится сама."
-                  : "Встреча встанет в календарь у всех, кого зовёте, и по ней пойдут напоминания."}
-              </div>
-            </div>
           </>
         )}
 
@@ -443,9 +553,25 @@ export default function MeetingModal({
               {resolved ? outcomeLabel(meeting.status) + (meeting.movedToDate ? " · перенесено на " + fmtDate(meeting.movedToDate) : "") : ""}
             </div>
             <div className="input-with-mic">
-              <AutoGrowTextarea id="mResult" minRows={2} placeholder="Кратко: что решили, что дальше…" value={result} onChange={setResult} />
+              {/* Enter завершает встречу успешно — по правилу Кирилла
+                  21.09.2026 «любые заполнения результатов или итогов должны
+                  закрываться нажатием Enter после заполнения, везде».
+                  «Успешно» здесь не догадка, а исход по умолчанию: именно
+                  им кончаются почти все встречи, а «без результата» — это
+                  отдельное решение, которое и нажимают отдельно. Подпись
+                  под полем говорит об этом вслух: Enter, срабатывающий
+                  неожиданно, хуже Enter, который не срабатывает. */}
+              <AutoGrowTextarea
+                id="mResult"
+                minRows={2}
+                placeholder="Кратко: что решили, что дальше…"
+                value={result}
+                onChange={setResult}
+                onEnter={() => setStatus("success")}
+              />
               <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
             </div>
+            <div className="field-hint">Enter — завершить успешно, Shift+Enter — новая строка.</div>
             <div className="outcome-actions">
               <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" onClick={() => setStatus("success")}>
                 <Icon name="check" size={15} /> Успешно
@@ -472,11 +598,6 @@ export default function MeetingModal({
             одна таблица, один вид, одни правила. */}
         {meeting && <ItemChat kind="meeting" itemId={meeting.id} />}
 
-        {sendState && <div className="send-result" id="meetingSendResult">{sendState}</div>}
-        {sendAt && meeting && (
-          <SendMenu kind="meeting" id={meeting.id} concerns={participants} anchor={sendAt} onClose={() => setSendAt(null)} onResult={setSendState} />
-        )}
-
         <div className="modal-actions">
           <div className="left">
             {isEditing && canEdit && (
@@ -497,17 +618,6 @@ export default function MeetingModal({
             )}
           </div>
           <div className="left">
-            {canSend && (
-              <button
-                className="btn"
-                id="sendMeetingBtn"
-                type="button"
-                title="Отправить встречу участнику в мессенджер"
-                onClick={(e) => setSendAt(e.currentTarget.getBoundingClientRect())}
-              >
-                <Icon name="send" size={15} /> Отправить
-              </button>
-            )}
             <button className="btn" id="meetingCancelBtn" onClick={onClose}>
               Отмена
             </button>

@@ -492,6 +492,12 @@ export default function NewTracker() {
             }}
             onRequestedMeetingSaved={requestedMeetingSaved}
             onIdeaDropped={convertIdeaToMeeting}
+            // Задача, принесённая в блок встреч, — то же самое, что задача,
+            // положенная на сегодняшний день календаря, и делается это той
+            // же функцией: форма встречи, заполненная по задаче, а сама
+            // задача остаётся на доске. День берётся выбранный, а нет
+            // выбранного — сегодняшний; поправить его можно прямо в форме.
+            onTaskDropped={(id) => taskDroppedOnDate(id, selectedDate ?? todayStr())}
             justCreatedId={justCreatedMeetingId}
           />
         ),
@@ -643,7 +649,11 @@ export default function NewTracker() {
             clockText={clockText}
             items={[
               ...(isOwner ? [{ id: "team", label: "Команда", icon: "users" as const, onSelect: () => setTeamOpen(true) }] : []),
-              { id: "search", label: "Поиск по трекеру", icon: "search" as const, onSelect: () => setSearchOpen(true) },
+              // Поиска здесь больше нет: он переехал в нижнюю панель
+              // шестой кнопкой (22.09.2026, «поиск в нижнюю панель»). В
+              // меню шапки он стоил двух нажатий и находился в углу,
+              // противоположном большому пальцу, — а ищут с телефона чаще
+              // всего остального.
               // Только когда есть кому быть загруженным: строка меню,
               // открывающая окно со словами «никому ничего не поручено», —
               // это строка, после которой ничего не произошло.
@@ -679,6 +689,7 @@ export default function NewTracker() {
             // Плавно, а не рывком: на телефоне смена вкладки — это весь
             // экран целиком, и мгновенная подмена читается как перезагрузка.
             onTabChange={(tab) => withViewTransition(() => setMobileTab(tab))}
+            onSearch={() => setSearchOpen(true)}
             badges={{
               today: todayCount(buildToday(tasks, meetings)),
               meetings: meetings.filter((m) => !m.status || m.status === "planned").length,

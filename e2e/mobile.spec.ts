@@ -36,21 +36,28 @@ test("the phone gets its own shell: compact header, tabs, and tasks first", asyn
   // Порядок вкладок продиктован им же и повторяет расположение блоков на
   // компьютере. Проверяется целиком, а не по одной: порядок — это и есть
   // всё требование, и перепутанная пара внутри него ничем себя не выдаст.
-  const tabs = await page.locator(".mobile-tab .mobile-tab-label").allTextContents();
+  // Шестым в ряду стоит поиск — он не раздел, а действие (22.09.2026,
+  // «поиск в нижнюю панель»), и потому проверяется отдельно: перепутать
+  // его с разделом нельзя ни человеку, ни тесту.
+  const tabs = await page.locator(".mobile-tab:not(.mobile-tab-search) .mobile-tab-label").allTextContents();
   expect(tabs).toEqual(["Встречи", "Задачи", "Приёмка", "Мысли", "Сегодня"]);
+  await expect(page.locator("#mobileSearchTab .mobile-tab-label")).toHaveText("Поиск");
 
   // Значки — свои, контурные: ни одного эмодзи из системного шрифта.
-  await expect(page.locator(".mobile-tab .mobile-tab-icon svg")).toHaveCount(5);
+  await expect(page.locator(".mobile-tab .mobile-tab-icon svg")).toHaveCount(6);
 
   // Кнопка в шапке одна, и у неё есть лицо — «вместо кнопок Лупы и „…“
   // оставить одну кнопку с картинкой команды». Поиск при этом не потерян:
-  // он первой строкой в её меню.
+  // он стоит в нижней панели, под большим пальцем (22.09.2026).
   await expect(page.locator(".mobile-header button")).toHaveCount(1);
   await expect(page.locator("#mobileSearchBtn")).toHaveCount(0);
   await page.click("#mobileMoreBtn");
   await expect(page.locator("#mobileMoreMenu")).toBeVisible();
   await expect(page.locator(".export-item", { hasText: "Команда" })).toBeVisible();
-  await expect(page.locator(".export-item", { hasText: "Поиск по трекеру" })).toBeVisible();
+  // Поиска в этом меню больше нет: он переехал в нижнюю панель шестой
+  // кнопкой. Две двери в одно место — это вопрос «а чем они отличаются?»,
+  // который задают каждый раз.
+  await expect(page.locator(".export-item", { hasText: "Поиск по трекеру" })).toHaveCount(0);
   // «Загрузка» ушла из полосы над доской (там остались три кнопки, которые
   // назвал Кирилл) — но не из трекера: вопрос «к кому идти первым» задают
   // как раз не за столом. Она здесь, и только когда есть кому быть
@@ -407,8 +414,161 @@ test("«Принял» есть в меню карточки и не требу�
   await page.click(".action-sheet .export-item:has-text('Принял в работу')");
   await expect(page.locator(".toast", { hasText: "Взяли в работу" })).toBeVisible({ timeout: 15_000 });
 
-  // Принято — значит второй раз предлагать нечего.
+  // Принято — значит второй раз предлагать нечего. Искать карточку надо
+  // уже в «В работе»: принятая задача туда и уезжает, а показанный
+  // столбец остаётся тем, где она была.
   await expect(page.locator(".modal")).toHaveCount(0);
+  await page.locator(".board-tab", { hasText: "В работе" }).click();
+  await expect(card).toBeVisible({ timeout: 15_000 });
   await card.locator("[data-task-menu]").click();
   await expect(page.locator(".action-sheet .export-item", { hasText: "Принял в работу" })).toHaveCount(0);
+});
+
+// Листание разделов пальцем.
+//
+// Жест просили прямо (22.09.2026), и опасность у него ровно одна: на этом
+// же экране горизонталь уже занята — по карточке задачи свайп закрывает её
+// или открывает действия, полосы фильтров и столбцов прокручиваются вбок.
+// Поэтому проверяется и то, что жест работает, и то, что он НЕ работает
+// там, где занято.
+test("свайп по содержимому листает разделы, но не там, где горизонталь занята", async ({ page }) => {
+  await login(page);
+  await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/);
+
+  // Playwright не умеет жестов — события шлются напрямую, теми же
+  // координатами, какими их прислал бы палец.
+  const swipe = (selector: string, dx: number) =>
+    page.evaluate(
+      ({ selector, dx }) => {
+        const el = document.querySelector(selector);
+        if (!el) throw new Error("не найдено: " + selector);
+        const r = el.getBoundingClientRect();
+        const y = Math.round(r.top + Math.min(40, r.height / 2));
+        const x = Math.round(r.left + r.width / 2);
+        const base = { pointerType: "touch", bubbles: true, isPrimary: true, pointerId: 1, clientY: y };
+        el.dispatchEvent(new PointerEvent("pointerdown", { ...base, clientX: x }));
+        el.dispatchEvent(new PointerEvent("pointermove", { ...base, clientX: x + dx / 2 }));
+        el.dispatchEvent(new PointerEvent("pointerup", { ...base, clientX: x + dx }));
+      },
+      { selector, dx },
+    );
+
+  // Влево — следующий раздел по полосе: задачи → приёмка.
+  await swipe("#mobileMain", -140);
+  await expect(page.locator('.mobile-tab[data-tab="review"]')).toHaveClass(/active/, { timeout: 5000 });
+
+  // Вправо — обратно.
+  await swipe("#mobileMain", 140);
+  await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/, { timeout: 5000 });
+
+  // А по полосе столбцов — ничего: она прокручивается вбок сама, и
+  // переключать разделы оттуда значит отнимать у неё жест.
+  await swipe(".board-tabs", -140);
+  await page.waitForTimeout(600);
+  await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/);
+});
+
+// Поиск — шестой кнопкой в нижней панели.
+test("поиск открывается из нижней панели, а не из меню шапки", async ({ page }) => {
+  await login(page);
+
+  await expect(page.locator("#mobileSearchTab")).toBeVisible();
+  await page.click("#mobileSearchTab");
+  await expect(page.locator("#searchOverlay")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // И из меню шапки он ушёл: две двери в одно место — это вопрос «а чем
+  // они отличаются?», который задают каждый раз.
+  await page.click("#mobileMoreBtn");
+  await expect(page.locator(".export-item", { hasText: "Поиск по трекеру" })).toHaveCount(0);
+});
+
+// Вход по ссылке из мессенджера.
+//
+// Страница обязана быть публичной: человек приходит сюда ИМЕННО потому,
+// что сессии у него нет. Отправить его на /login значит показать форму
+// входа тому, кто в эту секунду входит.
+test("страница входа по ссылке открыта без сессии", async ({ browser }) => {
+  const fresh = await browser.newContext();
+  const page = await fresh.newPage();
+  // Без токена — это или вторая попытка открыть сгоревшую ссылку, или
+  // набранный руками адрес: обе кончаются формой входа, а не пустотой.
+  await page.goto("/enter");
+  await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
+  await expect(page.locator("#email")).toBeVisible();
+  await fresh.close();
+});
+
+// Плохая связь — не то же самое, что её отсутствие.
+//
+// Офлайн проверялся и раньше, но только целиком выключенный: сеть есть или
+// её нет. У человека в поле третье состояние, и оно самое неприятное —
+// запрос ушёл и не вернулся. Трекер обязан в эти секунды показывать
+// сохранённую копию и говорить, что связи нет, а не пустой экран с
+// крутилкой.
+test("на медленной связи трекер открывается из копии, а не ждёт сеть", async ({ page, context }) => {
+  test.setTimeout(180_000);
+  await login(page);
+  // Дождаться, пока копия успеет сохраниться: без неё проверять нечего.
+  await expect(page.locator("#syncStatus")).toContainText("Сохранено", { timeout: 40_000 });
+
+  // Запросы к базе уходят и не возвращаются — ровно то, что делает
+  // мобильный интернет в подвале. Не обрыв: соединение установлено,
+  // ответа нет.
+  await context.route("**/rest/v1/**", async () => {
+    // Молчим: маршрут не отвечает вовсе.
+  });
+  await context.route("**/sb/rest/v1/**", async () => {});
+
+  await page.reload();
+
+  // Трекер всё равно открывается — из локальной копии, первым кадром.
+  await expect(page.locator("#mobileNav")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
+  // И говорит, что показывает сохранённое, а не делает вид, что всё в
+  // порядке: молчаливая копия — это данные, которым доверяют зря.
+  await expect(page.locator("#offlineBanner")).toBeVisible({ timeout: 60_000 });
+
+  await context.unroute("**/rest/v1/**");
+  await context.unroute("**/sb/rest/v1/**");
+});
+
+// Свайп влево по карточке — то же меню, что у «⋮».
+//
+// Правая сторона занята («готово»), левая была свободна, и ею закрывается
+// самый длинный путь на телефоне: найти задачу, попасть пальцем в точку
+// размером с горошину у края карточки, выбрать действие.
+test("свайп влево по карточке открывает её действия", async ({ page }) => {
+  const title = `E2E жест ${Date.now()}`;
+
+  await login(page);
+  await expect(page.locator("#syncStatus")).toContainText("Сохранено", { timeout: 40_000 });
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+
+  const card = page.locator(".task", { hasText: title });
+  await expect(card).toBeVisible();
+  await expect(card).not.toHaveClass(/just-created/, { timeout: 10_000 });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate((taskTitle) => {
+    const el = [...document.querySelectorAll(".task")].find((t) => t.textContent?.includes(taskTitle));
+    if (!el) throw new Error("карточка не найдена");
+    const r = el.getBoundingClientRect();
+    const y = Math.round(r.top + 20);
+    const x = Math.round(r.right - 40);
+    const base = { pointerType: "touch", bubbles: true, isPrimary: true, pointerId: 1, clientY: y };
+    el.dispatchEvent(new PointerEvent("pointerdown", { ...base, clientX: x }));
+    el.dispatchEvent(new PointerEvent("pointermove", { ...base, clientX: x - 50 }));
+    el.dispatchEvent(new PointerEvent("pointermove", { ...base, clientX: x - 130 }));
+    el.dispatchEvent(new PointerEvent("pointerup", { ...base, clientX: x - 130 }));
+  }, title);
+
+  // То самое меню: полоса у нижнего края, с теми же действиями.
+  await expect(page.locator(".action-sheet")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator(".action-sheet .export-item", { hasText: "Наверх списка" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".action-sheet")).toHaveCount(0);
 });

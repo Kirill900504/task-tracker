@@ -33,6 +33,9 @@ export type TaskRow = {
   approval_comment?: string | null;
   // Кто завёл. Как и accepted_at, приходит из базы и не пишется отсюда.
   created_by?: string | null;
+  // Когда завели. Ставит база (`default now()`), taskToRow не пишет — как
+  // и всё остальное в этом хвосте.
+  created_at?: string | null;
 };
 
 export type MeetingRow = {
@@ -49,6 +52,7 @@ export type MeetingRow = {
   from_task_id?: string | null;
   vote_round?: number | null;
   created_by?: string | null;
+  created_at?: string | null;
   // Written by the bot only, like TaskRow.accepted_at.
   confirmed_by?: string[] | null;
 };
@@ -140,6 +144,7 @@ export function taskFromRow(r: TaskRow): Task {
     approvalState: (r.approval_state as Task["approvalState"]) || "open",
     approvalComment: r.approval_comment || "",
     createdBy: r.created_by || "",
+    createdAt: r.created_at || "",
   };
 }
 
@@ -175,6 +180,7 @@ export function meetingFromRow(r: MeetingRow): Meeting {
     confirmedBy: r.confirmed_by || [],
     voteRound: r.vote_round ?? 1,
     createdBy: r.created_by || "",
+    createdAt: r.created_at || "",
   };
 }
 

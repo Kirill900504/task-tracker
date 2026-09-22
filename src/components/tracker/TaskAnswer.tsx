@@ -39,6 +39,7 @@ export default function TaskAnswer({
   onReport,
   onDecline,
   onAskReschedule,
+  onReported,
 }: {
   // Моя строка участия в этой задаче. Пусто — меня на ней нет.
   me: Participant | null;
@@ -54,6 +55,19 @@ export default function TaskAnswer({
   onReport: (comment: string) => Promise<void>;
   onDecline: (reason: string) => Promise<void>;
   onAskReschedule: (to: string, reason: string) => Promise<void>;
+  // Отчёт ушёл — карточку можно закрывать.
+  //
+  // Слова Кирилла 21.09.2026: «если человек пишет в каком-то событии
+  // итоговый результат, то после нажатия должны закрываться сразу все
+  // уровни задачи или встречи». Отчёт — это и есть итоговый результат
+  // исполнителя: после него задача уезжает на приёмку и ждёт уже не его.
+  // Окно, остающееся висеть над отправленным отчётом, читается как «а
+  // что, не сработало?».
+  //
+  // Зовётся ТОЛЬКО после успешного «Сделал»: не ушло — окно остаётся, и
+  // причина видна в нём же. «Не могу» и «Прошу перенос» окно не
+  // закрывают: там человек ещё читает, что ответит постановщик.
+  onReported?: () => void;
 }) {
   const [pending, setPending] = useState<Pending>(null);
   const [busy, setBusy] = useState(false);
@@ -65,12 +79,13 @@ export default function TaskAnswer({
   // Ответ может не уйти — сеть или отказ сервера. Промолчать здесь значит
   // оставить человека в уверенности, что он отчитался, а постановщика — в
   // уверенности, что тот молчит. Худшее недоразумение в этом трекере.
-  async function run(action: () => Promise<void>) {
+  async function run(action: () => Promise<void>, thenClose = false) {
     setBusy(true);
     setFailed("");
     try {
       await action();
       setPending(null);
+      if (thenClose) onReported?.();
     } catch (e) {
       setFailed(e instanceof Error ? e.message : "Не получилось отправить ответ");
     } finally {
@@ -124,7 +139,7 @@ export default function TaskAnswer({
           emptyHint="Отчёт без слов — это не отчёт: постановщику нечего принимать."
           submitLabel="Отправить отчёт"
           busy={busy}
-          onSubmit={(text) => void run(() => onReport(text))}
+          onSubmit={(text) => void run(() => onReport(text), true)}
           onCancel={() => setPending(null)}
         />
       )}

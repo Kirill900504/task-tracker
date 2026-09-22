@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { deliverRecap } from "@/lib/meetingRecap";
+import { approveTaskFromMeeting, deliverRecap } from "@/lib/meetingRecap";
+import { actorName } from "@/lib/actorName";
 
 // Итог встречи — тем, кто на ней был.
 //
@@ -22,9 +23,17 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
 
-  const body = (await req.json().catch(() => null)) as { meetingId?: string; result?: string } | null;
+  // `outcome` появился вместе с правилом «успешная встреча принимает свою
+  // задачу»: чем именно кончилась встреча, знает только вкладка — статус
+  // принадлежит движку синхронизации и сюда не пишется. Поэтому же итог
+  // больше не обязателен: встречу закрывают и молча, а задача из «На
+  // приёмке» закрыться при этом всё равно должна.
+  const body = (await req.json().catch(() => null)) as
+    | { meetingId?: string; result?: string; outcome?: "success" | "no_result" }
+    | null;
   const result = (body?.result || "").trim();
-  if (!body?.meetingId || !result) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+  const outcome = body?.outcome;
+  if (!body?.meetingId || (!result && !outcome)) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
 
   const admin = createAdminClient();
   const { data: row } = await admin
@@ -54,17 +63,25 @@ export async function POST(req: Request) {
   // Кому сказать, куда записать и что вернуть в задачу — правила, и
   // живут они в lib/meetingRecap: те же итоги закрываются теперь кнопкой
   // в мессенджере, и второй экземпляр этих правил разошёлся бы с первым.
-  const sent = await deliverRecap(
-    admin,
-    {
-      id: meeting.id,
-      title: meeting.title,
-      date: meeting.date,
-      time: meeting.time,
-      user_id: meeting.user_id,
-      from_task_id: meeting.from_task_id,
-    },
-    result,
-  );
-  return NextResponse.json({ ok: true, sent });
+  const ref = {
+    id: meeting.id,
+    title: meeting.title,
+    date: meeting.date,
+    time: meeting.time,
+    user_id: meeting.user_id,
+    from_task_id: meeting.from_task_id,
+  };
+  const sent = result ? await deliverRecap(admin, ref, result) : 0;
+
+  // Задача, ради которой собирались, закрывается тем же решением и теми же
+  // словами. Правило целиком — в approveTaskFromMeeting; здесь только имя
+  // того, кто его применил: хроника подписывается именем, а не должностью.
+  const closedTask =
+    outcome === "success" &&
+    (await approveTaskFromMeeting(admin, ref, result, {
+      label: await actorName(admin, meeting.user_id, user.id),
+      userId: user.id,
+    }));
+
+  return NextResponse.json({ ok: true, sent, closedTask: !!closedTask });
 }

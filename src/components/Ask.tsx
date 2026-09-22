@@ -216,6 +216,21 @@ export default function AskProvider({ children }: { children: ReactNode }) {
                       value={text}
                       placeholder={pending.placeholder || ""}
                       onChange={(e) => setText(e.target.value)}
+                      // Enter отправляет и здесь, а не только в однострочном
+                      // поле. Слова Кирилла 21.09.2026: «любые заполнения
+                      // результатов или итогов должны закрываться нажатием
+                      // „Enter“ после заполнения, везде! во всех формах
+                      // заполнения». Через это окно спрашивают отчёт, причину
+                      // возврата, итог встречи — то есть одну-две фразы, после
+                      // которых рука сама тянется к Enter, а тянуться ей
+                      // приходилось к кнопке. Перенос строки остаётся на
+                      // Shift+Enter — так же, как в обсуждении (ItemChat).
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          submit();
+                        }
+                      }}
                     />
                   ) : (
                     <input

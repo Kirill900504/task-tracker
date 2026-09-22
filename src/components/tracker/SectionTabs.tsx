@@ -8,6 +8,15 @@ import type { Section } from "@/types/tracker";
 
 // Разделы кнопками под панелью задач: выбрать, завести новый, переставить.
 //
+// Видна она только администратору и только на большом экране — поэтому
+// здесь нет ни одной ветки «а если менять нельзя». Слова Кирилла
+// 21.09.2026: «эту строку убери у остальных пользователей, кроме меня,
+// она для них не информативна», и про телефон с мини-приложением — «она
+// там заполняет место просто». Он прав дважды: разделы заводит и
+// переставляет админ, а остальным это отбор по одиннадцати кнопкам,
+// который у человека с четырьмя задачами ничего не сужает. Решает это
+// TasksPanel — он единственный, кто эту строку выводит.
+//
 // Перестановка сделана указателем, а не HTML5-перетаскиванием, и это не
 // прихоть: drag-and-drop браузера на телефоне не существует вовсе (см.
 // правило про касания в заметках), а разделы переставляют именно там, где
@@ -37,7 +46,6 @@ export default function SectionTabs({
   onReorder,
   onNewTask,
   onSettings,
-  canEdit = true,
 }: {
   sections: Section[];
   value: string;
@@ -63,7 +71,6 @@ export default function SectionTabs({
   // видит и выбирает ими, но не заводит, не переименовывает, не удаляет и
   // не переставляет: его в этом откажет и база (миграция 0031), а кнопка,
   // ведущая к отказу, хуже отсутствующей.
-  canEdit?: boolean;
 }) {
   const isMobile = useIsMobile();
   // Порядок, который человек видит, пока держит палец: настоящий приезжает
@@ -214,14 +221,14 @@ export default function SectionTabs({
             }
             title={
               isMobile
-                ? `${s.name} — показать задачи раздела${canEdit ? "; зажмите, чтобы переставить" : ""}`
-                : `${s.name} — новая задача в разделе; правая кнопка: показать только его задачи${canEdit ? "; зажмите, чтобы переставить" : ""}`
+                ? `${s.name} — показать задачи раздела; зажмите, чтобы переставить`
+                : `${s.name} — новая задача в разделе; правая кнопка: показать только его задачи; зажмите, чтобы переставить`
             }
             onContextMenu={(e) => {
               e.preventDefault();
               onSelect(value === s.id ? "all" : s.id);
             }}
-            onPointerDown={(e) => canEdit && onPointerDown(e, s.id)}
+            onPointerDown={(e) => onPointerDown(e, s.id)}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
@@ -240,22 +247,18 @@ export default function SectionTabs({
         );
       })}
 
-      {canEdit && (
-        <>
-          <button type="button" className="section-tab section-tab-add" id="addSectionTabBtn" title="Новый раздел" onClick={onAdd}>
-            +
-          </button>
-          <button
-            type="button"
-            className="section-tab section-tab-add"
-            id="sectionSettingsBtn"
-            title="Разделы: названия, ответственные, удаление"
-            onClick={onSettings}
-          >
-            <Icon name="users" size={14} />
-          </button>
-        </>
-      )}
+      <button type="button" className="section-tab section-tab-add" id="addSectionTabBtn" title="Новый раздел" onClick={onAdd}>
+        +
+      </button>
+      <button
+        type="button"
+        className="section-tab section-tab-add"
+        id="sectionSettingsBtn"
+        title="Разделы: названия, ответственные, удаление"
+        onClick={onSettings}
+      >
+        <Icon name="users" size={14} />
+      </button>
 
     </div>
   );

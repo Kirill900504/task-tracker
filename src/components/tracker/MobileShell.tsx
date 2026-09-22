@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import Icon, { type IconName } from "./Icon";
+import { neighbour, startsInBusyArea, verdict } from "@/lib/mobileSwipe";
 
 // The phone gets its own frame: one section on screen at a time, chosen from
 // a bar under the thumb, instead of the desktop's three columns stacked into
@@ -38,22 +39,60 @@ const TABS: { id: MobileTab; label: string; icon: IconName }[] = [
   { id: "today", label: "Сегодня", icon: "today" },
 ];
 
+const TAB_IDS = TABS.map((t) => t.id);
+
 export default function MobileShell({
   tab,
   onTabChange,
+  onSearch,
   badges,
   children,
 }: {
   tab: MobileTab;
   onTabChange: (tab: MobileTab) => void;
+  // Поиск стоит в той же полосе, шестой кнопкой, и это не раздел, а
+  // действие. Слова Кирилла 22.09.2026 — «поиск в нижнюю панель»: искать
+  // с телефона приходится чаще всего, а лежал он строкой в меню шапки, то
+  // есть двумя нажатиями и в противоположном от большого пальца углу.
+  onSearch: () => void;
   // Small counts on the tabs — how much is waiting there, so you can see it
   // without opening each one.
   badges?: Partial<Record<MobileTab, number>>;
   children: ReactNode;
 }) {
+  // Листание разделов пальцем.
+  //
+  // Правило, по которому жест отличается от всех остальных горизонталей на
+  // этом экране, вынесено в lib/mobileSwipe — там же записано, почему оно
+  // именно такое. Здесь остаются только руки: где палец лёг и куда пришёл.
+  const from = useRef<{ x: number; y: number } | null>(null);
+
+  function onPointerDown(e: ReactPointerEvent) {
+    if (e.pointerType !== "touch") return;
+    if (startsInBusyArea(e.target as Element)) return;
+    from.current = { x: e.clientX, y: e.clientY };
+  }
+
+  function onPointerUp(e: ReactPointerEvent) {
+    const start = from.current;
+    from.current = null;
+    if (!start) return;
+    const where = verdict(e.clientX - start.x, e.clientY - start.y);
+    const next = neighbour(TAB_IDS, tab, where);
+    if (next) onTabChange(next);
+  }
+
   return (
     <>
-      <main className="mobile-main" id="mobileMain">
+      <main
+        className="mobile-main"
+        id="mobileMain"
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerCancel={() => {
+          from.current = null;
+        }}
+      >
         {children}
       </main>
       <nav className="mobile-nav" id="mobileNav">
@@ -79,6 +118,16 @@ export default function MobileShell({
             </button>
           );
         })}
+        {/* Поиск — шестая кнопка и единственная в ряду, которая не
+            переключает раздел, а открывает окно. Поэтому она и выглядит
+            иначе: без заливки-пилюли, которой отмечено «вы здесь», —
+            иначе ряд обещал бы шестой раздел, которого нет. */}
+        <button className="mobile-tab mobile-tab-search" id="mobileSearchTab" onClick={onSearch}>
+          <span className="mobile-tab-icon">
+            <Icon name="search" size={21} />
+          </span>
+          <span className="mobile-tab-label">Поиск</span>
+        </button>
       </nav>
     </>
   );

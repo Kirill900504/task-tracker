@@ -1037,13 +1037,16 @@
      та же несоразмерность, только своя. */
   .overlay.ask-overlay{z-index:600; align-items:center;}
   .modal.ask-modal{max-width:420px; margin:auto;}
-  .ask-question{margin:0 0 10px; font-size:14px; line-height:1.5; color:var(--ink); white-space:pre-line;}
-  .ask-note{margin:0 0 12px; font-size:12.5px; line-height:1.5; color:var(--ink-soft);}
+  /* Вопрос и пояснение к нему почти всегда цитируют название задачи или
+     встречи — перенос по буквам здесь по той же причине, что у .toast. */
+  .ask-question{margin:0 0 10px; font-size:14px; line-height:1.5; color:var(--ink); white-space:pre-line; overflow-wrap:anywhere;}
+  .ask-note{margin:0 0 12px; font-size:12.5px; line-height:1.5; color:var(--ink-soft); overflow-wrap:anywhere;}
   .ask-modal .field{margin-bottom:0;}
   .ask-modal textarea{min-height:88px;}
   .ask-problem{
     margin-top:10px; padding:8px 10px; border-radius:var(--radius-sm);
     background:var(--high-bg); border:1px solid rgba(224,122,95,.4); color:#F2C9BC; font-size:12.5px;
+    overflow-wrap:anywhere;
   }
   .ask-actions{justify-content:flex-end; flex-wrap:wrap;}
   .ask-link{display:inline-block; text-decoration:none; margin-bottom:10px;}
@@ -1085,8 +1088,12 @@
     opacity:0; transition:opacity .3s ease;
   }
   #syncStatus.show{opacity:1;}
+  /* Текст уведомления цитирует название задачи, то есть его пишет человек,
+     и слово без единого пробела обязано переноситься по буквам: «11111…»
+     выезжало за скруглённый край плашки и печаталось поверх экрана. То же
+     правило и по той же причине, что у .done-list-* ниже. */
   .toast{
-    position:relative;
+    position:relative; overflow-wrap:anywhere;
     background:var(--accent); color:#F3F8FA; padding:12px 40px 12px 14px; border-radius:var(--radius-md); font-size:13px;
     box-shadow:var(--shadow-2); animation:slidein .2s ease-out; pointer-events:auto;
   }
@@ -1829,7 +1836,7 @@
        под значком, то есть фигура, которую видно боковым зрением. */
     .mobile-nav{
       position:fixed; left:0; right:0; bottom:0; z-index:210;
-      display:grid; grid-template-columns:repeat(5, 1fr);
+      display:grid; grid-template-columns:repeat(6, 1fr);
       background:color-mix(in srgb, var(--paper) 88%, transparent);
       backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
       border-top:1px solid var(--line-soft);
@@ -1860,6 +1867,11 @@
       box-shadow:0 0 0 2px var(--paper);
     }
     .mobile-tab.active .mobile-tab-badge{background:var(--accent); color:#F3F8FA;}
+    /* Поиск в том же ряду, но это не раздел, а действие: пилюли «вы
+       здесь» у него не бывает, и подпись приглушена — иначе ряд обещал
+       бы шестой раздел, которого нет. */
+    .mobile-tab-search{color:var(--ink-soft);}
+    .mobile-tab-search:active .mobile-tab-icon{background:var(--paper-soft);}
     .mobile-tab-label{line-height:1;}
     @media (prefers-reduced-motion: reduce){
       .mobile-tab-icon{transition:none;}
@@ -2004,12 +2016,28 @@
     /* Свайп по карточке */
     .swipe-wrap{position:relative; overflow:hidden; border-radius:var(--radius-md); margin-bottom:9px;}
     .swipe-wrap .task{margin-bottom:0; transition:transform .18s ease;}
+    /* Подсказки жеста лежат ПОД карточкой, каждая у своего края, и
+       проступают из-под неё по мере движения. Их две, потому что жестов
+       два: вправо — закрыть, влево — меню действий (22.09.2026). Левая
+       нарочно другого цвета: «готово» — это зелёное и необратимое, а
+       «действия» — просто ящик с кнопками, и путать их нельзя. */
     .swipe-hint{
       position:absolute; inset:0; display:flex; align-items:center; padding-left:18px;
       background:var(--long-border); color:#0B2116; font-size:13px; font-weight:600;
-      border-radius:var(--radius-md); opacity:.55;
+      border-radius:var(--radius-md); opacity:0;
+    }
+    /* Обе подсказки лежат на одном месте, одна поверх другой, поэтому
+       видна ровно та, к которой карточку ведут. Без этого из-под
+       уезжающей вправо карточки проступало бы «действия ⋮». */
+    .swipe-wrap.to-right .swipe-hint:not(.left){opacity:.55;}
+    .swipe-wrap.to-left .swipe-hint.left{opacity:.55;}
+    .swipe-hint.left{
+      justify-content:flex-end; padding-left:0; padding-right:18px;
+      background:var(--paper-soft); color:var(--ink-soft);
+      box-shadow:inset 0 0 0 1px var(--line);
     }
     .swipe-wrap.armed .swipe-hint{opacity:1;}
+    .swipe-wrap.armed-left .swipe-hint.left{opacity:1; color:var(--ink);}
 
     /* Модалка выезжает снизу, а не «вырастает» из центра */
     .modal{animation:modal-sheet-up .2s ease-out;}
@@ -2310,31 +2338,75 @@
   .chat-hint{margin-left:auto; font-size:11.5px; color:var(--ink-soft); opacity:.8;}
   @media (max-width:560px){ .chat-hint{display:none;} }
   .chat-empty{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
+
+  /* Переписка, а не список карточек.
+     Слова Кирилла 21.09.2026: «режим чата как в телеграм или МАХ (когда
+     твои сообщения справа, сообщение коллег слева)». Отсюда всё ниже:
+     лента со своей прокруткой (разговор не должен растягивать окно
+     задачи до бесконечности), пузыри на две стороны, кружок с буквами у
+     чужих реплик, время в углу пузыря и разделители дней.
+     Прежнее правило «своё отличается рамкой, а не расположением» здесь
+     отменено им же — и он прав: сторона узнаётся раньше, чем читается
+     подпись, и ровно поэтому так сделано в обоих мессенджерах, которыми
+     он пользуется. */
+  .chat-feed{
+    display:flex; flex-direction:column;
+    max-height:min(46vh, 380px); overflow-y:auto; overscroll-behavior:contain;
+    padding:2px 4px 2px 0; margin-bottom:4px;
+  }
+  .chat-day{
+    display:flex; align-items:center; justify-content:center;
+    margin:10px 0 8px;
+  }
+  .chat-day span{
+    font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-soft); background:var(--bg); border-radius:999px; padding:3px 12px;
+  }
+  .chat-row{display:flex; align-items:flex-end; gap:8px; margin-bottom:7px;}
+  .chat-row.mine{justify-content:flex-end;}
+  /* Реплики одного человека подряд стоят плотнее — это одна мысль в три
+     сообщения, а не три разговора. */
+  .chat-row.tight{margin-top:-4px;}
+  .chat-avatar{
+    flex:0 0 auto; width:28px; height:28px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:800; color:#101A1D;
+    font-family:var(--display); user-select:none;
+  }
+  /* Место под кружок остаётся, даже когда кружка нет: иначе вторая реплика
+     подряд уезжает влево и столбец ломается. */
+  .chat-avatar.hidden{background:transparent !important;}
   .chat-msg{
-    padding:10px 12px; border-radius:var(--radius-md); background:var(--paper);
-    border:1px solid var(--line-soft); margin-bottom:8px; box-shadow:var(--edge);
+    position:relative; max-width:min(78%, 520px);
+    padding:8px 12px 7px; border-radius:15px; background:var(--paper);
+    border:1px solid var(--line-soft); box-shadow:var(--edge);
     /* Меню вызывают правой кнопкой по самому сообщению — выделение текста
        при этом не должно превращаться в синюю заливку реплики; обычное
        выделение мышью остаётся. */
     transition:border-color .12s ease, background .12s ease, opacity .12s ease;
   }
+  /* Уголок у своей стороны — тот самый признак, по которому пузырь читается
+     как реплика, а не как плашка. */
+  .chat-msg{border-bottom-left-radius:5px;}
+  .chat-msg.mine{border-bottom-left-radius:15px; border-bottom-right-radius:5px;}
   .chat-msg:hover{border-color:rgba(255,255,255,.16);}
   /* Сообщение, у которого открыто меню, помечено — иначе в длинной ветке
      непонятно, к чему относится то, что сейчас откроется. */
-  .chat-msg.menu-open{border-color:var(--accent); background:var(--accent-soft);}
-  /* Своё сообщение отличается рамкой, а не расположением: переписка на две
-     стороны на узкой карточке читается хуже, чем ровный столбец. */
-  .chat-msg.mine{border-left:2px solid var(--accent);}
+  .chat-msg.menu-open{border-color:var(--accent);}
+  .chat-msg.mine{background:var(--accent-soft); border-color:rgba(62,138,168,.45);}
   /* Сообщение уже в ленте, но ещё не подтверждено базой. Бледность — весь
      рассказ об этом: подпись «отправляется» заняла бы строку ради того, что
      живёт доли секунды, а на плохой связи видно и так. Переход плавный,
      чтобы подтверждение не выглядело морганием. */
   .chat-msg.sending{opacity:.55;}
-  .chat-msg-head{display:flex; align-items:baseline; gap:8px; margin-bottom:5px; flex-wrap:wrap;}
-  .chat-author{font-size:12.5px; font-weight:700; color:var(--ink);}
-  .chat-time{font-size:11.5px; color:var(--ink-soft); font-family:var(--display);}
-  .chat-body{font-size:13.5px; color:var(--ink); line-height:1.55; white-space:pre-wrap; word-break:break-word;}
-  .chat-foot{display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap;}
+  .chat-author{font-size:12.5px; font-weight:700; margin-bottom:3px;}
+  /* Время — в подвале пузыря, справа: взглядом, а не чтением. */
+  .chat-time{
+    display:block; text-align:right; margin-top:3px;
+    font-size:10.5px; color:var(--ink-soft); font-family:var(--display); opacity:.85;
+  }
+  .chat-body{font-size:13.5px; color:var(--ink); line-height:1.5; white-space:pre-wrap; word-break:break-word;}
+  .chat-foot{display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;}
   .chat-reaction{
     display:inline-flex; align-items:center; gap:5px;
     min-height:28px; padding:3px 10px; font-size:12.5px; font-weight:600; cursor:pointer;

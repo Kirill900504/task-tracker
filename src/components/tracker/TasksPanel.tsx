@@ -35,6 +35,7 @@ import { uid } from "@/lib/uid";
 import Icon from "./Icon";
 import { isMine } from "@/lib/ownership";
 import { useAuthors } from "@/hooks/useAuthors";
+import { authorLabel } from "@/lib/authorName";
 
 export default function TasksPanel({
   tasks,
@@ -218,9 +219,24 @@ export default function TasksPanel({
   // Моя роль в задаче — один ответ, которым пользуются и цвет карточки, и
   // фильтр, и подсветка просрочки (см. lib/myRole).
   const roleOn = (t: Task) => myRoleOn(participants.forTask(t.id), myMemberAssigneeId);
-  // Имя постановщика — только у чужого поручения. Своё подписывать своим же
-  // именем значит повторять на каждой карточке то, что и так известно.
-  const authorOf = (t: Task) => (mine(t) ? "" : authors[t.createdBy || ""] || "");
+  // Имя постановщика — у КАЖДОЙ карточки.
+  //
+  // Раньше своё поручение не подписывалось вовсе («зачем повторять то, что
+  // и так известно»), и это было верно, пока поручал один человек. Теперь
+  // их четырнадцать, доска общая, и Кирилл попросил прямо 21.09.2026: «в
+  // коротких блоках задач тоже должен быть выделен постановщик задачи и
+  // все исполнители». Пустой created_by означает владельца — это правило
+  // живёт в одном месте (lib/authorName), а не считается здесь заново.
+  const authorOf = (t: Task) => authorLabel(t.createdBy, authors, assignees);
+  // Все исполнители задачи — для той же строки на кубике. Соисполнители и
+  // наблюдатели туда не идут: «соисполнителей и наблюдателей выводить не
+  // надо» (он же, тогда же).
+  const executorsOf = (t: Task) =>
+    participants
+      .forTask(t.id)
+      .filter((p) => p.role === "executor")
+      .map((p) => p.name)
+      .filter(Boolean);
 
   // Цифра на кнопке считается по всем задачам, а не по отфильтрованным:
   // иначе, включив фильтр, она показывала бы сама себя.
@@ -649,6 +665,7 @@ export default function TasksPanel({
                       justCreated={justCreatedId === t.id}
                       menuItems={isMobile ? menuItemsFor(t) : undefined}
                       authorName={authorOf(t)}
+                      executors={executorsOf(t)}
                     />
                   )}
                 </SortableTask>
@@ -840,22 +857,25 @@ export default function TasksPanel({
           они между кнопкой «Новая задача» и столбцами — там, куда смотрят
           перед тем, как читать сами задачи. */}
       {/* Разделы — кнопками под панелью задач: выбрать, завести новый («+»)
-          и переставить, зажав и потянув (см. SectionTabs). */}
-      <SectionTabs
-        canEdit={isAdmin}
-        sections={sections}
-        value={filterSection}
-        onSelect={setFilterSection}
-        onAdd={() => void addSection()}
-        onNewTask={(section) => newTaskForSection(section)}
-        onSettings={() => setSectionsOpen(true)}
-        onReorder={(ids) =>
-          ids.forEach((id, i) => {
-            const s = sections.find((x) => x.id === id);
-            if (s && s.sortOrder !== i) actions.saveSection({ ...s, sortOrder: i });
-          })
-        }
-      />
+          и переставить, зажав и потянув (см. SectionTabs). Видна только
+          админу и только на большом экране — SectionTabs сам этого не
+          решает, решаем здесь (см. её собственный комментарий вверху). */}
+      {isAdmin && !isMobile && (
+        <SectionTabs
+          sections={sections}
+          value={filterSection}
+          onSelect={setFilterSection}
+          onAdd={() => void addSection()}
+          onNewTask={(section) => newTaskForSection(section)}
+          onSettings={() => setSectionsOpen(true)}
+          onReorder={(ids) =>
+            ids.forEach((id, i) => {
+              const s = sections.find((x) => x.id === id);
+              if (s && s.sortOrder !== i) actions.saveSection({ ...s, sortOrder: i });
+            })
+          }
+        />
+      )}
 
       {/* Доска. Три столбца стоят всегда — это путь задачи, и прятать в
           нём звено значит прятать шаг работы. Четвёртый, «Завершённые»,
@@ -1057,6 +1077,15 @@ export default function TasksPanel({
               return;
             }
             toggleDone({ ...modalTask, status: "in_progress", approvalState: "accepted", approvalComment: reason });
+            // Закрыли волевым решением — карточку тоже закрываем.
+            //
+            // Слова Кирилла 21.09.2026: «после того, как „закрываешь
+            // волевым решением“, задача из кан-бана пропадает, а открытая
+            // её форма остаётся перед глазами». Так и было: задача уезжала
+            // в «Завершённые», а окно висело над тем, чего в столбце уже
+            // нет. Приёмка и возврат закрывались давно — это была
+            // единственная забытая из трёх дверей наружу.
+            closeModal();
           }}
           onReopenWork={async (comment) => {
             if (!modalTask) return;
