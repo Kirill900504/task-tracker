@@ -108,7 +108,6 @@ test("исполнитель, соисполнитель и наблюдател
   await expect(cards.executor).toHaveAttribute("data-role", "executor");
   await expect(cards.none).toHaveAttribute("data-role", "none");
 
-  if (process.env.ROLES_SHOT) await page.screenshot({ path: process.env.ROLES_SHOT, fullPage: true });
   const tones = {
     executor: await roleBar(cards.executor),
     coexecutor: await roleBar(cards.coexecutor),
