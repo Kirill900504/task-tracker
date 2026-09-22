@@ -98,8 +98,30 @@ const nextConfig: NextConfig = {
   // to it, so it doesn't get copied into the deployed function either
   // ("Could not locate ... web build", confirmed in production). Forcing
   // it in here, scoped to only the one route that needs it.
+  // Любой маршрут, который слушает речь, должен нести эти файлы с собой —
+  // забытая строка здесь стоила «Could not locate ... web build» на
+  // боевом, где это выясняется только при первой же расшифровке.
   outputFileTracingIncludes: {
     "/api/telegram/webhook": [
+      "./node_modules/@huggingface/transformers/**",
+      "./node_modules/@huggingface/jinja/**",
+      "./node_modules/@huggingface/tokenizers/**",
+      "./node_modules/onnxruntime-web/**",
+      "./node_modules/onnxruntime-common/**",
+    ],
+    // Голосовые из MAX разбирает свой обработчик — своя функция, свой
+    // список файлов. Строки тут не было, то есть расшифровка голосовых в
+    // MAX на боевом не могла работать вовсе.
+    "/api/max/webhook": [
+      "./node_modules/@huggingface/transformers/**",
+      "./node_modules/@huggingface/jinja/**",
+      "./node_modules/@huggingface/tokenizers/**",
+      "./node_modules/onnxruntime-web/**",
+      "./node_modules/onnxruntime-common/**",
+    ],
+    // Диктовка в самом трекере: браузер присылает сюда записанный звук,
+    // когда распознавание браузера не достучалось до своего сервиса.
+    "/api/speech": [
       "./node_modules/@huggingface/transformers/**",
       "./node_modules/@huggingface/jinja/**",
       "./node_modules/@huggingface/tokenizers/**",

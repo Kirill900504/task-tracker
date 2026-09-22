@@ -143,6 +143,20 @@ function resampleTo16k(input: Float32Array, inputRate: number): Float32Array {
   return out;
 }
 
+// Расшифровать готовый моно-PCM 16кГц — то, что Whisper ждёт на входе.
+//
+// Отдельно от разбора Ogg нарочно: из браузера звук приходит уже таким
+// (см. lib/dictation.ts — микрофон там открывается сразу на 16кГц, и
+// контейнера у записи нет вовсе), и упаковывать его в Opus только ради
+// того, чтобы здесь же распаковать обратно, значило бы возить воду.
+export async function transcribePcm16k(pcm: Float32Array): Promise<string> {
+  if (!pcm.length) return "";
+  const transcriber = await getTranscriber();
+  const result = await transcriber(pcm, { language: "russian", task: "transcribe" });
+  const text = Array.isArray(result) ? result[0]?.text : result.text;
+  return (text || "").trim();
+}
+
 export async function transcribeOggOpus(bytes: ArrayBuffer): Promise<string> {
   const { OggOpusDecoder } = await import("ogg-opus-decoder");
   const decoder = new OggOpusDecoder();
@@ -163,9 +177,5 @@ export async function transcribeOggOpus(bytes: ArrayBuffer): Promise<string> {
     }
   }
 
-  const pcm16k = resampleTo16k(mono, sampleRate);
-  const transcriber = await getTranscriber();
-  const result = await transcriber(pcm16k, { language: "russian", task: "transcribe" });
-  const text = Array.isArray(result) ? result[0]?.text : result.text;
-  return (text || "").trim();
+  return transcribePcm16k(resampleTo16k(mono, sampleRate));
 }

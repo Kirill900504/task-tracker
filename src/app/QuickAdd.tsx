@@ -150,6 +150,10 @@ export default function QuickAdd({
     },
   });
 
+  // Подпись микрофона: три состояния, и все три надо назвать. Молчащая
+  // кнопка неотличима от сломанной — а здесь диктовка и есть весь ввод.
+  const micLabel = speech.transcribing ? "Расшифровываю…" : speech.listening ? "Остановить запись" : "Надиктовать";
+
   function noteDropped(droppedNames: string[]) {
     if (droppedNames.length) {
       void ask.say({
@@ -371,7 +375,13 @@ export default function QuickAdd({
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder={
-                status === "loading" ? "Думаю…" : speech.listening ? "Говорите…" : "Что добавить? Enter — добавить, 🎤 — надиктовать"
+                status === "loading"
+                  ? "Думаю…"
+                  : speech.transcribing
+                    ? "Расшифровываю сказанное…"
+                    : speech.listening
+                      ? "Говорите…"
+                      : "Что добавить? Enter — добавить, 🎤 — надиктовать"
               }
               disabled={status === "loading"}
               style={INPUT_STYLE}
@@ -379,13 +389,15 @@ export default function QuickAdd({
             {speech.supported && (
               <button
                 type="button"
-                className={"quick-add-mic-btn" + (speech.listening ? " listening" : "")}
+                className={
+                  "quick-add-mic-btn" + (speech.listening ? " listening" : "") + (speech.transcribing ? " transcribing" : "")
+                }
                 onClick={speech.toggle}
-                disabled={status === "loading"}
-                title={speech.listening ? "Остановить запись" : "Надиктовать"}
-                aria-label={speech.listening ? "Остановить запись" : "Надиктовать"}
+                disabled={status === "loading" || speech.transcribing}
+                title={micLabel}
+                aria-label={micLabel}
               >
-                <Icon name={speech.listening ? "recording" : "mic"} size={16} />
+                <Icon name={speech.transcribing ? "clock" : speech.listening ? "recording" : "mic"} size={16} />
               </button>
             )}
           </form>

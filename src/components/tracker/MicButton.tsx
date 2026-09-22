@@ -4,8 +4,14 @@
 // Whatever was already typed is kept: dictation appends to it, so you can
 // start typing, finish by voice, or dictate twice in a row.
 //
-// Renders nothing at all where the browser has no speech recognition, rather
-// than offering a button that would do nothing.
+// Renders nothing at all where neither path to dictation exists (no speech
+// recognition AND no microphone at all), rather than offering a button that
+// would do nothing.
+//
+// Состояний у кнопки три, а не два: записывает, расшифровывает, спит.
+// Среднее появилось вместе со вторым путём диктовки (см. useSpeechInput):
+// там между «я договорил» и текстом в поле лежат секунды, и кнопка,
+// погасшая на это время, читается как «ничего не записалось».
 import { useRef } from "react";
 import { speechErrorText, useSpeechInput } from "@/hooks/useSpeechInput";
 import { useAsk } from "@/components/Ask";
@@ -43,18 +49,24 @@ export default function MicButton({
 
   if (!speech.supported) return null;
 
+  const label = speech.transcribing ? "Расшифровываю…" : speech.listening ? "Остановить запись" : title;
+
   return (
     <button
       type="button"
-      className={"field-mic-btn" + (speech.listening ? " listening" : "")}
-      title={speech.listening ? "Остановить запись" : title}
-      aria-label={speech.listening ? "Остановить запись" : title}
+      className={"field-mic-btn" + (speech.listening ? " listening" : "") + (speech.transcribing ? " transcribing" : "")}
+      title={label}
+      aria-label={label}
+      // Пока идёт расшифровка, нажимать не на что — но кнопка остаётся
+      // видимой и подписанной, иначе исчезнувшее действие выглядит так,
+      // будто диктовка отменилась сама.
+      disabled={speech.transcribing}
       onClick={() => {
         if (!speech.listening) baseRef.current = value.trim();
         speech.toggle();
       }}
     >
-      <Icon name={speech.listening ? "recording" : "mic"} size={16} />
+      <Icon name={speech.transcribing ? "clock" : speech.listening ? "recording" : "mic"} size={16} />
     </button>
   );
 }
