@@ -119,13 +119,16 @@ test("исполнитель, соисполнитель и наблюдател
   // менять, нельзя — сливать роли в один тон.
   expect(new Set(Object.values(tones)).size, `цвета корешка совпали: ${JSON.stringify(tones)}`).toBe(4);
 
-  // Фон при этом у всех четырёх ОДИН: он принадлежит сроку, и роль его
-  // не трогает. Без этой проверки роль однажды снова уедет в заливку и
-  // начнёт спорить с «просрочено».
-  const backgrounds = await Promise.all(
-    Object.values(cards).map((card) => card.evaluate((el) => getComputedStyle(el).backgroundColor)),
-  );
-  expect(new Set(backgrounds).size, `фон разошёлся: ${JSON.stringify(backgrounds)}`).toBe(1);
+  // Фон трогает РОВНО одна роль — исполнитель (слова Кирилла 22.09.2026:
+  // «исполнителю верни выделение в фирменном цвете как раньше»). Своя
+  // работа ищется глазами через всю доску, и полоска для этого слабовата.
+  // Остальные три фона обязаны совпадать: заливка, потраченная на
+  // «помогаю» и «смотрю», вернула бы три близких фона, которые
+  // приходится сравнивать.
+  const background = (card: Locator) => card.evaluate((el) => getComputedStyle(el).backgroundColor);
+  const plain = await Promise.all([background(cards.coexecutor), background(cards.watcher), background(cards.none)]);
+  expect(new Set(plain).size, `фон разошёлся у ролей без заливки: ${JSON.stringify(plain)}`).toBe(1);
+  expect(await background(cards.executor), "исполнителю положена фирменная заливка").not.toBe(plain[0]);
 
   // Просрочка — два разных сигнала, и путать их нельзя (выбор Кирилла
   // 21.09.2026). Своё горящее краснеет целиком: работа на мне. Горящее,
@@ -135,7 +138,7 @@ test("исполнитель, соисполнитель и наблюдател
   const lateOther = page.locator(`.task[data-id="${ids.lateOther}"]`);
   await expect(lateMine).toHaveClass(/overdue/, { timeout: 30_000 });
   await expect(lateOther).not.toHaveClass(/overdue/);
-  expect(await lateOther.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(backgrounds[0]);
+  expect(await background(lateOther)).toBe(plain[0]);
   // …но и не молчит: её корешок не тот, что у обычной чужой задачи, и не
   // тот, что у моей работы.
   const lateOtherBar = await roleBar(lateOther);
