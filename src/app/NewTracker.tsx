@@ -98,9 +98,8 @@ export default function NewTracker() {
   const { loading, loadError, tasks, meetings, ideas, sections, assignees, syncStatus, offline, actions } =
     useTrackerData({ enabled: ready, workspace });
   // Как меня зовут в списке людей. Своя строка помечена «(я)» — другого
-  // способа связать логин с человеком в браузере нет (см. правило про
-  // задачу самому себе в lib/kanban). Нужно на экране «Сегодня», чтобы
-  // отличить «моя задача» от «я поручил её другому».
+  // способа связать логин с человеком в браузере нет. Нужно на экране
+  // «Сегодня», чтобы отличить «моя задача» от «я поручил её другому».
   const myName = assignees.find((a) => a.trim().endsWith("(я)")) || "";
   const isMobile = useIsMobile();
   const toasts = useToasts();

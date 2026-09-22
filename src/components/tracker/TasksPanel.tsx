@@ -255,26 +255,11 @@ export default function TasksPanel({
 
   const stageOf = (t: Task) => taskStage(participants.forTask(t.id), t.approvalState || "open");
 
-  // Поставил ли человек эту задачу сам себе. Тогда столбца «Новые» для неё
-  // не существует (см. lib/kanban): ждать ответа не от кого.
-  //
-  // Сравниваются ИМЕНА, а не идентификаторы, и это единственный доступный
-  // здесь способ: автор — это логин (created_by), исполнитель — строка в
-  // списке людей, и связывает их только имя. У владельца created_by пуст,
-  // и его собственное имя — то, что помечено «(я)».
-  const selfName = participants.people.find((x) => x.name.trim().endsWith("(я)"))?.name || "";
-  const selfAssignedOn = (t: Task) => {
-    const executorNames = participants.forTask(t.id).filter((x) => x.role === "executor").map((x) => x.name);
-    if (executorNames.length !== 1) return false;
-    const authorName = t.createdBy ? authors[t.createdBy] || "" : selfName;
-    return !!authorName && authorName === executorNames[0];
-  };
-
   // Задачи, разложенные по столбцам доски. Считается один раз на отрисовку:
   // columnOf читает строки участия, и звать его по разу на столбец значило
   // бы пройти список четырежды.
   const byColumn: Record<KanbanColumn, Task[]> = { new: [], work: [], review: [], done: [] };
-  for (const t of filtered) byColumn[columnOf(t, participants.forTask(t.id), selfAssignedOn(t))].push(t);
+  for (const t of filtered) byColumn[columnOf(t, participants.forTask(t.id))].push(t);
   for (const id of Object.keys(byColumn) as KanbanColumn[]) byColumn[id].sort(taskSortFn);
   // Завершённые — свежими вперёд: этот столбец открывают, чтобы вернуть то,
   // что только что закрыли, и порядок закрытия важнее порядка сроков.
@@ -471,7 +456,7 @@ export default function TasksPanel({
     const dragged = tasks.find((t) => t.id === taskId);
     if (!dragged) return;
 
-    const from = columnOf(dragged, participants.forTask(dragged.id), selfAssignedOn(dragged));
+    const from = columnOf(dragged, participants.forTask(dragged.id));
     const to = spot.column;
 
     // Внутри столбца — обычная перестановка: порядок принадлежит задаче, и
@@ -534,7 +519,7 @@ export default function TasksPanel({
   // Ручной порядок — та же перестановка, что мышью, но кнопкой: на телефоне
   // перетаскивание есть, а точности в нём нет.
   function moveWithinColumn(t: Task, to: "top" | "bottom") {
-    const column = columnOf(t, participants.forTask(t.id), selfAssignedOn(t));
+    const column = columnOf(t, participants.forTask(t.id));
     const others = byColumn[column].filter((x) => x.id !== t.id).map((x) => x.id);
     const ids = to === "top" ? [t.id, ...others] : [...others, t.id];
     ids.forEach((id, i) => {
