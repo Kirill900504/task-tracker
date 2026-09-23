@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "autoContinueAtUsageLimit": true,
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm test:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run build)",
+      "Bash(npm run test:*)",
+      "Bash(node scripts/claim.mjs:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(mv:*)",
+      "Bash(mkdir:*)"
+    ]
+  }
+}
