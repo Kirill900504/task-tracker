@@ -54,6 +54,7 @@ export default function TaskCard({
   menuItems,
   authorName,
   executors,
+  refused,
 }: {
   task: Task;
   section: Section | null;
@@ -100,6 +101,10 @@ export default function TaskCard({
   // и наблюдатели сюда не идут — по его же словам: «соисполнителей и
   // наблюдателей выводить не надо».
   executors?: string[];
+  // Кто-то из исполнителей отказался. Отдельно от stage: отказ уводит
+  // задачу на приёмку (см. taskProgress.allAnswered), и без этого признака
+  // «не смогли» стало бы неотличимо от «сдали работу».
+  refused?: boolean;
 }) {
   const isMobile = useIsMobile();
   // Меню карточки: открыто ли и от чего. Якорь нужен только на
@@ -267,7 +272,7 @@ export default function TaskCard({
           {/* Два состояния, которых не видно по столбцу: «В работе» стоит и
               тот, кто взялся, и тот, кто отказался, и тот, кому вернули.
               Разница между ними — это разница между «идёт» и «стоит». */}
-          {stage === "blocked" && <span className="task-state blocked">не может</span>}
+          {(stage === "blocked" || refused) && <span className="task-state blocked">не может</span>}
           {stage === "returned" && <span className="task-state returned">на доработке</span>}
         </div>
       </div>

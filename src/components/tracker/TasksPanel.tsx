@@ -24,7 +24,7 @@ import SendMenu from "./SendMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { useSectionAssignees } from "@/hooks/useSectionAssignees";
-import { progressShort, taskStage } from "@/lib/taskProgress";
+import { hasDeclined, progressShort, taskStage } from "@/lib/taskProgress";
 import { peopleLoad } from "@/lib/peoplePanel";
 import type { useToasts } from "@/hooks/useToasts";
 import SectionTabs from "./SectionTabs";
@@ -270,6 +270,11 @@ export default function TasksPanel({
   });
 
   const stageOf = (t: Task) => taskStage(participants.forTask(t.id), t.approvalState || "open");
+  // Есть ли среди исполнителей отказ, который не перекрыт собственным
+  // отчётом (hasDeclined). Спрашивается отдельно от stage: с тех пор как
+  // отказ уводит задачу на приёмку, «не может» перестало быть отдельным
+  // состоянием и стало свойством ответа.
+  const hasRefusal = (t: Task) => participants.forTask(t.id).some((p) => p.role === "executor" && hasDeclined(p));
 
   // Задачи, разложенные по столбцам доски. Считается один раз на отрисовку:
   // columnOf читает строки участия, и звать его по разу на столбец значило
@@ -649,6 +654,12 @@ export default function TasksPanel({
                       section={sectionById.get(t.sectionId) ?? null}
                       progress={progressShort(participants.forTask(t.id))}
                       stage={stageOf(t)}
+                      // Кто-то отказался — это видно на кубике и тогда, когда
+                      // задача уже уехала на приёмку: столбец говорит «ждёт
+                      // решения», а метка — «работу не сделали». Разница
+                      // между «сдали» и «не смогли» и есть то, ради чего
+                      // карточку открывают.
+                      refused={hasRefusal(t)}
                       role={role}
                       outgoing={mine(t) && role === "none" && sharedBoard}
                       dimOverdue={!showsOverdue(role, !sharedBoard || view === "assigned")}

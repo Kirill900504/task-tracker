@@ -213,18 +213,46 @@ export default function TaskParticipants({
         </div>
       ))}
 
-      {/* B4: отчитались все — дальше слово за постановщиком. Это и есть
-          «Кирилл проверит», ради чего всё затевалось. */}
+      {/* B4: ответили все — дальше слово за постановщиком. Это и есть
+          «Кирилл проверит», ради чего всё затевалось.
+
+          Ответ — это отчёт ИЛИ отказ (см. taskProgress.allAnswered), и
+          поэтому здесь два разных вопроса. Когда работу сдали, спрашивают
+          «принимаете?». Когда сказали «не могу», принимать нечего — но
+          решать есть что, и молчать об этом нельзя: именно так задача с
+          единственным отказом висела в «В работе», не прося ничего ни у
+          кого (слова Кирилла 21.09.2026 про отказ, который не доезжает до
+          приёмки). */}
       {stage === "awaiting_review" && (
         <div className="tp-review">
-          <div className="tp-review-text">Все исполнители отчитались. Принимаете работу?</div>
+          <div className="tp-review-text">
+            {progress.declined.length === 0
+              ? "Все исполнители отчитались. Принимаете работу?"
+              : progress.doneCount === 0
+                ? `Работу не сделают: ${progress.declined.map((d) => d.name).join(", ")}. Решать вам.`
+                : `Отчитались не все: ${progress.declined.map((d) => d.name).join(", ")} не смогут. Решать вам.`}
+          </div>
           <div className="tp-review-actions">
-            <button className="btn btn-small btn-primary" type="button" onClick={() => void handleApprove()}>
-              Принять
-            </button>
+            {/* «Принять» — только когда есть что принимать: хотя бы один
+                отчёт. У задачи, от которой все отказались, эта кнопка
+                означала бы «принимаю ничего». */}
+            {progress.doneCount > 0 && (
+              <button className="btn btn-small btn-primary" type="button" onClick={() => void handleApprove()}>
+                Принять
+              </button>
+            )}
             <button className="btn btn-small" type="button" onClick={() => void handleReturn()}>
-              Вернуть на доработку
+              {progress.declined.length ? "Вернуть с объяснением" : "Вернуть на доработку"}
             </button>
+            {/* Отказ — это тупик, из которого выходят двумя дверями:
+                вернуть с новым объяснением (или сроком) либо закрыть
+                волевым решением. Вторая дверь до сих пор в этом состоянии
+                пропадала: кнопка внизу спрятана как раз на приёмке. */}
+            {progress.declined.length > 0 && (
+              <button className="btn btn-small" type="button" onClick={() => void handleForceClose()}>
+                Закрыть волевым решением
+              </button>
+            )}
           </div>
         </div>
       )}

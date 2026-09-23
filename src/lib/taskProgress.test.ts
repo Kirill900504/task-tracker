@@ -87,6 +87,25 @@ describe("the stage a card shows", () => {
     expect(taskStage(list, "open")).toBe("awaiting_review");
   });
 
+  // Отказ — это ответ. Слова Кирилла 21.09.2026: «после отказа задача не
+  // переносится „на приёмку“». Пока она считалась «blocked», она стояла в
+  // столбце «В работе» и не просила ничего ни у кого: исполнитель уже
+  // ответил, а постановщику никто не сказал, что решать теперь ему.
+  it("ждёт решения постановщика и тогда, когда единственный ответ — отказ", () => {
+    const list = [person("Аня", { declinedAt: t, declineReason: "нет людей" })];
+    expect(taskStage(list, "open")).toBe("awaiting_review");
+    expect(taskProgress(list).allAnswered).toBe(true);
+    // И «работа сдана» этим не становится: текст сообщения постановщику
+    // считается по allDone, а не по allAnswered.
+    expect(taskProgress(list).allDone).toBe(false);
+  });
+
+  it("остаётся 'blocked', пока один отказался, а другой ещё молчит", () => {
+    const list = [person("Аня", { acceptedAt: t }), person("Борис", { declinedAt: t, declineReason: "нет людей" })];
+    expect(taskProgress(list).allAnswered).toBe(false);
+    expect(taskStage(list, "open")).toBe("blocked");
+  });
+
   it("is done only when the result was accepted", () => {
     const list = [person("Аня", { doneAt: t, doneComment: "ок" })];
     expect(taskStage(list, "awaiting_review")).toBe("awaiting_review");
