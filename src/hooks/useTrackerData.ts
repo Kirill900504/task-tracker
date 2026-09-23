@@ -151,6 +151,9 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
   const userIdRef = useRef<string | null>(null);
   const offlineRef = useRef(false);
   const realtimeReadyRef = useRef(false);
+  // Легла ли подписка. Пока она жива, догон ходит раз в минуту; как только
+  // канал отвалился — вчетверо чаще, потому что другого пути у данных нет.
+  const realtimeDownRef = useRef(true);
   // Открытый канал живёт в клиенте Supabase, а клиент — один на всю
   // вкладку; поэтому канал надо снимать руками, когда трекер уходит с
   // экрана (см. subscribeRealtime).
@@ -858,6 +861,22 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       if (cancelled || catchingUp || offlineRef.current || !userIdRef.current) return;
       catchingUp = true;
       try {
+        // Снимок пары «что показано / что подтвердила база» берётся ДО
+        // чтения, и это не мелочь, а починка настоящей потери данных.
+        //
+        // Взятый ПОСЛЕ, он описывал бы мир, которого ответ уже не видел:
+        // синхронизация, успевшая записать строку за те секунды, что шёл
+        // запрос, помечает её в shadow как подтверждённую — а в пришедшем
+        // ответе её нет, потому что запрос ушёл раньше. Слияние читает это
+        // как «строка была и на сервере пропала», то есть как удаление, и
+        // честно убирает её с экрана. Проверено на боевом: мысль,
+        // записанная минуту назад, исчезала, оставаясь в базе.
+        //
+        // Снимок до запроса переворачивает это в безопасную сторону: всё,
+        // что подтвердилось за время чтения, выглядит как работа, которая
+        // ещё не уехала, и остаётся на экране. Цена — лишний upsert той же
+        // строки на следующей синхронизации, то есть ничего.
+        const before = { live: { ...liveRef.current }, shadow: { ...shadowRef.current } };
         let results;
         try {
           results = await loadAll();
@@ -876,8 +895,11 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
           sections: (results[4].data as SectionRow[]).map(sectionFromRow),
         };
 
-        // Снимается ДО перезаписи shadow — это и есть несохранённая работа.
-        const before = { live: { ...liveRef.current }, shadow: { ...shadowRef.current } };
+        // Запись в этот самый момент — повод не трогать экран вовсе.
+        // Ответ уже устарел на всё, что она пишет, а следующий повод
+        // придёт через минуту и застанет базу в покое.
+        if (pendingCountRef.current > 0) return;
+
         shadowRef.current = {
           tasks: snapshotList(server.tasks),
           meetings: snapshotList(server.meetings),
@@ -1036,6 +1058,12 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         // перечитать всё разом, а каждое падение — повод не считать экран
         // свежим и дождаться следующего подъёма.
         .subscribe((status) => {
+          // Жива подписка или нет — не косметика, а РИТМ чтения: пока она
+          // жива, минуты между догонами хватает с запасом, а когда легла,
+          // чтение остаётся единственным путём для всего, что приходит
+          // извне. Supabase переподключается сам, но между «лёг» и «встал»
+          // проходят десятки секунд, а иногда он не встаёт вовсе.
+          realtimeDownRef.current = status !== "SUBSCRIBED";
           if (status === "SUBSCRIBED") catchUpRef.current();
         });
     }
@@ -1067,7 +1095,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     // не пускает к Supabase напрямую, — он остаётся единственным путём для
     // всего, что приходит извне, поэтому спрашивает чаще.
     const stopRevive = onRevive(() => catchUpRef.current(), {
-      everyMs: isRoutedThroughProxy() ? 20_000 : 60_000,
+      everyMs: () => (isRoutedThroughProxy() || realtimeDownRef.current ? 20_000 : 60_000),
     });
 
     return () => {

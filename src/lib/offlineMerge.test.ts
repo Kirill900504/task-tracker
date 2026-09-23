@@ -50,6 +50,23 @@ describe("applyLocalChanges", () => {
     expect(result).toEqual([]);
   });
 
+  it("считает строку удалённой, если она есть в shadow и нет у сервера — и поэтому снимок берут ДО чтения", () => {
+    // Это правило верно и нужно (соседний тест выше), но у него есть
+    // острый край, который стоил исчезнувшей мысли на боевом 22.09.2026.
+    // Догон (catchUp в useTrackerData) читает базу секунду-другую; если за
+    // это время синхронизация успеет записать строку, та попадёт в shadow —
+    // а в уже улетевшем запросе её нет. Разница читается как удаление, и
+    // слияние убирает с экрана строку, которая в базе есть.
+    //
+    // Чинится это не здесь: снимок live/shadow берётся ДО запроса, и тогда
+    // такая строка выглядит как работа, которая ещё не уехала. Тест стоит
+    // затем, чтобы правило нельзя было «починить» в этом файле — соседний
+    // тест сломался бы первым.
+    const justWritten = { id: "b", title: "Мысль, записанная секунду назад" };
+    const result = applyLocalChanges(server([{ id: "a", title: "Старая" }]), [{ id: "a", title: "Старая" }, justWritten], [{ id: "a", title: "Старая" }, justWritten]);
+    expect(result).toEqual([{ id: "a", title: "Старая" }]);
+  });
+
   it("honours a delete from another device even over a local edit", () => {
     // Two devices disagreeing. The delete wins: an item that comes back from
     // the dead is the more confusing outcome, and it is recoverable there —

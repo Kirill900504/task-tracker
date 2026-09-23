@@ -34,7 +34,12 @@ type Reason = "visible" | "online" | "timer";
 type Watcher = {
   fn: () => void;
   // Как часто перечитывать просто по времени, без всякого повода.
-  everyMs: number;
+  //
+  // Функцией, а не числом, потому что ответ меняется по ходу дела: пока
+  // подписка жива, минуты между чтениями хватает с запасом, а когда она
+  // легла (или её нет вовсе — прокси), чтение остаётся единственным путём
+  // для всего, что приходит извне, и спрашивать надо чаще.
+  everyMs: () => number;
   // Сколько должно пройти, чтобы повод (возврат к вкладке, сеть) сработал
   // ещё раз. Защита от очереди из событий: браузер шлёт visibilitychange и
   // focus подряд, а Alt+Tab по десять раз в минуту — обычное дело.
@@ -52,7 +57,7 @@ const TICK_MS = 10_000;
 function fire(reason: Reason) {
   const now = Date.now();
   for (const w of [...watchers]) {
-    const gap = reason === "timer" ? w.everyMs : w.minGapMs;
+    const gap = reason === "timer" ? w.everyMs() : w.minGapMs;
     if (now - w.last < gap) continue;
     w.last = now;
     try {
@@ -95,10 +100,11 @@ function unwire() {
   timer = null;
 }
 
-export function onRevive(fn: () => void, opts: { everyMs?: number; minGapMs?: number } = {}): () => void {
+export function onRevive(fn: () => void, opts: { everyMs?: number | (() => number); minGapMs?: number } = {}): () => void {
+  const every = opts.everyMs ?? 60_000;
   const w: Watcher = {
     fn,
-    everyMs: opts.everyMs ?? 60_000,
+    everyMs: typeof every === "function" ? every : () => every,
     minGapMs: opts.minGapMs ?? 5_000,
     // Считаем от подписки, а не от нуля: хук только что прочитал всё сам.
     last: Date.now(),
