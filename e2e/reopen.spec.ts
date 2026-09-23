@@ -142,3 +142,40 @@ test("принятая задача открывается заново кноп
   await expect(page.locator(".task", { hasText: title })).toBeVisible({ timeout: 20_000 });
   await expect(page.locator("#col-done .task", { hasText: title })).toHaveCount(0);
 });
+
+test("отказ тоже закрывает карточку и уводит задачу на приёмку", async ({ page }) => {
+  const title = `E2E отказ ${Date.now()}`;
+  await login(page);
+  await waitForPeople();
+
+  // Почему это проверяется отдельно от отчёта, хотя закрывает окно одна и
+  // та же строка кода: правило здесь не «после отчёта», а «после ответа,
+  // который ПЕРЕДВИНУЛ задачу», и два его случая держатся на разных
+  // основаниях. Отчёт двигает задачу через allDone, отказ — через
+  // allAnswered (taskProgress), то есть любая правка, вернувшая отказу
+  // смысл «задача осталась в работе», разведёт столбец и окно обратно:
+  // карточка стоит в «В работе», а окно висит над ней закрытым ответом.
+  // Проверять это на отчёте бесполезно — он останется зелёным.
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator(".task", { hasText: title });
+  await expect(card).toBeVisible();
+  await waitForSaved(page);
+
+  await card.click();
+  const decline = page.locator(".my-work .btn", { hasText: "Не могу" });
+  await expect(decline).toBeVisible({ timeout: 20_000 });
+  await decline.click();
+  await page.fill("#myWorkDecline", "Нет доступа к смете");
+  await page.locator(".ms-answer-actions .btn", { hasText: "Отправить" }).click();
+
+  // Отказ — это ответ: ждут уже не исполнителя, а решения постановщика,
+  // и потому задача уходит на приёмку, а карточка закрывается так же, как
+  // после «Сделал».
+  await expect(page.locator("#overlay")).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.locator("#col-review .task", { hasText: title })).toBeVisible({ timeout: 15_000 });
+  // И не закрывается сама собой: отказ решает не за постановщика.
+  await expect(page.locator("#col-done .task", { hasText: title })).toHaveCount(0);
+});
