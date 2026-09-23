@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { onRevive } from "@/lib/revive";
 import { me } from "@/lib/me";
 import { withoutSelfMark } from "@/lib/actorName";
+import { describeDbError } from "@/lib/syncError";
 
 // Обсуждение внутри задачи или встречи.
 //
@@ -23,7 +24,16 @@ export type ItemKind = "task" | "meeting" | "idea";
 // ссылка на час. Иначе ссылка, пересланная наружу, работала бы вечно.
 export const BUCKET = "item-files";
 
-export const REACTIONS = ["👍", "🔥", "✅", "😄", "🤔", "👀", "🙏", "❤️"] as const;
+// Расширен 23.09.2026 с восьми до семнадцати — прежние остаются, только
+// добор. Список фиксирован (не открытый пикер) по причине из 2019-й
+// миграции: реакция уезжает в Telegram и MAX обычной строкой текста, а не
+// картинкой, и произвольный эмодзи там превращается в квадрат. Ограничение
+// в базе — check на comment_reactions.emoji (миграция 0040) — держит тот
+// же список.
+export const REACTIONS = [
+  "👍", "🔥", "✅", "😄", "🤔", "👀", "🙏", "❤️",
+  "👎", "😂", "😮", "😢", "😡", "🎉", "👏", "💪", "💯",
+] as const;
 export type Reaction = (typeof REACTIONS)[number];
 
 export type Attachment = {
@@ -55,6 +65,18 @@ export type Comment = {
   // только в этой вкладке: его нельзя ни править, ни убрать — у него ещё нет
   // адреса, по которому это делают.
   sending?: boolean;
+  // Сообщение, на которое отвечают/которое цитируют — то же самое действие
+  // под двумя именами (см. миграцию 0040). Пусто, если это обычная реплика.
+  // Убранное позже цитируемое сообщение оставляет здесь null, а не рвёт
+  // это: сама цитата всё равно уже сказана.
+  replyTo?: { id: string; body: string; authorName: string } | null;
+};
+
+type ReplyRow = {
+  id: string;
+  body: string;
+  author_user_id: string | null;
+  assignees: { name: string } | { name: string }[] | null;
 };
 
 type CommentRow = {
@@ -68,6 +90,13 @@ type CommentRow = {
   author_user_id: string | null;
   author_assignee_id: string | null;
   assignees: { name: string } | { name: string }[] | null;
+  reply_to: string | null;
+  // Самоссылка через PostgREST: embed по имени колонки-внешнего ключа
+  // (`reply:reply_to(...)`), а не по имени таблицы — только так embed
+  // идёт «вперёд», к тому сообщению, НА КОТОРОЕ отвечают, а не «назад», к
+  // тем, что отвечают на это. Проверено вручную против боевой базы
+  // 23.09.2026: `item_comments!reply_to(...)` даёт ровно обратное.
+  reply?: ReplyRow | null;
 };
 
 type ReactionRow = {
@@ -77,7 +106,7 @@ type ReactionRow = {
   actor_user_id: string | null;
 };
 
-function nameOf(row: CommentRow, meId: string, ownerLabel: string): string {
+function nameOf(row: Pick<CommentRow, "author_user_id" | "assignees">, meId: string, ownerLabel: string): string {
   if (row.author_user_id && row.author_user_id === meId) return "Вы";
   const a = row.assignees;
   const name = Array.isArray(a) ? a[0]?.name : a?.name;
@@ -121,7 +150,10 @@ export function useItemComments(kind: ItemKind, itemId: string) {
     const [{ data: rows }, { data: reactions }] = await Promise.all([
       db
         .from("item_comments")
-        .select("id, body, attachments, created_at, edited_at, source, system, author_user_id, author_assignee_id, assignees(name)")
+        .select(
+          "id, body, attachments, created_at, edited_at, source, system, author_user_id, author_assignee_id, reply_to, assignees(name), " +
+            "reply:reply_to(id, body, author_user_id, assignees(name))",
+        )
         .eq("item_kind", kind)
         .eq("item_id", itemId)
         .is("deleted_at", null)
@@ -154,6 +186,7 @@ export function useItemComments(kind: ItemKind, itemId: string) {
         const cur = grouped.get(r.emoji) || { count: 0, mine: false };
         grouped.set(r.emoji, { count: cur.count + 1, mine: cur.mine || r.actor_user_id === meId });
       }
+      const replyRow = row.reply;
       return {
         id: row.id,
         body: row.body,
@@ -165,6 +198,10 @@ export function useItemComments(kind: ItemKind, itemId: string) {
         source: row.source,
         system: !!row.system,
         reactions: [...grouped.entries()].map(([emoji, v]) => ({ emoji, count: v.count, mine: v.mine })),
+        // reply_to стоит, а сама реплика уже убрана (мягко) — embed вернёт
+        // null, и цитата в ленте не покажется вовсе: то же самое, что
+        // отсутствие reply_to с точки зрения того, кто читает.
+        replyTo: replyRow ? { id: replyRow.id, body: replyRow.body, authorName: nameOf(replyRow, meId, "Кирилл") } : null,
       };
     });
   }, [kind, itemId]);
@@ -221,7 +258,7 @@ export function useItemComments(kind: ItemKind, itemId: string) {
   // остальным. Всё это происходит уже ПОСЛЕ того, как человек увидел свой
   // текст в ленте, — см. `send` ниже.
   const sendToCloud = useCallback(
-    async (text: string, files: File[], localId: string) => {
+    async (text: string, files: File[], localId: string, replyToId: string | null) => {
       const db = createClient();
       const { userId, assigneeId, workspaceId } = await me();
       // Путь начинается с пространства: по первому сегменту права и
@@ -253,6 +290,10 @@ export function useItemComments(kind: ItemKind, itemId: string) {
         author_user_id: userId || null,
         author_assignee_id: assigneeId,
         source: "app",
+        // Ссылка на местное сообщение (id вида "local-…") сюда попасть не
+        // может: цитировать можно только то, что уже приехало из базы, —
+        // composer не даёт выбрать сообщение, ещё не подтверждённое.
+        reply_to: replyToId,
       };
       // id возвращается ради рассылки: сказать остальным участникам — часть
       // отправки, а не побочное дело. Раньше сообщение просто ложилось в
@@ -283,7 +324,20 @@ export function useItemComments(kind: ItemKind, itemId: string) {
       // всего это задача, ещё не доехавшая до облака, и человеку надо дать
       // повторить, а не гадать, куда делся его текст. Бросаем здесь, до
       // рассылки: рассылать нечего.
-      if (error) throw new Error(error.message);
+      //
+      // «new row violates row-level security policy…» уходило на экран как
+      // есть — то есть именем таблицы и по-английски, ни слова о том, что
+      // делать. Это тот самый отказ, который до 23.09.2026 чинился в
+      // lib/me.ts (устаревший кэш членства); текст здесь — второй слой на
+      // случай, если причина окажется другой.
+      if (error) {
+        if (/row-level security/i.test(error.message)) {
+          throw new Error(
+            "Нет прав написать сюда — похоже, доступ к пространству обновился, а эта вкладка ещё не узнала об этом. Обновите страницу и попробуйте снова.",
+          );
+        }
+        throw new Error(describeDbError(error));
+      }
 
       // Рассылка — отдельным вызовом и молча: сообщение уже сохранено, и
       // уронить отправку из-за того, что не ушло уведомление, было бы
@@ -333,7 +387,7 @@ export function useItemComments(kind: ItemKind, itemId: string) {
   // перечитывается потом и незаметно. Не ушло — местная копия исчезает,
   // текст возвращается в поле, и человек видит, почему.
   const send = useCallback(
-    (body: string, files: File[] = []): Promise<void> => {
+    (body: string, files: File[] = [], replyTo: Comment | null = null): Promise<void> => {
       const text = body.trim();
       if ((!text && !files.length) || !itemId) return Promise.resolve();
 
@@ -353,10 +407,13 @@ export function useItemComments(kind: ItemKind, itemId: string) {
         system: false,
         reactions: [],
         sending: true,
+        // Цитата рисуется сразу же, из того, что уже на экране — ждать
+        // ответа сервера ради нескольких слов чужой реплики незачем.
+        replyTo: replyTo ? { id: replyTo.id, body: replyTo.body, authorName: replyTo.authorName } : null,
       };
       setOutbox((prev) => [...prev, { local, serverId: null }]);
 
-      return sendToCloud(text, files, localId).catch((err) => {
+      return sendToCloud(text, files, localId, replyTo?.id ?? null).catch((err) => {
         setOutbox((prev) => prev.filter((o) => o.local.id !== localId));
         throw err;
       });

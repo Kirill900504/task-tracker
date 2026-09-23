@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { REACTIONS, useItemComments, type ItemKind } from "@/hooks/useItemComments";
+import { REACTIONS, useItemComments, type Comment, type ItemKind } from "@/hooks/useItemComments";
 import { useAsk } from "@/components/Ask";
 import ChatMessageMenu, { type ChatMenuAction } from "./ChatMessageMenu";
 import Icon from "./Icon";
@@ -14,9 +14,9 @@ import Icon from "./Icon";
 // and a record is what stops «мы же договорились» from being one person's
 // word against another's.
 //
-// Reactions are a fixed set of eight. An open picker looks generous and
-// then does not survive the trip into a messenger, where a message is text
-// and a reaction has to be rendered as a line under it.
+// Reactions are a fixed set. An open picker looks generous and then does not
+// survive the trip into a messenger, where a message is text and a reaction
+// has to be rendered as a line under it.
 
 function timeLabel(iso: string): string {
   const d = new Date(iso);
@@ -77,7 +77,75 @@ function sameDay(a: string, b: string): boolean {
   return !Number.isNaN(x.getTime()) && !Number.isNaN(y.getTime()) && x.toDateString() === y.toDateString();
 }
 
-export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: string }) {
+// Обрывок цитаты — коротко, чтобы полоска не превращалась в отдельное
+// сообщение. Файл без текста называется словом, а не пустой строкой.
+function quoteSnippet(body: string): string {
+  const text = body.trim() || "📎 файл";
+  return text.length > 80 ? text.slice(0, 80) + "…" : text;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Разбирает текст на обычные куски и узнанные «@Имя Фамилия», чтобы тег
+// человека внутри реплики читался раньше остального текста — тем же
+// приёмом, что цвет имени над чужой репликой. Список кандидатов — участники
+// именно этой задачи/встречи, а не всё пространство: тегнуть можно только
+// того, кто и так эту переписку видит.
+function renderWithMentions(body: string, candidates: string[]) {
+  if (!candidates.length || !body.includes("@")) return body;
+  const names = [...new Set(candidates)].filter(Boolean).sort((a, b) => b.length - a.length).map(escapeRegExp);
+  if (!names.length) return body;
+  const re = new RegExp(`@(?:${names.join("|")})`, "g");
+  const parts: Array<string | { key: number; text: string }> = [];
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body))) {
+    if (m.index > last) parts.push(body.slice(last, m.index));
+    parts.push({ key: key++, text: m[0] });
+    last = m.index + m[0].length;
+  }
+  if (last < body.length) parts.push(body.slice(last));
+  if (parts.length <= 1 && typeof parts[0] === "string") return body;
+  return parts.map((p) =>
+    typeof p === "string" ? p : (
+      <span className="chat-mention" key={p.key} style={{ color: colorOf(p.text.slice(1)) }}>
+        {p.text}
+      </span>
+    ),
+  );
+}
+
+// «@» напечатан и следом — слово без пробела: то, что сейчас набирают как
+// упоминание. Курсор предполагается в конце поля — этого достаточно для
+// того, как обычно печатают, и не требует таскать по всему компоненту
+// позицию выделения ради довольно редкого действия.
+function activeMentionQuery(draft: string): string | null {
+  const at = draft.lastIndexOf("@");
+  if (at === -1) return null;
+  const rest = draft.slice(at + 1);
+  if (/\s/.test(rest)) return null;
+  return rest;
+}
+
+function applyMention(draft: string, name: string): string {
+  const at = draft.lastIndexOf("@");
+  return draft.slice(0, at) + "@" + name + " ";
+}
+
+export default function ItemChat({
+  kind,
+  itemId,
+  mentionCandidates = [],
+}: {
+  kind: ItemKind;
+  itemId: string;
+  // Кого можно тегнуть — участники этого же элемента. Пусто — подсказка и
+  // подсветка просто не появляются, форма ввода при этом работает как раньше.
+  mentionCandidates?: string[];
+}) {
   // «По задаче» в обсуждении встречи — мелочь, но именно из таких мелочей
   // складывается ощущение, что окно собрано из чужих кусков.
   const about = kind === "meeting" ? "встрече" : kind === "idea" ? "мысли" : "задаче";
@@ -95,6 +163,20 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
   // ошибиться файлом легко.
   const [pending, setPending] = useState<File[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
+  // На какое сообщение отвечают прямо сейчас — «ответить» и «цитировать»
+  // это одно и то же действие: composer несёт ссылку, а лента рисует сверху
+  // цитату с автором и обрывком текста.
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  // Правка на месте — то же поле, что у отправки, но внутри самого пузыря:
+  // «сделай как в классических мессенджерах» (23.09.2026), без отдельного
+  // окна.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  // Сообщение, к которому только что перевели взгляд по цитате, — на
+  // секунду подсвечивается и само по себе гаснет.
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const draftRef = useRef<HTMLTextAreaElement>(null);
+
   // Лента прокручивается к последнему сообщению — как любой мессенджер.
   //
   // Без этого переписка открывается на первой реплике, и чтобы увидеть то,
@@ -142,15 +224,18 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
     const text = draft.trim();
     if (!text && !pending.length) return;
     const files = pending;
+    const quoting = replyTo;
     setDraft("");
     setPending([]);
     setError("");
-    void send(text, files).catch((e) => {
-      // Не ушло — текст и файлы возвращаются на место: повторить это одно
-      // нажатие, а набирать и прикладывать заново никто не станет. Если
-      // человек успел начать следующее сообщение, его не трогаем.
+    setReplyTo(null);
+    void send(text, files, quoting).catch((e) => {
+      // Не ушло — текст, файлы и цитата возвращаются на место: повторить
+      // это одно нажатие, а набирать заново никто не станет. Если человек
+      // успел начать следующее сообщение, его не трогаем.
       setDraft((current) => current || text);
       setPending((current) => (current.length ? current : files));
+      setReplyTo((current) => current || quoting);
       setError(e instanceof Error ? e.message : "Не отправилось. Проверьте связь и нажмите ещё раз.");
     });
   }
@@ -175,16 +260,21 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
     return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
   }
 
-  async function handleEdit(id: string, current: string) {
-    const next = await ask.ask({
-      title: "Изменить сообщение",
-      question: "Как должно быть написано?",
-      value: current,
-      multiline: true,
-      okText: "Сохранить",
-      required: "Пустое сообщение — это удаление; закройте окно и нажмите «убрать».",
-    });
-    if (next === null) return;
+  function startEdit(c: Comment) {
+    setEditingId(c.id);
+    setEditDraft(c.body);
+  }
+
+  function saveEdit() {
+    const id = editingId;
+    if (!id) return;
+    const next = editDraft.trim();
+    if (!next) {
+      // Пустое сообщение — это удаление; не подменяем одно другим молча.
+      setError("Пустое сообщение — это удаление; используйте «Убрать» в меню.");
+      return;
+    }
+    setEditingId(null);
     void edit(id, next);
   }
 
@@ -196,6 +286,28 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
     });
     if (!yes) return;
     void remove(id);
+  }
+
+  // Цитата ведёт к оригиналу: прокручивает его в видимую область и на
+  // секунду подсвечивает — иначе «куда меня привело» ищут глазами по всей
+  // ленте.
+  function jumpTo(id: string) {
+    const el = feed.current?.querySelector<HTMLElement>(`[data-comment-id="${id}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setFlashId(id);
+    setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1400);
+  }
+
+  const mentionQuery = activeMentionQuery(draft);
+  const mentionHits =
+    mentionQuery !== null
+      ? mentionCandidates.filter((n) => n.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 6)
+      : [];
+
+  function pickMention(name: string) {
+    setDraft((cur) => applyMention(cur, name));
+    draftRef.current?.focus();
   }
 
   return (
@@ -236,18 +348,7 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
           Слова Кирилла 21.09.2026: «сделай современный чат, с возможностью
           быстро переписываться с функциями чата и удобным отображением
           имён участников, режим чата как в телеграм или МАХ (когда твои
-          сообщения справа, сообщения коллег слева)».
-
-          Раньше это был ровный столбец одинаковых карточек, и «кто это
-          сказал» приходилось читать подписью над каждой. У переписки на
-          четырнадцать человек сторона отвечает на этот вопрос раньше
-          чтения, цвет имени — вторым, а кружок с буквами держит чужие
-          реплики в одном столбце, когда авторов больше двух.
-
-          Прежний довод («переписка на две стороны на узкой карточке
-          читается хуже, чем ровный столбец») оказался неверен на практике:
-          окно задачи не такое узкое, а пузыри уже столбца карточек, и
-          именно поэтому в мессенджерах на телефоне сделано так же. */}
+          сообщения справа, сообщения коллег слева)». */}
       {!loading && comments.length > 0 && (
         <div className="chat-feed" ref={feed}>
           {comments.map((c, i) => {
@@ -258,6 +359,7 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
             // фразы подряд остаются одной репликой, а не тремя карточками.
             const sameAuthor = !!prev && !prev.system && !c.system && prev.authorName === c.authorName && !newDay;
             const day = newDay ? dayLabel(c.createdAt) : "";
+            const editingThis = editingId === c.id;
             return (
               <div className="chat-line-group" key={c.id}>
                 {day && (
@@ -295,76 +397,120 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
                         "chat-msg" +
                         (c.mine ? " mine" : "") +
                         (c.sending ? " sending" : "") +
-                        (menuFor?.id === c.id ? " menu-open" : "")
+                        (menuFor?.id === c.id ? " menu-open" : "") +
+                        (flashId === c.id ? " flash" : "")
                       }
+                      data-comment-id={c.id}
                       onContextMenu={(e) => {
                         e.preventDefault();
-                        if (c.sending) return;
+                        if (c.sending || editingThis) return;
                         setMenuFor({ id: c.id, at: { x: e.clientX, y: e.clientY } });
                       }}
-                      {...(c.sending ? {} : longPressProps(c.id))}
+                      {...(c.sending || editingThis ? {} : longPressProps(c.id))}
                     >
                       {!c.mine && !sameAuthor && (
                         <div className="chat-author" style={{ color: colorOf(c.authorName) }}>
                           {c.authorName}
                         </div>
                       )}
-                      {c.body && <div className="chat-body">{c.body}</div>}
 
-                      {c.attachments.length > 0 && (
-                        <div className="chat-files">
-                          {c.attachments.map((a) => (
-                            <a
-                              key={a.path}
-                              className={"chat-file" + (a.type.startsWith("image/") ? " image" : "")}
-                              href={a.url || "#"}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={a.name}
-                            >
-                              {/* Фотографию показываем, остальное называем: акт и
-                                  выгрузку узнают по имени, а установленную кассу — нет. */}
-                              {a.type.startsWith("image/") && a.url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={a.url} alt={a.name} />
-                              ) : (
-                                <span className="chat-file-name">
-                                  <Icon name="clip" size={14} /> {a.name}
-                                </span>
-                              )}
-                            </a>
-                          ))}
+                      {c.replyTo && (
+                        <div className="chat-quote" onClick={() => jumpTo(c.replyTo!.id)}>
+                          <span className="chat-quote-author" style={{ color: colorOf(c.replyTo.authorName) }}>
+                            {c.replyTo.authorName}
+                          </span>
+                          <span className="chat-quote-body">{quoteSnippet(c.replyTo.body)}</span>
                         </div>
                       )}
 
-                      {/* Время — в углу пузыря, как в мессенджере: оно
-                          нужно взглядом, а не чтением, и строки над
-                          сообщением ради него больше нет. */}
-                      <span className="chat-time">
-                        {timeLabel(c.createdAt)}
-                        {c.editedAt ? " · изм." : ""}
-                        {SOURCE_MARK[c.source] || ""}
-                      </span>
-
-                      {/* Под сообщением — только реакции, которые уже стоят.
-                          «изменить», «убрать» и выбор эмодзи живут в меню по
-                          правой кнопке: три служебных слова под КАЖДОЙ
-                          репликой — это ветка, которую читаешь через подписи
-                          к ней. */}
-                      {c.reactions.length > 0 && (
-                        <div className="chat-foot">
-                          {c.reactions.map((r) => (
-                            <button
-                              key={r.emoji}
-                              type="button"
-                              className={"chat-reaction" + (r.mine ? " mine" : "")}
-                              title={r.mine ? "Убрать реакцию" : "Поддержать"}
-                              onClick={() => void react(c.id, r.emoji, !r.mine)}
-                            >
-                              {r.emoji} {r.count}
+                      {editingThis ? (
+                        <div className="chat-edit-box">
+                          <textarea
+                            autoFocus
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                saveEdit();
+                              }
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setEditingId(null);
+                              }
+                            }}
+                            rows={Math.min(6, Math.max(2, editDraft.split("\n").length))}
+                          />
+                          <div className="chat-edit-actions">
+                            <button type="button" className="btn btn-small" onClick={() => setEditingId(null)}>
+                              Отмена
                             </button>
-                          ))}
+                            <button type="button" className="btn btn-small btn-primary" onClick={saveEdit}>
+                              Сохранить
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        <>
+                          {c.body && <div className="chat-body">{renderWithMentions(c.body, mentionCandidates)}</div>}
+
+                          {c.attachments.length > 0 && (
+                            <div className="chat-files">
+                              {c.attachments.map((a) => (
+                                <a
+                                  key={a.path}
+                                  className={"chat-file" + (a.type.startsWith("image/") ? " image" : "")}
+                                  href={a.url || "#"}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={a.name}
+                                >
+                                  {/* Фотографию показываем, остальное называем: акт и
+                                      выгрузку узнают по имени, а установленную кассу — нет. */}
+                                  {a.type.startsWith("image/") && a.url ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={a.url} alt={a.name} />
+                                  ) : (
+                                    <span className="chat-file-name">
+                                      <Icon name="clip" size={14} /> {a.name}
+                                    </span>
+                                  )}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Время — в углу пузыря, как в мессенджере: оно
+                              нужно взглядом, а не чтением, и строки над
+                              сообщением ради него больше нет. */}
+                          <span className="chat-time">
+                            {timeLabel(c.createdAt)}
+                            {c.editedAt ? " · изм." : ""}
+                            {SOURCE_MARK[c.source] || ""}
+                          </span>
+
+                          {/* Под сообщением — только реакции, которые уже стоят.
+                              «изменить», «убрать» и выбор эмодзи живут в меню по
+                              правой кнопке: три служебных слова под КАЖДОЙ
+                              репликой — это ветка, которую читаешь через подписи
+                              к ней. */}
+                          {c.reactions.length > 0 && (
+                            <div className="chat-foot">
+                              {c.reactions.map((r) => (
+                                <button
+                                  key={r.emoji}
+                                  type="button"
+                                  className={"chat-reaction" + (r.mine ? " mine" : "")}
+                                  title={r.mine ? "Убрать реакцию" : "Поддержать"}
+                                  onClick={() => void react(c.id, r.emoji, !r.mine)}
+                                >
+                                  {r.emoji} {r.count}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -381,6 +527,7 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
         const c = comments.find((x) => x.id === menuFor.id);
         if (!c) return null;
         const actions: ChatMenuAction[] = [];
+        actions.push({ id: "reply", label: "Ответить", onSelect: () => setReplyTo(c) });
         if (c.body) {
           actions.push({
             id: "copy",
@@ -389,7 +536,7 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
           });
         }
         if (c.mine) {
-          actions.push({ id: "edit", label: "Изменить", onSelect: () => void handleEdit(c.id, c.body) });
+          actions.push({ id: "edit", label: "Изменить", onSelect: () => startEdit(c) });
           actions.push({ id: "remove", label: "Убрать", danger: true, onSelect: () => void handleRemove(c.id) });
         }
         return (
@@ -426,17 +573,54 @@ export default function ItemChat({ kind, itemId }: { kind: ItemKind; itemId: str
         </div>
       )}
 
+      {/* Ответ, который набирают, — цитата над полем: composer ссылается
+          на конкретное сообщение до того, как нажали «Отправить», а не
+          после. Крестик снимает выбор без потери набранного текста. */}
+      {replyTo && (
+        <div className="chat-reply-bar">
+          <div className="chat-reply-bar-text">
+            <span className="chat-quote-author" style={{ color: colorOf(replyTo.authorName) }}>
+              {replyTo.authorName}
+            </span>
+            <span className="chat-quote-body">{quoteSnippet(replyTo.body)}</span>
+          </div>
+          <button type="button" className="chat-reply-bar-close" aria-label="Не отвечать на это сообщение" onClick={() => setReplyTo(null)}>
+            <Icon name="close" size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* Подсказка @упоминания — прямо над полем, а не всплывающим окном:
+          она следует за тем, что печатается, не отдельным слоем поверх
+          всего. */}
+      {mentionHits.length > 0 && (
+        <div className="chat-mention-list">
+          {mentionHits.map((name) => (
+            <button key={name} type="button" className="chat-mention-item" onClick={() => pickMention(name)}>
+              @{name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="chat-composer">
         <textarea
+          ref={draftRef}
           value={draft}
-          placeholder={`Написать по ${about}…`}
+          placeholder={`Написать по ${about}… ${mentionCandidates.length ? "(@ — позвать кого-то из участников)" : ""}`}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             // Enter отправляет, Shift+Enter переносит строку: сообщение в
-            // обсуждении почти всегда одно предложение.
+            // обсуждении почти всегда одно предложение. Пока открыт список
+            // подсказок, Enter выбирает первую — тем же движением, что и
+            // отправка, только раньше.
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              void handleSend();
+              if (mentionHits.length) pickMention(mentionHits[0]);
+              else void handleSend();
+            }
+            if (e.key === "Escape" && replyTo) {
+              setReplyTo(null);
             }
           }}
           rows={2}

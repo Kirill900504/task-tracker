@@ -483,7 +483,7 @@ export default function MeetingModal({
             </div>
 
             <div className="modal-chat-pane">
-              <ItemChat kind="meeting" itemId={meeting.id} />
+              <ItemChat kind="meeting" itemId={meeting.id} mentionCandidates={participants.map((p) => withoutSelfMark(p))} />
             </div>
           </div>
         ) : (

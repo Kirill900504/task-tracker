@@ -644,7 +644,7 @@ export default function TaskModal({
             </div>
 
             <div className="modal-chat-pane">
-              <ItemChat kind="task" itemId={task.id} />
+              <ItemChat kind="task" itemId={task.id} mentionCandidates={participants.map((p) => p.name)} />
             </div>
           </div>
         ) : (

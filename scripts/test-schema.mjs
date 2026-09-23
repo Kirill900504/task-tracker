@@ -250,7 +250,7 @@ async function main() {
     ],
     meeting_participants: ["id", "user_id", "meeting_id", "assignee_id", "role", "response", "reason", "responded_at", "round"],
     idea_recipients: ["id", "user_id", "idea_id", "assignee_id", "seen_at", "converted_task_id", "converted_meeting_id"],
-    item_comments: ["id", "user_id", "item_kind", "item_id", "author_assignee_id", "author_user_id", "body", "source", "created_at", "edited_at", "deleted_at"],
+    item_comments: ["id", "user_id", "item_kind", "item_id", "author_assignee_id", "author_user_id", "body", "source", "created_at", "edited_at", "deleted_at", "reply_to"],
     comment_reactions: ["id", "user_id", "comment_id", "actor_assignee_id", "actor_user_id", "emoji"],
     workspace_members: ["id", "owner_id", "member_id", "assignee_id", "role", "status", "direction", "joined_at", "disabled_at"],
     workspace_invites: ["code", "owner_id", "assignee_id", "email", "expires_at", "used_at", "used_by"],

@@ -965,7 +965,7 @@
      а не растягивает его. */
   .modal{
     background:var(--paper); border-radius:var(--radius-lg); width:100%; max-width:580px;
-    padding:26px; border:1px solid var(--line-soft); box-shadow:var(--shadow-2), var(--edge);
+    padding:20px; border:1px solid var(--line-soft); box-shadow:var(--shadow-2), var(--edge);
     animation:modal-in .18s cubic-bezier(.2,.9,.3,1.1);
     max-height:min(82vh, 780px); overflow-y:auto; overscroll-behavior:contain;
     /* Vertically centred when it fits, top-aligned (and scrollable) when it
@@ -974,7 +974,12 @@
     margin:auto;
   }
   @keyframes modal-in{from{opacity:0; transform:translateY(8px) scale(.98);} to{opacity:1; transform:none;}}
-  .modal h2{margin:0 0 20px; font-size:20px; font-family:var(--display); font-weight:800; letter-spacing:-.015em; color:var(--ink);}
+  /* Плотность окон — общее правило с 23.09.2026: «все блоки сильно
+     раздуты, много свободного пустого места, делай так, чтобы место
+     было рационально использовано». Отступы ниже срезаны везде, где они
+     были декоративным воздухом, а не тем, что нужно для читаемости; поля
+     ввода и кнопки не тронуты (см. правило про 44px цели касания). */
+  .modal h2{margin:0 0 14px; font-size:19px; font-family:var(--display); font-weight:800; letter-spacing:-.015em; color:var(--ink);}
   /* Цифра в заголовке окна — та же плашка, что у заголовков панелей и
      столбцов доски: «Вычеркнутые мысли 27» голой цифрой читается как
      часть названия. */
@@ -990,7 +995,7 @@
     color:var(--ink-soft); white-space:pre-wrap;
   }
   @media (prefers-reduced-motion: reduce){ .overlay.open, .modal{animation:none;} }
-  .field{margin-bottom:18px;}
+  .field{margin-bottom:13px;}
   /* Название поля. В отличие от заголовка блока — БЕЗ прописных: «Кто на
      задаче» и «Дедлайн / дата» это вопросы, заданные человеку, а вопрос,
      набранный капслоком, читается как ярлык на папке. Заметность даёт вес
@@ -1076,7 +1081,7 @@
      ---------------------------------------------------------------- */
   .facts{
     display:flex; flex-direction:column; gap:1px;
-    margin:0 0 14px; padding:4px 0;
+    margin:0 0 10px; padding:4px 0;
     border:1px solid var(--line-soft); border-radius:var(--radius-md);
     background:var(--paper-soft); box-shadow:var(--edge); overflow:hidden;
   }
@@ -1090,7 +1095,7 @@
   .facts-row.wide{grid-template-columns:1fr;}
   .fact{
     display:flex; flex-direction:column; gap:2px;
-    padding:9px 14px; min-width:0;
+    padding:7px 12px; min-width:0;
   }
   .fact-label{
     font-size:11px; font-weight:var(--label-weight); letter-spacing:.06em; text-transform:uppercase;
@@ -1126,13 +1131,13 @@
      задачу ради ровно этого текста.
      ---------------------------------------------------------------- */
   .results{
-    margin:0 0 14px; padding:12px 15px;
+    margin:0 0 10px; padding:10px 13px;
     border:1px solid rgba(63,169,104,.35); border-radius:var(--radius-md);
     background:rgba(63,169,104,.08);
   }
   .results-head{
     font-size:var(--label-size); font-weight:var(--label-weight); letter-spacing:.09em;
-    text-transform:uppercase; color:var(--success); font-family:var(--display); margin-bottom:8px;
+    text-transform:uppercase; color:var(--success); font-family:var(--display); margin-bottom:6px;
   }
   .result-item{padding:7px 0; border-top:1px solid rgba(255,255,255,.07);}
   .result-item:first-of-type{border-top:0; padding-top:0;}
@@ -1173,12 +1178,12 @@
      У окна теперь есть потолок (см. .modal), а значит длинная форма
      прокручивается внутри — и «Сохранить» оказалась бы ниже видимой
      части, то есть кнопкой, которую надо сначала найти. Отрицательный
-     bottom и отступы по краям съедают те же 26px, что и padding окна,
-     чтобы полоса кнопок шла от края до края. */
+     bottom и отступы по краям съедают тот же отступ, что и padding окна
+     (см. .modal), чтобы полоса кнопок шла от края до края. */
   .modal-actions{
-    display:flex; justify-content:space-between; margin-top:18px; gap:8px;
-    position:sticky; bottom:-26px; margin-left:-26px; margin-right:-26px;
-    padding:12px 26px 0; background:var(--paper);
+    display:flex; justify-content:space-between; margin-top:14px; gap:8px;
+    position:sticky; bottom:-20px; margin-left:-20px; margin-right:-20px;
+    padding:12px 20px 0; background:var(--paper);
   }
   .modal-actions .left{display:flex; gap:8px;}
 
@@ -1200,14 +1205,21 @@
   .modal-split, .modal-main, .modal-chat-pane{display:contents;}
   @media (min-width:980px){
     .modal.has-chat{
-      max-width:1100px;
+      max-width:1300px;
       height:min(86vh, 860px); max-height:min(86vh, 860px);
       display:flex; flex-direction:column; overflow:hidden;
     }
     /* Заголовок и подсказка переноса — над столбцами, сами не скроллятся. */
     .modal.has-chat > :not(.modal-split):not(.modal-actions){flex:none;}
+    /* Левая колонка (сводка, состав, приёмка) — уже правой: это факты,
+       читаются один раз и не требуют простора, а переписка — то, чем
+       пользуются постоянно и куда удобнее печатать в широком поле. Слова
+       Кирилла 23.09.2026: «левый блок можно сделать чуть уже, а вот чат
+       надо шире». Раньше было ровно наоборот (1fr слева, до 380px
+       справа) — уже сама пропорция противоречила тому, чем пользуются
+       чаще. */
     .modal.has-chat .modal-split{
-      display:grid; grid-template-columns:minmax(360px,1fr) minmax(300px,380px);
+      display:grid; grid-template-columns:minmax(300px,400px) minmax(420px,1fr);
       gap:26px; flex:1 1 auto; min-height:0; overflow:hidden;
     }
     .modal.has-chat .modal-main{
@@ -2480,7 +2492,7 @@
      выбор человека (.participant-chip): статус — маленький значок
      справа от имени, а не отдельная строка.
      ---------------------------------------------------------------- */
-  .team-compact{margin-bottom:14px;}
+  .team-compact{margin-bottom:10px;}
   .chip-status{display:inline-flex; align-items:center; margin-left:5px; line-height:1;}
   .chip-status.status-done{color:#DFF3E6;}
   .chip-status.status-declined{color:#FBDCD3;}
@@ -2625,6 +2637,74 @@
     font-size:10.5px; color:var(--ink-soft); font-family:var(--display); opacity:.85;
   }
   .chat-body{font-size:13.5px; color:var(--ink); line-height:1.5; white-space:pre-wrap; word-break:break-word;}
+  /* Тег человека внутри сообщения — своим цветом и потолще: то же самое
+     правило, что у автора реплики (цвет считается из имени), только
+     внутри текста, а не над ним. */
+  .chat-mention{font-weight:700;}
+  /* Цитата — своя, до 23.09.2026 её не было вовсе. Полоска слева, как в
+     Telegram: имя автора цитаты и обрывок текста, целиком кликабельны —
+     ведут к оригиналу и на секунду подсвечивают его в ленте. */
+  .chat-quote{
+    display:flex; flex-direction:column; gap:1px;
+    padding:4px 8px; margin-bottom:5px; border-radius:6px;
+    border-left:3px solid var(--accent); background:rgba(255,255,255,.04);
+    cursor:pointer; max-width:100%;
+  }
+  .chat-quote:hover{background:rgba(255,255,255,.08);}
+  .chat-quote-author{font-size:11.5px; font-weight:700; color:var(--accent);}
+  .chat-quote-body{
+    font-size:12px; color:var(--ink-soft); overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; max-width:340px;
+  }
+  /* Сообщение, к которому только что перешли по цитате, — на секунду
+     подсвечено: иначе «куда меня привело» приходится искать глазами по
+     всей ленте. */
+  .chat-msg.flash{animation:chat-flash 1.4s ease-out;}
+  @keyframes chat-flash{
+    0%{box-shadow:0 0 0 2px var(--accent);}
+    100%{box-shadow:none;}
+  }
+  /* Ответ, набираемый прямо сейчас, — та же цитата, но над полем ввода, с
+     крестиком отказа: composer ссылается на конкретное сообщение до
+     нажатия «Отправить», а не после. */
+  .chat-reply-bar{
+    display:flex; align-items:center; gap:8px;
+    padding:6px 8px; margin-bottom:6px; border-radius:6px;
+    border-left:3px solid var(--accent); background:rgba(255,255,255,.04);
+  }
+  .chat-reply-bar .chat-quote-author, .chat-reply-bar .chat-quote-body{margin:0;}
+  .chat-reply-bar-text{flex:1; min-width:0; display:flex; flex-direction:column; gap:1px;}
+  .chat-reply-bar-close{
+    flex:none; background:none; border:0; color:var(--ink-soft); cursor:pointer;
+    width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:6px;
+  }
+  .chat-reply-bar-close:hover{background:rgba(255,255,255,.08); color:var(--ink);}
+  /* Правка на месте — то же поле, что у composer'а, но внутри самого
+     пузыря: слова Кирилла 23.09.2026 — «сделай как в классических
+     мессенджерах, прямо в рамках самого чата исправляешь». Отдельного
+     окна для этого больше нет. */
+  .chat-edit-box{display:flex; flex-direction:column; gap:6px; min-width:220px;}
+  .chat-edit-box textarea{
+    font-family:var(--sans); font-size:13.5px; color:var(--ink); background:var(--bg);
+    border:1px solid var(--accent); border-radius:var(--radius-sm); padding:7px 9px;
+    resize:vertical; min-height:36px;
+  }
+  .chat-edit-box textarea:focus{outline:none; box-shadow:0 0 0 3px var(--accent-soft);}
+  .chat-edit-actions{display:flex; gap:6px; justify-content:flex-end;}
+  /* Список подсказок @упоминания — прямо над полем ввода, а не всплывающим
+     окном поверх всего: это подсказка к тому, что печатается, и должна
+     идти следом за курсором взглядом, а не отдельным слоем. */
+  .chat-mention-list{
+    display:flex; flex-direction:column; gap:2px; margin-bottom:6px;
+    max-height:160px; overflow-y:auto;
+    background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:var(--radius-sm);
+    padding:4px;
+  }
+  .chat-mention-item{
+    text-align:left; padding:7px 9px; border:0; border-radius:6px; background:none;
+    color:var(--ink); font-family:var(--sans); font-size:13px; cursor:pointer;
+  }
+  .chat-mention-item:hover, .chat-mention-item.active{background:var(--accent-soft); color:var(--accent);}
   .chat-foot{display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;}
   .chat-reaction{
     display:inline-flex; align-items:center; gap:5px;
