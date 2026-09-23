@@ -206,6 +206,48 @@ test("dragging an idea onto a calendar day converts it into a meeting", async ({
   await expect(page.locator(".meeting-chip", { hasText: ideaText })).toHaveCount(0);
 });
 
+// 21.09.2026: «при переносе задачи во встречу встреча не создаётся». Блок
+// встреч принимал только мысль — задача поднималась под курсором и падала
+// в никуда, потому что своего обработчика на "task" в MeetingsPanel не
+// было вовсе. Тест — то же самое, что и у мысли выше, но с задачей: она
+// не заменяется встречей и не исчезает (это разговор О ней, а не вместо
+// неё), а форма открывается заполненной по ней.
+//
+// Цель — весь #meetingsPanel, а не список под шапкой: у свежего аккаунта
+// список — это одна строка «Встреч пока нет», и целиться мышью в неё
+// значило бы промахиваться ровно там, где промахивался и человек.
+test("dragging a task onto the meetings panel opens a prefilled meeting and leaves the task on the board", async ({ page }) => {
+  const title = `E2E задача-встреча ${Date.now()}`;
+
+  await login(page);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator("#col-new .task", { hasText: title });
+  await expect(card).toBeVisible();
+  await waitForSaved(page);
+
+  await dragOnto(page, card, page.locator("#meetingsPanel"));
+
+  await expect(page.locator("#meetingOverlay")).toBeVisible();
+  await expect(page.locator("#mTitle")).toHaveValue(title);
+  // Задача осталась на доске — она не переносится, встреча растёт рядом.
+  await expect(card).toBeVisible();
+
+  await page.click("#meetingSaveBtn");
+  await expect(page.locator(".meeting-chip", { hasText: title })).toBeVisible();
+  await expect(card).toBeVisible();
+  await waitForSaved(page);
+
+  // Связь пишется строкой в обсуждение обеих сторон (itemLink.ts) — она
+  // переживает перезагрузку так же, как сама задача.
+  await page.reload();
+  await expect(card).toBeVisible();
+  await expect(page.locator(".meeting-chip", { hasText: title })).toBeVisible();
+});
+
 test("deleting a task survives an immediate sign-out", async ({ page }) => {
   const title = `E2E race deleted ${Date.now()}`;
 
