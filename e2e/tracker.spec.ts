@@ -1461,11 +1461,18 @@ test("вычеркнутые мысли идут свежими сверху", a
   await waitForSaved(page);
 
   // А вычёркиваются в обратном порядке — сначала та, что записана раньше.
+  //
+  // Между двумя нажатиями — waitForSaved, а не просто следующий клик: это
+  // тот самый «отдельный, не связанный с этим тестом сдвиг по времени» из
+  // комментария над waitForSaved() — второе действие, начатое ДО того, как
+  // первое долетело до базы, встречается с эхом realtime/догона (см.
+  // lib/revive.ts) и рискует откатить ещё не подтверждённую пометку.
+  // Живой человек тоже не бьёт по двум галочкам одним движением.
   for (const text of [first, second]) {
     await page.locator(".idea-item", { hasText: text }).locator(".idea-check").click();
     await expect(page.locator(".idea-item", { hasText: text })).toHaveCount(0);
+    await waitForSaved(page);
   }
-  await waitForSaved(page);
 
   await page.click("#ideasDoneBtn");
   const rows = page.locator(".done-list-row");
