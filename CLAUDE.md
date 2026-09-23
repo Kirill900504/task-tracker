@@ -35,15 +35,18 @@ assign himself work, not just others). The one boundary that never moves:
 `isOwner` (Команда, access, roles) stays with Кирилл alone; everything
 else about *doing* work is symmetric, postановщик and исполнитель included.
 
-**Visibility is per-person, no exceptions — himself included.** A
-participant sees an item only if they are its postановщик, executor,
-co-executor, observer, or an invited/organizing meeting participant.
-Everything else stays off their screen entirely, not read-only-visible —
-"чтобы не засорялся эфир". This reverses the earlier "Трекер один на
-всех: чужое видно для чтения" design and is **not yet implemented in
-code** — see `docs/how-it-works.md` («Видимость») and `docs/next-ten.md`
-(п. 11) for the audit and the concrete list of places that still show
-everything.
+**Visibility is per-person, no exceptions — himself included. DONE
+23.09.2026.** A participant sees an item only if they are its
+postановщик, executor, co-executor, observer, or an invited/organizing
+meeting participant. Everything else stays off their screen entirely, not
+read-only-visible — "чтобы не засорялся эфир". This reversed the earlier
+"Трекер один на всех: чужое видно для чтения" design. `NewTracker.tsx`
+computes `visibleTasks`/`visibleMeetings` once (`lib/itemVisibility.ts`)
+and hands them to every panel instead of the raw arrays — see
+`docs/how-it-works.md` («Видимость») and `docs/next-ten.md` (п. 11) for
+what actually changed and a real bug the unit tests caught along the way
+(`isMine()` is the wrong check for "do I see this" — it answers "can I
+edit this," and always says yes for the owner).
 
 Full detail lives in `docs/how-it-works.md` — read it before touching
 anything about what a screen shows to whom; if code and that document

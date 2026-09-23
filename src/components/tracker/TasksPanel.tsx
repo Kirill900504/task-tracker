@@ -41,6 +41,7 @@ import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 
 export default function TasksPanel({
   tasks,
+  allTasks,
   sections,
   assignees,
   actions,
@@ -65,7 +66,19 @@ export default function TasksPanel({
   notifBanner,
   extraBanner,
 }: {
+  // Уже сужено родителем до «моё» — где я постановщик, исполнитель,
+  // соисполнитель или наблюдатель (см. NewTracker.tsx, 23.09.2026, правило
+  // видимости). Доска, «Просрочено» и переключатель «Мне / Я поручил /
+  // Все» работают внутри этого набора — «Все» больше не значит «всё
+  // пространство».
   tasks: Task[];
+  // Полный, несуженный список — только для «Загрузки» (кто чем занят):
+  // делегируя новую задачу, нужно видеть занятость ЛЮБОГО человека, а не
+  // только тех, с кем уже связан общей работой, иначе кнопка потеряла бы
+  // смысл. Показывает ровно то же, что и раньше — числа (горит/молчит/на
+  // приёмке), не названия и не содержание чужих задач. Необязательный:
+  // без него используется `tasks`.
+  allTasks?: Task[];
   sections: Section[];
   assignees: string[];
   actions: {
@@ -260,7 +273,7 @@ export default function TasksPanel({
   // показывать ли вообще кнопку и какую цифру на ней писать. Цифра — это
   // число тех, у кого есть о чём говорить (горит, молчит или ждёт
   // приёмки), а не число людей: «14» на кнопке не новость, «2» — новость.
-  const load = useMemo(() => peopleLoad(tasks, assignees), [tasks, assignees]);
+  const load = useMemo(() => peopleLoad(allTasks ?? tasks, assignees), [allTasks, tasks, assignees]);
   const peopleWithWork = load.length;
   const hotPeople = load.filter((p) => p.overdue > 0 || p.silent > 0 || p.review > 0).length;
 
@@ -965,7 +978,7 @@ export default function TasksPanel({
 
       {loadOpen && (
         <LoadModal
-          tasks={tasks}
+          tasks={allTasks ?? tasks}
           assignees={assignees}
           selected={filterAssignee}
           onSelect={onFilterAssigneeChange}

@@ -42,6 +42,7 @@ import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole, MEMBER_ROLE_LABELS } from "@/hooks/useWorkspaceRole";
+import { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import ActionMenu from "@/components/tracker/ActionMenu";
 import { withoutSelfMark } from "@/lib/actorName";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
@@ -51,7 +52,8 @@ import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
 import Icon from "@/components/tracker/Icon";
 import BootSkeleton from "@/components/tracker/BootSkeleton";
-import { isMine } from "@/lib/ownership";
+import { isMine, isCreatedByMe } from "@/lib/ownership";
+import { isTaskVisible, isMeetingVisible } from "@/lib/itemVisibility";
 import { withViewTransition } from "@/lib/viewTransition";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -107,21 +109,62 @@ export default function NewTracker() {
   // видна каждому с кнопкой «В работу», отправляли её ему или нет — своего
   // получателя мысль не хранит вовсе. `isMine()` здесь не подходит: она
   // отвечает на вопрос «можно править», а не «видно ли», и для владельца
-  // возвращает true безусловно (см. lib/ownership.ts) — тем самым объявила
-  // бы своими вообще все мысли пространства. Сравниваем `createdBy`
-  // напрямую с тем, кто сейчас смотрит: пусто — значит завёл владелец.
-  const myIdeas = useMemo(
-    () => ideas.filter((i) => (i.createdBy || "") === (identity.role === "manager" ? identity.userId : "")),
-    [ideas, identity.role, identity.userId],
-  );
+  // возвращает true безусловно — тем самым объявила бы своими вообще все
+  // мысли пространства. `isCreatedByMe()` (lib/ownership.ts) — та же
+  // проверка, что теперь и у задач со встречами ниже: сравнивает
+  // `createdBy` буквально, без поблажки владельцу.
+  const myIdeas = useMemo(() => ideas.filter((i) => isCreatedByMe(i, mineOnlyId)), [ideas, mineOnlyId]);
   // Как меня зовут в списке людей. Своя строка помечена «(я)» — другого
   // способа связать логин с человеком в браузере нет. Нужно на экране
   // «Сегодня», чтобы отличить «моя задача» от «я поручил её другому».
   const myName = assignees.find((a) => a.trim().endsWith("(я)")) || "";
+
+  // То же правило видимости, что у мыслей выше, — только для задач и
+  // встреч оно устроено сложнее, потому что «моё» не сводится к одному
+  // `createdBy`: у задачи есть ещё исполнитель, соисполнители и
+  // наблюдатели, а у встречи — приглашённые. `useTaskParticipants()` уже
+  // существовал и жил внутри `TasksPanel` — поднят сюда, чтобы посчитать
+  // видимость ОДИН раз и раздать готовый список во все панели разом
+  // (доску, встречи, календарь, поиск, «Сегодня», «На приёмке», счётчики
+  // на вкладках телефона), а не изобретать это в каждой заново. Второй
+  // вызов хука внутри `TasksPanel` остаётся — ему ещё нужны сами действия
+  // (принять, отчитаться, приёмка), которых этот верхний слой не просит;
+  // два канала подписки на одну таблицу здесь и раньше считались терпимой
+  // ценой против «белого экрана» (см. комментарий в самом хуке).
+  const participants = useTaskParticipants();
+  const visibleTasks = useMemo(
+    () =>
+      tasks.filter((t) =>
+        isTaskVisible(
+          t,
+          mineOnlyId,
+          identity.assigneeId,
+          participants.forTask(t.id).map((p) => p.assigneeId),
+        ),
+      ),
+    [tasks, mineOnlyId, participants, identity.assigneeId],
+  );
+  const visibleMeetings = useMemo(
+    () => meetings.filter((m) => isMeetingVisible(m, mineOnlyId, myName)),
+    [meetings, mineOnlyId, myName],
+  );
+  // «На приёмке» — не «видно мне», а «ждёт РОВНО МЕНЯ»: соисполнитель или
+  // наблюдатель на чужой задаче видит её на доске, но решение не за ним, и
+  // список приёмки не должен предлагать ему решать чужое. `isMine()` здесь
+  // тоже не годится по той же причине, что и выше: владельцу она сказала
+  // бы «моё поручение» о вообще любой видимой задаче, включая ту, где он
+  // сам просто наблюдатель.
+  const myReviewTasks = useMemo(() => visibleTasks.filter((t) => isCreatedByMe(t, mineOnlyId)), [visibleTasks, mineOnlyId]);
   const isMobile = useIsMobile();
   const toasts = useToasts();
   const dateTimeConfirm = useDateTimeConfirm();
-  const notifications = useNotifications({ tasks, meetings, saveTask: actions.saveTask, showToast: toasts.showToast, ready: !loading });
+  const notifications = useNotifications({
+    tasks: visibleTasks,
+    meetings: visibleMeetings,
+    saveTask: actions.saveTask,
+    showToast: toasts.showToast,
+    ready: !loading,
+  });
   const installPrompt = useInstallPrompt();
   const botLink = useBotLink();
   // Свой мессенджер руководителя: у владельца эту роль играет botLink
@@ -293,7 +336,7 @@ export default function NewTracker() {
   }
 
   function taskDroppedOnDate(taskId: string, date: string) {
-    const task = tasks.find((t) => t.id === taskId);
+    const task = visibleTasks.find((t) => t.id === taskId);
     if (!task) return;
     setPendingIdeaConversion(null);
     setOpenMeetingRequest({
@@ -424,7 +467,7 @@ export default function NewTracker() {
     // its card and mark it held, the same state the panel's own «Успешно»
     // button produces, so the meeting stops sitting there as planned.
     closeMeetingWithResult: ({ id, summary }) => {
-      const meeting = meetings.find((m) => m.id === id);
+      const meeting = visibleMeetings.find((m) => m.id === id);
       if (!meeting) return;
       actions.saveMeeting({
         ...meeting,
@@ -452,7 +495,7 @@ export default function NewTracker() {
     // прогресс сюда не передаются нарочно — они живут в панели задач, а
     // карточка едет доли секунды.
     if (active.kind === "task") {
-      const task = tasks.find((t) => t.id === active.id);
+      const task = visibleTasks.find((t) => t.id === active.id);
       if (!task) return null;
       return (
         <div className="dnd-card-ghost">
@@ -477,8 +520,8 @@ export default function NewTracker() {
   const panels = {
         calPanel: (
           <CalendarPanel
-            tasks={tasks}
-            meetings={meetings}
+            tasks={visibleTasks}
+            meetings={visibleMeetings}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             onRequestNewTask={(date) => setOpenTaskRequest({ deadline: date })}
@@ -500,7 +543,10 @@ export default function NewTracker() {
           <MeetingsPanel
             myUserId={mineOnlyId}
             meId={identity.assigneeId}
-            meetings={meetings}
+            meetings={visibleMeetings}
+            // Только для проверки занятости слотов в форме встречи — см.
+            // комментарий у пропа в самом MeetingsPanel.tsx.
+            allMeetings={meetings}
             assignees={assignees}
             selectedDay={selectedDate}
             actions={actions}
@@ -532,7 +578,12 @@ export default function NewTracker() {
             ownerId={identity.ownerId}
             filterAssignee={filterAssignee}
             onFilterAssigneeChange={setFilterAssignee}
-            tasks={tasks}
+            tasks={visibleTasks}
+            // Только для «Загрузки» (кто чем занят) — решение объяснено у
+            // самого пропа в TasksPanel.tsx: делегируя новую задачу, нужно
+            // видеть занятость ЛЮБОГО человека, а не только тех, с кем уже
+            // связан общей работой.
+            allTasks={tasks}
             sections={sections}
             assignees={assignees}
             actions={actions}
@@ -642,8 +693,8 @@ export default function NewTracker() {
       {teamOpen && isOwner && <TeamModal onClose={() => setTeamOpen(false)} />}
       {searchOpen && (
         <SearchOverlay
-          tasks={tasks}
-          meetings={meetings}
+          tasks={visibleTasks}
+          meetings={visibleMeetings}
           ideas={myIdeas}
           onClose={() => setSearchOpen(false)}
           onOpenResult={openSearchResult}
@@ -718,10 +769,10 @@ export default function NewTracker() {
             onTabChange={(tab) => withViewTransition(() => setMobileTab(tab))}
             onSearch={() => setSearchOpen(true)}
             badges={{
-              today: todayCount(buildToday(tasks, meetings)),
-              meetings: meetings.filter((m) => !m.status || m.status === "planned").length,
+              today: todayCount(buildToday(visibleTasks, visibleMeetings)),
+              meetings: visibleMeetings.filter((m) => !m.status || m.status === "planned").length,
               ideas: myIdeas.filter((i) => !i.done).length,
-              review: awaitingReview(tasks).length,
+              review: awaitingReview(myReviewTasks).length,
             }}
           >
             {/* Every section stays mounted and is merely hidden: switching tabs
@@ -729,8 +780,8 @@ export default function NewTracker() {
                 them are portalled to <body>, so they show over the shell. */}
             <div hidden={mobileTab !== "today"}>
               <TodayScreen
-                tasks={tasks}
-                meetings={meetings}
+                tasks={visibleTasks}
+                meetings={visibleMeetings}
                 sections={sections}
                 // Правило галочки здесь то же, что на доске: закрывает
                 // задачу постановщик, а не тот, кому она поручена. И если
@@ -771,7 +822,7 @@ export default function NewTracker() {
             <div hidden={mobileTab !== "meetings"}>{panels.meetingsPanel}</div>
             <div hidden={mobileTab !== "ideas"}>{panels.ideasPanel}</div>
             <div hidden={mobileTab !== "review"}>
-              <ReviewScreen tasks={tasks} onOpen={(t) => setOpenExistingTaskId(t.id)} />
+              <ReviewScreen tasks={myReviewTasks} onOpen={(t) => setOpenExistingTaskId(t.id)} />
             </div>
           </MobileShell>
           {/* Круглая «+» заводит то, в каком разделе её нажали.
