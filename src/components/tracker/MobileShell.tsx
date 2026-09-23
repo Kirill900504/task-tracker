@@ -2,7 +2,7 @@
 
 import { useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import Icon, { type IconName } from "./Icon";
-import { neighbour, startsInBusyArea, verdict } from "@/lib/mobileSwipe";
+import { SWIPE_PX_OVER_CARD, neighbour, startsInBusyArea, startsOverCard, verdict } from "@/lib/mobileSwipe";
 
 // The phone gets its own frame: one section on screen at a time, chosen from
 // a bar under the thumb, instead of the desktop's three columns stacked into
@@ -66,10 +66,15 @@ export default function MobileShell({
   // этом экране, вынесено в lib/mobileSwipe — там же записано, почему оно
   // именно такое. Здесь остаются только руки: где палец лёг и куда пришёл.
   const from = useRef<{ x: number; y: number } | null>(null);
+  // Жест начался на карточке задачи — ей отдаётся первые 150px (см.
+  // lib/mobileSwipe), и только после них движение читается как смена
+  // раздела, а не как её собственный свайп.
+  const overCard = useRef(false);
 
   function onPointerDown(e: ReactPointerEvent) {
     if (e.pointerType !== "touch") return;
     if (startsInBusyArea(e.target as Element)) return;
+    overCard.current = startsOverCard(e.target as Element);
     from.current = { x: e.clientX, y: e.clientY };
   }
 
@@ -77,7 +82,7 @@ export default function MobileShell({
     const start = from.current;
     from.current = null;
     if (!start) return;
-    const where = verdict(e.clientX - start.x, e.clientY - start.y);
+    const where = verdict(e.clientX - start.x, e.clientY - start.y, overCard.current ? SWIPE_PX_OVER_CARD : undefined);
     const next = neighbour(TAB_IDS, tab, where);
     if (next) onTabChange(next);
   }
