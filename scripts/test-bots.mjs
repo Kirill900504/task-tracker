@@ -540,6 +540,24 @@ try {
   const { data: moved } = await admin.from("tasks").select("deadline").eq("id", ownerTask).maybeSingle();
   check("«+неделя» двигает срок", extend.status === 200 && moved?.deadline === "2026-10-07", moved);
 
+  // Та же кнопка, но нажатая ВНУТРИ экрана: с 22.09.2026 такие несут в
+  // данных знак «~», по которому бот переписывает сообщение вместо того,
+  // чтобы слать новое (см. screenButtons в lib/colleagues). Знак снимается
+  // при разборе, и проверяется здесь именно это: действие обязано остаться
+  // тем же самым. Ошибка тут выглядит как молчащая кнопка — то есть
+  // неотличимо от сломанного бота.
+  await admin.from("tasks").update({ deadline: "2026-09-30" }).eq("id", ownerTask);
+  const inScreen = await pressOwner("own3s", "t:~plus7:" + ownerTask);
+  const { data: movedInScreen } = await admin.from("tasks").select("deadline").eq("id", ownerTask).maybeSingle();
+  check(
+    "та же кнопка из экрана делает то же самое",
+    inScreen.status === 200 && movedInScreen?.deadline === "2026-10-07",
+    movedInScreen,
+  );
+
+  const screenMenu = await pressOwner("own1s", "t:~omenu:x");
+  check("меню открывается и изнутри экрана", screenMenu.status === 200, screenMenu);
+
   const accept = await pressOwner("own4", "t:ok:" + ownerTask);
   const { data: accepted } = await admin.from("tasks").select("status, approval_state").eq("id", ownerTask).maybeSingle();
   check(
