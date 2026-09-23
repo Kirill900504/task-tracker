@@ -52,7 +52,7 @@ import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
 import Icon from "@/components/tracker/Icon";
 import BootSkeleton from "@/components/tracker/BootSkeleton";
-import { isMine, isCreatedByMe } from "@/lib/ownership";
+import { isCreatedByMe } from "@/lib/ownership";
 import { isTaskVisible, isMeetingVisible } from "@/lib/itemVisibility";
 import { withViewTransition } from "@/lib/viewTransition";
 
@@ -792,7 +792,7 @@ export default function NewTracker() {
                 // «Исполнитель»: приближение в сторону строгости, то есть
                 // лишний раз откроется карточка, а не закроется молча
                 // чужая работа.
-                canCompleteTask={(task) => isMine(task, mineOnlyId)}
+                canCompleteTask={(task) => isCreatedByMe(task, mineOnlyId)}
                 onToggleTask={(task) => {
                   const someoneElse = task.status !== "done" && !!task.assignee && task.assignee !== myName;
                   if (someoneElse) {

@@ -34,7 +34,7 @@ import LoadModal from "./LoadModal";
 import { useAsk } from "@/components/Ask";
 import { uid } from "@/lib/uid";
 import Icon from "./Icon";
-import { isMine } from "@/lib/ownership";
+import { isCreatedByMe, isMine } from "@/lib/ownership";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
@@ -243,6 +243,17 @@ export default function TasksPanel({
   // аккаунт работал ровно до первой задачи, а потом трекер не открывался
   // вовсе. Ни типы, ни линтер этого не видели.
   const mine = (t: Task | null) => isMine(t, myUserId);
+  // «Поставил ли это Я», а не «могу ли я это редактировать» — isMine()
+  // нарочно отвечает «да» на всё для владельца (пространство его целиком),
+  // и quickDone/toggleDone/перетаскивание в «Готово» читали это как «я
+  // постановщик» везде, включая задачи, которые ему поручили ДРУГИЕ.
+  // Слова Кирилла 23.09.2026: «убери у меня возможность принимать
+  // поставленные на меня задачи, я должен быть на одном уровне прав со
+  // всеми... никто не должен мочь её нарушать, даже я». Приёмка, быстрая
+  // галочка и перестановка карточки — право автора задачи, а не
+  // администратора пространства, и для владельца это разные вещи ровно в
+  // тех местах, где он сам оказывается исполнителем чужого поручения.
+  const authored = (t: Task | null) => isCreatedByMe(t, myUserId);
 
   // Моя роль в задаче — один ответ, которым пользуются и цвет карточки, и
   // фильтр, и подсветка просрочки (см. lib/myRole).
@@ -273,10 +284,10 @@ export default function TasksPanel({
   // отдельный вопрос: своё просроченное — «я не успел», чужое — «пора
   // толкнуть». Стоит на переключателе, а не краской на карточках: у
   // постановщика четырнадцати человек доска иначе краснеет целиком.
-  const assignedOverdue = tasks.filter((t) => mine(t) && isOverdue(t) && roleOn(t) === "none").length;
+  const assignedOverdue = tasks.filter((t) => authored(t) && isOverdue(t) && roleOn(t) === "none").length;
   // Есть ли вообще чужие поручения. Пока их нет, переключатель вида — три
   // кнопки, две из которых ничего не меняют.
-  const sharedBoard = tasks.some((t) => !mine(t) || roleOn(t) !== "none");
+  const sharedBoard = tasks.some((t) => !authored(t) || roleOn(t) !== "none");
 
   // Загрузка людей — считается здесь, а не только в окне: от неё зависит,
   // показывать ли вообще кнопку и какую цифру на ней писать. Цифра — это
@@ -388,7 +399,7 @@ export default function TasksPanel({
     // сделать вид, что закрыл: база откажет молча, галочка проживёт до
     // перезагрузки, а человек будет считать дело сделанным. Отчитаться по
     // ней он может там, где это его дело, — внутри самой задачи.
-    if (!mine(t)) {
+    if (!authored(t)) {
       toasts.showToast("Это не ваша задача", "Откройте её — там кнопки «Принял» и «Сделал».");
       return;
     }
@@ -430,7 +441,7 @@ export default function TasksPanel({
   // идут через /api/workspace/review, то есть человеку уходит сообщение, а
   // в хронику задачи — строка.
   async function quickDone(t: Task) {
-    if (!mine(t)) {
+    if (!authored(t)) {
       toasts.showToast("Это не ваша задача", "Откройте её — там кнопки «Принял» и «Сделал».");
       return;
     }
@@ -522,7 +533,7 @@ export default function TasksPanel({
     // Внутри столбца — обычная перестановка: порядок принадлежит задаче, и
     // менять его вправе тот, кто её поставил.
     if (from === to) {
-      if (!mine(dragged)) {
+      if (!authored(dragged)) {
         toasts.showToast("Это не ваша задача", "Порядок в столбце меняет тот, кто её поставил.");
         return;
       }
@@ -536,7 +547,7 @@ export default function TasksPanel({
     }
 
     const myRole = roleOn(dragged);
-    const move = moveBetween(from, to, { isAuthor: mine(dragged), isExecutor: myRole === "executor" });
+    const move = moveBetween(from, to, { isAuthor: authored(dragged), isExecutor: myRole === "executor" });
     if (!move) return;
     if ("refused" in move) {
       toasts.showToast("Так нельзя", move.refused);
@@ -599,7 +610,7 @@ export default function TasksPanel({
     // значит принять, в «На приёмке» — отчитаться. Такие вещи делаются
     // кнопками в самой карточке, где спрашивают комментарий и где видно,
     // кому что позволено, а не пунктом меню, который сделал бы это молча.
-    const items: ActionMenuItem[] = mine(t)
+    const items: ActionMenuItem[] = authored(t)
       ? [
           { id: "top", label: "Наверх списка", icon: "arrow-up", onSelect: () => moveWithinColumn(t, "top") },
           { id: "bottom", label: "В конец списка", icon: "arrow-down", onSelect: () => moveWithinColumn(t, "bottom") },
@@ -686,7 +697,7 @@ export default function TasksPanel({
             list.map((t) => {
               const role = roleOn(t);
               return (
-                <SortableTask key={t.id} task={t} column={column} draggable={mine(t) || role === "executor"}>
+                <SortableTask key={t.id} task={t} column={column} draggable={authored(t) || role === "executor"}>
                   {(dragProps, isDragging) => (
                     <TaskCard
                       task={t}
@@ -702,7 +713,7 @@ export default function TasksPanel({
                       awaitingReschedule={hasPendingReschedule(t)}
                       unreadCount={unread[t.id] || 0}
                       role={role}
-                      outgoing={mine(t) && role === "none" && sharedBoard}
+                      outgoing={authored(t) && role === "none" && sharedBoard}
                       dimOverdue={!showsOverdue(role, !sharedBoard || view === "assigned")}
                       onToggleDone={() => void quickDone(t)}
                       // Галочка — право постановщика: закрыть задачу
@@ -710,7 +721,7 @@ export default function TasksPanel({
                       // Исполнитель отвечает кнопками в самой карточке
                       // («Принял», «Сделал»), и показывать ему галочку,
                       // после которой придёт отказ, незачем.
-                      canComplete={mine(t)}
+                      canComplete={authored(t)}
                       onOpen={() => setModalState({ open: true, task: t })}
                       isDragging={isDragging}
                       dragProps={dragProps}

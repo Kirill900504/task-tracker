@@ -56,12 +56,20 @@ export async function POST(req: Request) {
   const task = taskRow as { id: string; title: string; user_id: string; created_by: string | null } | null;
   if (!task) return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
 
-  // Принимает работу тот, кто её поручил: владелец пространства или
-  // руководитель, поставивший задачу сам. Исполнитель принять свою работу
-  // не может — иначе приёмка перестала бы что-либо значить.
-  const isOwner = task.user_id === user.id;
-  const isAuthor = task.created_by === user.id;
-  if (!isOwner && !isAuthor) return NextResponse.json({ error: "Это решение не ваше" }, { status: 403 });
+  // Принимает работу тот, кто её поручил — и только он, даже когда он же
+  // владелец пространства.
+  //
+  // До 23.09.2026 здесь стояло «владелец пространства ИЛИ автор», и владелец
+  // проходил эту проверку на ЛЮБОЙ задаче своего пространства, включая те,
+  // что поставил ему кто-то из руководителей. Слова Кирилла об этом прямые:
+  // «я должен быть на одном уровне прав со всеми пользователями… никто не
+  // должен мочь её нарушать, даже я». Правило то же, что в интерфейсе
+  // (lib/ownership.isCreatedByMe): пустой created_by значит «поставил
+  // владелец сам», и тогда решает он; непустой значит «поставил
+  // руководитель», и решает он один — даже если исполнитель на задаче сам
+  // владелец.
+  const isAuthor = task.created_by ? task.created_by === user.id : task.user_id === user.id;
+  if (!isAuthor) return NextResponse.json({ error: "Это решение не ваше" }, { status: 403 });
 
   const comment = (body.comment || "").trim();
 
