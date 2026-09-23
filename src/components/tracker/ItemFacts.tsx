@@ -36,9 +36,24 @@ export type FactRow =
   // Во всю ширину: списки людей и всё, что не делится пополам.
   | { wide: Fact };
 
-export default function ItemFacts({ rows, id }: { rows: FactRow[]; id?: string }) {
+export default function ItemFacts({
+  rows,
+  id,
+  // Бейдж в углу блока — стадия задачи («в работе», «на приёмке»…).
+  //
+  // Слова Кирилла 22.09.2026: перенести пилюлю статуса из отдельного
+  // блока «Кто на задаче» сюда, в верхнюю сводку, «в такой же аккуратной
+  // форме». Форма и есть та же самая: это тот же класс tp-stage, что
+  // раньше стоял в TaskParticipants.tsx, просто теперь в другом месте.
+  badge,
+}: {
+  rows: FactRow[];
+  id?: string;
+  badge?: ReactNode;
+}) {
   return (
     <div className="facts" id={id}>
+      {badge && <div className="facts-badge-row">{badge}</div>}
       {rows.map((row, i) =>
         "wide" in row ? (
           <div className="facts-row wide" key={i}>

@@ -8,10 +8,10 @@
 import { useState } from "react";
 import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
 import { uid } from "@/lib/uid";
-import TaskParticipants from "./TaskParticipants";
+import TeamCompact from "./TeamCompact";
 import TaskAnswer from "./TaskAnswer";
 import ItemChat from "./ItemChat";
-import type { TaskParticipantRole } from "@/lib/taskProgress";
+import { STAGE_LABEL, taskStage, type TaskParticipantRole } from "@/lib/taskProgress";
 import type { Participant, PendingParticipant, PersonOption } from "@/hooks/useTaskParticipants";
 import PeoplePicker, { type PickedPerson } from "./PeoplePicker";
 import ChipChoice from "./ChipChoice";
@@ -225,6 +225,11 @@ export default function TaskModal({
     .filter((p) => p.doneAt)
     .map((p) => ({ ...p, name: withoutSelfMark(p.name || "") }))
     .sort((a, b) => (a.doneAt || "").localeCompare(b.doneAt || ""));
+
+  // Стадия задачи — тем же бейджем, что раньше стоял над списком «Кто на
+  // задаче», только теперь в сводке (ItemFacts): Кирилл 22.09.2026 попросил
+  // перенести его туда, «в такой же аккуратной форме».
+  const stage = task ? taskStage(participants, task.approvalState || "open") : null;
 
   // Кто сейчас на задаче — одинаково для новой и для сохранённой, чтобы
   // поле людей было одно и то же в обоих случаях. У новой это набранный
@@ -483,7 +488,7 @@ export default function TaskModal({
 
   return (
     <Modal id="overlay" onClose={onClose} dismissOnBackdrop={false}>
-      <div className="modal">
+      <div className={"modal" + (task ? " has-chat" : "")}>
         {/* Заведённая задача — не черновик.
 
             Слова Кирилла: «убирай всё лишнее, в ней должен остаться чат,
@@ -505,175 +510,184 @@ export default function TaskModal({
         <h2 id="modalTitle">{isEditing ? form.title || "Задача" : "Новая задача"}</h2>
         <input type="hidden" id="taskId" value={task?.id ?? ""} readOnly />
 
-        {isEditing && form.desc && <div className="task-card-desc">{form.desc}</div>}
+        {/* Заведённая задача разворачивается в два столбца на десктопе:
+            слева всё функциональное (сводка, состав, приёмка), справа —
+            обсуждение. Слова Кирилла 22.09.2026: «хочу, чтобы в версии
+            для ПК чат был правее функционального окна задачи, так легче
+            управлять бегунком задачи и чата по отдельности». Оба столбца
+            прокручиваются независимо (см. .modal.has-chat в tracker.css);
+            на телефоне и на узком окне .modal-split ничего не значит
+            (display:contents) и всё просто идёт одной колонкой, как раньше. */}
+        {task ? (
+          <div className="modal-split">
+            <div className="modal-main">
+              {form.desc && <div className="task-card-desc">{form.desc}</div>}
 
-        {/* Первым — то, чего ждут ОТ ВАС: ради этого карточку и открывают,
-            когда задачу поручили вам. Ниже идёт всё остальное, что о ней
-            известно. */}
-        {task && myPart && (
-          <TaskAnswer
-            me={myPart}
-            closed={task.status === "done" || task.approvalState === "accepted"}
-            deadline={task.deadline || ""}
-            returnedComment={task.approvalState === "returned" ? task.approvalComment || "" : ""}
-            onAccept={() => onAcceptWork?.(myPart.id) ?? Promise.resolve()}
-            onReport={(comment, files) => onReportWork?.(myPart.id, comment, files) ?? Promise.resolve()}
-            onDecline={(reason) => onDeclineWork?.(myPart.id, reason) ?? Promise.resolve()}
-            onAskReschedule={(to, reason) => onAskReschedule?.(myPart.id, to, reason) ?? Promise.resolve()}
-            onAnswered={onClose}
-          />
-        )}
+              {/* Первым — то, чего ждут ОТ ВАС: ради этого карточку и
+                  открывают, когда задачу поручили вам. Ниже идёт всё
+                  остальное, что о ней известно. */}
+              {myPart && (
+                <TaskAnswer
+                  me={myPart}
+                  closed={task.status === "done" || task.approvalState === "accepted"}
+                  deadline={task.deadline || ""}
+                  returnedComment={task.approvalState === "returned" ? task.approvalComment || "" : ""}
+                  onAccept={() => onAcceptWork?.(myPart.id) ?? Promise.resolve()}
+                  onReport={(comment, files) => onReportWork?.(myPart.id, comment, files) ?? Promise.resolve()}
+                  onDecline={(reason) => onDeclineWork?.(myPart.id, reason) ?? Promise.resolve()}
+                  onAskReschedule={(to, reason) => onAskReschedule?.(myPart.id, to, reason) ?? Promise.resolve()}
+                  onAnswered={onClose}
+                />
+              )}
 
-        {/* Главное о задаче — одной короткой таблицей, сразу под названием.
-            Слова Кирилла 21.09.2026: «требуется компактное окно с основной
-            информацией о задаче, в которое входит: кто постановщик →
-            напротив дата постановки задачи, кто исполнитель → напротив
-            крайний срок выполнения (дедлайн), далее соисполнители
-            (списком), далее наблюдатели (списком)».
-            До этого ответ на «кто это поручил и когда» в карточке не стоял
-            вовсе: постановщика показывала только маленькая подпись на
-            кубике доски, а даты постановки не было нигде. */}
-        {task && (
-          <ItemFacts
-            id="taskFacts"
-            rows={[
-              {
-                left: { label: "Постановщик", value: authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name)) },
-                right: { label: "Дата постановки", value: whenCreated(task.createdAt || "") || "—", muted: !task.createdAt },
-              },
-              {
-                left: {
-                  label: executorNames.length > 1 ? "Исполнители" : "Исполнитель",
-                  value: executorNames.length ? executorNames.join(", ") : "не назначен",
-                  muted: !executorNames.length,
-                },
-                right: {
-                  label: "Крайний срок",
-                  value: task.deadline ? fmtDate(task.deadline) : "без срока",
-                  muted: !task.deadline,
-                },
-              },
-              ...(coexecutorNames.length
-                ? [{ wide: { label: "Соисполнители", value: coexecutorNames.join(", ") } } as const]
-                : []),
-              ...(watcherNames.length ? [{ wide: { label: "Наблюдатели", value: watcherNames.join(", ") } } as const] : []),
-            ]}
-          />
-        )}
-
-        {/* Результат — то, ради чего приёмку вообще открывают.
-            Кирилл просил «поле Результат с датой и временем проведения»,
-            чтобы постановщик «мог прочесть данные по результату и принять
-            решение». Отчёты лежали в списке участников мелкой строкой
-            рядом с ролью и кнопкой «убрать» — то есть там, где их читают
-            последними. Теперь это отдельный блок, и в нём написано, кто
-            отчитался, когда и что именно сделано. */}
-        {task && reports.length > 0 && (
-          <div className="results" id="taskResults">
-            <div className="results-head">Результат</div>
-            {reports.map((r) => (
-              <div className="result-item" key={r.id}>
-                <div className="result-line">
-                  <span className="result-who">{r.name}</span>
-                  <span className="result-when">{whenCreated(r.doneAt || "")}</span>
-                </div>
-                <div className="result-text">{r.doneComment || "без комментария"}</div>
-                {/* Документы лежат ЗДЕСЬ, у результата, а не в обсуждении:
-                    на приёмке акт или фотография нужны ровно в эту секунду,
-                    и искать их, пролистывая переписку вверх, — это и есть
-                    то, о чём просил Кирилл («поле Результат… с возможностью
-                    прикрепления документа»). */}
-                <ResultFiles files={r.doneFiles || []} />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {isEditing && !canEdit && (
-          <div className="task-card-note">
-            Эту задачу поставил не вы — менять её может только постановщик. Написать в обсуждение можно.
-          </div>
-        )}
-
-        {!isEditing && (
-          <div className="field">
-            <label>Название задачи</label>
-            <div className="input-with-mic">
-              <AutoGrowTextarea
-                id="fTitle"
-                placeholder="Например: Согласовать прайс с поставщиком"
-                value={form.title}
-                onChange={(text) => setForm((f) => ({ ...f, title: text }))}
-                singleLine
+              {/* Главное о задаче — одной короткой таблицей, сразу под
+                  названием. Слова Кирилла 21.09.2026: «требуется компактное
+                  окно с основной информацией о задаче, в которое входит:
+                  кто постановщик → напротив дата постановки задачи, кто
+                  исполнитель → напротив крайний срок выполнения (дедлайн),
+                  далее соисполнители (списком), далее наблюдатели
+                  (списком)». Бейдж стадии («в работе», «на приёмке»…)
+                  переехал сюда же 22.09.2026 — раньше он стоял отдельной
+                  строкой над списком «Кто на задаче». */}
+              <ItemFacts
+                id="taskFacts"
+                badge={stage && <span className={"tp-stage tp-stage-" + stage}>{STAGE_LABEL[stage]}</span>}
+                rows={[
+                  {
+                    left: { label: "Постановщик", value: authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name)) },
+                    right: { label: "Дата постановки", value: whenCreated(task.createdAt || "") || "—", muted: !task.createdAt },
+                  },
+                  {
+                    left: {
+                      label: executorNames.length > 1 ? "Исполнители" : "Исполнитель",
+                      value: executorNames.length ? executorNames.join(", ") : "не назначен",
+                      muted: !executorNames.length,
+                    },
+                    right: {
+                      label: "Крайний срок",
+                      value: task.deadline ? fmtDate(task.deadline) : "без срока",
+                      muted: !task.deadline,
+                    },
+                  },
+                  ...(coexecutorNames.length
+                    ? [{ wide: { label: "Соисполнители", value: coexecutorNames.join(", ") } } as const]
+                    : []),
+                  ...(watcherNames.length ? [{ wide: { label: "Наблюдатели", value: watcherNames.join(", ") } } as const] : []),
+                ]}
               />
-              <MicButton value={form.title} onChange={(text) => setForm((f) => ({ ...f, title: text }))} title="Надиктовать название" />
-            </div>
-          </div>
-        )}
 
-        {/* Описание убрано с глаз: в девяти задачах из десяти его не пишут,
-            а поле в два ряда стояло вторым сверху и отодвигало всё, ради
-            чего карточку открывают. Оно тут же, если понадобится, и само
-            раскрыто у задачи, где текст уже есть, — иначе написанное
-            однажды стало бы невидимым. */}
-        {!isEditing && (descOpen ? (
-          <div className="field">
-            <label>Описание (необязательно)</label>
-            <div className="input-with-mic">
-              <AutoGrowTextarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} minRows={2} />
-              <MicButton value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} title="Надиктовать описание" />
+              {/* Результат — то, ради чего приёмку вообще открывают.
+                  Кирилл просил «поле Результат с датой и временем
+                  проведения», чтобы постановщик «мог прочесть данные по
+                  результату и принять решение». */}
+              {reports.length > 0 && (
+                <div className="results" id="taskResults">
+                  <div className="results-head">Результат</div>
+                  {reports.map((r) => (
+                    <div className="result-item" key={r.id}>
+                      <div className="result-line">
+                        <span className="result-who">{r.name}</span>
+                        <span className="result-when">{whenCreated(r.doneAt || "")}</span>
+                      </div>
+                      <div className="result-text">{r.doneComment || "без комментария"}</div>
+                      {/* Документы лежат ЗДЕСЬ, у результата, а не в
+                          обсуждении: на приёмке акт или фотография нужны
+                          ровно в эту секунду. */}
+                      <ResultFiles files={r.doneFiles || []} />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!canEdit && (
+                <div className="task-card-note">
+                  Эту задачу поставил не вы — менять её может только постановщик. Написать в обсуждение можно.
+                </div>
+              )}
+
+              {/* У заведённой задачи срок идёт первым: перенести его —
+                  одно из действий, ради которых её открывают. */}
+              {canEdit && deadlineField}
+
+              {/* Состав, статус каждого и приёмка — одним компактным
+                  блоком вместо прежних двух («Кто на задаче» списком
+                  кнопок и под ним ещё раз списком строк). Слова Кирилла
+                  22.09.2026: «оба блока «кто на задаче» — не нужны, но
+                  какая-то возможность добавить исполнителей должна
+                  присутствовать, но не занимать много места… функцию на
+                  стадии приёмки тоже перенести вверх». */}
+              {canEdit && (
+                <TeamCompact
+                  participants={participants}
+                  availablePeople={availablePeople}
+                  approvalState={task.approvalState || "open"}
+                  approvalComment={task.approvalComment}
+                  onAddParticipant={onAddParticipant}
+                  onSetParticipantRole={onSetParticipantRole}
+                  onRemoveParticipant={onRemoveParticipant}
+                  onApproveWork={onApproveWork}
+                  onReturnWork={onReturnWork}
+                  onForceCloseWork={onForceCloseWork}
+                  onReopenWork={onReopenWork}
+                  onAcceptReschedule={onAcceptReschedule}
+                  onRejectReschedule={onRejectReschedule}
+                  onAddPerson={isAdmin ? () => void handleAddAssignee() : undefined}
+                />
+              )}
+            </div>
+
+            <div className="modal-chat-pane">
+              <ItemChat kind="task" itemId={task.id} />
             </div>
           </div>
         ) : (
-          <button type="button" className="btn btn-small field-add" id="addDescBtn" onClick={() => setDescOpen(true)}>
-            + описание
-          </button>
-        ))}
+          <>
+            <div className="field">
+              <label>Название задачи</label>
+              <div className="input-with-mic">
+                <AutoGrowTextarea
+                  id="fTitle"
+                  placeholder="Например: Согласовать прайс с поставщиком"
+                  value={form.title}
+                  onChange={(text) => setForm((f) => ({ ...f, title: text }))}
+                  singleLine
+                />
+                <MicButton value={form.title} onChange={(text) => setForm((f) => ({ ...f, title: text }))} title="Надиктовать название" />
+              </div>
+            </div>
 
-        {/* У заведённой задачи срок идёт первым: перенести его — одно из
-            четырёх действий, ради которых её открывают. */}
-        {isEditing && canEdit && deadlineField}
+            {/* Описание убрано с глаз: в девяти задачах из десяти его не
+                пишут, а поле в два ряда стояло вторым сверху и отодвигало
+                всё, ради чего карточку открывают. */}
+            {descOpen ? (
+              <div className="field">
+                <label>Описание (необязательно)</label>
+                <div className="input-with-mic">
+                  <AutoGrowTextarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} minRows={2} />
+                  <MicButton value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} title="Надиктовать описание" />
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="btn btn-small field-add" id="addDescBtn" onClick={() => setDescOpen(true)}>
+                + описание
+              </button>
+            )}
 
-        {/* Одно поле людей вместо двух. «Исполнитель» списком и «Кто на
-            задаче» с выбором роли спрашивали об одном и том же в двух
-            местах; теперь человек выбирается нажатием, а роль — маленьким
-            меню у самой кнопки (см. PeoplePicker). Имя первого исполнителя
-            по-прежнему попадает в tasks.assignee: это короткая запись «для
-            кого это вообще», её читают бот, сводки и карточки. */}
-        {canEdit && (
-          <PeoplePicker
-            people={availablePeople}
-            picked={picked}
-            onPick={pickPerson}
-            onRemove={removePerson}
-            onAddPerson={isAdmin ? () => void handleAddAssignee() : undefined}
-          />
+            {/* Одно поле людей вместо двух. «Исполнитель» списком и «Кто на
+                задаче» с выбором роли спрашивали об одном и том же в двух
+                местах; теперь человек выбирается нажатием, а роль —
+                маленьким меню у самой кнопки (см. PeoplePicker). */}
+            {canEdit && (
+              <PeoplePicker
+                people={availablePeople}
+                picked={picked}
+                onPick={pickPerson}
+                onRemove={removePerson}
+                onAddPerson={isAdmin ? () => void handleAddAssignee() : undefined}
+              />
+            )}
+          </>
         )}
-
-
-        {/* Состав выбирается полем выше; здесь — то, чего в кнопках не
-            выразить: кто принял, кто отчитался и какими словами, кто просит
-            перенос, и сама приёмка. У новой задачи ничего этого ещё нет. */}
-        {task && canEdit && (
-          <TaskParticipants
-            taskId={task.id}
-            participants={participants}
-            approvalState={task.approvalState || "open"}
-            approvalComment={task.approvalComment}
-            onSetRole={onSetParticipantRole}
-            onRemove={onRemoveParticipant}
-            onApprove={onApproveWork}
-            onReturn={onReturnWork}
-            onForceClose={onForceCloseWork}
-            onReopen={onReopenWork}
-            onAcceptReschedule={onAcceptReschedule}
-            onRejectReschedule={onRejectReschedule}
-          />
-        )}
-
-        {/* Обсуждение — там же, где задача. Только у сохранённой: у
-            несуществующей ещё нечего обсуждать. */}
-        {task && <ItemChat kind="task" itemId={task.id} />}
 
         {/* Раздел, приоритет, срочность и повторение — только у новой
             задачи. У заведённой их правка ни до кого не доходит: человеку

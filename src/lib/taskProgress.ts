@@ -130,6 +130,18 @@ export function taskStage(participants: TaskParticipant[], approval: ApprovalSta
   return "sent";
 }
 
+// Подпись стадии — одним местом на оба её показа: раньше жила только в
+// TaskParticipants.tsx, а с 22.09.2026 та же самая стадия нужна и в
+// сводке задачи (ItemFacts), куда переехал бейдж «в работе».
+export const STAGE_LABEL: Record<TaskStage, string> = {
+  sent: "отправлено, ещё не приняли",
+  accepted: "в работе",
+  blocked: "кто-то не может",
+  awaiting_review: "на приёмке",
+  returned: "на доработке",
+  done: "принято",
+};
+
 // "2 из 4" is the line that makes the card readable at a glance; the names
 // are what make it actionable — the point is to see WHO is missing without
 // opening anything.

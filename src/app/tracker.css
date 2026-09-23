@@ -1059,6 +1059,12 @@
     border:1px solid var(--line-soft); border-radius:var(--radius-md);
     background:var(--paper-soft); box-shadow:var(--edge); overflow:hidden;
   }
+  /* Бейдж стадии («в работе», «на приёмке»…) — строкой над сводкой, прижат
+     вправо. Переехал сюда 22.09.2026 из отдельного блока «Кто на задаче»
+     по просьбе Кирилла: та же самая пилюля (.tp-stage), только в верхнем
+     блоке. Отдельной строкой, а не поверх первой ячейки — иначе бейдж
+     перекрывал бы «Дата постановки» у длинной даты. */
+  .facts-badge-row{display:flex; justify-content:flex-end; padding:7px 12px 0;}
   .facts-row{display:grid; grid-template-columns:1fr 1fr; gap:1px;}
   .facts-row.wide{grid-template-columns:1fr;}
   .fact{
@@ -1154,6 +1160,51 @@
     padding:12px 26px 0; background:var(--paper);
   }
   .modal-actions .left{display:flex; gap:8px;}
+
+  /* ----------------------------------------------------------------
+     Окно задачи и встречи — шире, и на десктопе чат стоит СПРАВА от
+     остального, а не под ним.
+     Слова Кирилла 22.09.2026: «хочу, чтобы в версии для ПК чат был
+     правее функционального окна задачи, так легче управлять бегунком
+     задачи и чата по отдельности… расширение окна и чтобы чат был в
+     правой части так же касается и уже созданных и предстоящих встреч».
+     Раньше окно задачи и обсуждение были одной прокручиваемой колонкой:
+     долистать до кнопки «Принять» означало заодно проскроллить мимо
+     всей переписки.
+     .modal-split/.modal-main/.modal-chat-pane — display:contents по
+     умолчанию: на телефоне и на узком окне это ничего не значит, и
+     разметка течёт одной колонкой, как раньше (порядок в DOM тот же).
+     Настоящим grid из двух колонок они становятся только на широком
+     окне ниже — тогда каждая половина получает свою прокрутку. */
+  .modal-split, .modal-main, .modal-chat-pane{display:contents;}
+  @media (min-width:980px){
+    .modal.has-chat{
+      max-width:1100px;
+      height:min(86vh, 860px); max-height:min(86vh, 860px);
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+    /* Заголовок и подсказка переноса — над столбцами, сами не скроллятся. */
+    .modal.has-chat > :not(.modal-split):not(.modal-actions){flex:none;}
+    .modal.has-chat .modal-split{
+      display:grid; grid-template-columns:minmax(360px,1fr) minmax(300px,380px);
+      gap:26px; flex:1 1 auto; min-height:0; overflow:hidden;
+    }
+    .modal.has-chat .modal-main{
+      display:block; min-width:0; min-height:0; overflow-y:auto; padding-right:2px;
+    }
+    .modal.has-chat .modal-chat-pane{
+      display:flex; flex-direction:column; min-height:0;
+      border-left:1px solid var(--line-soft); padding-left:26px;
+    }
+    .modal.has-chat .modal-chat-pane .chat{
+      flex:1 1 auto; display:flex; flex-direction:column; min-height:0;
+    }
+    /* Своя прокрутка ленты вместо доли высоты окна (.chat-feed без
+       has-chat ограничен min(46vh,380px) — здесь она растягивается на
+       весь остаток колонки, чтобы окно и чат ехали независимо. */
+    .modal.has-chat .modal-chat-pane .chat-feed{flex:1 1 auto; min-height:0; max-height:none;}
+    .modal.has-chat .modal-actions{flex:none;}
+  }
 
   /* Окно вопроса (Ask.tsx) — то, что раньше рисовал сам браузер.
      Узкое, по центру экрана и поверх любого другого окна, включая карточку
@@ -2352,17 +2403,11 @@
     line-height:1.45;
   }
 
-  .tp{
-    margin:0 0 14px; padding:12px 13px; border:1px solid var(--line);
-    border-radius:var(--radius-md); background:var(--paper-soft);
-  }
   /* Роль человека из поля «Исполнитель» в ещё не сохранённой задаче: она
      предопределена, поэтому показана словом, а не выпадашкой, которую всё
      равно нечем заполнить. */
   .tp-role-static{font-size:12px; color:var(--ink-soft); font-family:var(--display);}
   .tp-hint{margin-top:10px; font-size:12px; color:var(--ink-soft); line-height:1.5;}
-  .tp-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;}
-  .tp-title{font-size:12px; color:var(--ink-soft); font-family:var(--display); text-transform:uppercase; letter-spacing:.04em;}
   .tp-stage{font-size:11.5px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--ink-soft);}
   .tp-stage-accepted{color:var(--today); border-color:var(--today);}
   .tp-stage-blocked{color:var(--high); border-color:var(--high);}
@@ -2376,29 +2421,6 @@
     padding:8px 10px; margin-bottom:10px;
   }
   .tp-empty{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
-  .tp-row{
-    display:flex; align-items:center; gap:8px; padding:8px 0;
-    border-top:1px solid var(--line-soft); flex-wrap:wrap;
-  }
-  .tp-row:first-of-type{border-top:0;}
-  .tp-name{font-size:13.5px; font-weight:600; color:var(--ink); min-width:110px; flex:0 1 auto;}
-  /* Роль — свой список (Dropdown), а не системный: ширину задаёт обёртка,
-     кнопка внутри занимает её целиком. */
-  .tp-role{flex:none; min-width:132px;}
-  .tp-state{font-size:12px; flex:1 1 140px; min-width:0;}
-  /* Состояние человека на задаче — значок и слово в одну строку. */
-  .tp-done, .tp-declined, .tp-accepted, .tp-unreachable{display:inline-flex; align-items:center; gap:5px;}
-  .tp-done{color:var(--success);}
-  .tp-declined{color:var(--high);}
-  .tp-accepted{color:var(--long-border);}
-  .tp-waiting{color:var(--ink-soft);}
-  /* Кнопка «убрать с задачи» держится справа и не прыгает при переносе. */
-  .tp-remove{margin-left:auto; min-width:36px;}
-  .tp-add{display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap;}
-  .tp-add select{
-    font-size:12.5px; padding:6px 8px; border-radius:6px;
-    background:var(--paper); color:var(--ink); border:1px solid var(--line);
-  }
   .tp-review{
     margin-top:12px; padding:10px 11px; border-radius:var(--radius-sm);
     background:var(--today-bg); border:1px solid var(--today);
@@ -2406,10 +2428,34 @@
   .tp-review-text{font-size:12.5px; color:var(--ink); margin-bottom:8px;}
   .tp-review-actions{display:flex; gap:8px; flex-wrap:wrap;}
   .tp-force{margin-top:10px; color:var(--ink-soft);}
-  @media (max-width:560px){
-    .tp-name{min-width:0; flex:1 1 100%;}
-    .tp-state{flex:1 1 100%;}
-  }
+
+  /* ----------------------------------------------------------------
+     Состав задачи компактно (TeamCompact.tsx)
+     Раньше «кто на задаче» и статус каждого были двумя отдельными
+     списками ниже сводки. Слова Кирилла 22.09.2026: оба не нужны в
+     прежнем виде, но добавлять людей и видеть их статус — нужно, и
+     «не занимать много места». Теперь это фишки того же вида, что и
+     выбор человека (.participant-chip): статус — маленький значок
+     справа от имени, а не отдельная строка.
+     ---------------------------------------------------------------- */
+  .team-compact{margin-bottom:14px;}
+  .chip-status{display:inline-flex; align-items:center; margin-left:5px; line-height:1;}
+  .chip-status.status-done{color:#DFF3E6;}
+  .chip-status.status-declined{color:#FBDCD3;}
+  .chip-status.status-accepted{color:#EAF6F2;}
+  .chip-status.status-waiting{font-size:10px; opacity:.85;}
+  .chip-status.status-unreachable{color:#F0D9A8;}
+  /* На невыбранном фоне («ждём», «не подключён» у наблюдателя быть не
+     может, но роль сама по себе бывает не «executor» selected-акцентной)
+     статус читается цветом текста, а не белым по акценту. */
+  .participant-chip.role-coexecutor .chip-status.status-done,
+  .participant-chip.role-watcher .chip-status.status-done{color:var(--success);}
+  .participant-chip.role-coexecutor .chip-status.status-declined,
+  .participant-chip.role-watcher .chip-status.status-declined{color:var(--high);}
+  .participant-chip.role-coexecutor .chip-status.status-accepted,
+  .participant-chip.role-watcher .chip-status.status-accepted{color:var(--long-border);}
+  .participant-chip.role-coexecutor .chip-status.status-unreachable,
+  .participant-chip.role-watcher .chip-status.status-unreachable{color:var(--ink-soft);}
 
   /* ---------------------------------------------------------------
      Экран руководителя.
@@ -2684,9 +2730,6 @@
      быть не должно. Пунктир вместо сплошной рамки. */
   .ms-idea{border-style:dashed; border-left-style:dashed;}
   /* Просьба о переносе — то немногое в карточке, что ждёт решения. */
-  /* «Не подключён» — не про ход работы, а про то, что задача до человека
-     не доехала. Поэтому не красный: виноват не он. */
-  .tp-unreachable{font-size:11.5px; color:var(--ink-soft); white-space:nowrap;}
   .tp-ask{
     margin-bottom:10px; padding:9px 11px; border-radius:var(--radius-sm);
     background:var(--med-bg); border:1px solid rgba(224,184,77,.4);

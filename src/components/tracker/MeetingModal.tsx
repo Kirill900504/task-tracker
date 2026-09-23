@@ -301,7 +301,7 @@ export default function MeetingModal({
 
   return (
     <Modal id="meetingOverlay" onClose={onClose} dismissOnBackdrop={false}>
-      <div className="modal">
+      <div className={"modal" + (meeting ? " has-chat" : "")}>
         <h2 id="meetingModalTitle">{isEditing ? "Встреча" : isMove ? "Перенос встречи" : "Новая встреча"}</h2>
         {isMove && (
           <p className="field-hint meeting-move-hint">
@@ -325,77 +325,150 @@ export default function MeetingModal({
             голосуют, и вот в ней и время, и состав открыты. */}
         {/* Первым — то, чего ждут от вас: ответить «буду» или «не смогу».
             Ниже — всё остальное, что о встрече известно. */}
-        {isEditing && myVote && onAnswer && !resolved && <MeetingAnswer me={myVote} onAnswer={onAnswer} />}
+        {/* Назначенная встреча разворачивается в два столбца на десктопе —
+            слева сводка, итог и приёмка, справа обсуждение, каждый со
+            своей прокруткой. Слова Кирилла 22.09.2026: «расширение окна и
+            чтобы чат был в правой части так же касается и уже созданных и
+            предстоящих встреч». На телефоне и на узком окне .modal-split
+            ничего не значит (display:contents) — колонка одна, как раньше. */}
+        {meeting ? (
+          <div className="modal-split">
+            <div className="modal-main">
+              {myVote && onAnswer && !resolved && <MeetingAnswer me={myVote} onAnswer={onAnswer} />}
 
-        {isEditing ? (
-          <>
-            {/* Сводка встречи — той же формы, что сводка задачи.
-                Слова Кирилла 21.09.2026: «окно созданной встречи должно
-                быть однотипным с окном созданной задачи, только информация
-                там должна быть: кто назначил встречу → напротив дата
-                создания встречи, кто участники встречи (с заполненными
-                реакциями по факту отклика участников) → напротив дата и
-                время встречи, и результат встречи, который заполняет автор
-                встречи». Ровно это и стоит ниже, тем же компонентом, что и
-                у задачи (ItemFacts) — «однотипность» значит одно и то же
-                место, а не похожую разметку. */}
-            <div className="meeting-fact-title">{title}</div>
-            <ItemFacts
-              id="meetingFacts"
-              rows={[
-                {
-                  left: { label: "Назначил", value: organizer },
-                  right: { label: "Дата создания", value: createdLabel || "—", muted: !createdLabel },
-                },
-                {
-                  left: {
-                    label: "Когда",
-                    value: (
-                      <>
-                        {fmtDate(date)}
-                        {time ? `, ${time}` : ""}
-                        <span className="fact-note"> · {meeting.durationMin === 60 ? "1 час" : "30 минут"}</span>
-                      </>
-                    ),
+              {/* Сводка встречи — той же формы, что сводка задачи.
+                  Слова Кирилла 21.09.2026: «окно созданной встречи должно
+                  быть однотипным с окном созданной задачи…». Ровно это и
+                  стоит ниже, тем же компонентом, что и у задачи (ItemFacts). */}
+              <div className="meeting-fact-title">{title}</div>
+              <ItemFacts
+                id="meetingFacts"
+                rows={[
+                  {
+                    left: { label: "Назначил", value: organizer },
+                    right: { label: "Дата создания", value: createdLabel || "—", muted: !createdLabel },
                   },
-                  right: {
-                    label: "Ответили",
-                    value: answeredLabel,
-                    muted: !participants.length,
+                  {
+                    left: {
+                      label: "Когда",
+                      value: (
+                        <>
+                          {fmtDate(date)}
+                          {time ? `, ${time}` : ""}
+                          <span className="fact-note"> · {meeting.durationMin === 60 ? "1 час" : "30 минут"}</span>
+                        </>
+                      ),
+                    },
+                    right: {
+                      label: "Ответили",
+                      value: answeredLabel,
+                      muted: !participants.length,
+                    },
                   },
-                },
-                {
-                  wide: {
-                    label: "Участники",
-                    value: participants.length ? (
-                      <span className="fact-people">
-                        {participants.map((name) => {
-                          const vote = voteOf(name);
-                          return (
-                            <span className={"fact-person vote-" + vote.state} key={name} title={vote.title}>
-                              <span className="fact-person-mark">{vote.mark}</span>
-                              {withoutSelfMark(name)}
-                            </span>
-                          );
-                        })}
-                      </span>
-                    ) : (
-                      "никого не позвали"
-                    ),
-                    muted: !participants.length,
+                  {
+                    wide: {
+                      label: "Участники",
+                      value: participants.length ? (
+                        <span className="fact-people">
+                          {participants.map((name) => {
+                            const vote = voteOf(name);
+                            return (
+                              <span className={"fact-person vote-" + vote.state} key={name} title={vote.title}>
+                                <span className="fact-person-mark">{vote.mark}</span>
+                                {withoutSelfMark(name)}
+                              </span>
+                            );
+                          })}
+                        </span>
+                      ) : (
+                        "никого не позвали"
+                      ),
+                      muted: !participants.length,
+                    },
                   },
-                },
-              ]}
-            />
-            {/* Путь к изменению — здесь же, а не «где-то в списке». Кнопка
-                открывает форму новой встречи с тем же составом: перенести и
-                заодно поправить, кого зовём, — одно действие. */}
-            {onReschedule && !resolved && (
-              <button type="button" className="btn btn-small meeting-move-btn" id="meetingMoveBtn" onClick={onReschedule}>
-                <Icon name="calendar" size={15} /> Перенести — и поправить время или состав
-              </button>
-            )}
-          </>
+                ]}
+              />
+              {/* Путь к изменению — здесь же, а не «где-то в списке». Кнопка
+                  открывает форму новой встречи с тем же составом: перенести и
+                  заодно поправить, кого зовём, — одно действие. */}
+              {onReschedule && !resolved && (
+                <button type="button" className="btn btn-small meeting-move-btn" id="meetingMoveBtn" onClick={onReschedule}>
+                  <Icon name="calendar" size={15} /> Перенести — и поправить время или состав
+                </button>
+              )}
+
+              {/* Предложенную встречу назначает тот, кто её собрал: право
+                  занимать чужое время у него ровно такое же, как у всех. До
+                  этого она видна, по ней можно ответить, но ни в календарь,
+                  ни в напоминания она не попадает. */}
+              {proposed && canConfirm && (
+                <div className="field proposed-row">
+                  <div className="proposed-text">
+                    Пока это предложение: время ни у кого не занято и напоминаний нет. Когда ответят все, встреча
+                    назначится сама — или назначьте сейчас, не дожидаясь.
+                  </div>
+                  <button type="button" className="btn btn-small btn-primary" id="confirmMeetingBtn" onClick={() => setStatus("planned")}>
+                    <Icon name="check" size={15} /> Назначить
+                  </button>
+                </div>
+              )}
+              {proposed && !canConfirm && (
+                <div className="field proposed-row">
+                  <div className="proposed-text">
+                    {/* Ни имени, ни должности: эту строку читают четырнадцать
+                        человек, и ответ на «когда же она станет встречей»
+                        зависит теперь от них самих, а не от того, кто главный. */}
+                    Это предложение: время оно пока не занимает. Ответьте — когда ответят все, встреча назначится.
+                  </div>
+                </div>
+              )}
+
+              {canEdit && (
+                <div className="field outcome-field" id="outcomeField">
+                  <label>Итог встречи</label>
+                  <div className={"outcome-badge" + (resolved ? ` show ${meeting.status}` : "")} id="outcomeBadge">
+                    {resolved ? outcomeLabel(meeting.status) + (meeting.movedToDate ? " · перенесено на " + fmtDate(meeting.movedToDate) : "") : ""}
+                  </div>
+                  <div className="input-with-mic">
+                    {/* Enter завершает встречу успешно — по правилу Кирилла
+                        21.09.2026 «любые заполнения результатов или итогов
+                        должны закрываться нажатием Enter после заполнения,
+                        везде». */}
+                    <AutoGrowTextarea
+                      id="mResult"
+                      minRows={2}
+                      placeholder="Кратко: что решили, что дальше…"
+                      value={result}
+                      onChange={setResult}
+                      onEnter={() => setStatus("success")}
+                    />
+                    <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
+                  </div>
+                  <div className="field-hint">Enter — завершить успешно, Shift+Enter — новая строка.</div>
+                  <div className="outcome-actions">
+                    <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" onClick={() => setStatus("success")}>
+                      <Icon name="check" size={15} /> Успешно
+                    </button>
+                    <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" onClick={() => setStatus("no_result")}>
+                      <Icon name="ban" size={15} /> Без результата
+                    </button>
+                    {resolved && (
+                      <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => setStatus("planned")}>
+                        <Icon name="reset" size={15} /> Вернуть в план
+                      </button>
+                    )}
+                  </div>
+                  {/* Блока «Перенести следующий этап» здесь больше нет.
+                      У встречи есть кнопка ⇢ в списке, и она спрашивает дату
+                      и время тем же окном (useDateTimeConfirm). */}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-chat-pane">
+              <ItemChat kind="meeting" itemId={meeting.id} />
+            </div>
+          </div>
         ) : (
           <>
             {/* Название — первым полем.
@@ -519,84 +592,6 @@ export default function MeetingModal({
 
           </>
         )}
-
-        {/* Предложенную встречу назначает тот, кто её собрал: право
-            занимать чужое время у него ровно такое же, как у всех. До
-            этого она видна, по ней можно ответить, но ни в календарь, ни в
-            напоминания она не попадает. */}
-        {proposed && canConfirm && (
-          <div className="field proposed-row">
-            <div className="proposed-text">
-              Пока это предложение: время ни у кого не занято и напоминаний нет. Когда ответят все, встреча назначится
-              сама — или назначьте сейчас, не дожидаясь.
-            </div>
-            <button type="button" className="btn btn-small btn-primary" id="confirmMeetingBtn" onClick={() => setStatus("planned")}>
-              <Icon name="check" size={15} /> Назначить
-            </button>
-          </div>
-        )}
-        {proposed && !canConfirm && (
-          <div className="field proposed-row">
-            <div className="proposed-text">
-              {/* Ни имени, ни должности: эту строку читают четырнадцать
-                  человек, и ответ на «когда же она станет встречей»
-                  зависит теперь от них самих, а не от того, кто главный. */}
-              Это предложение: время оно пока не занимает. Ответьте — когда ответят все, встреча назначится.
-            </div>
-          </div>
-        )}
-
-        {isEditing && canEdit && (
-          <div className="field outcome-field" id="outcomeField">
-            <label>Итог встречи</label>
-            <div className={"outcome-badge" + (resolved ? ` show ${meeting.status}` : "")} id="outcomeBadge">
-              {resolved ? outcomeLabel(meeting.status) + (meeting.movedToDate ? " · перенесено на " + fmtDate(meeting.movedToDate) : "") : ""}
-            </div>
-            <div className="input-with-mic">
-              {/* Enter завершает встречу успешно — по правилу Кирилла
-                  21.09.2026 «любые заполнения результатов или итогов должны
-                  закрываться нажатием Enter после заполнения, везде».
-                  «Успешно» здесь не догадка, а исход по умолчанию: именно
-                  им кончаются почти все встречи, а «без результата» — это
-                  отдельное решение, которое и нажимают отдельно. Подпись
-                  под полем говорит об этом вслух: Enter, срабатывающий
-                  неожиданно, хуже Enter, который не срабатывает. */}
-              <AutoGrowTextarea
-                id="mResult"
-                minRows={2}
-                placeholder="Кратко: что решили, что дальше…"
-                value={result}
-                onChange={setResult}
-                onEnter={() => setStatus("success")}
-              />
-              <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
-            </div>
-            <div className="field-hint">Enter — завершить успешно, Shift+Enter — новая строка.</div>
-            <div className="outcome-actions">
-              <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" onClick={() => setStatus("success")}>
-                <Icon name="check" size={15} /> Успешно
-              </button>
-              <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" onClick={() => setStatus("no_result")}>
-                <Icon name="ban" size={15} /> Без результата
-              </button>
-              {resolved && (
-                <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => setStatus("planned")}>
-                  <Icon name="reset" size={15} /> Вернуть в план
-                </button>
-              )}
-            </div>
-            {/* Блока «Перенести следующий этап» здесь больше нет.
-                Он занимал полкарточки — календарь, ряд часов и кнопка —
-                ради действия, которое делают одним нажатием в списке: у
-                встречи есть кнопка ⇢, и она спрашивает дату и время тем же
-                окном (useDateTimeConfirm). Второй способ сделать то же самое,
-                вчетверо длиннее, только удлинял карточку. */}
-          </div>
-        )}
-
-        {/* Обсуждение встречи — то же самое обсуждение, что и у задачи:
-            одна таблица, один вид, одни правила. */}
-        {meeting && <ItemChat kind="meeting" itemId={meeting.id} />}
 
         <div className="modal-actions">
           <div className="left">
