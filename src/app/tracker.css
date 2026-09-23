@@ -1054,6 +1054,10 @@
   }
   .field-mic-btn:hover{color:var(--accent); border-color:var(--accent);}
   .field-mic-btn.listening{color:var(--high); border-color:var(--high); background:var(--high-bg); animation:quick-add-mic-pulse 1s ease-in-out infinite;}
+  /* Пустое поле — нечего добавлять, и кнопка говорит об этом заранее, а не
+     нажатием в пустоту. */
+  .idea-add-btn:disabled{opacity:.45; cursor:default;}
+  .idea-add-btn:disabled:hover{color:var(--ink-soft); border-color:var(--line-soft);}
   /* Назначенная встреча: «когда» и «кто» — факт, который читают, а не поля.
      Раньше здесь стояли календарь, сетка из двадцати кнопок времени и
      четырнадцать кнопок состава — полтора экрана на то, что менять всё
