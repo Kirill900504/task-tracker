@@ -164,7 +164,9 @@ export default function TaskModal({
   // задаче и чего от меня ждут (см. lib/ownership.myAssigneeId).
   myAssigneeId?: string;
   onAcceptWork?: (participantId: string) => Promise<void>;
-  onReportWork?: (participantId: string, comment: string) => Promise<void>;
+  // Отчёт вместе с документами: файлы грузит хук, маршрут получает их
+  // описания (см. lib/resultFiles и миграцию 0039).
+  onReportWork?: (participantId: string, comment: string, files: File[]) => Promise<void>;
   onDeclineWork?: (participantId: string, reason: string) => Promise<void>;
   onAskReschedule?: (participantId: string, to: string, reason: string) => Promise<void>;
 }) {
@@ -515,10 +517,10 @@ export default function TaskModal({
             deadline={task.deadline || ""}
             returnedComment={task.approvalState === "returned" ? task.approvalComment || "" : ""}
             onAccept={() => onAcceptWork?.(myPart.id) ?? Promise.resolve()}
-            onReport={(comment) => onReportWork?.(myPart.id, comment) ?? Promise.resolve()}
+            onReport={(comment, files) => onReportWork?.(myPart.id, comment, files) ?? Promise.resolve()}
             onDecline={(reason) => onDeclineWork?.(myPart.id, reason) ?? Promise.resolve()}
             onAskReschedule={(to, reason) => onAskReschedule?.(myPart.id, to, reason) ?? Promise.resolve()}
-            onReported={onClose}
+            onAnswered={onClose}
           />
         )}
 
