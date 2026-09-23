@@ -23,7 +23,7 @@ import TaskModal from "./TaskModal";
 import SendMenu from "./SendMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useIsMiniApp } from "@/lib/miniApp";
-import { useTaskParticipants } from "@/hooks/useTaskParticipants";
+import type { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { useSectionAssignees } from "@/hooks/useSectionAssignees";
 import { hasDeclined, progressShort, taskStage } from "@/lib/taskProgress";
 import { peopleLoad } from "@/lib/peoplePanel";
@@ -42,6 +42,7 @@ import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 export default function TasksPanel({
   tasks,
   allTasks,
+  participants,
   sections,
   assignees,
   actions,
@@ -79,6 +80,19 @@ export default function TasksPanel({
   // приёмке), не названия и не содержание чужих задач. Необязательный:
   // без него используется `tasks`.
   allTasks?: Task[];
+  // Кто на задачах — поднят в NewTracker.tsx (23.09.2026), чтобы видимость
+  // (`visibleTasks`) и действия на доске (принять/отчитаться/приёмка)
+  // читали ОДНУ подписку на task_participants, а не заводили каждая свою.
+  // Раньше у панели был собственный `useTaskParticipants()`, и второй
+  // экземпляр наверху (только на чтение, для фильтра видимости) завёл
+  // вторую независимую подписку с собственным циклом перезагрузки — оба
+  // канала слушают одну и ту же таблицу, но перезагружаются не синхронно,
+  // и именно это уронило e2e «принятая задача открывается заново кнопкой
+  // в карточке»: окно не успевало закрыться вовремя, потому что состояние,
+  // которое решает, закрывать ли его, ехало по одному из двух каналов
+  // чуть позже другого. Один экземпляр наверху, проп вниз — тот же
+  // принцип, что уже применён для tasks/meetings/ideas.
+  participants: ReturnType<typeof useTaskParticipants>;
   sections: Section[];
   assignees: string[];
   actions: {
@@ -161,9 +175,6 @@ export default function TasksPanel({
   // ПК держит его в обычном окне) — поэтому строка разделов гасится этим
   // признаком отдельно, а не только шириной экрана.
   const miniApp = useIsMiniApp();
-  // Кто на задаче — один слой на всю панель: и карточки, и форма
-  // читают отсюда, чтобы не заводить по подписке на каждую карточку.
-  const participants = useTaskParticipants();
   // Кто отвечает за раздел — отсюда берутся люди для задачи, заведённой
   // правой кнопкой по разделу.
   const sectionLinks = useSectionAssignees();

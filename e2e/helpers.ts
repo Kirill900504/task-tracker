@@ -118,3 +118,13 @@ export async function settled(locator: Locator, tries = 20): Promise<{ x: number
   }
   throw new Error('элемент так и не перестал двигаться');
 }
+
+// Выйти — на компьютере. Отдельный `#signOutBtn` исчез 23.09.2026 вместе с
+// «личным кабинетом» в шапке (кнопка с именем открывает меню, и «Выйти» —
+// один из его пунктов, как «Команда» и подключение мессенджера). Три места
+// звали старую кнопку напрямую по id и молча упёрлись в её исчезновение —
+// с этого момента про выход знает только этот хелпер.
+export async function signOut(page: Page) {
+  await page.click("#accountBtn");
+  await page.locator(".export-item", { hasText: "Выйти" }).click();
+}

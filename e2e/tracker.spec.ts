@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
-import { dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, settled as settledBox } from "./helpers";
+import { dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, signOut, settled as settledBox } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // The one smoke test covering the actual "Definition of Done" checklist
@@ -64,7 +64,7 @@ test("full loop: login, task, meeting, idea, calendar, logout", async ({ page })
   await expect(page.locator("#calMonthLabel")).not.toBeEmpty();
 
   // ---- Logout ----
-  await page.click("#signOutBtn");
+  await signOut(page);
   await expect(page).toHaveURL(/\/login/);
 });
 
@@ -141,7 +141,7 @@ test("completing a task survives an immediate sign-out", async ({ page }) => {
 
   // Mark done, then sign out immediately — no wait for that write to settle.
   await taskCard.locator(".check").click();
-  await page.click("#signOutBtn");
+  await signOut(page);
   await expect(page).toHaveURL(/\/login/);
 
   await login(page);
@@ -266,7 +266,7 @@ test("deleting a task survives an immediate sign-out", async ({ page }) => {
   await page.click("#deleteTaskBtn");
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.click("#askOkBtn");
-  await page.click("#signOutBtn");
+  await signOut(page);
   await expect(page).toHaveURL(/\/login/);
 
   await login(page);
@@ -334,7 +334,12 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   await expect(row).toBeVisible({ timeout: 20_000 });
   await expect(row).toContainText("Договорились по срокам");
   await row.locator(".done-list-text").click();
-  await expect(page.locator("#mResult")).toHaveValue("Договорились по срокам");
+  // Закрытая встреча заперта (23.09.2026, «закрытые или вычеркнутые
+  // события — не подлежат изменениям и доступны только к просмотру»):
+  // итог теперь текст внутри #outcomeField, а не поле #mResult — оно
+  // рисуется только пока встреча ещё не закрыта.
+  await expect(page.locator("#outcomeField")).toContainText("Договорились по срокам");
+  await expect(page.locator("#mResult")).toHaveCount(0);
 });
 
 // A recurring task's rule has to survive the round trip through the
@@ -997,10 +1002,13 @@ test("закрытие встречи из списка спрашивает и�
   await expect(chip).toHaveCount(0);
   await waitForSaved(page);
 
-  // Итог сохранён там же, где его потом читают, — в самой встрече.
+  // Итог сохранён там же, где его потом читают, — в самой встрече. Закрытая
+  // встреча заперта: итог теперь текст в #outcomeField, а не поле #mResult
+  // (см. комментарий у того же перехода выше).
   await page.click("#meetingsDoneBtn");
   await page.locator(".done-list-row", { hasText: title }).locator(".done-list-text").click();
-  await expect(page.locator("#mResult")).toHaveValue("Договорились по срокам");
+  await expect(page.locator("#outcomeField")).toContainText("Договорились по срокам");
+  await expect(page.locator("#mResult")).toHaveCount(0);
 });
 
 // Люди в задаче: нажал — выбрал роль, нажал второй раз — снял.
