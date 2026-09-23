@@ -861,22 +861,27 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       if (cancelled || catchingUp || offlineRef.current || !userIdRef.current) return;
       catchingUp = true;
       try {
-        // Снимок пары «что показано / что подтвердила база» берётся ДО
-        // чтения, и это не мелочь, а починка настоящей потери данных.
+        // Две половины пары снимаются в РАЗНЫЕ моменты, и это главное
+        // место во всём догоне: каждая половина отвечает на свой вопрос.
         //
-        // Взятый ПОСЛЕ, он описывал бы мир, которого ответ уже не видел:
-        // синхронизация, успевшая записать строку за те секунды, что шёл
-        // запрос, помечает её в shadow как подтверждённую — а в пришедшем
-        // ответе её нет, потому что запрос ушёл раньше. Слияние читает это
-        // как «строка была и на сервере пропала», то есть как удаление, и
-        // честно убирает её с экрана. Проверено на боевом: мысль,
-        // записанная минуту назад, исчезала, оставаясь в базе.
+        // shadow — ДО чтения. Он отвечает «что база уже подтверждала, когда
+        // мы спрашивали». Синхронизация, успевшая записать строку за те
+        // секунды, что шёл запрос, пометит её подтверждённой — а в ответе,
+        // ушедшем раньше, её нет. Взяв shadow ПОСЛЕ, слияние прочитало бы
+        // это как «строка была и на сервере пропала», то есть как удаление
+        // на другом устройстве, и убрало бы её с экрана. Проверено на
+        // боевом: мысль, записанная минуту назад, исчезала, оставаясь в
+        // базе. Со снимком «до» она выглядит работой, которая ещё не
+        // уехала, и остаётся; цена — лишний upsert той же строки, то есть
+        // ничего.
         //
-        // Снимок до запроса переворачивает это в безопасную сторону: всё,
-        // что подтвердилось за время чтения, выглядит как работа, которая
-        // ещё не уехала, и остаётся на экране. Цена — лишний upsert той же
-        // строки на следующей синхронизации, то есть ничего.
-        const before = { live: { ...liveRef.current }, shadow: { ...shadowRef.current } };
+        // live — наоборот, на момент ПРИМЕНЕНИЯ (ниже). Он отвечает «что
+        // человек видит прямо сейчас», а за секунду чтения он успевает
+        // нажать галочку, дописать строку, перетащить карточку. Взятый до
+        // запроса, он не знал бы об этом — и  стёр
+        // бы нажатие вместе со всем, что за ним. Одна и та же ошибка с
+        // двух сторон: половина, взятая не в свой момент, теряет работу.
+        const shadowBefore = { ...shadowRef.current };
         let results;
         try {
           results = await loadAll();
@@ -900,6 +905,10 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         // придёт через минуту и застанет базу в покое.
         if (pendingCountRef.current > 0) return;
 
+        // Вот он, второй момент: всё, что человек сделал, пока шло чтение,
+        // уже здесь.
+        const live = { ...liveRef.current };
+
         shadowRef.current = {
           tasks: snapshotList(server.tasks),
           meetings: snapshotList(server.meetings),
@@ -909,15 +918,15 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         };
 
         const next: TrackerLists = hasUnsyncedWork(
-          before.live as unknown as Record<string, unknown[]>,
-          before.shadow as unknown as Record<string, unknown[]>,
+          live as unknown as Record<string, unknown[]>,
+          shadowBefore as unknown as Record<string, unknown[]>,
         )
           ? {
-              tasks: applyLocalChanges(server.tasks, before.live.tasks, before.shadow.tasks),
-              meetings: applyLocalChanges(server.meetings, before.live.meetings, before.shadow.meetings),
-              ideas: applyLocalChanges(server.ideas, before.live.ideas, before.shadow.ideas),
-              assignees: applyLocalNameChanges(server.assignees, before.live.assignees, before.shadow.assignees),
-              sections: applyLocalChanges(server.sections, before.live.sections, before.shadow.sections),
+              tasks: applyLocalChanges(server.tasks, live.tasks, shadowBefore.tasks),
+              meetings: applyLocalChanges(server.meetings, live.meetings, shadowBefore.meetings),
+              ideas: applyLocalChanges(server.ideas, live.ideas, shadowBefore.ideas),
+              assignees: applyLocalNameChanges(server.assignees, live.assignees, shadowBefore.assignees),
+              sections: applyLocalChanges(server.sections, live.sections, shadowBefore.sections),
             }
           : server;
 
@@ -928,23 +937,23 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         // жеста роняет его).
         liveRef.current = next;
         let touched = false;
-        if (!sameLists(before.live.tasks, next.tasks)) {
+        if (!sameLists(live.tasks, next.tasks)) {
           setTasks(next.tasks);
           touched = true;
         }
-        if (!sameLists(before.live.meetings, next.meetings)) {
+        if (!sameLists(live.meetings, next.meetings)) {
           setMeetings(next.meetings);
           touched = true;
         }
-        if (!sameLists(before.live.ideas, next.ideas)) {
+        if (!sameLists(live.ideas, next.ideas)) {
           setIdeas(next.ideas);
           touched = true;
         }
-        if (!sameLists(before.live.assignees, next.assignees)) {
+        if (!sameLists(live.assignees, next.assignees)) {
           setAssignees(next.assignees);
           touched = true;
         }
-        if (!sameLists(before.live.sections, next.sections)) {
+        if (!sameLists(live.sections, next.sections)) {
           setSections(next.sections);
           touched = true;
         }
