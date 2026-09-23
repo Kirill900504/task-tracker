@@ -7,7 +7,7 @@
 // as legacy — it's a per-device "don't repeat this notification" cache,
 // deliberately never synced to Supabase.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isDueToday, isOverdue, refreshRecurringStatuses, todayStr } from "@/lib/taskDisplay";
+import { isDueToday, refreshRecurringStatuses, todayStr } from "@/lib/taskDisplay";
 import type { Meeting, Task } from "@/types/tracker";
 
 const LS_NOTIFIED = "kkt_notified_v2";
@@ -32,14 +32,19 @@ function hasNotificationApi(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
 }
 
-// A due task used to announce itself TWICE: a system notification in the
-// corner of the screen and an in-app toast over the board, word for word
-// the same. The system one is the better of the two — it arrives when the
-// tracker is behind another window, which is exactly when a reminder is
-// worth anything — so the toast is now only what is left when the browser
-// cannot deliver one. Not removed outright: without permission (or without
-// the API at all) dropping it would mean no reminder whatsoever, and
-// silence is worse than a duplicate.
+// A due task announces itself twice on purpose, since 23.09.2026: a system
+// notification (when the tracker is behind another window — the one moment
+// a reminder is worth anything) AND an in-app toast, bottom-right, the same
+// way Telegram and MAX show both. It used to be either/or — the toast only
+// fired when the browser had no notification permission — and that quietly
+// stopped it the moment permission was ever granted, which for Кирилл was
+// long before he asked for it: «я просил убрать эти нелепые уведомления и
+// оставить только те, что вылетали в правом нижнем углу… а сейчас почему-то
+// не вылетают». They were not gone, just permanently deferred to the OS,
+// which the desktop shell and a backgrounded phone browser both swallow
+// silently. Same reminder, shown both places now — nothing to unify since
+// they are not a duplicate of the SAME channel, one is in-tab and one is
+// not.
 function canNativeNotify(): boolean {
   return hasNotificationApi() && Notification.permission === "granted";
 }
@@ -63,7 +68,6 @@ export function useNotifications({
   ready: boolean;
 }) {
   const notifiedRef = useRef<Record<string, boolean>>({});
-  const [bannerText, setBannerText] = useState<string | null>(null);
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
 
   useEffect(() => {
@@ -99,8 +103,6 @@ export function useNotifications({
     }
 
     const today = todayStr();
-    let overdueCount = 0;
-    let dueTodayCount = 0;
 
     refreshed.forEach((t) => {
       if (t.status === "done") return;
@@ -111,16 +113,14 @@ export function useNotifications({
           due = true;
           label = t.title;
         }
-        if (isOverdue(t)) overdueCount++;
       } else if (isDueToday(t)) {
         due = true;
         label = t.title + " (повторяющаяся)";
       }
       if (!due) return;
-      dueTodayCount++;
       const toastKey = `toast_${t.id}_${today}`;
       const nativeKey = `native_${t.id}_${today}`;
-      if (!canNativeNotify() && !notifiedRef.current[toastKey]) {
+      if (!notifiedRef.current[toastKey]) {
         markNotified(toastKey);
         showToast("Задача на сегодня", label + (t.assignee ? " — " + t.assignee : ""));
       }
@@ -129,15 +129,6 @@ export function useNotifications({
         if (canNativeNotify()) markNotified(nativeKey);
       }
     });
-
-    if (overdueCount > 0 || dueTodayCount > 0) {
-      const parts: string[] = [];
-      if (overdueCount > 0) parts.push(`${overdueCount} просроченных`);
-      if (dueTodayCount > 0) parts.push(`${dueTodayCount} на сегодня`);
-      setBannerText(`⚠ ${parts.join(", ")} — проверьте список задач.`);
-    } else {
-      setBannerText(null);
-    }
   }, [tasks, saveTask, showToast]);
 
   const checkMeetingReminders = useCallback(() => {
@@ -150,10 +141,6 @@ export function useNotifications({
       fn();
       if (!requireGranted || canNativeNotify()) markNotified(key);
     }
-    // Same rule as the due-task reminder above: the toast is the stand-in
-    // for a system notification, not its twin.
-    const toastOnly = !canNativeNotify();
-
     meetings.forEach((m) => {
       if (m.date !== today || !m.time) return;
       const [hh, mm] = m.time.split(":").map(Number);
@@ -162,11 +149,11 @@ export function useNotifications({
       const who = m.participants.length ? " · " + m.participants.join(", ") : "";
 
       if (nowMin >= mMin - 15 && nowMin < mMin) {
-        if (toastOnly) fireOnce(`toast_meet15_${m.id}_${today}`, () => showToast("Встреча через 15 минут", `${m.time} — ${m.title}${who}`));
+        fireOnce(`toast_meet15_${m.id}_${today}`, () => showToast("Встреча через 15 минут", `${m.time} — ${m.title}${who}`));
         fireOnce(`native_meet15_${m.id}_${today}`, () => browserNotify("Через 15 минут: " + m.title, m.time + who), true);
       }
       if (nowMin >= mMin && nowMin <= mMin + 1) {
-        if (toastOnly) fireOnce(`toast_meet0_${m.id}_${today}`, () => showToast("Встреча начинается", `${m.time} — ${m.title}${who}`));
+        fireOnce(`toast_meet0_${m.id}_${today}`, () => showToast("Встреча начинается", `${m.time} — ${m.title}${who}`));
         fireOnce(`native_meet0_${m.id}_${today}`, () => browserNotify("Встреча сейчас: " + m.title, m.time + who), true);
       }
     });
@@ -210,5 +197,5 @@ export function useNotifications({
     }
   }, []);
 
-  return { bannerText, permission, requestPermission };
+  return { permission, requestPermission };
 }

@@ -36,13 +36,29 @@ function forget() {
   cached = null;
 }
 
-// Смена входа — единственное, что делает ответ неверным.
+// Смена входа — не единственное, что делает ответ неверным.
+//
+// 23.09.2026: Игорь Витковский написал в обсуждение и получил «new row
+// violates row-level security policy for table item_comments». Причина не в
+// правах — его членство было настоящим, — а в том, что оно появилось ПОСЛЕ
+// того, как эта вкладка уже спросила и запомнила ответ: строка
+// workspace_members ещё не существовала (или он не был активен), кэш
+// зафиксировал `assigneeId: null`, и с этой минуты каждая отправка слала
+// `author_assignee_id: null`, а база сверяет его с настоящим значением —
+// несовпадение и есть отказ RLS. Auth здесь ни при чём: сессия та же, что
+// была, событие входа не срабатывает.
+// Поэтому кэш забывается и при изменении самого членства — тем же приёмом,
+// каким `sharedStore` считает устаревшим список команды по этой же таблице.
 function watchAuth() {
   if (watching) return;
   watching = true;
-  createClient().auth.onAuthStateChange((event) => {
+  const db = createClient();
+  db.auth.onAuthStateChange((event) => {
     if (event === "SIGNED_OUT" || event === "SIGNED_IN" || event === "USER_UPDATED") forget();
   });
+  db.channel("me-membership")
+    .on("postgres_changes", { event: "*", schema: "public", table: "workspace_members" }, () => forget())
+    .subscribe();
 }
 
 async function load(): Promise<Me> {

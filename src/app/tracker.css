@@ -1285,11 +1285,14 @@
   .stop-recur-row{margin-top:8px; display:none;}
   .stop-recur-row.show{display:block;}
 
-  /* Toast notifications */
-  /* pointer-events:none на контейнере — иначе пустое пространство вокруг
-     всплывающих уведомлений перехватывало клики по кнопкам под ним (в т.ч.
-     крестики закрытия/удаления задач), пока уведомление было видно. */
-  #toast-stack{position:fixed; top:16px; right:16px; z-index:200; display:flex; flex-direction:column; gap:10px; max-width:320px; pointer-events:none;}
+  /* Toast notifications — нижний правый угол, карточкой, «как в МАХ и
+     телеграме» (слова Кирилла 23.09.2026). Раньше плашка стояла в левом
+     верхнем углу сплошной заливкой var(--accent) — то, что рисует системное
+     всплытие браузера, а не мессенджер, на который просили равняться.
+     pointer-events:none на контейнере — иначе пустое пространство вокруг
+     уведомлений перехватывало клики по кнопкам под ним (в т.ч. крестики
+     закрытия/удаления задач), пока уведомление было видно. */
+  #toast-stack{position:fixed; bottom:16px; right:16px; z-index:200; display:flex; flex-direction:column-reverse; gap:10px; max-width:320px; pointer-events:none;}
   #syncStatus{
     position:fixed; left:16px; bottom:16px; z-index:150; pointer-events:none;
     background:var(--paper); border:1px solid var(--line); border-radius:6px;
@@ -1297,33 +1300,44 @@
     opacity:0; transition:opacity .3s ease;
   }
   #syncStatus.show{opacity:1;}
-  /* Текст уведомления цитирует название задачи, то есть его пишет человек,
-     и слово без единого пробела обязано переноситься по буквам: «11111…»
-     выезжало за скруглённый край плашки и печаталось поверх экрана. То же
-     правило и по той же причине, что у .done-list-* ниже. */
+  /* Карточка — тот же язык, что у пузыря чужой реплики в обсуждении
+     (.chat-msg): тёмная заливка, тонкая рамка, мягкая тень — а не цветной
+     баннер. Кружок со значком слева играет роль аватара во входящем
+     сообщении: уведомление узнают по нему раньше, чем читают текст.
+     Текст цитирует название задачи, то есть его пишет человек, и слово без
+     единого пробела обязано переноситься по буквам: «11111…» выезжало за
+     скруглённый край плашки и печаталось поверх экрана. То же правило и по
+     той же причине, что у .done-list-* ниже. */
   .toast{
-    position:relative; overflow-wrap:anywhere;
-    background:var(--accent); color:#F3F8FA; padding:12px 40px 12px 14px; border-radius:var(--radius-md); font-size:13px;
-    box-shadow:var(--shadow-2); animation:slidein .2s ease-out; pointer-events:auto;
+    position:relative; overflow-wrap:anywhere; display:flex; align-items:flex-start; gap:10px;
+    background:var(--paper); color:var(--ink); padding:12px 34px 12px 12px; border-radius:var(--radius-lg);
+    border:1px solid var(--line-soft); font-size:13px;
+    box-shadow:var(--shadow-2), var(--edge); animation:toast-in .22s cubic-bezier(.2,.9,.3,1.1); pointer-events:auto;
   }
-  .toast b{display:block; margin-bottom:2px; font-size:12px; opacity:.75; font-family:var(--display); text-transform:uppercase; letter-spacing:.04em;}
+  .toast-icon{
+    flex:none; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:var(--accent-soft); color:var(--accent); margin-top:1px;
+  }
+  .toast-text{display:flex; flex-direction:column; gap:2px; min-width:0;}
+  .toast b{font-size:13.5px; font-weight:700; color:var(--ink); font-family:var(--display);}
+  .toast-body{color:var(--ink-soft); line-height:1.4;}
   /* Крестик — отдельным слоем поверх текста, а не float внутри него.
      Плавающий элемент рисуется НИЖЕ строчного содержимого соседнего блока,
      поэтому клик по нему попадал в заголовок: крестик было видно, но нажать
      его было нельзя — ни мышью, ни пальцем. */
   .toast .close{
     position:absolute; top:6px; right:6px; z-index:1;
-    width:30px; height:30px; display:flex; align-items:center; justify-content:center;
-    padding:0; border:0; border-radius:7px; background:none; color:inherit;
-    font-family:var(--sans); font-size:17px; line-height:1; cursor:pointer; opacity:.75;
+    width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+    padding:0; border:0; border-radius:7px; background:none; color:var(--ink-soft);
+    cursor:pointer; opacity:.85;
   }
-  .toast .close:hover{opacity:1; background:rgba(255,255,255,.16);}
+  .toast .close:hover{opacity:1; background:rgba(255,255,255,.08); color:var(--ink);}
   .toast-undo{
-    display:block; margin-top:8px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4);
-    color:#F3F8FA; border-radius:5px; padding:4px 10px; font-size:12px; cursor:pointer; font-family:var(--sans);
+    align-self:flex-start; margin-top:4px; background:var(--accent-soft); border:1px solid transparent;
+    color:var(--accent); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; font-family:var(--sans); font-weight:600;
   }
-  .toast-undo:hover{background:rgba(255,255,255,.25);}
-  @keyframes slidein{from{transform:translateX(20px); opacity:0;} to{transform:translateX(0); opacity:1;}}
+  .toast-undo:hover{background:var(--accent); color:#F3F8FA;}
+  @keyframes toast-in{from{transform:translateY(16px); opacity:0;} to{transform:translateY(0); opacity:1;}}
 
   .notif-banner{
     background:var(--high-bg); color:var(--high); border:1px solid var(--long-border); border-color:#5C3A32; border-radius:8px;
@@ -2201,11 +2215,11 @@
     #syncStatus{bottom:calc(80px + env(safe-area-inset-bottom, 0px));}
     .ms-link, .ms-link-dismissed{bottom:calc(80px + env(safe-area-inset-bottom, 0px)); left:12px; right:12px; max-width:none;}
     .sync-error-notice{bottom:calc(132px + env(safe-area-inset-bottom, 0px)); left:12px; right:12px; max-width:none;}
-    /* Тосты уезжают под шапку, чтобы не спорить с нижней навигацией. */
-    #toast-stack{top:auto; bottom:calc(84px + env(safe-area-inset-bottom, 0px)); right:12px; left:12px; max-width:none;}
+    /* Тосты поднимаются над нижней навигацией, чтобы не спорить с ней. */
+    #toast-stack{bottom:calc(84px + env(safe-area-inset-bottom, 0px)); right:12px; left:12px; max-width:none;}
     /* Под палец, а не под курсор */
     .toast{padding-right:52px;}
-    .toast .close{width:40px; height:40px; top:4px; right:4px; font-size:20px;}
+    .toast .close{width:40px; height:40px; top:4px; right:4px;}
 
     /* Поиск открывается листом сверху, а не по центру */
     #searchOverlay{padding-top:0;}

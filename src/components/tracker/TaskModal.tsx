@@ -479,16 +479,10 @@ export default function TaskModal({
             {q.label}
           </button>
         ))}
-        {form.deadline && (
-          <button
-            type="button"
-            className="participant-chip chip-del"
-            title="Убрать срок"
-            onClick={() => setForm((f) => ({ ...f, deadline: "" }))}
-          >
-            ✕
-          </button>
-        )}
+        {/* Отдельного крестика «убрать срок» больше нет — слова Кирилла
+            23.09.2026: «пусть там так же работает, ты просто выбираешь
+            другой вариант и оно само меняется. Крестик — лишний». Выбор
+            другой кнопки или дня в календаре по-прежнему меняет срок сам. */}
       </div>
     </div>
   );

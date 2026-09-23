@@ -609,7 +609,6 @@ export default function NewTracker() {
               })
             }
             justCreatedId={justCreatedTaskId}
-            notifBanner={notifications.bannerText}
             extraBanner={
               offline && (
                 <div className="notif-banner show" id="offlineBanner">

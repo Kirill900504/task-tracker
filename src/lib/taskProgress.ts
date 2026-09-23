@@ -115,6 +115,18 @@ export function taskStage(participants: TaskParticipant[], approval: ApprovalSta
   // have or have not pressed — including a task closed over their heads.
   if (approval === "accepted") return "done";
   if (approval === "returned") return "returned";
+  // 23.09.2026: a task got stuck with no button that could close it. The
+  // server had already written approval_state = "awaiting_review" (every
+  // executor had reported), but the participant rows the card was reading
+  // locally had gone empty — a sync race, not a real state — and this
+  // function used to re-derive the stage from THOSE rows instead of trusting
+  // the column the server already committed. taskProgress([]) says
+  // allAnswered: false, so the stage fell back to "sent" and every review
+  // action (including the force-close escape hatch, gated on
+  // `progress.total > 0`) disappeared at once. Two truths about one fact —
+  // exactly the pattern this file's own header warns against — and here the
+  // derived one won when it should have deferred to the column.
+  if (approval === "awaiting_review") return "awaiting_review";
 
   const progress = taskProgress(participants);
   // Ответили все — дальше слово за постановщиком, даже если кто-то из

@@ -64,7 +64,6 @@ export default function TasksPanel({
   filterAssignee,
   onFilterAssigneeChange,
   justCreatedId,
-  notifBanner,
   extraBanner,
 }: {
   // Уже сужено родителем до «моё» — где я постановщик, исполнитель,
@@ -143,8 +142,7 @@ export default function TasksPanel({
   filterAssignee: string;
   onFilterAssigneeChange: (name: string) => void;
   justCreatedId?: string | null;
-  notifBanner?: string | null;
-  // Rendered under the notification banner, in the same slot legacy's
+  // Rendered at the top of the column, in the same slot legacy's
   // #syncErrorBanner occupied (see SyncErrorBanner).
   extraBanner?: ReactNode;
 }) {
@@ -733,11 +731,6 @@ export default function TasksPanel({
 
   return (
     <div className="main-col dash-panel" id="mainCol" data-panel-id="mainCol">
-      {notifBanner && (
-        <div className="notif-banner show" id="notifBanner">
-          {notifBanner}
-        </div>
-      )}
       {extraBanner}
       {(() => {
         return (
@@ -1041,11 +1034,16 @@ export default function TasksPanel({
             // Задача только что создана — строки участия заводятся и по
             // имени из поля «Исполнитель», и по всем, кого добавили рядом.
             //
-            // И если кому-то она не ушла, об этом говорится вслух. Раньше
-            // ответ отбрасывался, и «Никита не подключён» терялось на самом
-            // частом пути: вписал имя в поле, сохранил, считаешь, что
-            // поручил.
+            // И если кому-то она не ушла, об этом говорится вслух — но не
+            // на телефоне: там всплывающий тост поверх только что закрытой
+            // формы читается как ошибка создания, хотя задача уже сохранена
+            // (скрин 23.09.2026, «в мобильной версии при создании чего-то
+            // из событий убрать уведомления»). На компьютере всплывающее
+            // окно не занимает весь экран, и тост рядом с ним не путают с
+            // ответом на само действие; «не подключён» по-прежнему видно в
+            // карточке участника и придёт в утреннюю сводку.
             void participants.attachOnCreate(t.id, t.assignee, pending).then((notices) => {
+              if (isMobile) return;
               for (const notice of notices || []) toasts.showToast(notice);
             });
           }}

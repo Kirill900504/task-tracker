@@ -313,7 +313,12 @@ export default function TeamCompact({
         </div>
       )}
 
-      {progress.total > 0 && stage !== "done" && stage !== "awaiting_review" && (
+      {/* Раньше требовало хотя бы одного участника — а строку про 23.09.2026
+          в taskStage() потому и написали, что задача может остаться и БЕЗ
+          них (сбой синхронизации), и именно тогда эта кнопка — единственный
+          выход. Волевое закрытие не должно зависеть от того, сошлась ли
+          локальная копия участников с тем, что знает сервер. */}
+      {stage !== "done" && stage !== "awaiting_review" && (
         <button className="btn btn-small tp-force" type="button" onClick={() => void handleForceClose()}>
           Закрыть волевым решением
         </button>

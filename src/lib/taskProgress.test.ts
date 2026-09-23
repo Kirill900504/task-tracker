@@ -117,6 +117,16 @@ describe("the stage a card shows", () => {
     expect(taskStage(list, "returned")).toBe("returned");
   });
 
+  // 23.09.2026: participant rows went empty locally (a sync race) while the
+  // server had already committed approval_state = "awaiting_review" — and
+  // the card, re-deriving the stage from the now-empty list, fell back to
+  // "sent" and lost every review button, including force-close. The column
+  // the server wrote is the truth here; the participant list is only used
+  // to derive it when the server hasn't already said.
+  it("не теряет приёмку, если строки участников опустели, а сервер уже сказал своё", () => {
+    expect(taskStage([], "awaiting_review")).toBe("awaiting_review");
+  });
+
   it("stays done after a forced close, whatever the executors did", () => {
     expect(taskStage([person("Аня"), person("Борис")], "accepted")).toBe("done");
   });
