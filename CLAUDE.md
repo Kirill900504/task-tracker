@@ -1853,7 +1853,16 @@ by a running `next start` (and by OneDrive) — stop the server first.
   unreadable. On 15.09.2026 all four «silent» people were exactly that.
 - Sending a task to the assignee at the moment of assignment is **done**, not
   pending — `assignWork.ts` treats it as one of the three notifications that
-  cannot be switched off. The ✈ button stayed for «покажи это ещё и Ане».
+  cannot be switched off. «Покажи это ещё и Ане» осталось, но не в форме:
+  кнопка отправки стояла рядом с «Сохранить», и 21.09.2026 Кирилл сказал о
+  ней прямо — «что значит эта нижняя серая дополнительная кнопка
+  „отправить“? там предлагается выбор кому отправить вне задачи??? что за
+  бред? где логика? удали её за ненадобностью». Он прав: в ряду сохранения
+  она читалась как второй способ поручить, хотя задача уходит исполнителю
+  сама. Теперь ✈ живёт только там, где отправка и есть отдельное действие —
+  в меню карточки (⋮ на телефоне) и в «Сегодня». Из окна задачи и окна
+  встречи она убрана вместе с `SendMenu`; вернуть её туда — значит вернуть
+  тот же вопрос.
   What that send SAYS («не подключён», «получит утром») has to reach the
   screen: `assignPerson` returns it, `attachOnCreate` collects it, and the
   card shows «📭 не подключён — задача не ушла» in place of «ждём ответа»

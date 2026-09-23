@@ -74,6 +74,19 @@ export type TaskProgress = {
   declined: { name: string; reason: string }[];
   // True only when there is somebody to wait for and nobody is left.
   allDone: boolean;
+  // Каждый исполнитель ОТВЕТИЛ — отчётом или отказом.
+  //
+  // Отказ — это ответ, и в этом весь смысл отдельной величины. Слова
+  // Кирилла 21.09.2026: «после отказа задача не переносится „на приёмку“».
+  // Он прав, и причина не в месте на доске: пока задача считалась «в
+  // работе», отказ никого ни к чему не обязывал — исполнитель уже
+  // ответил и ждёт решения, а задача лежала в столбце, который значит
+  // «идёт». Ждать в ней было некого.
+  //
+  // Поэтому «ответили все» шире, чем «сделали все»: доска и приёмка
+  // спрашивают именно её, а allDone остался для тех мест, где важно
+  // ровно «работа сдана» (например, текст сообщения постановщику).
+  allAnswered: boolean;
 };
 
 export function taskProgress(participants: TaskParticipant[]): TaskProgress {
@@ -89,6 +102,7 @@ export function taskProgress(participants: TaskParticipant[]): TaskProgress {
     pendingNames: pending.map((p) => p.name),
     declined: declined.map((p) => ({ name: p.name, reason: p.declineReason || "" })),
     allDone: list.length > 0 && done.length === list.length,
+    allAnswered: list.length > 0 && pending.length === 0,
   };
 }
 
@@ -99,7 +113,14 @@ export function taskStage(participants: TaskParticipant[], approval: ApprovalSta
   if (approval === "returned") return "returned";
 
   const progress = taskProgress(participants);
-  if (progress.allDone) return "awaiting_review";
+  // Ответили все — дальше слово за постановщиком, даже если кто-то из
+  // ответов «не могу». Принять тут нечего, а решить есть что: вернуть с
+  // объяснением, перенести срок или закрыть волевым решением. Пока это
+  // читалось как «blocked», задача стояла в «В работе» и не просила
+  // ничего ни у кого (см. allAnswered).
+  if (progress.allAnswered) return "awaiting_review";
+  // Кто-то не может, а кто-то ещё молчит: ждём остальных, но задача уже
+  // стоит, и это разные вещи.
   if (progress.declined.length) return "blocked";
   if (progress.acceptedCount > 0) return "accepted";
   return "sent";

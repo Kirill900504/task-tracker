@@ -262,9 +262,12 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   // сохранилось именно выбранное (время и участник видны в сводке), и то,
   // что редактировать их отсюда нечем: полей нет вовсе.
   await chip.click();
-  await expect(page.locator(".meeting-facts")).toContainText(title);
-  await expect(page.locator(".meeting-facts")).toContainText("10:00");
-  await expect(page.locator(".meeting-facts")).toContainText(participant);
+  // Сводка встречи — тот же блок, что у задачи (ItemFacts, «окно созданной
+  // встречи должно быть однотипным с окном созданной задачи»): название
+  // строкой над ней, дата, время и состав внутри.
+  await expect(page.locator(".meeting-fact-title")).toContainText(title);
+  await expect(page.locator("#meetingFacts")).toContainText("10:00");
+  await expect(page.locator("#meetingFacts")).toContainText(participant);
   await expect(page.locator("#mTimeGrid")).toHaveCount(0);
   await expect(page.locator("#mParticipants")).toHaveCount(0);
   await expect(page.locator("#mTitle")).toHaveCount(0);
@@ -720,11 +723,19 @@ test("a notification is closed by its cross", async ({ page }) => {
   await expect(toast).toHaveCount(0);
 });
 
-// Sending used to be a single button that went to the task's assignee and
-// nowhere else: if the person you wanted was not the assignee — or the
-// assignee was in no messenger at all — the tracker could not reach them.
-// Now the ✈ opens the list of everyone who is connected, with the people the
-// item already concerns at the top.
+// «Показать задачу ещё и Ане» живёт в меню карточки, а не в её форме.
+//
+// Кнопка отправки стояла в ряду с «Сохранить», и Кирилл 21.09.2026 сказал о
+// ней прямо: «что значит эта нижняя серая дополнительная кнопка
+// „отправить“? там предлагается выбор кому отправить вне задачи??? что за
+// бред? где логика? удали её за ненадобностью». Он прав: задача уходит
+// исполнителю сама, в момент назначения, а вторая кнопка рядом с
+// сохранением предлагала послать её тому, кто к ней не относится, — то есть
+// выглядела вторым способом поручить.
+//
+// Сама возможность осталась там, где она и есть отдельное действие: в меню
+// карточки (⋮ на телефоне). Тест ходит тем же путём и заодно сторожит, что
+// кнопки в форме больше нет.
 test("a task can be sent to any connected colleague, not only its assignee", async ({ page }) => {
   const title = `E2E отправка ${Date.now()}`;
   const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
@@ -748,18 +759,31 @@ test("a task can be sent to any connected colleague, not only its assignee", asy
   await page.fill("#fTitle", title);
   await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
-  await page.click(`.task:has-text("${title}")`);
 
-  await expect(page.locator("#sendTaskBtn")).toBeVisible();
-  await page.click("#sendTaskBtn");
+  // В форме кнопки отправки больше нет — и это проверяется, а не
+  // предполагается: она вернётся одной случайной правкой.
+  await page.click(`.task:has-text("${title}")`);
+  await expect(page.locator("#sendTaskBtn")).toHaveCount(0);
+  await page.click("#cancelBtn");
+  await expect(page.locator("#overlay")).toHaveCount(0);
+
+  // Меню карточки — телефонное, поэтому и окно на время теста телефонное.
+  await page.setViewportSize({ width: 390, height: 780 });
+  const card = page.locator(`.task:has-text("${title}")`).first();
+  await card.scrollIntoViewIfNeeded();
+  await card.locator(".task-menu-btn").click();
   const menu = page.locator(".action-menu");
   await expect(menu).toBeVisible();
-  await expect(menu.locator(".export-item", { hasText: "Игорь Витковский" })).toBeVisible();
+  await menu.locator(".export-item", { hasText: "Отправить участнику" }).click();
+
+  const sendMenu = page.locator(".action-menu");
+  await expect(sendMenu).toBeVisible();
+  await expect(sendMenu.locator(".export-item", { hasText: "Игорь Витковский" })).toBeVisible();
 
   // Nothing is sent by opening the menu.
   await page.keyboard.press("Escape");
-  await expect(menu).toHaveCount(0);
-  await expect(page.locator("#taskSendResult")).toHaveCount(0);
+  await expect(sendMenu).toHaveCount(0);
+  await page.setViewportSize({ width: 1280, height: 900 });
 });
 
 // «Не даёт ссылку ещё раз». Ссылка выдавалась исправно — её просто печатали

@@ -298,11 +298,18 @@ export async function handleColleagueCallback(
         .from("task_participants")
         .update({ declined_at: new Date().toISOString(), decline_reason: null, done_at: null, done_comment: null })
         .eq("id", participant.id);
+      // Отказ — ответ, и задача после него ждёт постановщика: то же, что
+      // делает кнопка «Не могу» в трекере (см. api/workspace/report). Две
+      // двери в одно действие обязаны оставлять задачу в одном состоянии —
+      // иначе отказ из мессенджера двигал бы её, а отказ из трекера нет.
+      const answered = await closeIfEveryoneReported(admin, task.id);
       return {
         toast: "Передал",
         rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
         notifyTo: task.created_by,
-        notifyOwner: `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
+        notifyOwner: answered
+          ? `⛔ ${colleague.name} не может выполнить: «${task.title}» — ответили все, задача ждёт вашего решения`
+          : `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
         notice: { kind: "declined", item: task.title, who: colleague.name },
       };
     }
@@ -497,17 +504,37 @@ export async function handleColleagueCallback(
   return { toast: "Это действие больше не доступно" };
 }
 
-// Все ли исполнители отчитались — и если да, задача уходит на приёмку.
+// Все ли исполнители ОТВЕТИЛИ — и если да, задача уходит на приёмку.
+//
+// Ответ — это отчёт ИЛИ отказ. Слова Кирилла 21.09.2026: «после отказа
+// задача не переносится „на приёмку“». Он прав, и дело не в столбце: пока
+// отказ не считался ответом, задача оставалась в состоянии «ждём
+// исполнителя» — а ждать было некого, человек уже сказал «не могу» и ждал
+// решения. Принимать в таком случае нечего, но решать есть что: вернуть с
+// объяснением, перенести срок, отдать другому или закрыть волевым
+// решением. Всё это — приёмка, то есть слово постановщика.
 //
 // Приёмка не закрывает задачу сама: B4 — «он отчитался» и «я проверил» это
 // разные события, и второе принадлежит человеку, а не боту. Поэтому здесь
 // выставляется только состояние ожидания, а `status` не трогается вовсе:
 // им владеет синхронизация трекера, и запись мимо неё откатится первой же
 // открытой вкладкой.
+//
+// То же правило живёт в браузере (taskProgress.allAnswered → lib/kanban), и
+// обе половины обязаны говорить одно: разойдись они — карточка стояла бы в
+// «На приёмке», а approval_state молчал бы, и утренняя сводка постановщика
+// об этой задаче не сказала бы ничего.
 export async function closeIfEveryoneReported(admin: SupabaseClient, taskId: string): Promise<boolean> {
-  const { data } = await admin.from("task_participants").select("role, done_at").eq("task_id", taskId);
-  const executors = ((data as { role: string; done_at: string | null }[]) || []).filter((p) => p.role === "executor");
-  if (!executors.length || executors.some((p) => !p.done_at)) return false;
+  const { data } = await admin
+    .from("task_participants")
+    .select("role, done_at, declined_at")
+    .eq("task_id", taskId);
+  type Row = { role: string; done_at: string | null; declined_at: string | null };
+  const executors = ((data as Row[]) || []).filter((p) => p.role === "executor");
+  // Отказ, отменённый собственным отчётом, отказом больше не считается —
+  // то же правило, что в hasDeclined: отчёт новее.
+  const answered = (p: Row) => !!p.done_at || !!p.declined_at;
+  if (!executors.length || executors.some((p) => !answered(p))) return false;
   await admin.from("tasks").update({ approval_state: "awaiting_review" }).eq("id", taskId);
   return true;
 }

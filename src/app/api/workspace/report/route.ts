@@ -249,8 +249,20 @@ export async function POST(req: Request) {
       .update({ declined_at: now, decline_reason: reason, done_at: null, done_comment: null })
       .eq("id", part.id);
     await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `⛔ ${myName} не может: ${reason}` });
-    await tell(`⛔ ${myName} не может «${title}»: ${reason}`, { kind: "declined", item: title, who: myName, what: reason });
-    return NextResponse.json({ ok: true });
+    // Отказ — тоже ответ, и после него задача ждёт решения постановщика, а
+    // не исполнителя. Раньше здесь не вызывалось ничего, и задача с
+    // единственным отказавшимся исполнителем оставалась «в работе»
+    // навсегда: ждать было некого, а на приёмке она не появлялась. Слова
+    // Кирилла 21.09.2026: «после отказа задача не переносится „на
+    // приёмку“».
+    const everyone = await closeIfEveryoneReported(admin, part.task_id);
+    await tell(
+      everyone
+        ? `⛔ ${myName} не может «${title}»: ${reason}\n\nОтветили все — задача ждёт вашего решения.`
+        : `⛔ ${myName} не может «${title}»: ${reason}`,
+      { kind: "declined", item: title, who: myName, what: reason },
+    );
+    return NextResponse.json({ ok: true, awaitingReview: everyone });
   }
 
   if (body.action === "reschedule") {

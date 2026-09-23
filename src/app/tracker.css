@@ -818,8 +818,12 @@
     font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);
   }
   .task-meta:empty{display:none;}
-  .task-assignee{font-weight:700; color:var(--assignee); white-space:nowrap;}
-  .task-from{color:var(--ink-soft);}
+  /* «Кто поручил → кому» — одной группой, чтобы стрелка не отрывалась от
+     имён переносом строки. */
+  .task-who{display:inline-flex; align-items:center; gap:5px; min-width:0; flex-wrap:wrap;}
+  .task-assignee{font-weight:700; color:var(--assignee); overflow-wrap:anywhere;}
+  .task-from{color:var(--ink-soft); overflow-wrap:anywhere;}
+  .task-arrow{color:var(--ink-soft); opacity:.7;}
   .task-due{white-space:nowrap;}
   .task-due.overdue-text{color:var(--high); font-weight:700;}
   .task-due.due-today-text{color:var(--today); font-weight:700;}
@@ -1000,19 +1004,89 @@
   /* Назначенная встреча: «когда» и «кто» — факт, который читают, а не поля.
      Раньше здесь стояли календарь, сетка из двадцати кнопок времени и
      четырнадцать кнопок состава — полтора экрана на то, что менять всё
-     равно нельзя (см. MeetingModal). Три строки говорят ровно то же. */
-  .meeting-facts{
-    padding:14px 16px; border:1px solid var(--line-soft); border-radius:var(--radius-md);
-    background:var(--paper-soft); box-shadow:var(--edge);
+     равно нельзя (см. MeetingModal).
+     Сами факты теперь рисует общий блок сводки (.facts ниже — он же в
+     карточке задачи, потому что «однотипное» значит одно и то же место), а
+     здесь остались только название встречи над ним и кнопка переноса.
+     Правила `.meeting-facts` и `.meeting-fact-row` убраны: разметки, к
+     которой они относились, больше нет, а мёртвый стиль читается как
+     работающий. */
+  .meeting-fact-title{
+    font-size:15px; font-weight:700; color:var(--ink); line-height:1.4;
+    margin-bottom:10px; overflow-wrap:anywhere;
   }
-  .meeting-fact-title{font-size:15px; font-weight:700; color:var(--ink); line-height:1.4; margin-bottom:8px;}
-  .meeting-fact-row{
-    display:flex; align-items:center; gap:8px; margin-top:5px;
-    font-size:13px; color:var(--ink-soft); line-height:1.45;
-  }
-  .meeting-fact-row span{min-width:0;}
-  .meeting-fact-row .icon{color:var(--ink-soft); margin-top:1px;}
   .meeting-move-btn{margin-top:12px;}
+
+  /* ----------------------------------------------------------------
+     Сводка задачи и встречи (ItemFacts.tsx)
+     Пары «кто» и «когда» в одной строке: «Постановщик — дата постановки»,
+     «Исполнитель — крайний срок». Просил этого Кирилл 21.09.2026, и
+     причина не в красоте: эти величины читают вместе, а столбцом из шести
+     строк их приходится собирать глазами. На узком окне пара
+     распадается в две строки — читать по одной всё равно лучше, чем
+     сжимать вдвое.
+     ---------------------------------------------------------------- */
+  .facts{
+    display:flex; flex-direction:column; gap:1px;
+    margin:0 0 14px; padding:4px 0;
+    border:1px solid var(--line-soft); border-radius:var(--radius-md);
+    background:var(--paper-soft); box-shadow:var(--edge); overflow:hidden;
+  }
+  .facts-row{display:grid; grid-template-columns:1fr 1fr; gap:1px;}
+  .facts-row.wide{grid-template-columns:1fr;}
+  .fact{
+    display:flex; flex-direction:column; gap:2px;
+    padding:9px 14px; min-width:0;
+  }
+  .fact-label{
+    font-size:11px; font-weight:var(--label-weight); letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-label); font-family:var(--display);
+  }
+  .fact-value{
+    font-size:13.5px; font-weight:600; color:var(--ink); line-height:1.4;
+    font-variant-numeric:var(--nums); overflow-wrap:anywhere;
+  }
+  .fact-value.muted{font-weight:500; color:var(--ink-soft);}
+  .fact-note{color:var(--ink-soft); font-weight:500;}
+  /* Состав встречи: имя с отметкой «буду / опоздаю / не смогу / молчит».
+     Значок стоит ПЕРЕД именем и красится сам — так в списке из пяти
+     человек видно, кого ещё ждём, не читая ни одного имени. */
+  .fact-people{display:flex; flex-wrap:wrap; gap:4px 10px;}
+  .fact-person{display:inline-flex; align-items:center; gap:5px; white-space:nowrap;}
+  .fact-person-mark{font-size:11.5px; line-height:1;}
+  .fact-person.vote-yes .fact-person-mark{color:var(--success);}
+  .fact-person.vote-no{color:var(--ink-soft);}
+  .fact-person.vote-no .fact-person-mark{color:var(--high);}
+  .fact-person.vote-late .fact-person-mark{color:var(--med);}
+  .fact-person.vote-none{color:var(--ink-soft);}
+  .fact-person.vote-none .fact-person-mark{color:var(--ink-soft); opacity:.6;}
+  @media (max-width:560px){
+    .facts-row{grid-template-columns:1fr;}
+  }
+
+  /* ----------------------------------------------------------------
+     Результат задачи (блок «Результат» в TaskModal)
+     Отчёты исполнителей: кто, когда и что именно сделано. Раньше это
+     жило строчкой в списке участников — между ролью и кнопкой «убрать»,
+     то есть в самом неудобном месте карточки. Постановщик приходит в
+     задачу ради ровно этого текста.
+     ---------------------------------------------------------------- */
+  .results{
+    margin:0 0 14px; padding:12px 15px;
+    border:1px solid rgba(63,169,104,.35); border-radius:var(--radius-md);
+    background:rgba(63,169,104,.08);
+  }
+  .results-head{
+    font-size:var(--label-size); font-weight:var(--label-weight); letter-spacing:.09em;
+    text-transform:uppercase; color:var(--success); font-family:var(--display); margin-bottom:8px;
+  }
+  .result-item{padding:7px 0; border-top:1px solid rgba(255,255,255,.07);}
+  .result-item:first-of-type{border-top:0; padding-top:0;}
+  .result-line{display:flex; gap:10px; align-items:baseline; justify-content:space-between; flex-wrap:wrap;}
+  .result-who{font-size:13px; font-weight:700; color:var(--ink);}
+  .result-when{font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
+  .result-text{font-size:13.5px; color:var(--ink); line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; margin-top:3px;}
+  .results-note{margin-top:8px; font-size:11.5px; color:var(--ink-soft);}
 
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
   .select-with-add{display:flex; gap:6px;}

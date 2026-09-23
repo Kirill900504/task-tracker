@@ -43,7 +43,10 @@ export function columnOf(task: Task, participants: TaskParticipant[]): KanbanCol
   if (task.approvalState === "returned") return "work";
 
   const progress = taskProgress(participants);
-  if (progress.total > 0 && progress.allDone) return "review";
+  // «На приёмке» — это «ответили все», а не «сделали все». Отказ тоже
+  // ответ: после него ждут не исполнителя, а решения постановщика (см.
+  // taskProgress.allAnswered и слова Кирилла 21.09.2026 про отказ).
+  if (progress.total > 0 && progress.allAnswered) return "review";
   // Взялся, отказался или уже отчитался кто-то один из нескольких — всё это
   // движение, и место ему в «В работе». «Новые» означает буквально «ещё
   // никто не ответил ни слова».
