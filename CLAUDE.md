@@ -17,6 +17,38 @@ Supabase (Postgres + Auth + Realtime + RLS) · Vercel · GigaChat for
 language · Telegram and MAX bots. The UI language is Russian; code and
 comments are English.
 
+## What this tracker is for
+
+Said outright 23.09.2026, as the reason the whole project exists: Кирилл
+once assigned ten people different tasks and later remembered only two of
+them — and colleagues learned to count on exactly that forgetting. The
+tracker's job is to be an external memory nobody can outwait: whatever a
+person commits to, for themselves or someone else, stays visible until it
+is actually resolved. Planning and follow-through are the focus, not a
+history of what is already done — a closed item should get out of the way,
+not accumulate as archive to maintain.
+
+**Equal footing, one exception.** Every participant can assign tasks and
+meetings to themselves and to colleagues on the same terms — this is
+literally why the tracker was first built (his own recurring need to
+assign himself work, not just others). The one boundary that never moves:
+`isOwner` (Команда, access, roles) stays with Кирилл alone; everything
+else about *doing* work is symmetric, postановщик and исполнитель included.
+
+**Visibility is per-person, no exceptions — himself included.** A
+participant sees an item only if they are its postановщик, executor,
+co-executor, observer, or an invited/organizing meeting participant.
+Everything else stays off their screen entirely, not read-only-visible —
+"чтобы не засорялся эфир". This reverses the earlier "Трекер один на
+всех: чужое видно для чтения" design and is **not yet implemented in
+code** — see `docs/how-it-works.md` («Видимость») and `docs/next-ten.md`
+(п. 11) for the audit and the concrete list of places that still show
+everything.
+
+Full detail lives in `docs/how-it-works.md` — read it before touching
+anything about what a screen shows to whom; if code and that document
+disagree, the document is right and the code needs fixing.
+
 ## How to work here
 
 - **Everything he reads is in Russian.** Answers, reports, questions,
