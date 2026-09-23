@@ -96,7 +96,13 @@ test("обсуждение выглядит перепиской: своя ре�
   // относится и к обсуждению.
   await composer.press("Enter");
 
-  const mine = page.locator(".chat-row.mine .chat-msg").filter({ hasText: "Первое сообщение" });
+  // `:not(.sending)` обязателен. Сообщение появляется в ленте до того, как
+  // о нём узнает база (местная копия, класс `sending`), а подтверждённая
+  // строка может приехать подпиской раньше, чем отправка успеет убрать
+  // копию, — тогда в ленте на долю секунды живут оба пузыря. Человек этого
+  // не замечает, а строгий поиск Playwright спотыкается: «resolved to 2
+  // elements». Ждём именно подтверждённый.
+  const mine = page.locator(".chat-row.mine .chat-msg:not(.sending)").filter({ hasText: "Первое сообщение" });
   await expect(mine).toBeVisible({ timeout: 20_000 });
   // Время стоит в самом пузыре, а не строкой над ним.
   await expect(mine.locator(".chat-time")).toContainText(/\d{2}:\d{2}/);
