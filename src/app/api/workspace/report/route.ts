@@ -223,19 +223,41 @@ export async function POST(req: Request) {
   if (body.action === "done") {
     const comment = (body.comment || "").trim();
     if (!canReportDone(comment)) return NextResponse.json({ error: "Нужен комментарий" }, { status: 400 });
+    // Документы к отчёту едут вместе с ним (миграция 0039): в корзине они
+    // уже лежат, здесь записываются описания. Пустой массив — не то же
+    // самое, что «не трогать»: отчёт, отправленный второй раз без файлов,
+    // не должен таскать за собой вложения первого.
+    const files = body.attachments || [];
     await admin
       .from("task_participants")
-      .update({ done_at: now, done_comment: comment, declined_at: null, decline_reason: null })
+      .update({
+        done_at: now,
+        done_comment: comment,
+        done_files: files,
+        declined_at: null,
+        decline_reason: null,
+      })
       .eq("id", part.id);
     // Та же проверка, что и у кнопки в мессенджере — буквально та же
     // функция, потому что «отчитались все» не должно значить разное в
     // зависимости от того, откуда пришёл последний отчёт.
-    await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `🏁 ${myName} отчитался: ${comment}` });
+    await recordEvent(admin, {
+      userId: m.owner_id,
+      kind: "task",
+      itemId: part.task_id,
+      // Файл в хронике называется числом, а не именем: имён бывает три, и
+      // строка события — это отметка на полях, а не список вложений.
+      text: `🏁 ${myName} отчитался: ${comment}` + (files.length ? ` (📎 ${files.length})` : ""),
+    });
     const everyone = await closeIfEveryoneReported(admin, part.task_id);
+    // Про файлы в мессенджере говорится словами, но не ссылкой: ссылка на
+    // файл из закрытой корзины живёт час, а сообщение — навсегда, и через
+    // сутки она читалась бы как сломанная.
+    const attached = files.length ? `\n📎 Приложено файлов: ${files.length} — смотреть в задаче.` : "";
     await tell(
       everyone
-        ? `🏁 ${myName} по задаче «${title}»: ${comment}\n\nОтчитались все — задача ждёт вашей приёмки.`
-        : `🏁 ${myName} по задаче «${title}»: ${comment}`,
+        ? `🏁 ${myName} по задаче «${title}»: ${comment}${attached}\n\nОтчитались все — задача ждёт вашей приёмки.`
+        : `🏁 ${myName} по задаче «${title}»: ${comment}${attached}`,
       { kind: everyone ? "reported_all" : "reported", item: title, who: myName, what: comment },
     );
     return NextResponse.json({ ok: true, awaitingReview: everyone });

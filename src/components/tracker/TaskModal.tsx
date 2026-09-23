@@ -22,6 +22,7 @@ import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
 import Icon from "./Icon";
 import ItemFacts from "./ItemFacts";
+import ResultFiles from "./ResultFiles";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { withoutSelfMark } from "@/lib/actorName";
@@ -575,12 +576,14 @@ export default function TaskModal({
                   <span className="result-when">{whenCreated(r.doneAt || "")}</span>
                 </div>
                 <div className="result-text">{r.doneComment || "без комментария"}</div>
+                {/* Документы лежат ЗДЕСЬ, у результата, а не в обсуждении:
+                    на приёмке акт или фотография нужны ровно в эту секунду,
+                    и искать их, пролистывая переписку вверх, — это и есть
+                    то, о чём просил Кирилл («поле Результат… с возможностью
+                    прикрепления документа»). */}
+                <ResultFiles files={r.doneFiles || []} />
               </div>
             ))}
-            {/* Файлы к результату кладут в обсуждение ниже: корзина, права
-                и подписанные ссылки у него уже есть, а второй загрузчик
-                рядом означал бы два места, где лежит одно и то же. */}
-            <div className="results-note">Документы к результату прикладывают в обсуждении — там же, где их обсуждают.</div>
           </div>
         )}
 

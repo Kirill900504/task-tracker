@@ -21,6 +21,10 @@ export type TaskParticipant = {
   acceptedAt: string | null;
   doneAt: string | null;
   doneComment: string | null;
+  // Документы, приложенные к отчёту (миграция 0039). В подсчётах не
+  // участвуют — это про содержание ответа, а не про его наличие, — и
+  // потому необязательны, как и `reachable` ниже.
+  doneFiles?: { path: string; name: string; size: number; type: string }[];
   declinedAt: string | null;
   declineReason: string | null;
   // Есть ли куда прислать ему задачу. Не участвует ни в одном подсчёте —

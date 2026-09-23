@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import Icon from "./Icon";
+import { tooBigFile } from "@/lib/resultFiles";
 
 // Ответ исполнителя — формой в карточке, а не системным окном браузера.
 //
@@ -22,6 +24,7 @@ export default function AnswerForm({
   emptyHint,
   submitLabel,
   date,
+  withFiles,
   busy,
   onSubmit,
   onCancel,
@@ -38,13 +41,20 @@ export default function AnswerForm({
   submitLabel: string;
   // Есть только у просьбы о переносе: дата, на которую просят.
   date?: { label: string; initial: string };
+  // Можно ли приложить документы. Есть только у отчёта: «покажи, что
+  // сделал» — это чаще всего акт или фотография, и Кирилл просил, чтобы
+  // результат нёс их с собой, а не отсылал в обсуждение (см. миграцию
+  // 0039). У отказа и просьбы о переносе прикладывать нечего.
+  withFiles?: boolean;
   busy?: boolean;
-  onSubmit: (text: string, date: string) => void;
+  onSubmit: (text: string, date: string, files: File[]) => void;
   onCancel: () => void;
 }) {
   const [text, setText] = useState("");
   const [when, setWhen] = useState(date?.initial || "");
   const [error, setError] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,7 +67,27 @@ export default function AnswerForm({
       return;
     }
     setError("");
-    onSubmit(text.trim(), when);
+    onSubmit(text.trim(), when, files);
+  }
+
+  function pickFiles(list: FileList | null) {
+    if (!list?.length) return;
+    const chosen = Array.from(list);
+    // 20 МБ — предел корзины, и сказать об этом надо ДО загрузки: иначе
+    // человек ждёт отправки отчёта, а получает отказ на последнем байте.
+    const tooBig = tooBigFile(chosen);
+    if (tooBig) {
+      setError(`«${tooBig.name}» больше 20 МБ — такой файл не пройдёт.`);
+      return;
+    }
+    setError("");
+    setFiles((prev) => [...prev, ...chosen]);
+  }
+
+  function sizeLabel(bytes: number): string {
+    if (bytes < 1024) return `${bytes} Б`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
   }
 
   return (
@@ -88,6 +118,32 @@ export default function AnswerForm({
         <div className="ms-answer-date">
           <label htmlFor={id + "-date"}>{date.label}</label>
           <input id={id + "-date"} type="date" value={when} onChange={(e) => setWhen(e.target.value)} />
+        </div>
+      )}
+      {withFiles && (
+        <div className="ms-answer-files">
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              pickFiles(e.target.files);
+              // Сброс, иначе один и тот же файл нельзя приложить второй раз.
+              e.target.value = "";
+            }}
+          />
+          <button type="button" className="btn btn-small" onClick={() => fileInput.current?.click()}>
+            <Icon name="clip" size={14} /> Приложить документ
+          </button>
+          {files.map((f, i) => (
+            <span className="ms-answer-file" key={f.name + i}>
+              <Icon name="clip" size={13} /> {f.name} <span className="ms-answer-file-size">{sizeLabel(f.size)}</span>
+              <button type="button" className="chat-mini" onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}>
+                убрать
+              </button>
+            </span>
+          ))}
         </div>
       )}
       {error && <div className="ms-answer-error">{error}</div>}

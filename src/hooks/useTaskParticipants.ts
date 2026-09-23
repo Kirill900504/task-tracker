@@ -6,6 +6,8 @@ import { isSelfAssignee } from "@/lib/trackerRows";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { onRevive } from "@/lib/revive";
 import { assignPerson, waitForTaskRow } from "@/lib/assignWork";
+import type { Attachment } from "@/hooks/useItemComments";
+import { uploadResultFiles } from "@/lib/resultFiles";
 import type { TaskParticipant, TaskParticipantRole } from "@/lib/taskProgress";
 
 // Кто на задаче: исполнители, соисполнители, наблюдатели.
@@ -39,6 +41,7 @@ type Row = {
   accepted_at: string | null;
   done_at: string | null;
   done_comment: string | null;
+  done_files: Attachment[] | null;
   declined_at: string | null;
   decline_reason: string | null;
   reschedule_requested_at: string | null;
@@ -162,7 +165,7 @@ export function useTaskParticipants() {
       db
         .from("task_participants")
         .select(
-          "id, task_id, assignee_id, role, accepted_at, done_at, done_comment, declined_at, decline_reason, reschedule_requested_at, reschedule_to, reschedule_reason, assignees(name, telegram_chat_id, max_user_id)",
+          "id, task_id, assignee_id, role, accepted_at, done_at, done_comment, done_files, declined_at, decline_reason, reschedule_requested_at, reschedule_to, reschedule_reason, assignees(name, telegram_chat_id, max_user_id)",
         ),
       // The full list, the owner's own row included: work can be put on
       // yourself, and the send menu is the only place that has a reason to
@@ -180,6 +183,10 @@ export function useTaskParticipants() {
         acceptedAt: raw.accepted_at,
         doneAt: raw.done_at,
         doneComment: raw.done_comment,
+        // Документы к отчёту (миграция 0039). Ссылок здесь нет: они живут
+        // час и запрашиваются тем, кто показывает результат, — см.
+        // lib/resultFiles.signResultFiles.
+        doneFiles: raw.done_files || [],
         declinedAt: raw.declined_at,
         declineReason: raw.decline_reason,
         // «Не подключён» видно всегда, а не только в секунду добавления:
@@ -473,9 +480,31 @@ export function useTaskParticipants() {
   );
 
   const acceptWork = useCallback((participantId: string) => answer({ action: "accept", participantId }), [answer]);
+
+  // По строке участия — её задача. Путь файла в корзине начинается с
+  // пространства и id задачи, потому что права на корзину решают по первому
+  // сегменту пути (миграция 0020), а строка участия знает свою задачу
+  // только здесь: наверх уезжает один participantId.
+  const taskIdOf = useCallback(
+    (participantId: string) => {
+      for (const [taskId, list] of Object.entries(byTask)) {
+        if (list.some((p) => p.id === participantId)) return taskId;
+      }
+      return "";
+    },
+    [byTask],
+  );
+  // Отчёт с документами: файлы уезжают в корзину ЗДЕСЬ, а маршрут получает
+  // только их описания (см. lib/resultFiles — там же причина, по которой
+  // содержимое не идёт через серверную функцию). Не загрузился файл —
+  // отчёт не уходит вовсе: отчёт без обещанного акта хуже, чем повторная
+  // попытка, потому что постановщик прочитает его как полный.
   const reportWork = useCallback(
-    (participantId: string, comment: string) => answer({ action: "done", participantId, comment }),
-    [answer],
+    async (participantId: string, comment: string, files: File[] = []) => {
+      const attachments = files.length ? await uploadResultFiles(taskIdOf(participantId), files) : [];
+      return answer({ action: "done", participantId, comment, attachments });
+    },
+    [answer, taskIdOf],
   );
   const declineWork = useCallback(
     (participantId: string, reason: string) => answer({ action: "decline", participantId, comment: reason }),

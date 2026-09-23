@@ -1087,6 +1087,30 @@
   .result-when{font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
   .result-text{font-size:13.5px; color:var(--ink); line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; margin-top:3px;}
   .results-note{margin-top:8px; font-size:11.5px; color:var(--ink-soft);}
+  /* Документы к результату: фотографию показываем, остальное называем —
+     акт и выгрузку узнают по имени, а установленную кассу нет. Та же
+     логика, что у вложений обсуждения. */
+  .result-files{display:flex; flex-wrap:wrap; gap:8px; margin-top:7px;}
+  .result-file{
+    display:inline-flex; align-items:center; gap:6px; max-width:100%;
+    padding:5px 10px; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
+    background:var(--paper); color:var(--ink); font-size:12.5px; text-decoration:none;
+    transition:border-color .12s ease;
+  }
+  .result-file:hover{border-color:var(--accent);}
+  .result-file-size{color:var(--ink-soft);}
+  .result-file.image{padding:0; overflow:hidden;}
+  .result-file.image img{display:block; max-width:180px; max-height:140px; object-fit:cover;}
+
+  /* Прикрепление документа в форме отчёта. Кнопка и список выбранного —
+     до отправки: ошибиться файлом легко, а узнать об этом после «Отправить
+     отчёт» уже поздно. */
+  .ms-answer-files{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px;}
+  .ms-answer-file{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:12px; color:var(--ink); overflow-wrap:anywhere;
+  }
+  .ms-answer-file-size{color:var(--ink-soft);}
 
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
   .select-with-add{display:flex; gap:6px;}

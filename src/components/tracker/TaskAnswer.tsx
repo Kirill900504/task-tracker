@@ -52,7 +52,9 @@ export default function TaskAnswer({
   // что человек должен прочитать, открыв её снова.
   returnedComment?: string;
   onAccept: () => Promise<void>;
-  onReport: (comment: string) => Promise<void>;
+  // Отчёт может нести документы: «покажи, что сделал» — это чаще всего акт
+  // или фотография (миграция 0039).
+  onReport: (comment: string, files: File[]) => Promise<void>;
   onDecline: (reason: string) => Promise<void>;
   onAskReschedule: (to: string, reason: string) => Promise<void>;
   // Отчёт ушёл — карточку можно закрывать.
@@ -138,8 +140,9 @@ export default function TaskAnswer({
           placeholder="Коротко: что готово и где смотреть"
           emptyHint="Отчёт без слов — это не отчёт: постановщику нечего принимать."
           submitLabel="Отправить отчёт"
+          withFiles
           busy={busy}
-          onSubmit={(text) => void run(() => onReport(text), true)}
+          onSubmit={(text, _when, files) => void run(() => onReport(text, files), true)}
           onCancel={() => setPending(null)}
         />
       )}
