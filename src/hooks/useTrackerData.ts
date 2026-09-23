@@ -249,46 +249,83 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         shadowRef.current.sections = snapshotList(sectionsNow);
       })
       .then(async () => {
-        const tasksNow = liveRef.current.tasks.filter(mine);
+        // Снимок берётся ОДИН и здесь же, до всякой сети: и для диффа, и
+        // для тени в конце. Почему — см. длинный комментарий ниже.
+        const tasksAll = liveRef.current.tasks;
+        const tasksNow = tasksAll.filter(mine);
         const { upserts, deleteIds } = diffRows(tasksNow, shadowRef.current.tasks.filter(mine), stamp(taskToRow));
         if (upserts.length) {
           const { error } = await db.from("tasks").upsert(upserts as TaskRow[]);
           if (error) throw syncFailure("Задачи", "запись", error);
         }
-        if (deleteIds.length) {
-          const { error } = await db.from("tasks").delete().in("id", deleteIds);
-          if (error) throw syncFailure("Задачи", "удаление", error);
+        // Строка, пропавшая из live, — РАСХОЖДЕНИЕ, а не приказ удалить.
+        //
+        // Удаляет человек, и делает это иначе: deleteTask убирает строку из
+        // ОБОИХ списков и шлёт мягкое удаление (softDeleteRow), realtime и
+        // догон тоже правят оба. То есть сюда строка попадает только тогда,
+        // когда live и тень разошлись сами, а это ошибка — и цена ей была
+        // жёсткий DELETE навсегда. Ровно этим когда-то был потерян человек
+        // из списка людей (см. ветку assignees ниже), и вывод оттуда
+        // распространяется сюда целиком: список не редеет по догадке.
+        // Поэтому строка возвращается на экран из тени, где она заведомо
+        // подтверждена базой.
+        const back = shadowRef.current.tasks.filter((x) => deleteIds.includes(x.id));
+        const tasksKept = back.length ? [...tasksAll, ...back] : tasksAll;
+        if (back.length) {
+          liveRef.current.tasks = tasksKept;
+          setTasks(tasksKept);
         }
         // В тень кладётся ВЕСЬ список, а не отфильтрованный: тень — это
         // «что было в прошлый раз», и чужие строки в ней должны остаться,
         // иначе следующий дифф сочтёт их новыми.
-        shadowRef.current.tasks = snapshotList(liveRef.current.tasks);
+        //
+        // И кладётся именно ТОТ список, который только что отправляли, а не
+        // liveRef на эту секунду. Разница стоила пропавших записей: пока шёл
+        // upsert, человек успевал записать ещё одну мысль, она попадала в
+        // тень как подтверждённая — НЕ БУДУЧИ ОТПРАВЛЕННОЙ, — и следующий
+        // дифф не видел разницы. Строка оставалась на экране, трекер писал
+        // «✓ Сохранено», а в базе её не было вовсе; уходила она молча, при
+        // первой же перезагрузке. Поймано на боевом 23.09.2026: мысль
+        // исчезала и с экрана, и из базы, хотя сохранение подтвердилось.
+        shadowRef.current.tasks = snapshotList(tasksKept);
       })
       .then(async () => {
-        const meetingsNow = liveRef.current.meetings.filter(mine);
+        // Один снимок на дифф и на тень — см. комментарий у задач.
+        const meetingsAll = liveRef.current.meetings;
+        const meetingsNow = meetingsAll.filter(mine);
         const { upserts, deleteIds } = diffRows(meetingsNow, shadowRef.current.meetings.filter(mine), stamp(meetingToRow));
         if (upserts.length) {
           const { error } = await db.from("meetings").upsert(upserts as MeetingRow[]);
           if (error) throw syncFailure("Встречи", "запись", error);
         }
-        if (deleteIds.length) {
-          const { error } = await db.from("meetings").delete().in("id", deleteIds);
-          if (error) throw syncFailure("Встречи", "удаление", error);
+        // Пропавшая из live строка — расхождение, а не приказ удалить
+        // (разбор у задач).
+        const meetingsBack = shadowRef.current.meetings.filter((x) => deleteIds.includes(x.id));
+        const meetingsKept = meetingsBack.length ? [...meetingsAll, ...meetingsBack] : meetingsAll;
+        if (meetingsBack.length) {
+          liveRef.current.meetings = meetingsKept;
+          setMeetings(meetingsKept);
         }
-        shadowRef.current.meetings = snapshotList(liveRef.current.meetings);
+        shadowRef.current.meetings = snapshotList(meetingsKept);
       })
       .then(async () => {
-        const ideasNow = liveRef.current.ideas.filter(mine);
+        // Один снимок на дифф и на тень — см. комментарий у задач.
+        const ideasAll = liveRef.current.ideas;
+        const ideasNow = ideasAll.filter(mine);
         const { upserts, deleteIds } = diffRows(ideasNow, shadowRef.current.ideas.filter(mine), stamp(ideaToRow));
         if (upserts.length) {
           const { error } = await db.from("ideas").upsert(upserts as IdeaRow[]);
           if (error) throw syncFailure("Мысли", "запись", error);
         }
-        if (deleteIds.length) {
-          const { error } = await db.from("ideas").delete().in("id", deleteIds);
-          if (error) throw syncFailure("Мысли", "удаление", error);
+        // Пропавшая из live строка — расхождение, а не приказ удалить
+        // (разбор у задач).
+        const ideasBack = shadowRef.current.ideas.filter((x) => deleteIds.includes(x.id));
+        const ideasKept = ideasBack.length ? [...ideasAll, ...ideasBack] : ideasAll;
+        if (ideasBack.length) {
+          liveRef.current.ideas = ideasKept;
+          setIdeas(ideasKept);
         }
-        shadowRef.current.ideas = snapshotList(liveRef.current.ideas);
+        shadowRef.current.ideas = snapshotList(ideasKept);
       })
       .then(async () => {
         // Людей эта синхронизация только ЗАВОДИТ. Удалять она умела, и один
