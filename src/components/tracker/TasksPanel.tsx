@@ -22,6 +22,7 @@ import type { ActionMenuItem } from "./ActionMenu";
 import TaskModal from "./TaskModal";
 import SendMenu from "./SendMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useIsMiniApp } from "@/lib/miniApp";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { useSectionAssignees } from "@/hooks/useSectionAssignees";
 import { hasDeclined, progressShort, taskStage } from "@/lib/taskProgress";
@@ -142,6 +143,10 @@ export default function TasksPanel({
   const [loadOpen, setLoadOpen] = useState(false);
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
   const isMobile = useIsMobile();
+  // Мини-приложение мессенджера бывает шире порога «телефон» (Telegram для
+  // ПК держит его в обычном окне) — поэтому строка разделов гасится этим
+  // признаком отдельно, а не только шириной экрана.
+  const miniApp = useIsMiniApp();
   // Кто на задаче — один слой на всю панель: и карточки, и форма
   // читают отсюда, чтобы не заводить по подписке на каждую карточку.
   const participants = useTaskParticipants();
@@ -870,8 +875,12 @@ export default function TasksPanel({
       {/* Разделы — кнопками под панелью задач: выбрать, завести новый («+»)
           и переставить, зажав и потянув (см. SectionTabs). Видна только
           админу и только на большом экране — SectionTabs сам этого не
-          решает, решаем здесь (см. её собственный комментарий вверху). */}
-      {isAdmin && !isMobile && (
+          решает, решаем здесь (см. её собственный комментарий вверху).
+          Мини-приложение гасится отдельно от isMobile: у него своя ширина,
+          и на ПК-клиенте Telegram она бывает больше порога «телефон» —
+          Кирилл 22.09.2026: «в мобильной версии и мини приложении скрой
+          её тоже, она там заполняет место просто». */}
+      {isAdmin && !isMobile && !miniApp && (
         <SectionTabs
           sections={sections}
           value={filterSection}
