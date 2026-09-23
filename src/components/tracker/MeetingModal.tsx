@@ -22,6 +22,7 @@ import Modal from "./Modal";
 import Icon from "./Icon";
 import ChipChoice from "./ChipChoice";
 import ItemFacts from "./ItemFacts";
+import ExpandableText from "./ExpandableText";
 import { busyStarts, minutesOf, slotOf } from "@/lib/meetingTime";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
@@ -440,7 +441,7 @@ export default function MeetingModal({
                       санкционированный путь назад — «Вернуть в план». */}
                   {resolved ? (
                     <>
-                      {result && <p className="task-card-desc">{result}</p>}
+                      {result && <ExpandableText text={result} className="task-card-desc" />}
                       <div className="outcome-actions">
                         <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => setStatus("planned")}>
                           <Icon name="reset" size={15} /> Вернуть в план

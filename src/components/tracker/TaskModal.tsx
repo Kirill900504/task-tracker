@@ -23,6 +23,7 @@ import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
 import Icon from "./Icon";
 import ItemFacts from "./ItemFacts";
+import ExpandableText from "./ExpandableText";
 import ResultFiles from "./ResultFiles";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
@@ -522,7 +523,7 @@ export default function TaskModal({
         {task ? (
           <div className="modal-split">
             <div className="modal-main">
-              {form.desc && <div className="task-card-desc">{form.desc}</div>}
+              {form.desc && <ExpandableText text={form.desc} className="task-card-desc" />}
 
               {/* Первым — то, чего ждут ОТ ВАС: ради этого карточку и
                   открывают, когда задачу поручили вам. Ниже идёт всё

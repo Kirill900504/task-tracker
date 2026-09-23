@@ -979,7 +979,17 @@
      было рационально использовано». Отступы ниже срезаны везде, где они
      были декоративным воздухом, а не тем, что нужно для читаемости; поля
      ввода и кнопки не тронуты (см. правило про 44px цели касания). */
-  .modal h2{margin:0 0 14px; font-size:19px; font-family:var(--display); font-weight:800; letter-spacing:-.015em; color:var(--ink);}
+  /* Название задачи/встречи — то, что написал человек, а не то, что
+     придумал трекер, и переносится оно как угодно нужно, а не тянет за
+     собой горизонтальную прокрутку всего окна. До 23.09.2026 у h2 не было
+     ни overflow-wrap, ни word-break, и одно слово без единого пробела
+     (случай, но не редкий — вставленный код, ссылка, случайно слитый
+     текст) раздвигало окно вбок и оставляло бегунок, который не должен
+     существовать вовсе: «этого бегунка внизу... быть не должно вообще». */
+  .modal h2{
+    margin:0 0 14px; font-size:19px; font-family:var(--display); font-weight:800;
+    letter-spacing:-.015em; color:var(--ink); overflow-wrap:anywhere; word-break:break-word;
+  }
   /* Цифра в заголовке окна — та же плашка, что у заголовков панелей и
      столбцов доски: «Вычеркнутые мысли 27» голой цифрой читается как
      часть названия. */
@@ -992,8 +1002,20 @@
      нечего (см. TaskModal). Переносы сохраняются, потому что их писали. */
   .task-card-desc{
     margin:-10px 0 18px; font-size:13.5px; line-height:1.55;
-    color:var(--ink-soft); white-space:pre-wrap;
+    color:var(--ink-soft); white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;
   }
+  /* Свёрнутое длинное описание — до пяти строк с отточием, «как в
+     Битриксе» (пример, который показал Кирилл 23.09.2026): длинный текст
+     не разворачивает окно сам, а ждёт, чтобы его развернули явно. */
+  .task-card-desc.clamped{
+    display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .expand-toggle{
+    display:inline-flex; align-items:center; gap:3px; margin:2px 0 14px;
+    background:none; border:0; padding:0; cursor:pointer;
+    font-family:var(--display); font-size:12.5px; font-weight:700; color:var(--accent);
+  }
+  .expand-toggle:hover{text-decoration:underline;}
   @media (prefers-reduced-motion: reduce){ .overlay.open, .modal{animation:none;} }
   .field{margin-bottom:13px;}
   /* Название поля. В отличие от заголовка блока — БЕЗ прописных: «Кто на
