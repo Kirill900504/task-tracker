@@ -268,7 +268,10 @@ export async function POST(req: Request) {
     if (!canDecline(reason)) return NextResponse.json({ error: "Нужна причина" }, { status: 400 });
     await admin
       .from("task_participants")
-      .update({ declined_at: now, decline_reason: reason, done_at: null, done_comment: null })
+      // Документы прежнего отчёта уходят вместе с ним: «не могу» после
+      // «сделал» означает, что того результата больше нет, а файлы,
+      // оставшиеся рядом с отказом, читались бы как его подтверждение.
+      .update({ declined_at: now, decline_reason: reason, done_at: null, done_comment: null, done_files: [] })
       .eq("id", part.id);
     await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `⛔ ${myName} не может: ${reason}` });
     // Отказ — тоже ответ, и после него задача ждёт решения постановщика, а

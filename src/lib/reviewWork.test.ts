@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { REOPEN_PATCH } from "./reviewWork";
 import { columnOf } from "./kanban";
+import { taskStage } from "./taskProgress";
 import type { Task } from "@/types/tracker";
 
 // Выход из «Завершённых» проверяется тем же способом, каким туда попадают:
@@ -53,5 +54,38 @@ describe("REOPEN_PATCH", () => {
     expect(REOPEN_PATCH.approved_at).toBeNull();
     expect(REOPEN_PATCH.completed_at).toBeNull();
     expect(REOPEN_PATCH.last_completed_on).toBeNull();
+  });
+});
+
+// Возврат на доработку обязан снять ПРЕЖНИЙ ОТВЕТ целиком — и отчёт, и
+// отказ.
+//
+// Отказ стал ответом 21.09.2026 («после отказа задача не переносится на
+// приёмку» — теперь переносится), и с этого дня оставленный отказ означал
+// бы, что «Вернуть с объяснением» возвращает задачу в тот же тупик:
+// declined_at на месте → «ответили все» → снова приёмка, и кнопка
+// выглядит несработавшей. Проверяется поэтому не сам вызов базы, а его
+// следствие: доска и стадия после очистки.
+describe("возврат на доработку", () => {
+  const person = (over: Record<string, unknown> = {}) => ({
+    assigneeId: "a1",
+    name: "Аня",
+    role: "executor" as const,
+    acceptedAt: "2026-09-20T10:00:00Z",
+    doneAt: null,
+    doneComment: null,
+    declinedAt: null,
+    declineReason: null,
+    ...over,
+  });
+
+  it("задача с непогашенным отказом снова просит решения — значит гасить его обязательно", () => {
+    const refused = [person({ declinedAt: "2026-09-21T10:00:00Z", declineReason: "нет людей" })];
+    const task = { ...closed(), status: "in_progress", approvalState: "returned" } as Task;
+    // Возврат сам по себе кладёт задачу в «В работе» — пока отказ снят.
+    expect(columnOf(task, [person()])).toBe("work");
+    // А если бы отказ остался, задача читалась бы как «ответили все»: это
+    // и есть цена забытой колонки в applyReview.
+    expect(taskStage(refused, "open")).toBe("awaiting_review");
   });
 });

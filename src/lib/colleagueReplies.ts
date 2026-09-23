@@ -296,7 +296,15 @@ export async function handleColleagueCallback(
       }
       await admin
         .from("task_participants")
-        .update({ declined_at: new Date().toISOString(), decline_reason: null, done_at: null, done_comment: null })
+        .update({
+          declined_at: new Date().toISOString(),
+          decline_reason: null,
+          done_at: null,
+          done_comment: null,
+          // Как и в трекере: отказ снимает прежний отчёт целиком, вместе
+          // с приложенными к нему документами.
+          done_files: [],
+        })
         .eq("id", participant.id);
       // Отказ — ответ, и задача после него ждёт постановщика: то же, что
       // делает кнопка «Не могу» в трекере (см. api/workspace/report). Две

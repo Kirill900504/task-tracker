@@ -66,9 +66,20 @@ export async function applyReview(
       .eq("id", task.id);
   } else if (action === "return") {
     await admin.from("tasks").update({ approval_state: "returned", approval_comment: text, approved_at: null }).eq("id", task.id);
-    // Отчёты обнуляются: иначе задача осталась бы «отчитались все», и
-    // приёмка предложилась бы снова, ничего не изменив.
-    await admin.from("task_participants").update({ done_at: null, done_comment: null }).eq("task_id", task.id).eq("role", "executor");
+    // Отчёты И отказы обнуляются: иначе задача осталась бы «ответили все»,
+    // и приёмка предложилась бы снова, ничего не изменив.
+    //
+    // Отказ попал сюда вместе с правилом «отказ — это ответ» (21.09.2026):
+    // раз он уводит задачу на приёмку, то и возврат обязан его снимать —
+    // иначе «Вернуть с объяснением» отправляло задачу ровно в тот же
+    // тупик, из которого её пытались вывести, и кнопка выглядела
+    // несработавшей. Возврат и значит «прежний ответ больше не в силе:
+    // вот объяснение, попробуйте снова».
+    await admin
+      .from("task_participants")
+      .update({ done_at: null, done_comment: null, done_files: [], declined_at: null, decline_reason: null })
+      .eq("task_id", task.id)
+      .eq("role", "executor");
   } else if (action === "reopen") {
     await admin.from("tasks").update(REOPEN_PATCH).eq("id", task.id);
   } else {
