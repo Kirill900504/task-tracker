@@ -660,12 +660,39 @@
      сетка, по которой карточку якобы надо куда-то попасть. Куда она
      встанет, и так видно: соседи расступаются, а сама карточка едет под
      курсором. Поэтому место остаётся местом — оно держит высоту, чтобы
-     список не прыгал, — и не рисует ничего. */
-  .task.dragging{
-    background:transparent; border-color:transparent;
-    box-shadow:none; transform:none;
+     список не прыгал, — и не рисует ничего.
+
+     `!important` здесь стоит нарочно, и это единственное место в файле, где
+     он нужен. Пустым место БЫЛО написано и раньше — но ниже по файлу лежат
+     `.task.role-executor`, `.task.overdue` и `.task.due-today`, у которых
+     ровно та же специфичность (два класса), а при равной специфичности
+     побеждает то, что ниже. Значит у задачи, где я исполнитель, у
+     просроченной и у той, чей срок сегодня, место взятой карточки
+     оставалось ЗАЛИТЫМ и с рамкой — то есть выглядело второй карточкой,
+     только без текста. Кирилл 22.09.2026: «опять ошибка со склейкой двух
+     задач, и они не расступаются, а ходят парой, и между ними ничего не
+     вставишь». Пара — это карточка под курсором и её собственный призрак;
+     вставить между ними и правда нечего, потому что призрак и есть то
+     место, куда она встанет.
+     Отсюда и способ починки. Порядок правил в файле как гарантия уже
+     подвёл — каждая новая раскраска карточки дописывается в конец и молча
+     выигрывает, а проявляется это только под курсором, то есть там, куда
+     не смотрят тесты. Состояние «эту карточку сейчас несут» обязано гасить
+     ЛЮБУЮ раскраску, какую бы ни добавили завтра, и `!important` говорит
+     ровно это. Сторож — `e2e/drag.spec.ts`: он спрашивает у браузера
+     вычисленный фон места, а не читает файл стилей.
+
+     `transition:none` здесь обязателен, и отдельно от заливки — по
+     каскаду CSS переход СИЛЬНЕЕ авторского `!important` (это единственное,
+     что его перебивает). У `.task` есть переход на border-color в 150мс, и
+     без этой строки просроченная или важная карточка на подхвате доли
+     секунды ДОЦВЕТАЛА бы от прежнего цвета к прозрачному — тот же самый
+     призрак, только короче и слабее. e2e поймал это первым прогоном, ждать
+     полсекунды и смотреть глазом было незачем. */
+  .task.dragging, .task.dragging:hover{
+    background:transparent !important; border-color:transparent !important;
+    box-shadow:none !important; transform:none; transition:none !important;
   }
-  .task.dragging:hover{transform:none; border-color:transparent;}
   .task.dragging > *{visibility:hidden;}
 
   /* Тело столбца. Пустой столбец обязан принимать сброс — иначе
@@ -1276,8 +1303,11 @@
      сама мысль в это время едет под курсором, а место за ней пустует и
      ничего не рисует (см. .task.dragging — там причина целиком). */
   .idea-item.dragging{
-    background:transparent; border-color:transparent;
-    box-shadow:none; transform:none;
+    /* transition:none — та же причина, что у .task.dragging: без неё
+       граница важной мысли доцветает от красной к прозрачной поверх
+       !important, потому что CSS-переход сильнее авторского !important. */
+    background:transparent !important; border-color:transparent !important;
+    box-shadow:none !important; transform:none; transition:none !important;
   }
   .idea-item.dragging > *{visibility:hidden;}
   #ideaList{border-radius:8px;}
@@ -1326,8 +1356,11 @@
   /* Взятая встреча — тот же силуэт, что у задачи и у мысли: пустое место
      без рамки и заливки. */
   .meeting-chip.dragging{
-    background:transparent; border-color:transparent;
-    box-shadow:none; transform:none;
+    /* transition:none — та же причина, что у .task.dragging и
+       .idea-item.dragging: без неё встреча «сегодня» (.selected-day)
+       доцветает от заливки к прозрачной поверх !important. */
+    background:transparent !important; border-color:transparent !important;
+    box-shadow:none !important; transform:none; transition:none !important;
   }
   .meeting-chip.dragging > *{visibility:hidden;}
   /* Встреча в списке устроена как задача на доске: название, строка
