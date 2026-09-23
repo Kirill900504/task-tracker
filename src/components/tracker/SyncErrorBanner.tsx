@@ -48,15 +48,24 @@ export default function SyncErrorBanner() {
     setErrors(null);
   }
 
+  // Плавающая карточка, а не полоса в потоке страницы.
+  //
+  // До 23.09.2026 это был `.notif-banner` внутри панели задач: он раздвигал
+  // всё, что под ним, и выглядел так же, как случайная поломка. Правило
+  // Кирилла общее для всего трекера — ошибка не должна расширять форму или
+  // блок, а всплывает поверх, — так что здесь та же плашка, что у
+  // напоминания подключить мессенджер (.ms-link рядом), только своим
+  // цветом: это ПРОШЛЫЙ отказ записи, обнаруженный при открытии, а не
+  // призыв к действию.
   return (
-    <div className="notif-banner show" id="syncErrorBanner" style={{ display: "flex" }}>
-      <span>
+    <div className="sync-error-notice" id="syncErrorBanner">
+      <span className="sync-error-text">
         <Icon name="warning" size={14} /> Не всё сохранилось в облако ({errors.count}):{" "}
         {unreadable(errors.message)
           ? "что именно отказало, в тот раз не записалось. Если повторится — здесь будет написано, какая таблица и почему."
           : errors.message}
       </span>
-      <button className="btn btn-small" style={{ marginLeft: 10 }} onClick={dismiss}>
+      <button className="btn btn-small" onClick={dismiss}>
         Скрыть
       </button>
     </div>

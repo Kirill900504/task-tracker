@@ -56,7 +56,7 @@ const INPUT_STYLE = {
   color: "var(--ink)",
 } as const;
 
-type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "answer" | "notes-preview" | "error";
+type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "answer" | "notes-preview";
 
 export default function QuickAdd({
   provider,
@@ -125,7 +125,18 @@ export default function QuickAdd({
   const [ideaPreview, setIdeaPreview] = useState<IdeaFields | null>(null);
   const [taskPreview, setTaskPreview] = useState<TaskFields | null>(null);
   const [meetingPreview, setMeetingPreview] = useState<MeetingFields | null>(null);
-  const [errorMessage, setErrorMessage] = useState("");
+  // Ошибки этой формы — всплывающее окно, а не строка под полем.
+  //
+  // До 23.09.2026 отказ рисовался прямо под строкой ввода и раздвигал
+  // саму панель/лист снизу — растущий блок под полем при диктовке читался
+  // как поломка формы, а не как объяснение. Правило Кирилла общее для
+  // всего трекера: ошибка не должна расширять форму или блок, в котором
+  // она возникла — она всплывает поверх. Текст не сбрасывает набранное:
+  // окно закрывается, а строка ввода остаётся как была.
+  function showError(message: string) {
+    setStatus("idle");
+    void ask.say({ title: "Не получилось", question: message });
+  }
   // A question about the tracker gets answered by the server (see
   // /api/quick-add) — shown right here rather than sending the user to the
   // Telegram bot for it.
@@ -144,10 +155,7 @@ export default function QuickAdd({
     // Диктовка здесь — не удобство, а весь способ ввода: кнопка, которая
     // загорелась и ничего не сделала, оставляет человека ни с чем. Причина
     // пишется тем же местом, что и остальные отказы этой формы.
-    onError: (code) => {
-      setErrorMessage(speechErrorText(code));
-      setStatus("error");
-    },
+    onError: (code) => showError(speechErrorText(code)),
   });
 
   // Подпись микрофона: три состояния, и все три надо назвать. Молчащая
@@ -166,7 +174,6 @@ export default function QuickAdd({
 
   async function send(fullText: string, isClarifyFollowUp: boolean) {
     setStatus("loading");
-    setErrorMessage("");
     try {
       const assignees = api?.getAssignees() || [];
       const res = await fetch("/api/quick-add", {
@@ -176,14 +183,12 @@ export default function QuickAdd({
       });
       const data = await res.json();
       if (!res.ok) {
-        setStatus("error");
-        setErrorMessage(data.error || "Не удалось распознать");
+        showError(data.error || "Не удалось распознать");
         return;
       }
       handleItems((data.items as QuickAddItem[]) || [], isClarifyFollowUp);
     } catch {
-      setStatus("error");
-      setErrorMessage("Проблема с сетью");
+      showError("Проблема с сетью");
     }
   }
 
@@ -193,8 +198,7 @@ export default function QuickAdd({
     // practice; cap by round instead).
     if (items.length === 1 && items[0].tool === "ask_clarifying_question") {
       if (isClarifyFollowUp) {
-        setStatus("error");
-        setErrorMessage("Не смог разобрать фразу — попробуйте переформулировать");
+        showError("Не смог разобрать фразу — попробуйте переформулировать");
         return;
       }
       setClarifyQuestion(items[0].input.question);
@@ -207,8 +211,7 @@ export default function QuickAdd({
     // handle the actionable items instead of derailing the whole message.
     const actionable = items.filter((it) => it.tool !== "ask_clarifying_question");
     if (!actionable.length) {
-      setStatus("error");
-      setErrorMessage("Не удалось разобрать фразу");
+      showError("Не удалось разобрать фразу");
       return;
     }
 
@@ -298,19 +301,16 @@ export default function QuickAdd({
       return;
     }
     if (item.tool === "cant_help") {
-      setStatus("error");
-      setErrorMessage("Это не похоже ни на задачу/встречу/мысль, ни на вопрос о делах");
+      showError("Это не похоже ни на задачу/встречу/мысль, ни на вопрос о делах");
       return;
     }
     if (item.tool === "manage_item") {
-      setStatus("error");
-      setErrorMessage("Изменить или удалить существующую задачу/встречу можно кнопками в списке — так надёжнее, чем текстом");
+      showError("Изменить или удалить существующую задачу/встречу можно кнопками в списке — так надёжнее, чем текстом");
       return;
     }
     // Should not happen (ask_clarifying_question is filtered out before
     // reaching here) — fall back to a visible error rather than silence.
-    setStatus("error");
-    setErrorMessage("Неожиданный ответ сервера");
+    showError("Неожиданный ответ сервера");
   }
 
   function reset() {
@@ -322,7 +322,6 @@ export default function QuickAdd({
     setIdeaPreview(null);
     setTaskPreview(null);
     setMeetingPreview(null);
-    setErrorMessage("");
     setStatus("idle");
     if (isMobile) onCloseSheet?.();
   }
@@ -509,11 +508,6 @@ export default function QuickAdd({
           </div>
         )}
 
-        {status === "error" && (
-          <div style={{ marginTop: 6, fontSize: 12, color: "var(--high)" }}>
-            {errorMessage} — <button className="btn-ghost" style={{ textDecoration: "underline" }} onClick={reset}>ок</button>
-          </div>
-        )}
       </>
     );
   }

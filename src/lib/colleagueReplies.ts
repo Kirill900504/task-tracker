@@ -247,7 +247,17 @@ export async function handleColleagueCallback(
         // nothing to clean up if he never answers.
         await admin
           .from("task_participants")
-          .update({ done_at: new Date().toISOString(), done_comment: null, declined_at: null, decline_reason: null })
+          .update({
+            done_at: new Date().toISOString(),
+            done_comment: null,
+            declined_at: null,
+            decline_reason: null,
+            // Та же просьба о переносе теряет смысл, если работа уже
+            // сделана — см. тот же комментарий в /api/workspace/report.
+            reschedule_requested_at: null,
+            reschedule_to: null,
+            reschedule_reason: null,
+          })
           .eq("id", participant.id);
         const closed = await closeIfEveryoneReported(admin, task.id);
         return {
@@ -302,8 +312,12 @@ export async function handleColleagueCallback(
           done_at: null,
           done_comment: null,
           // Как и в трекере: отказ снимает прежний отчёт целиком, вместе
-          // с приложенными к нему документами.
+          // с приложенными к нему документами, и снимает просьбу о
+          // переносе — «не могу» уже ответ на неё.
           done_files: [],
+          reschedule_requested_at: null,
+          reschedule_to: null,
+          reschedule_reason: null,
         })
         .eq("id", participant.id);
       // Отказ — ответ, и задача после него ждёт постановщика: то же, что

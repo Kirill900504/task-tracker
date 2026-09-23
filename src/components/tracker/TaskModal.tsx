@@ -5,8 +5,9 @@
 // public/legacy-tracker.js. Kept on the same element ids (#overlay,
 // #fTitle, #saveTaskBtn, etc.) so the existing e2e patterns keep working
 // against the new UI with minimal changes.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
+import { markTaskCommentsRead } from "@/hooks/useUnreadTaskComments";
 import { uid } from "@/lib/uid";
 import TeamCompact from "./TeamCompact";
 import TaskAnswer from "./TaskAnswer";
@@ -173,6 +174,12 @@ export default function TaskModal({
   const ask = useAsk();
   // Кто из логинов какой человек — по этому имени подписан постановщик.
   const authors = useAuthors();
+  // Открыли карточку — обсуждение внутри неё прочитано: значок
+  // «непрочитано» на кубике доски снимается с этой задачи на этом
+  // устройстве (см. useUnreadTaskComments).
+  useEffect(() => {
+    if (task?.id) markTaskCommentsRead(task.id);
+  }, [task?.id]);
   const [form, setForm] = useState(() => emptyForm(task, prefill));
   // Состав новой задачи держится здесь до сохранения: строки участия
   // ссылаются на задачу, а её ещё нет в базе (см. PendingParticipants).

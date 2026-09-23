@@ -37,6 +37,7 @@ import Icon from "./Icon";
 import { isMine } from "@/lib/ownership";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
+import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 
 export default function TasksPanel({
   tasks,
@@ -280,6 +281,17 @@ export default function TasksPanel({
   // отказ уводит задачу на приёмку, «не может» перестало быть отдельным
   // состоянием и стало свойством ответа.
   const hasRefusal = (t: Task) => participants.forTask(t.id).some((p) => p.role === "executor" && hasDeclined(p));
+  // Кто-то попросил перенос и ещё ждёт ответа постановщика — значок в углу
+  // кубика, отдельно от текстовых меток «не может»/«на доработке»: это то,
+  // что не видно по столбцу вовсе (доска не заводит для этого своей
+  // колонки), а решать бывает нужно раньше, чем открыли карточку.
+  const hasPendingReschedule = (t: Task) => participants.forTask(t.id).some((p) => p.rescheduleTo || p.rescheduleReason);
+
+  // Значок «непрочитано» — считается по видимым (после фильтра) задачам,
+  // а не по всем сразу: их могут быть сотни за месяцы работы, а на доске в
+  // любой момент лежит несколько десятков. Хук сам сравнивает список по
+  // содержимому, а не по ссылке на массив.
+  const unread = useUnreadTaskComments(filtered.map((t) => t.id));
 
   // Задачи, разложенные по столбцам доски. Считается один раз на отрисовку:
   // columnOf читает строки участия, и звать его по разу на столбец значило
@@ -665,6 +677,8 @@ export default function TasksPanel({
                       // между «сдали» и «не смогли» и есть то, ради чего
                       // карточку открывают.
                       refused={hasRefusal(t)}
+                      awaitingReschedule={hasPendingReschedule(t)}
+                      unreadCount={unread[t.id] || 0}
                       role={role}
                       outgoing={mine(t) && role === "none" && sharedBoard}
                       dimOverdue={!showsOverdue(role, !sharedBoard || view === "assigned")}

@@ -41,6 +41,7 @@ export type IconName =
   | "arrow-up"
   | "arrow-down"
   | "arrow-right"
+  | "arrow-left"
   | "flag"
   | "eye"
   | "mailbox"
@@ -179,6 +180,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M5 12h14" />
       <path d="m13 6 6 6-6 6" />
+    </>
+  ),
+  "arrow-left": (
+    <>
+      <path d="M19 12H5" />
+      <path d="m11 18-6-6 6-6" />
     </>
   ),
   flag: (

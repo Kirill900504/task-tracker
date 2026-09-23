@@ -236,6 +236,13 @@ export async function POST(req: Request) {
         done_files: files,
         declined_at: null,
         decline_reason: null,
+        // Просьба о переносе, если она была, теряет смысл: работа готова,
+        // двигать срок больше не для чего. Без этого постановщик видел бы
+        // одновременно старую просьбу «перенесите» и «отчитались все, готовы
+        // принять» — два окна на одно решение, которое уже не то (23.09.2026).
+        reschedule_requested_at: null,
+        reschedule_to: null,
+        reschedule_reason: null,
       })
       .eq("id", part.id);
     // Та же проверка, что и у кнопки в мессенджере — буквально та же
@@ -271,7 +278,18 @@ export async function POST(req: Request) {
       // Документы прежнего отчёта уходят вместе с ним: «не могу» после
       // «сделал» означает, что того результата больше нет, а файлы,
       // оставшиеся рядом с отказом, читались бы как его подтверждение.
-      .update({ declined_at: now, decline_reason: reason, done_at: null, done_comment: null, done_files: [] })
+      // Просьба о переносе — тем же движением: «не могу» это и ответ на
+      // неё, а не повод держать оба вопроса перед постановщиком разом.
+      .update({
+        declined_at: now,
+        decline_reason: reason,
+        done_at: null,
+        done_comment: null,
+        done_files: [],
+        reschedule_requested_at: null,
+        reschedule_to: null,
+        reschedule_reason: null,
+      })
       .eq("id", part.id);
     await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `⛔ ${myName} не может: ${reason}` });
     // Отказ — тоже ответ, и после него задача ждёт решения постановщика, а

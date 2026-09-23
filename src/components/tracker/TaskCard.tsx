@@ -8,6 +8,7 @@ import { withoutSelfMark } from "@/lib/actorName";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSwipeComplete } from "@/hooks/useSwipeComplete";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
+import Icon from "./Icon";
 import type { MyRole } from "@/lib/myRole";
 import type { TaskStage } from "@/lib/taskProgress";
 
@@ -55,6 +56,8 @@ export default function TaskCard({
   authorName,
   executors,
   refused,
+  awaitingReschedule,
+  unreadCount,
 }: {
   task: Task;
   section: Section | null;
@@ -105,6 +108,12 @@ export default function TaskCard({
   // задачу на приёмку (см. taskProgress.allAnswered), и без этого признака
   // «не смогли» стало бы неотличимо от «сдали работу».
   refused?: boolean;
+  // Кто-то попросил перенос и ждёт решения. Доска для этого не заводит
+  // своего столбца, а решать иногда нужно раньше, чем открыли карточку.
+  awaitingReschedule?: boolean;
+  // Сколько новых реплик в обсуждении с прошлого открытия этой карточки на
+  // этом устройстве (см. useUnreadTaskComments).
+  unreadCount?: number;
 }) {
   const isMobile = useIsMobile();
   // Меню карточки: открыто ли и от чего. Якорь нужен только на
@@ -228,7 +237,11 @@ export default function TaskCard({
           {/* Маркеры угла. Их осталось два, и подписаны они целыми
               фразами: 20.09.2026 Кирилл спросил про них прямо — «это
               что?», — а значок, который надо расшифровывать, не работает.
-              Точка приоритета отсюда ушла вместе с самим приоритетом. */}
+              Точка приоритета отсюда ушла вместе с самим приоритетом.
+              23.09.2026 добавились ещё два, оба значком с подсказкой:
+              просьба о переносе и «ждёт приёмки» — то, что не видно ни по
+              столбцу, ни по тексту рядом, а решать иногда нужно раньше,
+              чем открыли карточку. */}
           <span className="task-marks">
             {outgoing && (
               <span className="task-mark outgoing" title="Это поручили вы — ждём ответа исполнителя">
@@ -238,6 +251,21 @@ export default function TaskCard({
             {soon && (
               <span className="task-mark soon" title="Срок через три рабочих дня или меньше">
                 !
+              </span>
+            )}
+            {awaitingReschedule && (
+              <span className="task-mark reschedule" title="Просят перенести срок — ждёт вашего решения">
+                <Icon name="calendar" size={12} />
+              </span>
+            )}
+            {!awaitingReschedule && stage === "awaiting_review" && (
+              <span className="task-mark review" title="Отчитались все — ждёт вашей приёмки">
+                <Icon name="inbox" size={12} />
+              </span>
+            )}
+            {!!unreadCount && (
+              <span className="task-mark unread" title={`${unreadCount} новых сообщений в обсуждении`}>
+                {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
           </span>

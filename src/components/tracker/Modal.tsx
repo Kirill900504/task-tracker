@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
+import Icon from "./Icon";
 
 // Одно окно на все окна трекера — и оно настоящее, браузерное.
 //
@@ -82,6 +83,17 @@ export default function Modal({
         if (dismissOnBackdrop && event.target === event.currentTarget) onClose();
       }}
     >
+      {/* Стрелка назад — только на телефоне (см. .modal-back-btn в
+          tracker.css). На компьютере у окна есть щелчок мимо и Esc; на
+          телефоне окно во весь экран, и щёлкнуть мимо него физически
+          нельзя, а Esc у клавиатуры телефона нет вовсе — до 23.09.2026
+          выйти из такого окна (поиск, «Команда», «Загрузка») можно было
+          только системной кнопкой «назад», которой у части экранов нет.
+          Кнопка живёт здесь, в одном месте, а не в каждом окне отдельно:
+          иначе через месяц её забудут в новом. */}
+      <button type="button" className="modal-back-btn" aria-label="Назад" onClick={onClose}>
+        <Icon name="arrow-left" size={20} />
+      </button>
       {children}
     </dialog>,
     document.body,

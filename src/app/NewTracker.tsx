@@ -41,7 +41,9 @@ import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
+import { useWorkspaceRole, MEMBER_ROLE_LABELS } from "@/hooks/useWorkspaceRole";
+import ActionMenu from "@/components/tracker/ActionMenu";
+import { withoutSelfMark } from "@/lib/actorName";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import MessengerLink from "@/components/tracker/MessengerLink";
 import { useMyMessenger } from "@/hooks/useMyMessenger";
@@ -171,6 +173,12 @@ export default function NewTracker() {
   // Один фильтр на панель задач и панель «Люди»: нажатие на человека и
   // выбор в списке — это один и тот же вопрос, заданный двумя способами.
   const [filterAssignee, setFilterAssignee] = useState("all");
+  // Кто сейчас смотрит на трекер — своя строка в шапке, с меню личного
+  // кабинета. Слова Кирилла 23.09.2026: «чтоб каждый видел, что они сидят
+  // под личным аккаунтом в системе». Без этого экран у всех четырнадцати
+  // выглядел одинаково, и «Выйти» была единственной подсказкой, что вход
+  // вообще персональный.
+  const [accountMenuAnchor, setAccountMenuAnchor] = useState<DOMRect | null>(null);
 
   // Список команды спрашивается заранее, а не в момент нажатия. «Команда» и
   // любое ✈ открываются из уже открытого трекера, то есть время на запрос
@@ -551,14 +559,11 @@ export default function NewTracker() {
             justCreatedId={justCreatedTaskId}
             notifBanner={notifications.bannerText}
             extraBanner={
-              <>
-                {offline && (
-                  <div className="notif-banner show" id="offlineBanner">
-                    <span>📴 Нет связи с облаком — показываю сохранённую копию. Всё, что записываете, отправится, как только связь вернётся.</span>
-                  </div>
-                )}
-                <SyncErrorBanner />
-              </>
+              offline && (
+                <div className="notif-banner show" id="offlineBanner">
+                  <span>📴 Нет связи с облаком — показываю сохранённую копию. Всё, что записываете, отправится, как только связь вернётся.</span>
+                </div>
+              )
             }
           />
         ),
@@ -651,6 +656,12 @@ export default function NewTracker() {
           autoHide={!syncStatus.pending && !syncStatus.lastError}
         />
       )}
+      {/* Напоминание подключить мессенджер — плавающая карточка (см.
+          .ms-link в tracker.css), общая для компьютера и телефона: до
+          23.09.2026 она стояла только в десктопной ветке ниже, и
+          руководитель, открывший трекер с телефона, о ней не узнавал вовсе. */}
+      {messengerMissing && <MessengerLink messenger={myMessenger} />}
+      <SyncErrorBanner />
       {isMobile ? (
         <>
           {/* Одна кнопка в шапке, и её меню — единственное место, куда
@@ -662,6 +673,7 @@ export default function NewTracker() {
               выглядит приклеенной. */}
           <MobileHeader
             clockText={clockText}
+            accountName={withoutSelfMark(myName)}
             items={[
               ...(isOwner ? [{ id: "team", label: "Команда", icon: "users" as const, onSelect: () => setTeamOpen(true) }] : []),
               // Поиска здесь больше нет: он переехал в нижнюю панель
@@ -878,22 +890,34 @@ export default function NewTracker() {
                 <Icon name="link" /> MAX
               </button>
             )}
-            <button className="btn" id="signOutBtn" onClick={() => actions.signOut()}>
-              Выйти
+            {/* Личный кабинет: имя того, кто сейчас вошёл, плюс меню с
+                «Выйти». «Выйти» стояло отдельной кнопкой и ничего не
+                говорило о том, ЧЕЙ это вход — при четырнадцати
+                постановщиках это первый вопрос к своей же шапке. */}
+            <button
+              className="btn account-btn"
+              id="accountBtn"
+              title="Личный кабинет"
+              onClick={(e) => setAccountMenuAnchor(e.currentTarget.getBoundingClientRect())}
+            >
+              <Icon name="users" size={14} /> {withoutSelfMark(myName) || "Аккаунт"}
             </button>
           </div>
         </div>
       </header>
+      {accountMenuAnchor && (
+        <ActionMenu
+          anchor={accountMenuAnchor}
+          title={MEMBER_ROLE_LABELS[identity.memberRole]}
+          items={[{ id: "signout", label: "Выйти", icon: "logout", onSelect: () => actions.signOut() }]}
+          onClose={() => setAccountMenuAnchor(null)}
+        />
+      )}
       {/* Мессенджер — первое, чего не хватает человеку, который вошёл по
           приглашению: без него задачи, напоминания и кнопки «Принял /
           Сделал» приходят только сюда, а сюда он заходит не каждый день.
-          Полоса исчезает сама, как только он подключился, и у владельца её
-          нет вовсе — у него для этого кнопки в шапке. */}
-      {messengerMissing && (
-        <div className="tracker-messenger-link">
-          <MessengerLink messenger={myMessenger} />
-        </div>
-      )}
+          Напоминание теперь общее для обеих раскладок — см. плавающую
+          карточку MessengerLink выше, до ветки isMobile/desktop. */}
       {/* Перетаскивание — одно на весь трекер: панели, задачи, мысли и
           встречи ездят в одном контексте, потому что ездят они друг в
           друга. Разбор «что куда бросили» живёт там же. */}

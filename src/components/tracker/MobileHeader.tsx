@@ -32,9 +32,15 @@ export type MobileMenuItem = {
 
 export default function MobileHeader({
   clockText,
+  accountName,
   items,
 }: {
   clockText: string;
+  // Имя того, кто сейчас вошёл — под датой, там же, где на компьютере
+  // стоит кнопка личного кабинета. Слова Кирилла 23.09.2026: «чтоб каждый
+  // видел, что они сидят под личным аккаунтом в системе» — на телефоне
+  // до этого не было ни одной подсказки, чей это вход.
+  accountName?: string;
   items: MobileMenuItem[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -50,7 +56,7 @@ export default function MobileHeader({
         <img className="mobile-logo" src="/favicon.png" alt="РОКАС" />
         <div className="mobile-brand-text">
           <div className="mobile-title">РОКАС</div>
-          <div className="mobile-date">{clockText}</div>
+          <div className="mobile-date">{accountName ? `${accountName} · ${clockText}` : clockText}</div>
         </div>
       </div>
       <button

@@ -429,35 +429,52 @@ export default function MeetingModal({
                   <div className={"outcome-badge" + (resolved ? ` show ${meeting.status}` : "")} id="outcomeBadge">
                     {resolved ? outcomeLabel(meeting.status) + (meeting.movedToDate ? " · перенесено на " + fmtDate(meeting.movedToDate) : "") : ""}
                   </div>
-                  <div className="input-with-mic">
-                    {/* Enter завершает встречу успешно — по правилу Кирилла
-                        21.09.2026 «любые заполнения результатов или итогов
-                        должны закрываться нажатием Enter после заполнения,
-                        везде». */}
-                    <AutoGrowTextarea
-                      id="mResult"
-                      minRows={2}
-                      placeholder="Кратко: что решили, что дальше…"
-                      value={result}
-                      onChange={setResult}
-                      onEnter={() => setStatus("success")}
-                    />
-                    <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
-                  </div>
-                  <div className="field-hint">Enter — завершить успешно, Shift+Enter — новая строка.</div>
-                  <div className="outcome-actions">
-                    <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" onClick={() => setStatus("success")}>
-                      <Icon name="check" size={15} /> Успешно
-                    </button>
-                    <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" onClick={() => setStatus("no_result")}>
-                      <Icon name="ban" size={15} /> Без результата
-                    </button>
-                    {resolved && (
-                      <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => setStatus("planned")}>
-                        <Icon name="reset" size={15} /> Вернуть в план
-                      </button>
-                    )}
-                  </div>
+                  {/* Закрытая встреча — договорённость, а не черновик: у
+                      неё уже есть исход, и решать его заново, не открыв
+                      сначала «Вернуть в план», значит незаметно поменять
+                      то, о чём уже сказали участникам. Слова Кирилла
+                      23.09.2026: «закрытые или вычеркнутые события — не
+                      подлежат изменениям и доступны только к просмотру».
+                      Поэтому итог здесь — текст, а не поле, и кнопок
+                      «Успешно» / «Без результата» нет вовсе: единственный
+                      санкционированный путь назад — «Вернуть в план». */}
+                  {resolved ? (
+                    <>
+                      {result && <p className="task-card-desc">{result}</p>}
+                      <div className="outcome-actions">
+                        <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => setStatus("planned")}>
+                          <Icon name="reset" size={15} /> Вернуть в план
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="input-with-mic">
+                        {/* Enter завершает встречу успешно — по правилу Кирилла
+                            21.09.2026 «любые заполнения результатов или итогов
+                            должны закрываться нажатием Enter после заполнения,
+                            везде». */}
+                        <AutoGrowTextarea
+                          id="mResult"
+                          minRows={2}
+                          placeholder="Кратко: что решили, что дальше…"
+                          value={result}
+                          onChange={setResult}
+                          onEnter={() => setStatus("success")}
+                        />
+                        <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
+                      </div>
+                      <div className="field-hint">Enter — завершить успешно, Shift+Enter — новая строка.</div>
+                      <div className="outcome-actions">
+                        <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" onClick={() => setStatus("success")}>
+                          <Icon name="check" size={15} /> Успешно
+                        </button>
+                        <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" onClick={() => setStatus("no_result")}>
+                          <Icon name="ban" size={15} /> Без результата
+                        </button>
+                      </div>
+                    </>
+                  )}
                   {/* Блока «Перенести следующий этап» здесь больше нет.
                       У встречи есть кнопка ⇢ в списке, и она спрашивает дату
                       и время тем же окном (useDateTimeConfirm). */}

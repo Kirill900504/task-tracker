@@ -819,6 +819,24 @@
     width:15px; height:15px; border-radius:50%;
     background:var(--med-bg); color:var(--med); border:1px solid var(--med);
   }
+  /* Просьба о переносе и «ждёт приёмки» — тем же приглушённым кружком, но
+     своим цветом каждая: не событие само по себе кричит, а то, что решение
+     по нему ждёт постановщика. Подсказка (title) называет их словами —
+     значок без слов рядом не проверить не открыв карточку. */
+  .task-mark.reschedule{
+    width:17px; height:17px; border-radius:50%;
+    background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent);
+  }
+  .task-mark.review{
+    width:17px; height:17px; border-radius:50%;
+    background:var(--paper-soft); color:var(--ink-soft); border:1px solid var(--line);
+  }
+  /* Число непрочитанных реплик — плашкой, тем же тоном, что у пилюли
+     тостов, чтобы не спорить цветом с остальными значками угла. */
+  .task-mark.unread{
+    min-width:16px; height:16px; padding:0 3px; border-radius:999px;
+    background:var(--accent); color:#F3F8FA; font-size:10px;
+  }
   .check{
     width:18px; height:18px; border-radius:6px; border:1.5px solid var(--line);
     flex:none; margin-top:2px; cursor:pointer; display:flex; align-items:center; justify-content:center;
@@ -934,6 +952,9 @@
   .pop-layer > *{pointer-events:auto;}
   .overlay.open{display:flex; animation:overlay-in .15s ease-out;}
   @keyframes overlay-in{from{opacity:0;} to{opacity:1;}}
+  /* Стрелка назад — скрыта на компьютере (там есть щелчок мимо окна и
+     Esc); показывается только в мобильном блоке ниже. */
+  .modal-back-btn{display:none;}
   /* Одна форма на все окна трекера.
      Слова Кирилла 20.09.2026: «окна не должны быть растянуты от потолка
      до пола, они должны быть более-менее стандартизированной однотипной
@@ -2128,11 +2149,30 @@
       /* На телефоне окно и должно быть во весь экран: там нет ни фона,
          который стоило бы показывать, ни места на поля. Общий потолок в
          82vh отсюда снимается — иначе под окном осталась бы полоса
-         пустоты. */
-      min-height:100%; max-height:none; padding:16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+         пустоты. Верхний отступ увеличен — под ним сама стрелка назад. */
+      min-height:100%; max-height:none; padding:56px 14px calc(16px + env(safe-area-inset-bottom, 0px));
       display:flex; flex-direction:column;
     }
     .modal h2{font-size:18px;}
+    /* Стрелка назад — единственный выход с полноэкранного окна телефона:
+       у него нет ни щелчка мимо (окно и есть весь экран), ни Esc на
+       клавиатуре телефона. Кнопка сидит в левом верхнем углу самого
+       <dialog>, а не .modal, — поэтому не может закрыться раньше, чем
+       её увидели, и не ездит вместе с прокруткой содержимого. */
+    .modal-back-btn{
+      display:flex; align-items:center; justify-content:center;
+      position:absolute; z-index:5;
+      top:calc(10px + env(safe-area-inset-top, 0px)); left:10px;
+      width:38px; height:38px; border-radius:999px;
+      background:var(--paper-soft); border:1px solid var(--line); color:var(--ink-soft);
+      padding:0;
+    }
+    .modal-back-btn:active{background:var(--paper); color:var(--ink);}
+    /* Окно вопроса (Ask.tsx) на телефоне остаётся небольшой карточкой по
+       центру, а не разворачивается во весь экран (см. .ask-overlay выше),
+       и у него уже есть видимая «Отмена» рядом с вопросом — стрелка в
+       углу целого экрана смотрелась бы отдельно от самой карточки. */
+    .ask-overlay .modal-back-btn{display:none;}
     /* 16px — ниже этого iOS зумит страницу при фокусе в поле. */
     .field input, .field textarea, .field select,
     .search-input, .time-input{font-size:16px !important;}
@@ -2147,6 +2187,8 @@
     /* Быстрый ввод не должен налезать на навигацию */
     .quick-add-fab{bottom:calc(78px + env(safe-area-inset-bottom, 0px));}
     #syncStatus{bottom:calc(80px + env(safe-area-inset-bottom, 0px));}
+    .ms-link, .ms-link-dismissed{bottom:calc(80px + env(safe-area-inset-bottom, 0px)); left:12px; right:12px; max-width:none;}
+    .sync-error-notice{bottom:calc(132px + env(safe-area-inset-bottom, 0px)); left:12px; right:12px; max-width:none;}
     /* Тосты уезжают под шапку, чтобы не спорить с нижней навигацией. */
     #toast-stack{top:auto; bottom:calc(84px + env(safe-area-inset-bottom, 0px)); right:12px; left:12px; max-width:none;}
     /* Под палец, а не под курсор */
@@ -2653,24 +2695,62 @@
     background:var(--high-bg); border:1px solid rgba(224,122,95,.4);
     color:#F2C9BC; font-size:12.5px;
   }
-  /* Подключение своего мессенджера. Пока его нет — это самое важное на
-     экране, и выглядит соответственно; как только подключён, остаётся
-     одной спокойной строкой и перестаёт бросаться в глаза. */
+  /* Подключение своего мессенджера — плавающая карточка, а не полоса на
+     всю ширину над доской.
+     До 23.09.2026 это был блок в потоке страницы: пока мессенджер не
+     подключён, он раздвигал всё, что ниже, и оставался на экране до
+     самого подключения, — то самое «раздражающее напоминание», о котором
+     Кирилл прямо сказал. `position:fixed` убирает её из потока (ничего
+     не раздвигает по определению), а место — тот же нижний левый угол,
+     что у плашки «✓ Сохранено» (#syncStatus) и выше неё, чтобы не
+     перекрывались. */
   .ms-link{
-    display:flex; flex-direction:column; gap:10px; margin:0 0 20px;
+    position:fixed; left:16px; bottom:60px; z-index:145; max-width:300px;
+    display:flex; flex-direction:column; gap:10px;
     padding:13px 15px; border-radius:var(--radius-md);
     background:var(--med-bg); border:1px solid rgba(224,184,77,.4);
+    box-shadow:var(--shadow-2);
   }
   .ms-link-quiet{
     background:var(--paper-soft); border-color:var(--line);
     padding:9px 13px; gap:8px;
     flex-direction:row; align-items:center; flex-wrap:wrap;
   }
-  .ms-link-state{display:flex; gap:12px; flex-wrap:wrap; align-items:center;}
-  .ms-link-on{font-size:12.5px; color:var(--ink-soft);}
+  .ms-link-close{
+    position:absolute; top:6px; right:6px; width:22px; height:22px;
+    display:flex; align-items:center; justify-content:center;
+    border:0; border-radius:6px; background:none; color:var(--ink-soft); padding:0; opacity:.7;
+  }
+  .ms-link-close:hover{opacity:1; background:rgba(255,255,255,.08);}
+  /* Свёрнутое напоминание — крестиком нажали «скрыть», а мессенджер так и
+     не подключён: одна тихая строка вместо карточки, тем же местом. */
+  .ms-link-dismissed{
+    position:fixed; left:16px; bottom:60px; z-index:145;
+    display:flex; align-items:center; gap:6px;
+    padding:6px 12px; border-radius:999px;
+    background:var(--paper-soft); border:1px solid var(--line); color:var(--ink-soft);
+    font-size:12px; box-shadow:var(--shadow-1);
+  }
+  .ms-link-dismissed:hover{color:var(--ink); border-color:var(--line-soft);}
+  .ms-link-state{display:flex; gap:12px; flex-wrap:wrap; align-items:center; padding-right:16px;}
+  .ms-link-on{font-size:12.5px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;}
   .ms-link-why{font-size:13px; line-height:1.5; color:var(--ink-soft);}
   .ms-link-why b{color:var(--ink);}
-  .ms-link-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .ms-link-actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .ms-link-actions .btn{display:inline-flex; align-items:center; gap:6px;}
+
+  /* Отказ синхронизации — та же плавающая плашка, своим (тёплым красным)
+     цветом, и на 50px выше напоминания подключить мессенджер: если видны
+     оба сразу, им нельзя лечь друг на друга. */
+  .sync-error-notice{
+    position:fixed; left:16px; bottom:112px; z-index:146; max-width:320px;
+    display:flex; align-items:center; gap:10px;
+    padding:11px 13px; border-radius:var(--radius-md);
+    background:var(--high-bg); border:1px solid #5C3A32; color:var(--high);
+    font-size:12.5px; line-height:1.45; box-shadow:var(--shadow-2);
+  }
+  .sync-error-text{display:flex; align-items:flex-start; gap:6px;}
+  .sync-error-text .icon{flex:none; margin-top:2px;}
   .ms-link-error{
     padding:8px 10px; border-radius:var(--radius-sm);
     background:var(--high-bg); border:1px solid rgba(224,122,95,.4);
@@ -2788,11 +2868,6 @@
     background:var(--overdue-bg); border:1px solid var(--high);
   }
   .my-work .ms-actions{margin-top:0;}
-
-  /* Полоса «подключите мессенджер» — только у того, у кого он не
-     подключён, и только на всю ширину над трекером: раньше она жила на
-     отдельном экране руководителя, которого больше нет. */
-  .tracker-messenger-link{margin:0 0 14px;}
 
   /* «В работу» у присланной мысли: единственное действие, доступное тому,
      кому мысль прислали. Узкая кнопка в том же ряду, что ✈ и 🚩. */

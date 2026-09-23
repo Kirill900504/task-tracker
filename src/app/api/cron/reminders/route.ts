@@ -407,6 +407,11 @@ export async function GET(req: Request) {
       .is("deleted_at", null);
 
     for (const m of (meetings || []) as MeetingRow[]) {
+      // Всё, что ниже — и напоминания, и вопрос «чем кончилась встреча», —
+      // только для запланированной, действующей встречи. Закрытая
+      // (success/no_result) или предложенная не должна снова о себе
+      // напоминать: закрытые события доступны только к просмотру
+      // (23.09.2026).
       if (m.status !== "planned" || !m.time) continue;
       const [hh, mm] = m.time.split(":").map(Number);
       if (Number.isNaN(hh) || Number.isNaN(mm)) continue;
