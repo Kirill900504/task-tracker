@@ -84,6 +84,20 @@ function quoteSnippet(body: string): string {
   return text.length > 80 ? text.slice(0, 80) + "…" : text;
 }
 
+// Строка хроники — это ярлык действия и, часто, слово человека рядом с
+// ним («вернул на доработку: ВСЕРАВНО ДЕЛА!!!!!!»). Оба пишутся сервером
+// одной строкой через ": ", и здесь она разбирается обратно на две части
+// ради ровно того, что Кирилл попросил 23.09.2026 — «надо чтобы больше
+// выделялось именно сообщение... а событие было чуть менее заметно».
+// Метка никогда не содержит ": " сама — она всегда одна из
+// фиксированных фраз («вернул на доработку», «принял в работу» и т.п.),
+// поэтому первое вхождение и есть граница.
+function splitEvent(body: string): { label: string; comment: string | null } {
+  const at = body.indexOf(": ");
+  if (at === -1) return { label: body, comment: null };
+  return { label: body.slice(0, at), comment: body.slice(at + 2) || null };
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -367,18 +381,52 @@ export default function ItemChat({
                     <span>{day}</span>
                   </div>
                 )}
-                {/* Хроника — не реплика. Её никто не писал, её нельзя
-                    править, на неё не ставят реакции, и стоит она по
-                    середине ленты отметкой на полях — как служебные строки
-                    в мессенджере. Именно она отвечает на «а что просили
-                    доделать» после второго возврата: состояние задачи этого
-                    уже не помнит (см. itemHistory.ts). */}
-                {c.system ? (
-                  <div className="chat-event">
-                    <span className="chat-event-text">{c.body}</span>
-                    <span className="chat-event-time">{timeLabel(c.createdAt)}</span>
-                  </div>
-                ) : (
+                {/* Хроника — не реплика: её нельзя править и убрать (это
+                    отметка на полях, а не сообщение человека), но
+                    отвечать на неё и ставить реакции — можно, ровно как
+                    на обычное сообщение. Именно она отвечает на «а что
+                    просили доделать» после второго возврата: состояние
+                    задачи этого уже не помнит (см. itemHistory.ts).
+                    23.09.2026: ярлык события и слово человека при этом —
+                    разной важности. «Вернул на доработку» — метка, ниже
+                    которой всегда можно посмотреть; «ВСЕРАВНО ДЕЛА» — то,
+                    из-за чего карточку открывают, и должно читаться
+                    первым. */}
+                {c.system ? (() => {
+                  const { label, comment } = splitEvent(c.body);
+                  return (
+                    <div
+                      className={"chat-event" + (menuFor?.id === c.id ? " menu-open" : "") + (flashId === c.id ? " flash" : "")}
+                      data-comment-id={c.id}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setMenuFor({ id: c.id, at: { x: e.clientX, y: e.clientY } });
+                      }}
+                      {...longPressProps(c.id)}
+                    >
+                      <div className="chat-event-row">
+                        <span className="chat-event-text">{label}</span>
+                        <span className="chat-event-time">{timeLabel(c.createdAt)}</span>
+                      </div>
+                      {comment && <div className="chat-event-comment">{renderWithMentions(comment, mentionCandidates)}</div>}
+                      {c.reactions.length > 0 && (
+                        <div className="chat-foot">
+                          {c.reactions.map((r) => (
+                            <button
+                              key={r.emoji}
+                              type="button"
+                              className={"chat-reaction" + (r.mine ? " mine" : "")}
+                              title={r.mine ? "Убрать реакцию" : "Поддержать"}
+                              onClick={() => void react(c.id, r.emoji, !r.mine)}
+                            >
+                              {r.emoji} {r.count}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })() : (
                   <div className={"chat-row" + (c.mine ? " mine" : "") + (sameAuthor ? " tight" : "")}>
                     {!c.mine &&
                       (sameAuthor ? (
@@ -527,7 +575,15 @@ export default function ItemChat({
         const c = comments.find((x) => x.id === menuFor.id);
         if (!c) return null;
         const actions: ChatMenuAction[] = [];
-        actions.push({ id: "reply", label: "Ответить", onSelect: () => setReplyTo(c) });
+        // Цитата события — тем же механизмом, что у реплики, но своей
+        // подписью: «authorName» у системной строки — служебное значение
+        // (см. itemHistory.ts, автора у неё нет), и в цитате оно не
+        // должно читаться как «это сказал Кирилл».
+        actions.push({
+          id: "reply",
+          label: "Ответить",
+          onSelect: () => setReplyTo(c.system ? { ...c, authorName: "Событие" } : c),
+        });
         if (c.body) {
           actions.push({
             id: "copy",

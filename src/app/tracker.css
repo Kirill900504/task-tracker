@@ -1001,8 +1001,15 @@
   /* Описание заведённой задачи — текст, а не поле: править его там уже
      нечего (см. TaskModal). Переносы сохраняются, потому что их писали. */
   .task-card-desc{
-    margin:-10px 0 18px; font-size:13.5px; line-height:1.55;
-    color:var(--ink-soft); white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;
+    /* Без отрицательного отступа сверху: он подтягивал текст ВЫШЕ верхней
+       границы прокручиваемой колонки (.modal-main{overflow-y:auto}), а у
+       скролл-контейнера нет «отрицательной прокрутки» — верхняя строка
+       обрезалась примерно наполовину, «уходила за текстуру». Кирилл
+       23.09.2026. Цвет — обычный, не приглушённый: описание читают, а не
+       бегло просматривают, и «ink-soft» рядом с настоящим текстом задачи
+       выглядело тусклее самого фона карточки. */
+    margin:0 0 18px; font-size:13.5px; line-height:1.6; font-weight:500;
+    color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;
   }
   /* Свёрнутое длинное описание — до пяти строк с отточием, «как в
      Битриксе» (пример, который показал Кирилл 23.09.2026): длинный текст
@@ -1010,12 +1017,28 @@
   .task-card-desc.clamped{
     display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden;
   }
-  .expand-toggle{
-    display:inline-flex; align-items:center; gap:3px; margin:2px 0 14px;
-    background:none; border:0; padding:0; cursor:pointer;
-    font-family:var(--display); font-size:12.5px; font-weight:700; color:var(--accent);
+  /* Обёртка ExpandableText — относительная позиция нужна градиенту ниже. */
+  .expandable{position:relative;}
+  /* Затухание у нижнего края свёрнутого текста — вместо голого «▽», который
+     Кирилл справедливо назвал скупым и несовременным: сам текст подсказывает,
+     что дальше есть ещё, а не подпись под ним. Маска гасит прозрачность до
+     нуля, а не рисует свой цвет — под текстом должен быть однородный фон
+     окна (--paper), иначе плавный переход стал бы плавным переходом в
+     ничто на другом фоне. У карточки задачи и у итога встречи фон общий —
+     оба лежат прямо в .modal. */
+  .expandable.has-fade .task-card-desc{
+    -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 26px), transparent 100%);
+    mask-image:linear-gradient(to bottom, #000 calc(100% - 26px), transparent 100%);
   }
-  .expand-toggle:hover{text-decoration:underline;}
+  .expand-toggle{
+    display:inline-flex; align-items:center; gap:5px; margin:-4px 0 14px;
+    background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:999px;
+    padding:5px 12px; cursor:pointer;
+    font-family:var(--display); font-size:12px; font-weight:700; color:var(--ink-soft);
+    transition:border-color .12s ease, color .12s ease, background .12s ease;
+  }
+  .expand-toggle:hover{border-color:var(--accent); color:var(--accent); background:var(--accent-soft);}
+  .expand-toggle .icon{transition:transform .15s ease;}
   @media (prefers-reduced-motion: reduce){ .overlay.open, .modal{animation:none;} }
   .field{margin-bottom:13px;}
   /* Название поля. В отличие от заголовка блока — БЕЗ прописных: «Кто на
@@ -1116,7 +1139,7 @@
      по просьбе Кирилла: та же самая пилюля (.tp-stage), только в верхнем
      блоке. Отдельной строкой, а не поверх первой ячейки — иначе бейдж
      перекрывал бы «Дата постановки» у длинной даты. */
-  .facts-badge-row{display:flex; justify-content:flex-end; padding:7px 12px 0;}
+  .facts-badge-row{display:flex; justify-content:flex-start; padding:7px 12px 6px;}
   .facts-row{display:grid; grid-template-columns:1fr 1fr; gap:1px;}
   .facts-row.wide{grid-template-columns:1fr;}
   .fact{
@@ -1237,15 +1260,14 @@
     }
     /* Заголовок и подсказка переноса — над столбцами, сами не скроллятся. */
     .modal.has-chat > :not(.modal-split):not(.modal-actions){flex:none;}
-    /* Левая колонка (сводка, состав, приёмка) — уже правой: это факты,
-       читаются один раз и не требуют простора, а переписка — то, чем
-       пользуются постоянно и куда удобнее печатать в широком поле. Слова
-       Кирилла 23.09.2026: «левый блок можно сделать чуть уже, а вот чат
-       надо шире». Раньше было ровно наоборот (1fr слева, до 380px
-       справа) — уже сама пропорция противоречила тому, чем пользуются
-       чаще. */
+    /* Левая колонка (сводка, состав, приёмка) — уже правой, но не в
+       ущерб читаемости: списки соисполнителей и наблюдателей — это имена
+       в несколько слов, и первая попытка (300–400px) сжимала их в
+       перенос через слово. Кирилл 23.09.2026, уже после сужения: «всё же
+       расширь и левую часть, так будет читабельней». Чат всё равно
+       остаётся большинством (1fr), просто минимум левой колонки поднят. */
     .modal.has-chat .modal-split{
-      display:grid; grid-template-columns:minmax(300px,400px) minmax(420px,1fr);
+      display:grid; grid-template-columns:minmax(340px,460px) minmax(420px,1fr);
       gap:26px; flex:1 1 auto; min-height:0; overflow:hidden;
     }
     .modal.has-chat .modal-main{
@@ -1766,9 +1788,14 @@
     padding:7px 13px; border:1px solid var(--line-soft); border-radius:999px; cursor:pointer;
     background:var(--paper-soft); color:var(--ink); font-family:var(--sans); font-size:12.5px; font-weight:600;
     line-height:1.35; box-shadow:var(--edge);
-    transition:border-color .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;
+    transition:border-color .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease, transform .12s ease;
   }
-  .participant-chip:hover{border-color:var(--accent); color:var(--accent);}
+  /* Лёгкий подъём на наведении — то немногое, что отличает «нарисовано» от
+     «сделано»: тень становится глубже, а кнопка на пиксель ближе к
+     курсору. Кирилл 23.09.2026 про этот же блок: «выглядит отвратительно…
+     как в прошлый век». */
+  .participant-chip:hover{border-color:var(--accent); color:var(--accent); box-shadow:var(--shadow-1); transform:translateY(-1px);}
+  .participant-chip:active{transform:translateY(0);}
   .participant-chip.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:600;}
   /* Роль видно на самой кнопке: исполнитель — просто выбранный, остальные
      подписаны, потому что их меньшинство и их легко перепутать с главным. */
@@ -1776,6 +1803,17 @@
   .participant-chip.role-coexecutor{background:var(--accent-soft); color:var(--accent); border-color:var(--accent);}
   .participant-chip.role-watcher{background:var(--paper-soft); color:var(--ink-soft); border-color:var(--ink-soft); font-weight:500;}
   .participant-chip.chip-add{border-style:dashed; color:var(--ink-soft);}
+  /* Роль читается цветной полоской слева — тем же приёмом, что у роли на
+     кубике доски (.task-role-bar), только здесь она короче и внутри самой
+     фишки: имя человека остаётся текстом, роль — цветом, и то и другое
+     видно без наведения. */
+  .team-compact .participant-chip:not(.chip-add){
+    position:relative; padding-left:16px;
+  }
+  .team-compact .participant-chip:not(.chip-add)::before{
+    content:""; position:absolute; left:6px; top:50%; transform:translateY(-50%);
+    width:4px; height:4px; border-radius:50%; background:currentColor; opacity:.55;
+  }
   /* «Ещё N» — не человек, а продолжение списка, и выглядеть должна иначе
      от обеих соседок: сплошная, но приглушённая. Пунктир занят кнопкой
      «+ человек», у которой смысл совсем другой — завести нового. */
@@ -2122,11 +2160,6 @@
       box-shadow:0 0 0 2px var(--paper);
     }
     .mobile-tab.active .mobile-tab-badge{background:var(--accent); color:#F3F8FA;}
-    /* Поиск в том же ряду, но это не раздел, а действие: пилюли «вы
-       здесь» у него не бывает, и подпись приглушена — иначе ряд обещал
-       бы шестой раздел, которого нет. */
-    .mobile-tab-search{color:var(--ink-soft);}
-    .mobile-tab-search:active .mobile-tab-icon{background:var(--paper-soft);}
     .mobile-tab-label{line-height:1;}
     @media (prefers-reduced-motion: reduce){
       .mobile-tab-icon{transition:none;}
@@ -2533,12 +2566,19 @@
      справа от имени, а не отдельная строка.
      ---------------------------------------------------------------- */
   .team-compact{margin-bottom:10px;}
-  .chip-status{display:inline-flex; align-items:center; margin-left:5px; line-height:1;}
-  .chip-status.status-done{color:#DFF3E6;}
-  .chip-status.status-declined{color:#FBDCD3;}
-  .chip-status.status-accepted{color:#EAF6F2;}
-  .chip-status.status-waiting{font-size:10px; opacity:.85;}
-  .chip-status.status-unreachable{color:#F0D9A8;}
+  /* Значок статуса — своим кружком с подложкой, а не голой иконкой,
+     плывущей в тексте: у него теперь есть вес, и на фишке он читается
+     как завершённый элемент дизайна, а не «забыли доделать». */
+  .chip-status{
+    display:inline-flex; align-items:center; justify-content:center;
+    margin-left:6px; width:16px; height:16px; border-radius:50%; line-height:1;
+    background:rgba(255,255,255,.16);
+  }
+  .chip-status.status-done{color:#DFF3E6; background:rgba(63,169,104,.35);}
+  .chip-status.status-declined{color:#FBDCD3; background:rgba(224,122,95,.35);}
+  .chip-status.status-accepted{color:#EAF6F2; background:rgba(255,255,255,.22);}
+  .chip-status.status-waiting{font-size:10px; opacity:.85; background:none;}
+  .chip-status.status-unreachable{color:#F0D9A8; background:rgba(224,184,77,.3);}
   /* На невыбранном фоне («ждём», «не подключён» у наблюдателя быть не
      может, но роль сама по себе бывает не «executor» selected-акцентной)
      статус читается цветом текста, а не белым по акценту. */
@@ -2800,16 +2840,36 @@
     border:1px solid var(--line-soft); border-radius:var(--radius-sm);
   }
   .chat-composer textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
-  /* Хроника задачи: кто что сделал и когда. Отметка на полях, а не
-     сообщение — её никто не писал, и выглядеть как чья-то реплика она не
-     должна, иначе обсуждение перестанет читаться. */
+  /* Хроника задачи: кто что сделал и когда. Отметка на полях — метка
+     события намеренно тише переписки, а слово человека при этом заметнее
+     обычной реплики. Слова Кирилла 23.09.2026: «уведомления о событиях
+     меркнут с мелким шрифтом на фоне переписки… надо чтобы больше
+     выделялось именно сообщение (комментарий)… а событие было чуть менее
+     заметно» — то есть не «сделай крупнее всё», а разведи эти два слоя.
+     Интерактивна так же, как обычное сообщение: правая кнопка/долгое
+     нажатие открывают то же меню — ответить и поставить реакцию можно и
+     на событие, хотя изменить или убрать его саму строку — нет (это не
+     чья-то реплика, см. itemHistory.ts). */
   .chat-event{
-    display:flex; gap:10px; align-items:baseline; justify-content:space-between;
-    padding:6px 2px; margin:2px 0;
-    border-left:2px solid var(--line); padding-left:10px;
+    display:flex; flex-direction:column; gap:5px;
+    padding:8px 10px; margin:4px 0;
+    border-left:2px solid var(--line); border-radius:0 8px 8px 0;
+    transition:border-color .12s ease, background .12s ease;
   }
-  .chat-event-text{font-size:12.5px; line-height:1.45; color:var(--ink-soft);}
-  .chat-event-time{font-size:11px; color:var(--ink-faint, var(--ink-soft)); white-space:nowrap; opacity:.75;}
+  .chat-event.menu-open{border-color:var(--accent);}
+  .chat-event.flash{animation:chat-flash 1.4s ease-out;}
+  .chat-event-row{display:flex; gap:10px; align-items:baseline; justify-content:space-between;}
+  .chat-event-text{font-size:11.5px; line-height:1.4; color:var(--ink-soft); opacity:.8;}
+  .chat-event-time{font-size:10.5px; color:var(--ink-faint, var(--ink-soft)); white-space:nowrap; opacity:.7;}
+  /* Слово человека — карточкой, крупнее и контрастнее самой переписки:
+     это то, ради чего открывают хронику, а событие сверху — просто
+     объясняет, при каких обстоятельствах это было сказано. */
+  .chat-event-comment{
+    font-size:14px; font-weight:600; line-height:1.5; color:var(--ink);
+    padding:9px 11px; border-radius:10px;
+    background:var(--paper); border:1px solid var(--line-soft);
+    white-space:pre-wrap; overflow-wrap:anywhere;
+  }
   .chat-error{
     margin-top:8px; padding:8px 10px; border-radius:var(--radius-sm);
     background:var(--high-bg); border:1px solid rgba(224,122,95,.4);
@@ -3137,18 +3197,11 @@
   .meeting-chip.awaits-recap{border-color:var(--med); background:var(--med-bg);}
   .pill-recap{background:var(--med-bg); color:var(--med); border:1px solid var(--med);}
 
-  /* Полоса столбцов на телефоне. Четыре списка в одну ленту означали бы,
-     что до «На приёмке» надо пролистать всё остальное; здесь виден один
-     столбец, а цифры на кнопках отвечают на «сколько где» сразу. */
-  .board-tabs{display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:8px; -webkit-overflow-scrolling:touch;}
-  .board-tab{
-    flex:none; cursor:pointer; white-space:nowrap; font:inherit;
-    display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 12px;
-    background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:999px;
-    color:var(--ink-soft); font-size:13px; font-weight:600;
-  }
-  .board-tab.active{background:var(--accent); border-color:var(--accent); color:#F3F8FA;}
-  .board-tab-count{font-variant-numeric:var(--nums); opacity:.8;}
+  /* Полоса-переключатель столбцов на телефоне (.board-tabs/.board-tab) ушла
+     23.09.2026 вместе со своей разметкой: «Новые задачи», «В работе» и
+     «На приёмке» стали тремя полноценными разделами нижней панели, а не
+     кнопками внутри одного (см. MobileShell.tsx и TasksPanel.tsx). Один
+     столбец на разделе остаётся — .columns-single ниже по-прежнему в деле. */
   .columns-single{grid-template-columns:1fr !important;}
   /* Заголовок столбца на телефоне не нужен: его название уже на кнопке. */
   @media (max-width:800px){ .columns-single .section-title{display:none;} }

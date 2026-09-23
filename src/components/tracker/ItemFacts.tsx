@@ -53,7 +53,6 @@ export default function ItemFacts({
 }) {
   return (
     <div className="facts" id={id}>
-      {badge && <div className="facts-badge-row">{badge}</div>}
       {rows.map((row, i) =>
         "wide" in row ? (
           <div className="facts-row wide" key={i}>
@@ -66,6 +65,12 @@ export default function ItemFacts({
           </div>
         ),
       )}
+      {/* Бейдж стадии — в нижнем левом углу блока, а не отдельной строкой
+          сверху. Слова Кирилла 23.09.2026: строка над сводкой с пилюлей у
+          правого края и пустотой слева от неё читалась как «свободное
+          бесполезное пространство» — теперь это последняя строка блока,
+          и пустует в ней куда более привычное место, ПОСЛЕ данных. */}
+      {badge && <div className="facts-badge-row">{badge}</div>}
     </div>
   );
 }

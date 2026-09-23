@@ -38,6 +38,7 @@ import { isCreatedByMe, isMine } from "@/lib/ownership";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
+import { noteParticipantChange } from "@/lib/participantNote";
 
 export default function TasksPanel({
   tasks,
@@ -65,6 +66,7 @@ export default function TasksPanel({
   onFilterAssigneeChange,
   justCreatedId,
   extraBanner,
+  mobileColumn,
 }: {
   // Уже сужено родителем до «моё» — где я постановщик, исполнитель,
   // соисполнитель или наблюдатель (см. NewTracker.tsx, 23.09.2026, правило
@@ -145,6 +147,14 @@ export default function TasksPanel({
   // Rendered at the top of the column, in the same slot legacy's
   // #syncErrorBanner occupied (see SyncErrorBanner).
   extraBanner?: ReactNode;
+  // На телефоне это теперь ВЕСЬ раздел, а не переключатель внутри одного —
+  // слова Кирилла 23.09.2026: «убрать кнопки «новые задачи», «в работе» и
+  // на приёмке и сделать три полноценных раздела». «Приёмка» уже была
+  // отдельным разделом (ReviewScreen); «Задачи» и «В работе» становятся
+  // двумя отдельными монтированиями этой панели, каждое со своим столбцом,
+  // — см. NewTracker.tsx. Без этого пропа (везде, кроме мобильных вкладок)
+  // поведение прежнее — все три столбца в ряд.
+  mobileColumn?: "new" | "work";
 }) {
   // «Просрочено» — не сортировка и не раздел, а вопрос «что горит»: он
   // задаётся чаще всех прочих фильтров вместе взятых.
@@ -161,9 +171,6 @@ export default function TasksPanel({
   const [filterSection, setFilterSection] = useState("all");
   // Окно «Разделы»: названия, ответственные, удаление. Только у админа.
   const [sectionsOpen, setSectionsOpen] = useState(false);
-  // Какой столбец доски показан на телефоне. Пусто — значит человек ещё не
-  // выбирал сам, и столбец подбирается по работе (см. shownColumn).
-  const [mobileColumn, setMobileColumn] = useState<KanbanColumn | null>(null);
   // Окно «Загрузка»: кто чем занят и у кого горит. Раньше стояло панелью в
   // правой колонке (см. LoadModal — там же причина переезда).
   const [loadOpen, setLoadOpen] = useState(false);
@@ -659,27 +666,6 @@ export default function TasksPanel({
     return items;
   }
 
-  // «Завершённые» появляются в полосе только вместе с кнопкой, которая их
-  // открывает, — и если выбранный столбец исчез, показываем «Новые», а не
-  // пустоту от несуществующего столбца.
-  // На телефоне четвёртого столбца нет никогда, даже если «Завершённые»
-  // включены на компьютере: переключатель один на оба экрана, а правило
-  // «завершённые в мобильной версии поскрывай» — про экран.
-  const visibleColumns: KanbanColumn[] = showDone && !isMobile ? ["new", "work", "review", "done"] : ["new", "work", "review"];
-  // Пока человек сам не выбрал столбец, показывается ПЕРВЫЙ НЕПУСТОЙ.
-  //
-  // Осмотр 21.09.2026 на телефоне: четыре задачи в работе, а трекер
-  // открывается на «Новых» со словами «Всё разобрано — новых нет». То есть
-  // первое, что видит человек при каждом запуске, — пустой экран при
-  // полном списке дел. «Новые» значит «отправлена, ждём ответа» — у того,
-  // кто работает сам на себя, этот столбец пуст всегда, и вкладка задач
-  // для него была бесполезна по умолчанию.
-  // Своего выбора это не отменяет: нажал на столбец — показывается он,
-  // даже пустой (человек спросил именно про него).
-  const firstWithWork = visibleColumns.find((c) => byColumn[c].length > 0);
-  const shownColumn: KanbanColumn =
-    mobileColumn && visibleColumns.includes(mobileColumn) ? mobileColumn : (firstWithWork ?? "new");
-
   function renderColumn(column: KanbanColumn) {
     const meta = KANBAN_COLUMNS.find((c) => c.id === column)!;
     const list = byColumn[column];
@@ -823,8 +809,15 @@ export default function TasksPanel({
 
                 Появляется только там, где работают вместе: пока поручает и
                 выполняет один человек, все три кнопки показывают одно и то
-                же. */}
-            {sharedBoard && (
+                же.
+
+                На телефоне их больше нет — слова Кирилла 23.09.2026: раз
+                доска сама разошлась на три раздела («Задачи», «В работе»,
+                «Приёмка»), различать «чьё» внутри каждого уже незачем, а
+                сама кнопка «Я поручил» потеряла смысл вопроса, на который
+                отвечала. `view` при этом остаётся «all» и не трогается: та
+                же логика фильтрации продолжает работать на компьютере. */}
+            {sharedBoard && !isMobile && (
               <div className="view-switch" role="group" aria-label="Чьи задачи показывать">
                 {(
                   [
@@ -945,32 +938,15 @@ export default function TasksPanel({
           кнопка завершённые открывала только колонку кан-бана
           „завершённые“».
 
-          На телефоне столбцы не встают друг под друга: четыре списка в
-          одну ленту означают, что до «На приёмке» надо пролистать всё
-          остальное. Там доска показывает один столбец, выбранный полосой
-          кнопок, — и цифры на кнопках заодно отвечают на «сколько где»,
-          не открывая ничего. */}
+          На телефоне столбцы не встают друг под друга и больше не выбираются
+          переключателем внутри одного раздела — каждый теперь свой раздел
+          нижней панели («Задачи», «В работе», «Приёмка»), а какой из них
+          показать здесь, решает mobileColumn, пришедший от родителя (см.
+          NewTracker.tsx). Слова Кирилла 23.09.2026: «убрать кнопки «новые
+          задачи», «в работе» и на приёмке и сделать три полноценных
+          раздела». Полосы-переключателя, которая была здесь, больше нет. */}
       {isMobile ? (
-        <>
-          <div className="board-tabs" role="group" aria-label="Столбец доски">
-            {visibleColumns.map((id) => {
-              const meta = KANBAN_COLUMNS.find((c) => c.id === id)!;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  className={"board-tab" + (shownColumn === id ? " active" : "")}
-                  aria-pressed={shownColumn === id}
-                  onClick={() => setMobileColumn(id)}
-                >
-                  {meta.title}
-                  <span className="board-tab-count">{byColumn[id].length}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="columns columns-single">{renderColumn(shownColumn)}</div>
-        </>
+        <div className="columns columns-single">{renderColumn(mobileColumn ?? "new")}</div>
       ) : (
         <div className={"columns" + (showDone ? " with-done" : "")}>
           {renderColumn("new")}
@@ -1071,9 +1047,27 @@ export default function TasksPanel({
           participants={modalTask ? participants.forTask(modalTask.id) : []}
           availablePeople={participants.people}
           onPersonAdded={(name) => participants.waitForPerson(name)}
-          onAddParticipant={(assigneeId, role) => (modalTask ? participants.add(modalTask.id, assigneeId, role) : undefined)}
-          onSetParticipantRole={(id, role) => void participants.setRole(id, role)}
-          onRemoveParticipant={(id) => void participants.remove(id)}
+          onAddParticipant={(assigneeId, role) => {
+            if (!modalTask) return undefined;
+            // Хроника — только про смену состава у ЖИВОЙ задачи, поэтому
+            // нота пишется здесь, а не внутри participants.add: тот же
+            // хук зовёт заведение состава и при создании задачи
+            // (attachOnCreate), а для только что заведённой задачи
+            // «добавил в исполнители» не событие — она и так вся из
+            // одних только что назначенных людей.
+            noteParticipantChange({ taskId: modalTask.id, assigneeId, action: "add", role });
+            return participants.add(modalTask.id, assigneeId, role);
+          }}
+          onSetParticipantRole={(id, role) => {
+            const p = modalTask ? participants.forTask(modalTask.id).find((x) => x.id === id) : undefined;
+            if (modalTask && p) noteParticipantChange({ taskId: modalTask.id, assigneeId: p.assigneeId, action: "role", role });
+            void participants.setRole(id, role);
+          }}
+          onRemoveParticipant={(id) => {
+            const p = modalTask ? participants.forTask(modalTask.id).find((x) => x.id === id) : undefined;
+            if (modalTask && p) noteParticipantChange({ taskId: modalTask.id, assigneeId: p.assigneeId, action: "remove" });
+            void participants.remove(id);
+          }}
           onApproveWork={async (comment) => {
             if (!modalTask) return;
             try {
