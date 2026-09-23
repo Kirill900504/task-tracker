@@ -97,6 +97,21 @@ export default function NewTracker() {
   );
   const { loading, loadError, tasks, meetings, ideas, sections, assignees, syncStatus, offline, actions } =
     useTrackerData({ enabled: ready, workspace });
+  // Мысль — личная заметка, а не общий поток: 23.09.2026 Кирилл сказал
+  // прямо, что видеть чужие задачи и встречи никто не должен, «чтобы не
+  // засорялся эфир» — и мысли этому правилу не следовали вовсе. `useTrackerData`
+  // читает мысли всего пространства разом (это нужно синку), а сюда до сих
+  // пор уходил весь массив без единого фильтра: любая чужая мысль была
+  // видна каждому с кнопкой «В работу», отправляли её ему или нет — своего
+  // получателя мысль не хранит вовсе. `isMine()` здесь не подходит: она
+  // отвечает на вопрос «можно править», а не «видно ли», и для владельца
+  // возвращает true безусловно (см. lib/ownership.ts) — тем самым объявила
+  // бы своими вообще все мысли пространства. Сравниваем `createdBy`
+  // напрямую с тем, кто сейчас смотрит: пусто — значит завёл владелец.
+  const myIdeas = useMemo(
+    () => ideas.filter((i) => (i.createdBy || "") === (identity.role === "manager" ? identity.userId : "")),
+    [ideas, identity.role, identity.userId],
+  );
   // Как меня зовут в списке людей. Своя строка помечена «(я)» — другого
   // способа связать логин с человеком в браузере нет. Нужно на экране
   // «Сегодня», чтобы отличить «моя задача» от «я поручил её другому».
@@ -567,7 +582,7 @@ export default function NewTracker() {
         ideasPanel: (
           <IdeasPanel
             myUserId={mineOnlyId}
-            ideas={ideas}
+            ideas={myIdeas}
             highlightId={highlightIdeaId}
             actions={actions}
             toasts={toasts}
@@ -624,7 +639,7 @@ export default function NewTracker() {
         <SearchOverlay
           tasks={tasks}
           meetings={meetings}
-          ideas={ideas}
+          ideas={myIdeas}
           onClose={() => setSearchOpen(false)}
           onOpenResult={openSearchResult}
         />
@@ -693,7 +708,7 @@ export default function NewTracker() {
             badges={{
               today: todayCount(buildToday(tasks, meetings)),
               meetings: meetings.filter((m) => !m.status || m.status === "planned").length,
-              ideas: ideas.filter((i) => !i.done).length,
+              ideas: myIdeas.filter((i) => !i.done).length,
               review: awaitingReview(tasks).length,
             }}
           >
