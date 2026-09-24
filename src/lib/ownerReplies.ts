@@ -439,7 +439,7 @@ export async function handleOwnerCallback(
   if (action.action === "ok" && action.kind === "task") {
     const task = await loadTask(admin, actor, action.id);
     if (!task) return { toast: "Эта задача не найдена" };
-    const done = await applyReview(admin, { id: task.id, title: task.title, user_id: actor.spaceId }, "approve", "", {
+    const done = await applyReview(admin, { id: task.id, title: task.title, user_id: actor.spaceId, status: task.status }, "approve", "", {
       label: await actorName(admin, actor.spaceId, actor.userId),
       userId: actor.userId,
     });

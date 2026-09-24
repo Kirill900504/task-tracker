@@ -42,3 +42,17 @@ export function isMeetingVisible(meeting: Meeting, myUserId: string, myName: str
   if (!myName) return false;
   return meeting.participants.includes(myName);
 }
+
+// Как меня зовут в общем списке людей — источник для isMeetingVisible выше.
+// Список один на всё пространство, и «(я)» в нём стоит РОВНО у владельца
+// (см. rename-person.mjs / useWorkspaceRole): у руководителя такой строки
+// нет, его настоящее имя знает только его собственная строка членства
+// (`identityName`, из useWorkspaceRole). До 24.09.2026 здесь искали только
+// «(я)» — для руководителя это находило имя ВЛАДЕЛЬЦА (единственную строку
+// с такой пометкой в общем списке), и isMeetingVisible сравнивал участников
+// встречи с чужим именем: встречу, на которую пригласили руководителя, он
+// не видел вовсе. Пойман на живом аккаунте (Кирилл создал встречу тестовому
+// руководителю, и она не появилась на его стороне).
+export function resolveMyName(identityName: string, assignees: string[]): string {
+  return identityName || assignees.find((a) => a.trim().endsWith("(я)")) || "";
+}

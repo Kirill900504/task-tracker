@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isTaskVisible, isMeetingVisible } from "./itemVisibility";
+import { isTaskVisible, isMeetingVisible, resolveMyName } from "./itemVisibility";
 import type { Task, Meeting } from "@/types/tracker";
 
 const ME = "11111111-1111-1111-1111-111111111111";
@@ -68,5 +68,19 @@ describe("видимость встречи — организатор или п
 
   it("пустое имя не совпадает случайно с пустой строкой в участниках", () => {
     expect(isMeetingVisible(meeting(SOMEONE, [""]), ME, "")).toBe(false);
+  });
+});
+
+describe("resolveMyName — своё имя в общем списке людей", () => {
+  it("владельцу отдаёт строку, помеченную «(я)»", () => {
+    expect(resolveMyName("", ["Иван Петров", "Кирилл Кучеренко (я)"])).toBe("Кирилл Кучеренко (я)");
+  });
+
+  it("руководителю отдаёт его собственное имя, а не строку владельца", () => {
+    // Баг, пойманный на живом аккаунте 24.09.2026: список людей один на всё
+    // пространство, и «(я)» в нём стоит только у владельца. Раньше здесь
+    // искали только «(я)» — для руководителя это находило имя владельца, и
+    // встреча, на которую его пригласили, не проходила isMeetingVisible.
+    expect(resolveMyName("Кирилл (тест)", ["Кирилл Кучеренко (я)", "Кирилл (тест)"])).toBe("Кирилл (тест)");
   });
 });

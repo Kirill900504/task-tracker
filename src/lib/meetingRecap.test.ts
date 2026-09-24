@@ -82,7 +82,7 @@ describe("approveTaskFromMeeting", () => {
     expect(closed).toBe(true);
     expect(applyReview).toHaveBeenCalledTimes(1);
     const [, task, action, comment] = applyReview.mock.calls[0];
-    expect(task).toEqual({ id: "t1", title: "Собрать смету", user_id: "owner-1" });
+    expect(task).toEqual({ id: "t1", title: "Собрать смету", user_id: "owner-1", status: "in_progress" });
     expect(action).toBe("approve");
     expect(comment).toBe("Смету согласовали, Игорь сдаёт в пятницу");
   });

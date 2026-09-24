@@ -77,6 +77,16 @@ describe("the stage a card shows", () => {
     expect(taskStage([person("Аня", { acceptedAt: t }), person("Борис")], "open")).toBe("accepted");
   });
 
+  // Кирилл, 24.09.2026: задача «2» с двумя исполнителями — один уже сдал,
+  // второй ни разу не нажал «Принял» — показывала «отправлено, ещё не
+  // приняли», хотя половина работы уже сделана. acceptedCount нарочно не
+  // считает тех, кто уже отчитался (см. taskProgress), и без doneCount в
+  // этой же проверке стадия откатывалась к «sent».
+  it("is 'accepted', not 'sent', when one executor has already reported and the other never even accepted", () => {
+    const list = [person("Аня", { doneAt: t, doneComment: "готово" }), person("Борис")];
+    expect(taskStage(list, "open")).toBe("accepted");
+  });
+
   it("is 'blocked' when an executor cannot do it", () => {
     const list = [person("Аня", { acceptedAt: t }), person("Борис", { declinedAt: t, declineReason: "нет людей" })];
     expect(taskStage(list, "open")).toBe("blocked");

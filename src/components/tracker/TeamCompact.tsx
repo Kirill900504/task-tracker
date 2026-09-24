@@ -73,10 +73,10 @@ export default function TeamCompact({
   onAddParticipant: (assigneeId: string, role: TaskParticipantRole) => void | Promise<string | void>;
   onSetParticipantRole: (participantId: string, role: TaskParticipantRole) => void;
   onRemoveParticipant: (participantId: string) => void;
-  onApproveWork: (comment: string) => void;
-  onReturnWork: (comment: string) => void;
-  onForceCloseWork: (reason: string) => void;
-  onReopenWork: (comment: string) => void;
+  onApproveWork: (comment: string) => void | Promise<void>;
+  onReturnWork: (comment: string) => void | Promise<void>;
+  onForceCloseWork: (reason: string) => void | Promise<void>;
+  onReopenWork: (comment: string) => void | Promise<void>;
   onAcceptReschedule: (participantId: string, date: string) => void;
   onRejectReschedule: (participantId: string) => void;
   // Завести нового человека — только у администратора (см. PeoplePicker).
@@ -93,12 +93,23 @@ export default function TeamCompact({
   const [personMenu, setPersonMenu] = useState<{ p: Participant; anchor: DOMRect } | null>(null);
   const [addMenu, setAddMenu] = useState<DOMRect | null>(null);
   const [roleFor, setRoleFor] = useState<{ person: PersonOption; anchor: DOMRect } | null>(null);
+  // Приёмка, возврат, волевое закрытие и открытие заново все двигают
+  // задачу и после успеха закрывают карточку (см. onApproveWork и
+  // соседей в TasksPanel.tsx) — но карточка закрывается только когда
+  // ответ сети ВЕРНУЛСЯ, а «Принять» ничем не блокировалось до этого
+  // момента. При задержке сети повторное нажатие успевало открыть окно
+  // комментария второй раз и отправить приёмку ещё раз с другим текстом —
+  // «два раза закрыть с разными комментариями» (Кирилл, 24.09.2026, по
+  // скриншоту). busy — тот же приём, что уже стоит в TaskAnswer.tsx у
+  // ответа исполнителя.
+  const [busy, setBusy] = useState(false);
 
   const pickedIds = new Set(participants.map((p) => p.assigneeId));
   const unpicked = availablePeople.filter((p) => !pickedIds.has(p.id));
   const canAddMore = unpicked.length > 0 || !!onAddPerson;
 
   async function handleApprove() {
+    if (busy) return;
     const comment = await ask.ask({
       title: "Приёмка работы",
       question: "Комментарий к приёмке",
@@ -112,11 +123,17 @@ export default function TeamCompact({
       // слова неотличимо от того, что его никто не читал.
       required: "Приёмка без комментария не решение — напишите хотя бы, что именно принимаете.",
     });
-    if (comment === null) return;
-    onApproveWork(comment.trim());
+    if (comment === null || busy) return;
+    setBusy(true);
+    try {
+      await onApproveWork(comment.trim());
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleReturn() {
+    if (busy) return;
     const comment = await ask.ask({
       title: "Вернуть на доработку",
       question: "Что доделать?",
@@ -125,11 +142,17 @@ export default function TeamCompact({
       okText: "Вернуть",
       required: "Возврат без объяснения бессмысленен — напишите, что не так.",
     });
-    if (comment === null) return;
-    onReturnWork(comment.trim());
+    if (comment === null || busy) return;
+    setBusy(true);
+    try {
+      await onReturnWork(comment.trim());
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleForceClose() {
+    if (busy) return;
     const reason = await ask.ask({
       title: "Закрыть волевым решением",
       question: "Почему закрываем?",
@@ -138,11 +161,17 @@ export default function TeamCompact({
       okText: "Закрыть задачу",
       required: "Причина обязательна: именно она объясняет, почему задача закрыта не как обычно.",
     });
-    if (reason === null) return;
-    onForceCloseWork(reason.trim());
+    if (reason === null || busy) return;
+    setBusy(true);
+    try {
+      await onForceCloseWork(reason.trim());
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleReopen() {
+    if (busy) return;
     const comment = await ask.ask({
       title: "Открыть задачу заново",
       question: "Что изменилось?",
@@ -150,8 +179,13 @@ export default function TeamCompact({
       multiline: true,
       okText: "Открыть заново",
     });
-    if (comment === null) return;
-    onReopenWork(comment.trim());
+    if (comment === null || busy) return;
+    setBusy(true);
+    try {
+      await onReopenWork(comment.trim());
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -286,15 +320,15 @@ export default function TeamCompact({
           </div>
           <div className="tp-review-actions">
             {progress.doneCount > 0 && (
-              <button className="btn btn-small btn-primary" type="button" onClick={() => void handleApprove()}>
+              <button className="btn btn-small btn-primary" type="button" disabled={busy} onClick={() => void handleApprove()}>
                 Принять
               </button>
             )}
-            <button className="btn btn-small" type="button" onClick={() => void handleReturn()}>
+            <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleReturn()}>
               {progress.declined.length ? "Вернуть с объяснением" : "Вернуть на доработку"}
             </button>
             {progress.declined.length > 0 && (
-              <button className="btn btn-small" type="button" onClick={() => void handleForceClose()}>
+              <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleForceClose()}>
                 Закрыть волевым решением
               </button>
             )}
@@ -306,7 +340,7 @@ export default function TeamCompact({
         <div className="tp-review">
           <div className="tp-review-text">Задача принята и закрыта.</div>
           <div className="tp-review-actions">
-            <button className="btn btn-small" type="button" onClick={() => void handleReopen()}>
+            <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleReopen()}>
               Открыть заново
             </button>
           </div>
@@ -319,7 +353,7 @@ export default function TeamCompact({
           выход. Волевое закрытие не должно зависеть от того, сошлась ли
           локальная копия участников с тем, что знает сервер. */}
       {stage !== "done" && stage !== "awaiting_review" && (
-        <button className="btn btn-small tp-force" type="button" onClick={() => void handleForceClose()}>
+        <button className="btn btn-small tp-force" type="button" disabled={busy} onClick={() => void handleForceClose()}>
           Закрыть волевым решением
         </button>
       )}

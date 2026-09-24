@@ -49,11 +49,11 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: taskRow } = await admin
     .from("tasks")
-    .select("id, title, user_id, created_by")
+    .select("id, title, user_id, created_by, status")
     .eq("id", body.taskId)
     .is("deleted_at", null)
     .maybeSingle();
-  const task = taskRow as { id: string; title: string; user_id: string; created_by: string | null } | null;
+  const task = taskRow as { id: string; title: string; user_id: string; created_by: string | null; status: string } | null;
   if (!task) return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
 
   // Принимает работу тот, кто её поручил — и только он, даже когда он же
@@ -175,7 +175,7 @@ export async function POST(req: Request) {
   // кто вправе.
   const result = await applyReview(
     admin,
-    { id: task.id, title: task.title, user_id: task.user_id },
+    { id: task.id, title: task.title, user_id: task.user_id, status: task.status },
     body.action as ReviewAction,
     comment,
     { label: await actorName(admin, task.user_id, user.id), userId: user.id },

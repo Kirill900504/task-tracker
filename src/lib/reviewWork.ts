@@ -45,7 +45,7 @@ export const REOPEN_PATCH = {
 
 export async function applyReview(
   admin: SupabaseClient,
-  task: { id: string; title: string; user_id: string },
+  task: { id: string; title: string; user_id: string; status?: string | null },
   action: ReviewAction,
   comment: string,
   who: { label: string; userId: string },
@@ -53,6 +53,20 @@ export async function applyReview(
   const text = comment.trim();
   if (action === "return" && !text) return { ok: false, error: "Напишите, что доделать" };
   if (action === "force" && !text) return { ok: false, error: "Нужна причина" };
+
+  // Приёмка и волевое закрытие оба ЗАКРЫВАЮТ задачу — и второй такой же
+  // запрос на уже закрытую задачу не решение, а эхо первого. Без этой
+  // проверки гонка (медленная сеть плюс повторное нажатие «Принять», пока
+  // карточка ещё не успела закрыться) записывала приёмку дважды — с двумя
+  // разными комментариями поверх друг друга — и слала исполнителям два
+  // одинаковых по смыслу, но разных по тексту сообщения. Кирилл,
+  // 24.09.2026, по скриншоту. Открывает задачу заново только «Открыть
+  // заново» (см. REOPEN_PATCH) — поэтому здесь достаточно тихо ничего не
+  // делать, а не отвечать ошибкой: то, чего человек добивался нажатием,
+  // уже случилось первым запросом.
+  if ((action === "approve" || action === "force") && task.status === "done") {
+    return { ok: true };
+  }
 
   const now = new Date().toISOString();
   // Принято и закрыто — одно и то же событие, и записывается оно одной

@@ -166,6 +166,12 @@ export async function approveTaskFromMeeting(
   // слова о том, откуда это взялось, — а взялось оно со встречи, на которой
   // его самого могло и не быть.
   const comment = result.trim() || `Принято по итогам встречи «${meeting.title}»`;
-  const done = await applyReview(admin, { id: task.id, title: task.title, user_id: task.user_id }, "approve", comment, who);
+  const done = await applyReview(
+    admin,
+    { id: task.id, title: task.title, user_id: task.user_id, status: task.status },
+    "approve",
+    comment,
+    who,
+  );
   return done.ok;
 }

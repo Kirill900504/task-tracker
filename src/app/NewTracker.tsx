@@ -54,7 +54,7 @@ import type { SearchResult } from "@/lib/localSearch";
 import Icon from "@/components/tracker/Icon";
 import BootSkeleton from "@/components/tracker/BootSkeleton";
 import { isCreatedByMe } from "@/lib/ownership";
-import { isTaskVisible, isMeetingVisible } from "@/lib/itemVisibility";
+import { isTaskVisible, isMeetingVisible, resolveMyName } from "@/lib/itemVisibility";
 import { withViewTransition } from "@/lib/viewTransition";
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -115,10 +115,8 @@ export default function NewTracker() {
   // проверка, что теперь и у задач со встречами ниже: сравнивает
   // `createdBy` буквально, без поблажки владельцу.
   const myIdeas = useMemo(() => ideas.filter((i) => isCreatedByMe(i, mineOnlyId)), [ideas, mineOnlyId]);
-  // Как меня зовут в списке людей. Своя строка помечена «(я)» — другого
-  // способа связать логин с человеком в браузере нет. Нужно на экране
-  // «Сегодня», чтобы отличить «моя задача» от «я поручил её другому».
-  const myName = assignees.find((a) => a.trim().endsWith("(я)")) || "";
+  // Как меня зовут в списке людей — см. resolveMyName в lib/itemVisibility.ts.
+  const myName = resolveMyName(identity.name, assignees);
 
   // То же правило видимости, что у мыслей выше, — только для задач и
   // встреч оно устроено сложнее, потому что «моё» не сводится к одному

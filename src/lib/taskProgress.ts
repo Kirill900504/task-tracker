@@ -138,7 +138,16 @@ export function taskStage(participants: TaskParticipant[], approval: ApprovalSta
   // Кто-то не может, а кто-то ещё молчит: ждём остальных, но задача уже
   // стоит, и это разные вещи.
   if (progress.declined.length) return "blocked";
-  if (progress.acceptedCount > 0) return "accepted";
+  // acceptedCount нарочно не считает тех, кто уже отчитался (см. его
+  // определение в taskProgress) — а значит на задаче с несколькими
+  // исполнителями, где один уже сдал работу, а второй ещё даже не нажал
+  // «Принял», acceptedCount мог остаться нулевым, и бейдж откатывался к
+  // «отправлено, ещё не приняли» — при том что «1 из 2» тут же на экране
+  // говорит обратное. Кирилл поймал это 24.09.2026 на задаче «2» (два
+  // исполнителя, один сделал, второй молчит). columnOf в lib/kanban.ts
+  // этой ошибки не знал — он и до правки считал такую задачу «в работе»
+  // (moved смотрит и doneAt), — расходились только бейдж и столбец.
+  if (progress.acceptedCount > 0 || progress.doneCount > 0) return "accepted";
   return "sent";
 }
 
