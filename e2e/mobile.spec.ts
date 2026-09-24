@@ -31,7 +31,7 @@ test("the phone gets its own shell: compact header, tabs, and tasks first", asyn
   // Сессия начинается с задач: «он же всегда должен быть главной
   // страницей и с него начинаться каждая сессия» (20.09.2026).
   await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/);
-  await expect(page.locator("#mainCol")).toBeVisible();
+  await expect(page.locator("#mainCol:visible")).toBeVisible();
 
   // Порядок вкладок продиктован им же и повторяет расположение блоков на
   // компьютере. Проверяется целиком, а не по одной: порядок — это и есть
@@ -89,8 +89,8 @@ test("на телефоне убрано всё, что дублирует по�
   // «Загрузки», ни «Завершённых», ни самой кнопки «Фильтры» (сворачивать
   // стало нечего), и с 23.09.2026 — ни «Все / Мне / Я поручил»: доска сама
   // разошлась на три раздела, различать «чьё» внутри каждого уже незачем.
-  await expect(page.locator("#newTaskBtn")).toBeVisible();
-  const addBox = await page.locator("#newTaskBtn").boundingBox();
+  await expect(page.locator("#newTaskBtn:visible")).toBeVisible();
+  const addBox = await page.locator("#newTaskBtn:visible").boundingBox();
   expect(addBox!.width).toBeLessThan(80);
   expect(addBox!.height).toBeGreaterThanOrEqual(40);
   await expect(page.locator("#mobileFiltersBtn")).toHaveCount(0);
@@ -105,10 +105,10 @@ test("на телефоне убрано всё, что дублирует по�
 
   // Полоса при этом обязана помещаться целиком: обрезанная кнопка у края
   // читается как сломанный интерфейс, и именно так выглядело «Просроченс».
-  const bar = await page.locator(".toolbar").boundingBox();
+  const bar = await page.locator(".toolbar:visible").boundingBox();
   expect(bar!.width).toBeLessThanOrEqual(390);
   const barOverflow = await page.evaluate(() => {
-    const el = document.querySelector(".toolbar")!;
+    const el = [...document.querySelectorAll(".toolbar")].find((e) => (e as HTMLElement).offsetParent !== null)!;
     return el.scrollWidth - el.clientWidth;
   });
   expect(barOverflow).toBeLessThanOrEqual(1);
@@ -163,9 +163,9 @@ test("tabs switch sections and a task can be created from the phone", async ({ p
   await login(page);
 
   await page.click('[data-tab="tasks"]');
-  await expect(page.locator("#newTaskBtn")).toBeVisible();
+  await expect(page.locator("#newTaskBtn:visible")).toBeVisible();
 
-  await page.click("#newTaskBtn");
+  await page.click("#newTaskBtn:visible");
   await page.fill("#fTitle", title);
   await pickAnyExecutor(page);
   // The form fills the screen, and its buttons stay reachable at the bottom.
@@ -187,7 +187,7 @@ test("a task is finished by swiping the card to the right", async ({ page }) => 
 
   await login(page);
   await page.click('[data-tab="tasks"]');
-  await page.click("#newTaskBtn");
+  await page.click("#newTaskBtn:visible");
   await page.fill("#fTitle", title);
   // Себе: свайп, как и галочка, закрывает задачу сразу только у своей
   // работы — у чужой он спросил бы результат (см. quickDone).
@@ -195,9 +195,8 @@ test("a task is finished by swiping the card to the right", async ({ page }) => 
   await page.click("#saveTaskBtn");
   // Искать её надо в «Новых», и это касается любой только что заведённой
   // задачи, в том числе поставленной себе: исключения у этого столбца нет
-  // (см. lib/kanban). На телефоне столбец показывается один, поэтому
-  // вкладка выбирается явно, а не по тому, где раньше найдётся работа.
-  await page.locator(".board-tab", { hasText: "Новые задачи" }).click();
+  // (см. lib/kanban). На телефоне «Новые» — это и есть раздел «Задачи».
+  await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/);
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
 
@@ -283,7 +282,7 @@ test("a task is moved to the top of its column from the card menu", async ({ pag
 
   await login(page);
   await page.click('[data-tab="tasks"]');
-  await page.click("#newTaskBtn");
+  await page.click("#newTaskBtn:visible");
   await page.fill("#fTitle", title);
   await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
@@ -317,35 +316,27 @@ test("a notification is closed by its cross on the phone too", async ({ page }) 
   await expect(toast).toHaveCount(0);
 });
 
-// Доска открывается там, где есть работа.
-//
-// Осмотр 21.09.2026 на телефоне: четыре задачи в работе, а вкладка задач
-// открывалась на «Новых» со словами «Всё разобрано — новых нет». То есть
-// первое, что человек видит при каждом запуске, — пустой экран при полном
-// списке дел. «Новые» означает «отправлена, ждём ответа»: у того, кто
-// ставит задачи себе, этот столбец пуст всегда.
-test("вкладка задач открывается на столбце, где есть работа", async ({ page }) => {
-  const title = `E2E столбец ${Date.now()}`;
+// Каждое состояние доски — свой раздел (23.09.2026: «убрать кнопки «новые
+// задачи», «в работе» и на приёмке и сделать три полноценных раздела»).
+// Переключателя столбцов внутри раздела больше нет, и новая задача живёт
+// ровно в одном из них — в «Задачах».
+test("«Задачи» и «В работе» — отдельные разделы, каждый со своим столбцом", async ({ page }) => {
+  const title = `E2E раздел ${Date.now()}`;
 
   await login(page);
-  await page.click("#newTaskBtn");
+  await expect(page.locator(".board-tab")).toHaveCount(0);
+
+  await page.click("#newTaskBtn:visible");
   await page.fill("#fTitle", title);
   await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
 
-  // Не нажимая ничего: показан столбец, в котором ЕСТЬ задачи, а не
-  // пустой первый. Какой именно — зависит от того, что накопилось в
-  // аккаунте за прогон, и проверять надо не имя столбца, а само правило:
-  // открытая доска не бывает пустой, когда работа есть.
-  const activeCount = await page.locator('.board-tab.active .board-tab-count').innerText();
-  expect(Number(activeCount)).toBeGreaterThan(0);
-  await expect(page.locator('.column .task').first()).toBeVisible();
+  await expect(page.locator("#col-new .task:visible", { hasText: title })).toBeVisible();
 
-  // Свой выбор это не отменяет: нажал на пустой столбец — показывается он,
-  // человек спросил именно про него.
-  const empty = page.locator('.board-tab').filter({ hasText: 'На приёмке' });
-  await empty.click();
-  await expect(page.locator('.board-tab.active')).toContainText('На приёмке');
+  // В «В работе» новой задачи нет: она ещё не принята.
+  await page.click('[data-tab="work"]');
+  await expect(page.locator('.mobile-tab[data-tab="work"]')).toHaveClass(/active/);
+  await expect(page.locator("#col-work .task:visible", { hasText: title })).toHaveCount(0);
 });
 
 // Окно мини-приложения настраивается там, где человек работает.
@@ -396,7 +387,7 @@ test("«Принял» есть в меню карточки и не требу�
   // выборе исполнителя — причём на боевом чаще, чем на локальной сборке.
   await expect(page.locator("#syncStatus")).toContainText("Сохранено", { timeout: 40_000 });
 
-  await page.click("#newTaskBtn");
+  await page.click("#newTaskBtn:visible");
   await page.fill("#fTitle", title);
   await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
@@ -413,12 +404,12 @@ test("«Принял» есть в меню карточки и не требу�
   await expect(page.locator(".toast", { hasText: "Взяли в работу" })).toBeVisible({ timeout: 15_000 });
 
   // Принято — значит второй раз предлагать нечего. Искать карточку надо
-  // уже в «В работе»: принятая задача туда и уезжает, а показанный
-  // столбец остаётся тем, где она была.
+  // уже в разделе «В работе»: принятая задача туда и уезжает.
   await expect(page.locator(".modal")).toHaveCount(0);
-  await page.locator(".board-tab", { hasText: "В работе" }).click();
-  await expect(card).toBeVisible({ timeout: 15_000 });
-  await card.locator("[data-task-menu]").click();
+  await page.click('[data-tab="work"]');
+  const inWork = page.locator("#col-work .task", { hasText: title });
+  await expect(inWork).toBeVisible({ timeout: 15_000 });
+  await inWork.locator("[data-task-menu]").click();
   await expect(page.locator(".action-sheet .export-item", { hasText: "Принял в работу" })).toHaveCount(0);
 });
 
@@ -434,7 +425,11 @@ test("свайп по содержимому листает разделы, но
   await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/);
 
   // Playwright не умеет жестов — события шлются напрямую, теми же
-  // координатами, какими их прислал бы палец.
+  // координатами, какими их прислал бы палец. И это КАСАНИЯ, а не
+  // pointer-события: на настоящем телефоне браузер забирает поехавший палец
+  // под прокрутку и вместо pointerup шлёт pointercancel, поэтому раздел
+  // слушает touchstart/touchend (MobileShell, 24.09.2026). Тест на
+  // pointer-событиях проходил, пока на iPhone жест не работал вовсе.
   const swipe = (selector: string, dx: number) =>
     page.evaluate(
       ({ selector, dx }) => {
@@ -443,42 +438,38 @@ test("свайп по содержимому листает разделы, но
         const r = el.getBoundingClientRect();
         const y = Math.round(r.top + Math.min(40, r.height / 2));
         const x = Math.round(r.left + r.width / 2);
-        const base = { pointerType: "touch", bubbles: true, isPrimary: true, pointerId: 1, clientY: y };
-        el.dispatchEvent(new PointerEvent("pointerdown", { ...base, clientX: x }));
-        el.dispatchEvent(new PointerEvent("pointermove", { ...base, clientX: x + dx / 2 }));
-        el.dispatchEvent(new PointerEvent("pointerup", { ...base, clientX: x + dx }));
+        const t = (cx: number) => new Touch({ identifier: 1, target: el, clientX: cx, clientY: y });
+        el.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [t(x)], changedTouches: [t(x)] }));
+        el.dispatchEvent(new TouchEvent("touchmove", { bubbles: true, touches: [t(x + dx / 2)], changedTouches: [t(x + dx / 2)] }));
+        el.dispatchEvent(new TouchEvent("touchend", { bubbles: true, touches: [], changedTouches: [t(x + dx)] }));
       },
       { selector, dx },
     );
 
-  // Влево — следующий раздел по полосе: задачи → приёмка.
+  // Влево — следующий раздел по полосе: «Задачи» → «В работе».
   await swipe("#mobileMain", -140);
-  await expect(page.locator('.mobile-tab[data-tab="review"]')).toHaveClass(/active/, { timeout: 5000 });
+  await expect(page.locator('.mobile-tab[data-tab="work"]')).toHaveClass(/active/, { timeout: 5000 });
 
   // Вправо — обратно.
   await swipe("#mobileMain", 140);
   await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/, { timeout: 5000 });
 
-  // А по полосе столбцов — ничего: она прокручивается вбок сама, и
+  // А по полосе над доской — ничего: у неё своя горизонталь, и
   // переключать разделы оттуда значит отнимать у неё жест.
-  await swipe(".board-tabs", -140);
+  await swipe('#mobileMain > div:not([hidden]) .toolbar', -140);
   await page.waitForTimeout(600);
   await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/);
 });
 
-// Поиск — шестой кнопкой в нижней панели.
-test("поиск открывается из нижней панели, а не из меню шапки", async ({ page }) => {
+// Поиск — снова в меню шапки (23.09.2026): с разделом «В работе» нижняя
+// полоса и без него из шести кнопок.
+test("поиск открывается из меню шапки, а в нижней панели его нет", async ({ page }) => {
   await login(page);
 
-  await expect(page.locator("#mobileSearchTab")).toBeVisible();
-  await page.click("#mobileSearchTab");
-  await expect(page.locator("#searchOverlay")).toBeVisible();
-  await page.keyboard.press("Escape");
-
-  // И из меню шапки он ушёл: две двери в одно место — это вопрос «а чем
-  // они отличаются?», который задают каждый раз.
+  await expect(page.locator("#mobileSearchTab")).toHaveCount(0);
   await page.click("#mobileMoreBtn");
-  await expect(page.locator(".export-item", { hasText: "Поиск по трекеру" })).toHaveCount(0);
+  await page.locator(".export-item", { hasText: "Поиск" }).click();
+  await expect(page.locator("#searchOverlay")).toBeVisible();
 });
 
 // Вход по ссылке из мессенджера.
@@ -522,7 +513,7 @@ test("на медленной связи трекер открывается и�
 
   // Трекер всё равно открывается — из локальной копии, первым кадром.
   await expect(page.locator("#mobileNav")).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("#newTaskBtn:visible")).toBeVisible({ timeout: 30_000 });
   // И говорит, что показывает сохранённое, а не делает вид, что всё в
   // порядке: молчаливая копия — это данные, которым доверяют зря. Значок
   // в шапке (ConnectionStatus.tsx), а не баннер на пол-экрана.
@@ -542,7 +533,7 @@ test("свайп влево по карточке открывает её дей
 
   await login(page);
   await expect(page.locator("#syncStatus")).toContainText("Сохранено", { timeout: 40_000 });
-  await page.click("#newTaskBtn");
+  await page.click("#newTaskBtn:visible");
   await page.fill("#fTitle", title);
   await pickAnyExecutor(page);
   await page.click("#saveTaskBtn");
