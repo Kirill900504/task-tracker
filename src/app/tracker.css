@@ -2093,7 +2093,7 @@
     font-family:var(--sans); color:var(--ink);
   }
   .review-row:hover{border-color:var(--accent);}
-  .review-row-title{font-size:14.5px; font-weight:600; line-height:1.35;}
+  .review-row-title{font-size:14.5px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; word-break:break-word;}
   .review-row-meta{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
 
   /* Экран «данные не загрузились»: сообщение и выход из положения,
@@ -2589,7 +2589,7 @@
   .tp-returned{
     font-size:12.5px; color:#F0D9A8; background:var(--med-bg);
     border:1px solid rgba(224,184,77,.35); border-radius:var(--radius-sm);
-    padding:8px 10px; margin-bottom:10px;
+    padding:8px 10px; margin-bottom:10px; overflow-wrap:anywhere; word-break:break-word;
   }
   .tp-empty{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
   /* Цветные врезки карточки (приёмка, просьба о переносе, результат) — та
@@ -2599,7 +2599,7 @@
     margin-top:12px; padding:10px 11px; border-radius:var(--radius-sm);
     background:var(--today-bg); border:1px solid var(--today); box-shadow:var(--shadow-1);
   }
-  .tp-review-text{font-size:12.5px; color:var(--ink); margin-bottom:8px;}
+  .tp-review-text{font-size:12.5px; color:var(--ink); margin-bottom:8px; overflow-wrap:anywhere; word-break:break-word;}
   .tp-review-actions{display:flex; gap:8px; flex-wrap:wrap;}
   .tp-force{margin-top:10px; color:var(--ink-soft);}
 
@@ -3029,7 +3029,7 @@
     margin-bottom:10px; padding:9px 11px; border-radius:var(--radius-sm);
     background:var(--med-bg); border:1px solid rgba(224,184,77,.4); box-shadow:var(--shadow-1);
   }
-  .tp-ask-text{font-size:12.5px; color:#F0D9A8; line-height:1.45; margin-bottom:8px;}
+  .tp-ask-text{font-size:12.5px; color:#F0D9A8; line-height:1.45; margin-bottom:8px; overflow-wrap:anywhere; word-break:break-word;}
   .tp-ask-text b{color:var(--ink);}
   .tp-ask-actions{display:flex; gap:8px; flex-wrap:wrap;}
   .tp-notice{
@@ -3075,12 +3075,17 @@
     font-size:var(--label-size); font-weight:var(--label-weight);
     text-transform:uppercase; letter-spacing:.06em; color:var(--ink-label);
   }
-  .my-work-said{font-size:13px; line-height:1.5; color:var(--ink); white-space:pre-wrap;}
+  /* Слово человека здесь — то, что он написал сам, отчёт или отказ, а
+     не то, что подобрал трекер: перенос нужен без исключений (см. общее
+     правило «нигде ничего не должно вылетать за рамки окна», 24.09.2026 —
+     поймано на «Вернули на доработку» с текстом без единого пробела). */
+  .my-work-said{font-size:13px; line-height:1.5; color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;}
   .my-work-said.declined{color:var(--high);}
   .my-work-returned{
     font-size:13px; line-height:1.5; color:var(--high);
     padding:8px 10px; border-radius:var(--radius-sm);
     background:var(--overdue-bg); border:1px solid var(--high);
+    overflow-wrap:anywhere; word-break:break-word;
   }
   .my-work .ms-actions{margin-top:0;}
 
@@ -3219,7 +3224,7 @@
     display:flex; flex-direction:column; gap:2px;
   }
   .done-list-text:disabled{cursor:default;}
-  .done-list-title{font-size:13.5px; color:var(--ink); line-height:1.35;}
+  .done-list-title{font-size:13.5px; color:var(--ink); line-height:1.35; overflow-wrap:anywhere; word-break:break-word;}
   .done-list-note{font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
 
   /* Встреча прошла, а итога нет. Отдельной группой наверху панели: это
