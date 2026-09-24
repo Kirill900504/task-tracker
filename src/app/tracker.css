@@ -1156,14 +1156,21 @@
     border:1px solid var(--line-soft); border-radius:var(--radius-md);
     background:var(--paper-soft); box-shadow:var(--shadow-1), var(--edge); overflow:hidden;
   }
-  /* Бейдж стадии («в работе», «на приёмке»…) — строкой над сводкой, прижат
-     вправо. Переехал сюда 22.09.2026 из отдельного блока «Кто на задаче»
-     по просьбе Кирилла: та же самая пилюля (.tp-stage), только в верхнем
-     блоке. Отдельной строкой, а не поверх первой ячейки — иначе бейдж
-     перекрывал бы «Дата постановки» у длинной даты. */
+  /* Бейдж стадии («в работе», «на приёмке»…) — в правом верхнем углу,
+     в одной ячейке с «Датой постановки» (см. ItemFacts, 24.09.2026).
+     Ячейка — flex с переносом, а не наложение поверх неё: самая длинная
+     подпись («отправлено, ещё не приняли») рядом с датой может не
+     уместиться, и тогда пилюля уходит под дату, а не на неё.
+     Левый столбец уже правого (0.8 : 1.2) — это и есть «сократить пустое
+     расстояние между столбцами»: слева короткое имя, справа дата и
+     пилюля. Пропорция одна на все строки, иначе «Крайний срок» стоял бы
+     не под «Датой постановки». */
   .facts-badge-row{display:flex; justify-content:flex-start; padding:7px 12px 6px;}
-  .facts-row{display:grid; grid-template-columns:1fr 1fr; gap:1px;}
+  .facts-row{display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); gap:1px;}
   .facts-row.wide{grid-template-columns:1fr;}
+  .fact-pair{display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; min-width:0;}
+  .fact-pair > .fact{flex:0 1 auto;}
+  .facts-badge{display:flex; margin:7px 10px 0 auto; padding-left:8px; flex:none;}
   .fact{
     display:flex; flex-direction:column; gap:2px;
     padding:7px 12px; min-width:0;
@@ -1192,6 +1199,12 @@
   .fact-person.vote-none .fact-person-mark{color:var(--ink-soft); opacity:.6;}
   @media (max-width:560px){
     .facts-row{grid-template-columns:1fr;}
+    /* Столбец один — пилюля встаёт справа от «Постановщика», то есть
+       всё равно в правый верхний угол, а дата уходит строкой ниже. */
+    .facts-row.has-badge{grid-template-columns:minmax(0,1fr) auto;}
+    .facts-row.has-badge .fact-pair{display:contents;}
+    .facts-row.has-badge .fact-pair > .fact{grid-column:1 / -1; grid-row:2;}
+    .facts-row.has-badge .facts-badge{grid-column:2; grid-row:1;}
   }
 
   /* ----------------------------------------------------------------
@@ -2380,7 +2393,12 @@
 
   @media (max-width:800px){
     /* Свайп по карточке */
-    .swipe-wrap{position:relative; overflow:hidden; border-radius:var(--radius-md); margin-bottom:9px;}
+    /* pan-y: вертикаль браузер оставляет себе (прокрутка списка), а
+       горизонталь отдаёт жесту карточки. Без этого настоящий телефон,
+       увидев движение вбок, забирает касание сам и шлёт pointercancel —
+       та же причина, по которой листание разделов не работало до
+       24.09.2026 (см. MobileShell). */
+    .swipe-wrap{position:relative; overflow:hidden; border-radius:var(--radius-md); margin-bottom:9px; touch-action:pan-y;}
     .swipe-wrap .task{margin-bottom:0; transition:transform .18s ease;}
     /* Подсказки жеста лежат ПОД карточкой, каждая у своего края, и
        проступают из-под неё по мере движения. Их две, потому что жестов
@@ -2909,18 +2927,27 @@
      Интерактивна так же, как обычное сообщение: правая кнопка/долгое
      нажатие открывают то же меню — ответить и поставить реакцию можно и
      на событие, хотя изменить или убрать его саму строку — нет (это не
-     чья-то реплика, см. itemHistory.ts). */
+     чья-то реплика, см. itemHistory.ts).
+     И назад на полшага — 24.09.2026: «сделай строки действий чуть более
+     заметными и выразительными, а то меркнут на фоне сообщений». Тише
+     переписки событие сделали мелким шрифтом, приглушённым цветом И
+     прозрачностью сразу, а три приглушения на тёмном фоне складываются в
+     «почти не видно». Теперь событие отличается от переписки НОСИТЕЛЕМ,
+     а не бледностью: фирменная полоса слева и подложка того же тона,
+     подпись — полужирная и полного цвета. Слово человека под ним
+     по-прежнему крупнее и остаётся главным. */
   .chat-event{
-    display:flex; flex-direction:column; gap:5px;
-    padding:8px 10px; margin:4px 0;
-    border-left:2px solid var(--line); border-radius:0 8px 8px 0;
+    display:flex; flex-direction:column; gap:6px;
+    padding:8px 12px; margin:6px 0;
+    background:var(--accent-soft);
+    border-left:3px solid var(--accent); border-radius:0 10px 10px 0;
     transition:border-color .12s ease, background .12s ease;
   }
-  .chat-event.menu-open{border-color:var(--accent);}
+  .chat-event.menu-open{border-color:var(--ink);}
   .chat-event.flash{animation:chat-flash 1.4s ease-out;}
   .chat-event-row{display:flex; gap:10px; align-items:baseline; justify-content:space-between;}
-  .chat-event-text{font-size:11.5px; line-height:1.4; color:var(--ink-soft); opacity:.8;}
-  .chat-event-time{font-size:10.5px; color:var(--ink-faint, var(--ink-soft)); white-space:nowrap; opacity:.7;}
+  .chat-event-text{font-size:12.5px; line-height:1.4; font-weight:600; color:var(--ink-label);}
+  .chat-event-time{font-size:11px; color:var(--ink-soft); white-space:nowrap;}
   /* Слово человека — карточкой, крупнее и контрастнее самой переписки:
      это то, ради чего открывают хронику, а событие сверху — просто
      объясняет, при каких обстоятельствах это было сказано. */

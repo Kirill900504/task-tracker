@@ -51,12 +51,30 @@ export default function ItemFacts({
   id?: string;
   badge?: ReactNode;
 }) {
+  // Бейдж стадии — в правом верхнем углу, на одной строке с
+  // «Постановщиком» и «Датой постановки». Слова Кирилла 24.09.2026:
+  // статус «должен быть в правом верхнем углу вровень со строкой, где
+  // указан постановщик и дата постановки… целью тут является убрать
+  // лишний отступ, который образуется за счёт того, что статус отдельной
+  // строкой показывается». Две прежние попытки — строкой НАД сводкой и
+  // строкой ПОД ней — обе тратили на пилюлю целую строку. Теперь она
+  // делит ячейку с датой (.fact-pair): поместилась — стоит справа, нет —
+  // переносится под дату, но на неё не наезжает.
+  const badgeRow = badge ? rows.findIndex((r) => !("wide" in r)) : -1;
   return (
     <div className="facts" id={id}>
       {rows.map((row, i) =>
         "wide" in row ? (
           <div className="facts-row wide" key={i}>
             <FactCell fact={row.wide} />
+          </div>
+        ) : i === badgeRow ? (
+          <div className="facts-row has-badge" key={i}>
+            <FactCell fact={row.left} />
+            <span className="fact-pair">
+              {row.right ? <FactCell fact={row.right} /> : <span className="fact" />}
+              <span className="facts-badge">{badge}</span>
+            </span>
           </div>
         ) : (
           <div className="facts-row" key={i}>
@@ -65,12 +83,9 @@ export default function ItemFacts({
           </div>
         ),
       )}
-      {/* Бейдж стадии — в нижнем левом углу блока, а не отдельной строкой
-          сверху. Слова Кирилла 23.09.2026: строка над сводкой с пилюлей у
-          правого края и пустотой слева от неё читалась как «свободное
-          бесполезное пространство» — теперь это последняя строка блока,
-          и пустует в ней куда более привычное место, ПОСЛЕ данных. */}
-      {badge && <div className="facts-badge-row">{badge}</div>}
+      {/* Строк без пары не бывает у задачи, но компонент общий: если
+          ставить пилюлю некуда, она остаётся последней строкой, как раньше. */}
+      {badge && badgeRow < 0 && <div className="facts-badge-row">{badge}</div>}
     </div>
   );
 }

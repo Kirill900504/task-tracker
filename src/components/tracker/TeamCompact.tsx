@@ -65,6 +65,7 @@ export default function TeamCompact({
   onAcceptReschedule,
   onRejectReschedule,
   onAddPerson,
+  part,
 }: {
   participants: Participant[];
   availablePeople: PersonOption[];
@@ -81,6 +82,19 @@ export default function TeamCompact({
   onRejectReschedule: (participantId: string) => void;
   // Завести нового человека — только у администратора (см. PeoplePicker).
   onAddPerson?: () => void;
+  // Какую половину рисовать. «decisions» — то, что ждёт решения
+  // постановщика (просьбы о переносе, приёмка, открыть заново); «team» —
+  // состав и всё остальное. Без значения — обе, одним блоком, как было.
+  //
+  // Разделено 24.09.2026, словами Кирилла: «блоки, призывающие к действию
+  // для постановщика… должны идти сразу за описанием задачи… Не правильно,
+  // когда за тем, чтобы отреагировать на исполнение поставленной тобой
+  // задачи другому человеку, приходится опускаться в середину окна или тем
+  // более в самый низ». Решение стояло под фактами, результатом и списком
+  // людей. Половины — один компонент с одними обработчиками, а не второй
+  // блок приёмки рядом: копия таких правил в этом проекте расходилась с
+  // первой трижды.
+  part?: "decisions" | "team";
 }) {
   const ask = useAsk();
   const identity = useWorkspaceRole();
@@ -188,18 +202,10 @@ export default function TeamCompact({
     }
   }
 
-  return (
-    <div className="field team-compact">
-      <label>Кто на задаче</label>
-
-      {label && <div className="tp-progress">{label}</div>}
-
-      {approvalState === "returned" && approvalComment && (
-        <div className="tp-returned">Возвращено на доработку: {approvalComment}</div>
-      )}
-
-      {/* Просьбы о переносе — над списком, это единственное, что требует
-          решения прямо сейчас. */}
+  const asksOpen = participants.some((p) => p.rescheduleTo || p.rescheduleReason);
+  const decisionsBlock = (
+    <>
+      {/* Просьбы о переносе — первыми: решение, которого ждут прямо сейчас. */}
       {participants
         .filter((p) => p.rescheduleTo || p.rescheduleReason)
         .map((p) => (
@@ -221,6 +227,66 @@ export default function TeamCompact({
             </div>
           </div>
         ))}
+
+      {/* Приёмка — то, ради чего постановщик открывает задачу на этой
+          стадии; где она стоит в окне, решает part (см. выше). */}
+      {stage === "awaiting_review" && (
+        <div className="tp-review">
+          <div className="tp-review-text">
+            {progress.declined.length === 0
+              ? "Все исполнители отчитались. Принимаете работу?"
+              : progress.doneCount === 0
+                ? `Работу не сделают: ${progress.declined.map((d) => d.name).join(", ")}. Решать вам.`
+                : `Отчитались не все: ${progress.declined.map((d) => d.name).join(", ")} не смогут. Решать вам.`}
+          </div>
+          <div className="tp-review-actions">
+            {progress.doneCount > 0 && (
+              <button className="btn btn-small btn-primary" type="button" disabled={busy} onClick={() => void handleApprove()}>
+                Принять
+              </button>
+            )}
+            <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleReturn()}>
+              {progress.declined.length ? "Вернуть с объяснением" : "Вернуть на доработку"}
+            </button>
+            {progress.declined.length > 0 && (
+              <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleForceClose()}>
+                Закрыть волевым решением
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {stage === "done" && (
+        <div className="tp-review">
+          <div className="tp-review-text">Задача принята и закрыта.</div>
+          <div className="tp-review-actions">
+            <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleReopen()}>
+              Открыть заново
+            </button>
+          </div>
+        </div>
+      )}
+
+    </>
+  );
+
+  if (part === "decisions") {
+    if (!asksOpen && stage !== "awaiting_review" && stage !== "done") return null;
+    return <div className="field team-decisions" id="taskDecisions">{decisionsBlock}</div>;
+  }
+
+  return (
+    <div className="field team-compact">
+      <label>Кто на задаче</label>
+
+      {label && <div className="tp-progress">{label}</div>}
+
+      {approvalState === "returned" && approvalComment && (
+        <div className="tp-returned">Возвращено на доработку: {approvalComment}</div>
+      )}
+
+      {part !== "team" && decisionsBlock}
 
       {participants.length === 0 && (
         <div className="tp-empty">
@@ -305,46 +371,6 @@ export default function TeamCompact({
           }))}
           onClose={() => setRoleFor(null)}
         />
-      )}
-
-      {/* Приёмка — сразу под составом, а не в самом низу карточки: это то,
-          ради чего постановщик открывает задачу на этой стадии. */}
-      {stage === "awaiting_review" && (
-        <div className="tp-review">
-          <div className="tp-review-text">
-            {progress.declined.length === 0
-              ? "Все исполнители отчитались. Принимаете работу?"
-              : progress.doneCount === 0
-                ? `Работу не сделают: ${progress.declined.map((d) => d.name).join(", ")}. Решать вам.`
-                : `Отчитались не все: ${progress.declined.map((d) => d.name).join(", ")} не смогут. Решать вам.`}
-          </div>
-          <div className="tp-review-actions">
-            {progress.doneCount > 0 && (
-              <button className="btn btn-small btn-primary" type="button" disabled={busy} onClick={() => void handleApprove()}>
-                Принять
-              </button>
-            )}
-            <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleReturn()}>
-              {progress.declined.length ? "Вернуть с объяснением" : "Вернуть на доработку"}
-            </button>
-            {progress.declined.length > 0 && (
-              <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleForceClose()}>
-                Закрыть волевым решением
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {stage === "done" && (
-        <div className="tp-review">
-          <div className="tp-review-text">Задача принята и закрыта.</div>
-          <div className="tp-review-actions">
-            <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleReopen()}>
-              Открыть заново
-            </button>
-          </div>
-        </div>
       )}
 
       {/* Раньше требовало хотя бы одного участника — а строку про 23.09.2026

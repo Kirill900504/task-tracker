@@ -525,6 +525,30 @@ export default function TaskModal({
             <div className="modal-main">
               {form.desc && <ExpandableText text={form.desc} className="task-card-desc" />}
 
+              {/* Решение постановщика — сразу под описанием: принять или
+                  вернуть, согласиться на перенос или нет. Раньше оно стояло
+                  под фактами, результатом и составом, то есть в середине
+                  окна, а на телефоне — в самом низу (24.09.2026). Состав —
+                  второй половиной того же компонента, ниже. */}
+              {canEdit && (
+                <TeamCompact
+                  part="decisions"
+                  participants={participants}
+                  availablePeople={availablePeople}
+                  approvalState={task.approvalState || "open"}
+                  approvalComment={task.approvalComment}
+                  onAddParticipant={onAddParticipant}
+                  onSetParticipantRole={onSetParticipantRole}
+                  onRemoveParticipant={onRemoveParticipant}
+                  onApproveWork={onApproveWork}
+                  onReturnWork={onReturnWork}
+                  onForceCloseWork={onForceCloseWork}
+                  onReopenWork={onReopenWork}
+                  onAcceptReschedule={onAcceptReschedule}
+                  onRejectReschedule={onRejectReschedule}
+                />
+              )}
+
               {/* Первым — то, чего ждут ОТ ВАС: ради этого карточку и
                   открывают, когда задачу поручили вам. Ниже идёт всё
                   остальное, что о ней известно. */}
@@ -625,6 +649,7 @@ export default function TaskModal({
                   стадии приёмки тоже перенести вверх». */}
               {canEdit && (
                 <TeamCompact
+                  part="team"
                   participants={participants}
                   availablePeople={availablePeople}
                   approvalState={task.approvalState || "open"}

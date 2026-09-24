@@ -27,6 +27,7 @@ import { busyStarts, minutesOf, slotOf } from "@/lib/meetingTime";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { isCurrent, voteTally } from "@/lib/meetingVotes";
+import { awaitsRecap } from "@/lib/calendarLogic";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS: string[] = (() => {
@@ -300,6 +301,103 @@ export default function MeetingModal({
     ? `${tally.answered} из ${tally.expected}` + (tally.no.length ? ` · не смогут: ${tally.no.length}` : "")
     : "ответов не ждём";
 
+  // Решения организатора — назначить предложенную встречу и записать
+  // итог. Слова Кирилла 24.09.2026: блоки, призывающие к действию, «во
+  // встречах тоже должны быть выше» — сразу под названием, а не под
+  // сводкой. Но итог поднимается наверх только когда его уже МОЖНО дать
+  // (встреча прошла — awaitsRecap) или он уже дан: у будущей встречи
+  // пустое поле итога над сводкой отодвинуло бы вниз то, ради чего её
+  // открывают, — когда и кто. Разметка одна, место — одно из двух.
+  const decisionBlocks = meeting ? (
+    <>
+          {/* Предложенную встречу назначает тот, кто её собрал: право
+              занимать чужое время у него ровно такое же, как у всех. До
+              этого она видна, по ней можно ответить, но ни в календарь,
+              ни в напоминания она не попадает. */}
+          {proposed && canConfirm && (
+            <div className="field proposed-row">
+              <div className="proposed-text">
+                Пока это предложение: время ни у кого не занято и напоминаний нет. Когда ответят все, встреча
+                назначится сама — или назначьте сейчас, не дожидаясь.
+              </div>
+              <button type="button" className="btn btn-small btn-primary" id="confirmMeetingBtn" onClick={() => setStatus("planned")}>
+                <Icon name="check" size={15} /> Назначить
+              </button>
+            </div>
+          )}
+          {proposed && !canConfirm && (
+            <div className="field proposed-row">
+              <div className="proposed-text">
+                {/* Ни имени, ни должности: эту строку читают четырнадцать
+                    человек, и ответ на «когда же она станет встречей»
+                    зависит теперь от них самих, а не от того, кто главный. */}
+                Это предложение: время оно пока не занимает. Ответьте — когда ответят все, встреча назначится.
+              </div>
+            </div>
+          )}
+
+          {canEdit && (
+            <div className="field outcome-field" id="outcomeField">
+              <label>Итог встречи</label>
+              <div className={"outcome-badge" + (resolved ? ` show ${meeting.status}` : "")} id="outcomeBadge">
+                {resolved ? outcomeLabel(meeting.status) + (meeting.movedToDate ? " · перенесено на " + fmtDate(meeting.movedToDate) : "") : ""}
+              </div>
+              {/* Закрытая встреча — договорённость, а не черновик: у
+                  неё уже есть исход, и решать его заново, не открыв
+                  сначала «Вернуть в план», значит незаметно поменять
+                  то, о чём уже сказали участникам. Слова Кирилла
+                  23.09.2026: «закрытые или вычеркнутые события — не
+                  подлежат изменениям и доступны только к просмотру».
+                  Поэтому итог здесь — текст, а не поле, и кнопок
+                  «Успешно» / «Без результата» нет вовсе: единственный
+                  санкционированный путь назад — «Вернуть в план». */}
+              {resolved ? (
+                <>
+                  {result && <ExpandableText text={result} className="task-card-desc" />}
+                  <div className="outcome-actions">
+                    <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => setStatus("planned")}>
+                      <Icon name="reset" size={15} /> Вернуть в план
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="input-with-mic">
+                    {/* Enter завершает встречу успешно — по правилу Кирилла
+                        21.09.2026 «любые заполнения результатов или итогов
+                        должны закрываться нажатием Enter после заполнения,
+                        везде». */}
+                    <AutoGrowTextarea
+                      id="mResult"
+                      minRows={2}
+                      placeholder="Кратко: что решили, что дальше…"
+                      value={result}
+                      onChange={setResult}
+                      onEnter={() => setStatus("success")}
+                    />
+                    <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
+                  </div>
+                  <div className="field-hint">Enter — завершить успешно, Shift+Enter — новая строка.</div>
+                  <div className="outcome-actions">
+                    <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" onClick={() => setStatus("success")}>
+                      <Icon name="check" size={15} /> Успешно
+                    </button>
+                    <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" onClick={() => setStatus("no_result")}>
+                      <Icon name="ban" size={15} /> Без результата
+                    </button>
+                  </div>
+                </>
+              )}
+              {/* Блока «Перенести следующий этап» здесь больше нет.
+                  У встречи есть кнопка ⇢ в списке, и она спрашивает дату
+                  и время тем же окном (useDateTimeConfirm). */}
+            </div>
+          )}
+    </>
+  ) : null;
+  const decisionsFirst =
+    !!meeting && ((proposed && canConfirm) || (canEdit && (!!resolved || awaitsRecap(meeting))));
+
   return (
     <Modal id="meetingOverlay" onClose={onClose} dismissOnBackdrop={false}>
       <div className={"modal" + (meeting ? " has-chat" : "")}>
@@ -342,6 +440,7 @@ export default function MeetingModal({
                   быть однотипным с окном созданной задачи…». Ровно это и
                   стоит ниже, тем же компонентом, что и у задачи (ItemFacts). */}
               <div className="meeting-fact-title">{title}</div>
+              {decisionsFirst && decisionBlocks}
               <ItemFacts
                 id="meetingFacts"
                 rows={[
@@ -398,89 +497,7 @@ export default function MeetingModal({
                 </button>
               )}
 
-              {/* Предложенную встречу назначает тот, кто её собрал: право
-                  занимать чужое время у него ровно такое же, как у всех. До
-                  этого она видна, по ней можно ответить, но ни в календарь,
-                  ни в напоминания она не попадает. */}
-              {proposed && canConfirm && (
-                <div className="field proposed-row">
-                  <div className="proposed-text">
-                    Пока это предложение: время ни у кого не занято и напоминаний нет. Когда ответят все, встреча
-                    назначится сама — или назначьте сейчас, не дожидаясь.
-                  </div>
-                  <button type="button" className="btn btn-small btn-primary" id="confirmMeetingBtn" onClick={() => setStatus("planned")}>
-                    <Icon name="check" size={15} /> Назначить
-                  </button>
-                </div>
-              )}
-              {proposed && !canConfirm && (
-                <div className="field proposed-row">
-                  <div className="proposed-text">
-                    {/* Ни имени, ни должности: эту строку читают четырнадцать
-                        человек, и ответ на «когда же она станет встречей»
-                        зависит теперь от них самих, а не от того, кто главный. */}
-                    Это предложение: время оно пока не занимает. Ответьте — когда ответят все, встреча назначится.
-                  </div>
-                </div>
-              )}
-
-              {canEdit && (
-                <div className="field outcome-field" id="outcomeField">
-                  <label>Итог встречи</label>
-                  <div className={"outcome-badge" + (resolved ? ` show ${meeting.status}` : "")} id="outcomeBadge">
-                    {resolved ? outcomeLabel(meeting.status) + (meeting.movedToDate ? " · перенесено на " + fmtDate(meeting.movedToDate) : "") : ""}
-                  </div>
-                  {/* Закрытая встреча — договорённость, а не черновик: у
-                      неё уже есть исход, и решать его заново, не открыв
-                      сначала «Вернуть в план», значит незаметно поменять
-                      то, о чём уже сказали участникам. Слова Кирилла
-                      23.09.2026: «закрытые или вычеркнутые события — не
-                      подлежат изменениям и доступны только к просмотру».
-                      Поэтому итог здесь — текст, а не поле, и кнопок
-                      «Успешно» / «Без результата» нет вовсе: единственный
-                      санкционированный путь назад — «Вернуть в план». */}
-                  {resolved ? (
-                    <>
-                      {result && <ExpandableText text={result} className="task-card-desc" />}
-                      <div className="outcome-actions">
-                        <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => setStatus("planned")}>
-                          <Icon name="reset" size={15} /> Вернуть в план
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="input-with-mic">
-                        {/* Enter завершает встречу успешно — по правилу Кирилла
-                            21.09.2026 «любые заполнения результатов или итогов
-                            должны закрываться нажатием Enter после заполнения,
-                            везде». */}
-                        <AutoGrowTextarea
-                          id="mResult"
-                          minRows={2}
-                          placeholder="Кратко: что решили, что дальше…"
-                          value={result}
-                          onChange={setResult}
-                          onEnter={() => setStatus("success")}
-                        />
-                        <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
-                      </div>
-                      <div className="field-hint">Enter — завершить успешно, Shift+Enter — новая строка.</div>
-                      <div className="outcome-actions">
-                        <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" onClick={() => setStatus("success")}>
-                          <Icon name="check" size={15} /> Успешно
-                        </button>
-                        <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" onClick={() => setStatus("no_result")}>
-                          <Icon name="ban" size={15} /> Без результата
-                        </button>
-                      </div>
-                    </>
-                  )}
-                  {/* Блока «Перенести следующий этап» здесь больше нет.
-                      У встречи есть кнопка ⇢ в списке, и она спрашивает дату
-                      и время тем же окном (useDateTimeConfirm). */}
-                </div>
-              )}
+              {!decisionsFirst && decisionBlocks}
             </div>
 
             <div className="modal-chat-pane">

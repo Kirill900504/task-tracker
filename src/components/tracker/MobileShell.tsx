@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useRef, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import Icon, { type IconName } from "./Icon";
 import { SWIPE_PX_OVER_CARD, neighbour, startsInBusyArea, startsOverCard, verdict } from "@/lib/mobileSwipe";
 
@@ -73,18 +73,30 @@ export default function MobileShell({
   // раздела, а не как её собственный свайп.
   const overCard = useRef(false);
 
-  function onPointerDown(e: ReactPointerEvent) {
-    if (e.pointerType !== "touch") return;
+  // Касания, а не pointer-события — и это вся починка 24.09.2026, третьей
+  // по счёту попытки. На настоящем телефоне браузер, увидев, что палец
+  // поехал, забирает касание себе под прокрутку и вместо pointerup шлёт
+  // pointercancel. Старт обнулялся, и жест не срабатывал НИКОГДА — даже на
+  // пустом разделе, где карточек нет вовсе (снимки Кирилла с iPhone). В
+  // e2e это не видно: синтетическое событие до браузерной прокрутки не
+  // доходит. touchend прокрутка не отменяет, он приходит всегда.
+  function onTouchStart(e: ReactTouchEvent) {
+    if (e.touches.length !== 1) {
+      from.current = null;
+      return;
+    }
     if (startsInBusyArea(e.target as Element)) return;
+    const t = e.touches[0];
     overCard.current = startsOverCard(e.target as Element);
-    from.current = { x: e.clientX, y: e.clientY };
+    from.current = { x: t.clientX, y: t.clientY };
   }
 
-  function onPointerUp(e: ReactPointerEvent) {
+  function onTouchEnd(e: ReactTouchEvent) {
     const start = from.current;
     from.current = null;
-    if (!start) return;
-    const where = verdict(e.clientX - start.x, e.clientY - start.y, overCard.current ? SWIPE_PX_OVER_CARD : undefined);
+    const t = e.changedTouches[0];
+    if (!start || !t) return;
+    const where = verdict(t.clientX - start.x, t.clientY - start.y, overCard.current ? SWIPE_PX_OVER_CARD : undefined);
     const next = neighbour(TAB_IDS, tab, where);
     if (next) onTabChange(next);
   }
@@ -94,9 +106,9 @@ export default function MobileShell({
       <main
         className="mobile-main"
         id="mobileMain"
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerCancel={() => {
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={() => {
           from.current = null;
         }}
       >
