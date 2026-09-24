@@ -36,28 +36,26 @@ test("the phone gets its own shell: compact header, tabs, and tasks first", asyn
   // Порядок вкладок продиктован им же и повторяет расположение блоков на
   // компьютере. Проверяется целиком, а не по одной: порядок — это и есть
   // всё требование, и перепутанная пара внутри него ничем себя не выдаст.
-  // Шестым в ряду стоит поиск — он не раздел, а действие (22.09.2026,
-  // «поиск в нижнюю панель»), и потому проверяется отдельно: перепутать
-  // его с разделом нельзя ни человеку, ни тесту.
-  const tabs = await page.locator(".mobile-tab:not(.mobile-tab-search) .mobile-tab-label").allTextContents();
-  expect(tabs).toEqual(["Встречи", "Задачи", "Приёмка", "Мысли", "Сегодня"]);
-  await expect(page.locator("#mobileSearchTab .mobile-tab-label")).toHaveText("Поиск");
+  // «В работе» встала между «Задачами» и «Приёмкой» 23.09.2026: три
+  // состояния доски были кнопками внутри одного раздела, теперь это три
+  // полноценных раздела.
+  const tabs = await page.locator(".mobile-tab .mobile-tab-label").allTextContents();
+  expect(tabs).toEqual(["Встречи", "Задачи", "В работе", "Приёмка", "Мысли", "Сегодня"]);
 
   // Значки — свои, контурные: ни одного эмодзи из системного шрифта.
   await expect(page.locator(".mobile-tab .mobile-tab-icon svg")).toHaveCount(6);
 
   // Кнопка в шапке одна, и у неё есть лицо — «вместо кнопок Лупы и „…“
-  // оставить одну кнопку с картинкой команды». Поиск при этом не потерян:
-  // он стоит в нижней панели, под большим пальцем (22.09.2026).
+  // оставить одну кнопку с картинкой команды».
   await expect(page.locator(".mobile-header button")).toHaveCount(1);
   await expect(page.locator("#mobileSearchBtn")).toHaveCount(0);
   await page.click("#mobileMoreBtn");
   await expect(page.locator("#mobileMoreMenu")).toBeVisible();
   await expect(page.locator(".export-item", { hasText: "Команда" })).toBeVisible();
-  // Поиска в этом меню больше нет: он переехал в нижнюю панель шестой
-  // кнопкой. Две двери в одно место — это вопрос «а чем они отличаются?»,
-  // который задают каждый раз.
-  await expect(page.locator(".export-item", { hasText: "Поиск по трекеру" })).toHaveCount(0);
+  // Поиск вернулся сюда 23.09.2026: с появлением «В работе» нижняя полоса
+  // и без него стала из шести разделов, и седьмая, не переключающая
+  // раздел, кнопка начала путать ряд.
+  await expect(page.locator(".export-item", { hasText: "Поиск" })).toBeVisible();
   // «Загрузка» ушла из полосы над доской (там остались три кнопки, которые
   // назвал Кирилл) — но не из трекера: вопрос «к кому идти первым» задают
   // как раз не за столом. Она здесь, и только когда есть кому быть
@@ -87,9 +85,10 @@ test("the phone gets its own shell: compact header, tabs, and tasks first", asyn
 test("на телефоне убрано всё, что дублирует подпись вкладки", async ({ page }) => {
   await login(page);
 
-  // Задачи: вместо кнопки во всю ширину — «+», рядом только «Все / Мне /
-  // Я поручил». Ни «Загрузки», ни «Завершённых», ни самой кнопки
-  // «Фильтры» (сворачивать стало нечего).
+  // Задачи: вместо кнопки во всю ширину — «+», и ничего больше. Ни
+  // «Загрузки», ни «Завершённых», ни самой кнопки «Фильтры» (сворачивать
+  // стало нечего), и с 23.09.2026 — ни «Все / Мне / Я поручил»: доска сама
+  // разошлась на три раздела, различать «чьё» внутри каждого уже незачем.
   await expect(page.locator("#newTaskBtn")).toBeVisible();
   const addBox = await page.locator("#newTaskBtn").boundingBox();
   expect(addBox!.width).toBeLessThan(80);
@@ -97,8 +96,7 @@ test("на телефоне убрано всё, что дублирует по�
   await expect(page.locator("#mobileFiltersBtn")).toHaveCount(0);
   await expect(page.locator("#loadBtn")).toHaveCount(0);
   await expect(page.locator("#showDoneCheckbox")).toHaveCount(0);
-  // И четвёртого столбца доски нет вовсе.
-  await expect(page.locator(".board-tab", { hasText: "Завершённые" })).toHaveCount(0);
+  await expect(page.locator(".view-switch")).toHaveCount(0);
 
   // «Просрочено» на телефоне появляется, только когда есть просроченное:
   // у свежего аккаунта его нет, а пустой значок «внимание» без слова

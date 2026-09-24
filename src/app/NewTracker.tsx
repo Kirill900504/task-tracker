@@ -40,6 +40,7 @@ import MobileHeader from "@/components/tracker/MobileHeader";
 import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
+import { columnOf } from "@/lib/kanban";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole, MEMBER_ROLE_LABELS } from "@/hooks/useWorkspaceRole";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
@@ -517,6 +518,53 @@ export default function NewTracker() {
     return null;
   };
 
+  // Общие пропы панели задач — вынесены отдельно, чтобы три монтирования
+  // TasksPanel (полное на компьютере и два мобильных, каждое на свой
+  // столбец) не расходились друг с другом лишним нажатием клавиш.
+  const mainColProps = {
+    isAdmin,
+    myUserId: mineOnlyId,
+    myMemberAssigneeId: identity.assigneeId,
+    ownerId: identity.ownerId,
+    filterAssignee,
+    onFilterAssigneeChange: setFilterAssignee,
+    tasks: visibleTasks,
+    // Только для «Загрузки» (кто чем занят) — решение объяснено у самого
+    // пропа в TasksPanel.tsx: делегируя новую задачу, нужно видеть
+    // занятость ЛЮБОГО человека, а не только тех, с кем уже связан общей
+    // работой.
+    allTasks: tasks,
+    participants,
+    sections,
+    assignees,
+    actions,
+    toasts,
+    showDone,
+    onShowDoneChange: setShowDone,
+    calendarFilterDate: selectedDate,
+    openTaskRequest,
+    openExistingTaskId,
+    onOpenExistingHandled: () => setOpenExistingTaskId(null),
+    onOpenTaskHandled: () => setOpenTaskRequest(null),
+    onIdeaDropped: convertIdeaToTask,
+    onTaskToMeeting: (id: string) => taskDroppedOnDate(id, selectedDate ?? todayStr()),
+    onScheduleMeetingFor: (task: Task, people: string[]) =>
+      setOpenMeetingRequest({
+        title: task.title,
+        date: selectedDate ?? todayStr(),
+        time: "10:00",
+        participants: people,
+        fromTaskId: task.id,
+        fromTaskTitle: task.title,
+      }),
+    justCreatedId: justCreatedTaskId,
+    extraBanner: offline && (
+      <div className="notif-banner show" id="offlineBanner">
+        <span>📴 Нет связи с облаком — показываю сохранённую копию. Всё, что записываете, отправится, как только связь вернётся.</span>
+      </div>
+    ),
+  };
+
   const panels = {
         calPanel: (
           <CalendarPanel
@@ -570,54 +618,15 @@ export default function NewTracker() {
             justCreatedId={justCreatedMeetingId}
           />
         ),
-        mainCol: (
-          <TasksPanel
-            isAdmin={isAdmin}
-            myUserId={mineOnlyId}
-            myMemberAssigneeId={identity.assigneeId}
-            ownerId={identity.ownerId}
-            filterAssignee={filterAssignee}
-            onFilterAssigneeChange={setFilterAssignee}
-            tasks={visibleTasks}
-            // Только для «Загрузки» (кто чем занят) — решение объяснено у
-            // самого пропа в TasksPanel.tsx: делегируя новую задачу, нужно
-            // видеть занятость ЛЮБОГО человека, а не только тех, с кем уже
-            // связан общей работой.
-            allTasks={tasks}
-            participants={participants}
-            sections={sections}
-            assignees={assignees}
-            actions={actions}
-            toasts={toasts}
-            showDone={showDone}
-            onShowDoneChange={setShowDone}
-            calendarFilterDate={selectedDate}
-            openTaskRequest={openTaskRequest}
-            openExistingTaskId={openExistingTaskId}
-            onOpenExistingHandled={() => setOpenExistingTaskId(null)}
-            onOpenTaskHandled={() => setOpenTaskRequest(null)}
-            onIdeaDropped={convertIdeaToTask}
-            onTaskToMeeting={(id) => taskDroppedOnDate(id, selectedDate ?? todayStr())}
-            onScheduleMeetingFor={(task, people) =>
-              setOpenMeetingRequest({
-                title: task.title,
-                date: selectedDate ?? todayStr(),
-                time: "10:00",
-                participants: people,
-                fromTaskId: task.id,
-                fromTaskTitle: task.title,
-              })
-            }
-            justCreatedId={justCreatedTaskId}
-            extraBanner={
-              offline && (
-                <div className="notif-banner show" id="offlineBanner">
-                  <span>📴 Нет связи с облаком — показываю сохранённую копию. Всё, что записываете, отправится, как только связь вернётся.</span>
-                </div>
-              )
-            }
-          />
-        ),
+        // Общие пропы панели задач — одни на все три монтирования: полную
+        // (компьютер, все столбцы в ряд) и две мобильные, каждая на свой
+        // столбец (см. mobileColumn у TasksPanel и MobileShell.tsx). Три
+        // раза выписывать один и тот же список пропов значило бы завести
+        // тройную копию, которая разойдётся при первой же новой задаче —
+        // ровно та ошибка, от которой в этом файле уже избавлялись не раз.
+        mainCol: <TasksPanel {...mainColProps} />,
+        mainColNew: <TasksPanel {...mainColProps} mobileColumn="new" />,
+        mainColWork: <TasksPanel {...mainColProps} mobileColumn="work" />,
         // Панелей «Сегодня» и «Неделя» здесь больше нет.
         //
         // Кирилл о них 19.09.2026: «я вообще не понимаю смысловой
@@ -727,11 +736,13 @@ export default function NewTracker() {
             accountName={withoutSelfMark(myName)}
             items={[
               ...(isOwner ? [{ id: "team", label: "Команда", icon: "users" as const, onSelect: () => setTeamOpen(true) }] : []),
-              // Поиска здесь больше нет: он переехал в нижнюю панель
-              // шестой кнопкой (22.09.2026, «поиск в нижнюю панель»). В
-              // меню шапки он стоил двух нажатий и находился в углу,
-              // противоположном большому пальцу, — а ищут с телефона чаще
-              // всего остального.
+              // Поиск вернулся сюда 23.09.2026. Он жил здесь до 22.09.2026,
+              // переехал шестой кнопкой в нижнюю панель, а с появлением
+              // раздела «В работе» той же кнопке стало некуда деться — ряд
+              // и без неё уже из шести разделов. Двух нажатий вместо одного
+              // это стоит редко используемой функции меньше, чем шестой
+              // палец в и так тесном ряду.
+              { id: "search", label: "Поиск", icon: "search" as const, onSelect: () => setSearchOpen(true) },
               // Только когда есть кому быть загруженным: строка меню,
               // открывающая окно со словами «никому ничего не поручено», —
               // это строка, после которой ничего не произошло.
@@ -767,9 +778,10 @@ export default function NewTracker() {
             // Плавно, а не рывком: на телефоне смена вкладки — это весь
             // экран целиком, и мгновенная подмена читается как перезагрузка.
             onTabChange={(tab) => withViewTransition(() => setMobileTab(tab))}
-            onSearch={() => setSearchOpen(true)}
             badges={{
               today: todayCount(buildToday(visibleTasks, visibleMeetings)),
+              tasks: visibleTasks.filter((t) => columnOf(t, participants.forTask(t.id)) === "new").length,
+              work: visibleTasks.filter((t) => columnOf(t, participants.forTask(t.id)) === "work").length,
               meetings: visibleMeetings.filter((m) => !m.status || m.status === "planned").length,
               ideas: myIdeas.filter((i) => !i.done).length,
               review: awaitingReview(myReviewTasks).length,
@@ -811,7 +823,8 @@ export default function NewTracker() {
                 showToast={toasts.showToast}
               />
             </div>
-            <div hidden={mobileTab !== "tasks"}>{panels.mainCol}</div>
+            <div hidden={mobileTab !== "tasks"}>{panels.mainColNew}</div>
+            <div hidden={mobileTab !== "work"}>{panels.mainColWork}</div>
             {/* Календаря месяца здесь больше нет. Слова Кирилла
                 20.09.2026: «в разделе „встречи“ убрать календарь, в
                 мобильной версии он хавает слишком много пространства».
@@ -833,13 +846,13 @@ export default function NewTracker() {
               В «Сегодня» и «Приёмке» её нет вовсе: заводить там нечего,
               а кнопка, заводящая задачу из очереди приёмки, отвечала бы
               не на тот вопрос, с которым туда заходят. */}
-          {(mobileTab === "tasks" || mobileTab === "meetings" || mobileTab === "ideas") && (
+          {(mobileTab === "tasks" || mobileTab === "work" || mobileTab === "meetings" || mobileTab === "ideas") && (
             <button
               type="button"
               className="quick-add-fab"
-              aria-label={mobileTab === "tasks" ? "Новая задача" : mobileTab === "meetings" ? "Новая встреча" : "Новая мысль"}
+              aria-label={mobileTab === "tasks" || mobileTab === "work" ? "Новая задача" : mobileTab === "meetings" ? "Новая встреча" : "Новая мысль"}
               onClick={() => {
-                if (mobileTab === "tasks") setOpenTaskRequest({});
+                if (mobileTab === "tasks" || mobileTab === "work") setOpenTaskRequest({});
                 else if (mobileTab === "meetings") setOpenMeetingRequest({ date: selectedDate ?? todayStr() });
                 else setIdeaFocusSignal((n) => n + 1);
               }}

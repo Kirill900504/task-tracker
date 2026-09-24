@@ -13,7 +13,7 @@ import { SWIPE_PX_OVER_CARD, neighbour, startsInBusyArea, startsOverCard, verdic
 // difference is the navigation around them, not a second implementation of
 // the tracker.
 
-export type MobileTab = "today" | "tasks" | "meetings" | "ideas" | "review";
+export type MobileTab = "today" | "tasks" | "work" | "meetings" | "ideas" | "review";
 
 // Вкладка, с которой начинается каждая сессия. Слова Кирилла 20.09.2026:
 // «Задачи… он же всегда должен быть главной страницей и на с него
@@ -27,6 +27,13 @@ export const DEFAULT_MOBILE_TAB: MobileTab = "tasks";
 // частоте: приёмка ждёт решения каждый день, «Сегодня» — это взгляд, а не
 // работа, и он крайний.
 //
+// «В работе» встал между «Задачами» и «Приёмкой» 23.09.2026: три состояния
+// доски были кнопками ВНУТРИ одного раздела «Задачи» («Новые задачи» / «В
+// работе» / «На приёмке»), и Кирилл попросил прямо — «убрать кнопки… и
+// сделать три полноценных раздела, по примеру ЗАДАЧИ и ПРИЁМКА, только
+// добавить по середине раздел В РАБОТЕ». «Задачи» после этого значит
+// «новые», «Приёмка» осталась тем же разделом, что и была.
+//
 // Значки — контурные из Icon.tsx, а не эмодзи. Эмодзи рисует система: на
 // Windows это цветные наклейки своего размера и своего цвета, который не
 // темнеет вместе с неактивной вкладкой, — пять разных картинок в ряд
@@ -34,6 +41,7 @@ export const DEFAULT_MOBILE_TAB: MobileTab = "tasks";
 const TABS: { id: MobileTab; label: string; icon: IconName }[] = [
   { id: "meetings", label: "Встречи", icon: "calendar" },
   { id: "tasks", label: "Задачи", icon: "tasks" },
+  { id: "work", label: "В работе", icon: "clock" },
   { id: "review", label: "Приёмка", icon: "inbox" },
   { id: "ideas", label: "Мысли", icon: "bulb" },
   { id: "today", label: "Сегодня", icon: "today" },
@@ -44,17 +52,11 @@ const TAB_IDS = TABS.map((t) => t.id);
 export default function MobileShell({
   tab,
   onTabChange,
-  onSearch,
   badges,
   children,
 }: {
   tab: MobileTab;
   onTabChange: (tab: MobileTab) => void;
-  // Поиск стоит в той же полосе, шестой кнопкой, и это не раздел, а
-  // действие. Слова Кирилла 22.09.2026 — «поиск в нижнюю панель»: искать
-  // с телефона приходится чаще всего, а лежал он строкой в меню шапки, то
-  // есть двумя нажатиями и в противоположном от большого пальца углу.
-  onSearch: () => void;
   // Small counts on the tabs — how much is waiting there, so you can see it
   // without opening each one.
   badges?: Partial<Record<MobileTab, number>>;
@@ -123,16 +125,10 @@ export default function MobileShell({
             </button>
           );
         })}
-        {/* Поиск — шестая кнопка и единственная в ряду, которая не
-            переключает раздел, а открывает окно. Поэтому она и выглядит
-            иначе: без заливки-пилюли, которой отмечено «вы здесь», —
-            иначе ряд обещал бы шестой раздел, которого нет. */}
-        <button className="mobile-tab mobile-tab-search" id="mobileSearchTab" onClick={onSearch}>
-          <span className="mobile-tab-icon">
-            <Icon name="search" size={21} />
-          </span>
-          <span className="mobile-tab-label">Поиск</span>
-        </button>
+        {/* Поиск вернулся в меню шапки 23.09.2026 — сюда он переехал
+            22.09.2026 шестой кнопкой, но с добавлением «В работе» разделов
+            в этой полосе и так стало шесть, и седьмая, единственная не
+            переключающая раздел, начала путать ряд. */}
       </nav>
     </>
   );
