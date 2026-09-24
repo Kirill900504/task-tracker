@@ -618,8 +618,38 @@ export default function NewTracker() {
         // тройную копию, которая разойдётся при первой же новой задаче —
         // ровно та ошибка, от которой в этом файле уже избавлялись не раз.
         mainCol: <TasksPanel {...mainColProps} />,
-        mainColNew: <TasksPanel {...mainColProps} mobileColumn="new" />,
-        mainColWork: <TasksPanel {...mainColProps} mobileColumn="work" />,
+        // «Новая задача» и «открыть карточку» едут в openTaskRequest /
+        // openExistingTaskId — ОДНОМ состоянии на двоих, потому что мобильный
+        // экран задач теперь смонтирован дважды (mainColNew и mainColWork,
+        // см. комментарий выше). Не поделить его между монтированиями значило
+        // бы, что оба получают одно и то же ненулевое значение одновременно —
+        // и оба открывают СВОЙ диалог задачи, оба через showModal(), то есть
+        // оба в верхнем слое браузера поверх скрытого через [hidden] родителя,
+        // который top layer не останавливает. Снаружи это два одинаковых
+        // окна «Новая задача» друг на друге. Пойман 24.09.2026 при живой
+        // проверке на телефоне.
+        // «work» получает запрос, только когда именно эта вкладка открыта
+        // сейчас; «new» — во всех ОСТАЛЬНЫХ случаях, включая открытие
+        // карточки с других вкладок («Сегодня», «Приёмка») — так было
+        // устроено и до разделения панели на две: там, где сейчас открыт не
+        // раздел задач, диалог всё равно всплывает через top layer, и владеть
+        // им должен ровно один монтированный экземпляр.
+        mainColNew: (
+          <TasksPanel
+            {...mainColProps}
+            mobileColumn="new"
+            openTaskRequest={mobileTab === "work" ? null : openTaskRequest}
+            openExistingTaskId={mobileTab === "work" ? null : openExistingTaskId}
+          />
+        ),
+        mainColWork: (
+          <TasksPanel
+            {...mainColProps}
+            mobileColumn="work"
+            openTaskRequest={mobileTab === "work" ? openTaskRequest : null}
+            openExistingTaskId={mobileTab === "work" ? openExistingTaskId : null}
+          />
+        ),
         // Панелей «Сегодня» и «Неделя» здесь больше нет.
         //
         // Кирилл о них 19.09.2026: «я вообще не понимаю смысловой
