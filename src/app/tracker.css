@@ -459,14 +459,18 @@
   .idea-item{
     border:1px solid var(--line-soft); border-radius:var(--radius-md); padding:8px 10px; margin-bottom:5px;
     display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; align-items:flex-start; background:var(--paper-soft);
-    box-shadow:var(--edge);
+    box-shadow:var(--edge); transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
   }
   /* «Отправляю Никита Козлов…» — четвёртый ребёнок этой же флекс-строки, и
      без переноса он забирал ширину у текста мысли: текст сжимался до одной
      буквы и вытягивался в вертикальный столбик. Своя строка, а не третья
      колонка. */
   .idea-item > .send-result{flex-basis:100%; margin-top:2px;}
-  .idea-item:hover{border-color:var(--accent);}
+  /* Тот же лёгкий подъём на наведении, что у кубика доски и у карточки
+     встречи (.task:hover, .meeting-chip:hover) — единственная из трёх
+     карточек трекера, у которой его не было, и рядом с двумя другими это
+     читалось как недоделанное, а не как другой стиль. */
+  .idea-item:hover{border-color:var(--accent); box-shadow:var(--shadow-1); transform:translateY(-1px);}
   /* Длинная мысль сворачивается до четырёх строк.
      В правой колонке лежат надиктованные абзацы, и один такой занимал
      треть экрана, оттесняя всё остальное вниз. Развернуть — нажатием на
@@ -1806,11 +1810,15 @@
   /* Роль читается цветной полоской слева — тем же приёмом, что у роли на
      кубике доски (.task-role-bar), только здесь она короче и внутри самой
      фишки: имя человека остаётся текстом, роль — цветом, и то и другое
-     видно без наведения. */
-  .team-compact .participant-chip:not(.chip-add){
+     видно без наведения. По классу роли, а не по месту на экране — эта же
+     фишка выбирает исполнителя и в уже созданной задаче (TeamCompact), и
+     при заведении новой (PeoplePicker), и должна выглядеть одинаково там
+     и там; фишки без роли (дата встречи, список участников встречи) этот
+     класс не получают вовсе, и точка на них не появится. */
+  .participant-chip.role-executor, .participant-chip.role-coexecutor, .participant-chip.role-watcher{
     position:relative; padding-left:16px;
   }
-  .team-compact .participant-chip:not(.chip-add)::before{
+  .participant-chip.role-executor::before, .participant-chip.role-coexecutor::before, .participant-chip.role-watcher::before{
     content:""; position:absolute; left:6px; top:50%; transform:translateY(-50%);
     width:4px; height:4px; border-radius:50%; background:currentColor; opacity:.55;
   }
