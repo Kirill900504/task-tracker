@@ -2706,7 +2706,7 @@
   .chat-msg{
     position:relative; max-width:min(78%, 520px);
     padding:8px 12px 7px; border-radius:15px; background:var(--paper);
-    border:1px solid var(--line-soft); box-shadow:var(--edge);
+    border:1px solid var(--line-soft); box-shadow:var(--shadow-1), var(--edge);
     /* Меню вызывают правой кнопкой по самому сообщению — выделение текста
        при этом не должно превращаться в синюю заливку реплики; обычное
        выделение мышью остаётся. */
