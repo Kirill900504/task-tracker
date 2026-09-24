@@ -136,13 +136,16 @@ export async function POST(req: Request) {
   if (body.action === "vote") {
     const { data: row } = await admin
       .from("meeting_participants")
-      .select("id, assignee_id, meeting_id, meetings(title, date, time, vote_round, created_by)")
+      .select("id, assignee_id, meeting_id, response, late, round, meetings(title, date, time, vote_round, created_by)")
       .eq("id", body.participantId)
       .maybeSingle();
     type MeetingRef = { title: string; date: string; time: string | null; vote_round: number | null; created_by: string | null };
     const vote = row as {
       assignee_id: string;
       meeting_id: string;
+      response: "none" | "yes" | "no";
+      late: boolean | null;
+      round: number | null;
       meetings: MeetingRef | MeetingRef[] | null;
     } | null;
     if (!vote || vote.assignee_id !== m.assignee_id) return NextResponse.json({ error: "Это не ваша встреча" }, { status: 403 });
@@ -156,13 +159,24 @@ export async function POST(req: Request) {
     const reason = (body.comment || "").trim();
     if (!coming && !canVoteNo(reason)) return NextResponse.json({ error: "Нужна причина" }, { status: 400 });
 
+    const currentRound = Number(vote.round ?? 1) || 1;
+    const nextRound = Number(meeting?.vote_round ?? 1) || 1;
+    // Тот же самый ответ второй раз — не событие. До 24.09.2026 кнопка
+    // «Буду» оставалась нажимаемой после ответа, и каждое лишнее нажатие
+    // честно писало в хронику встречи ещё одно «будет» — Кирилл поймал
+    // это как четыре одинаковых строки подряд. Меняющийся ответ (буду →
+    // не смогу, или новый круг после переноса) — по-прежнему событие;
+    // не событие — только буквальный повтор того же самого.
+    const unchanged = vote.response === (coming ? "yes" : "no") && !!vote.late === late && currentRound === nextRound;
+    if (unchanged) return NextResponse.json({ ok: true, scheduled: false });
+
     await admin
       .from("meeting_participants")
       .update({
         response: coming ? "yes" : "no",
         reason: coming ? null : reason,
         responded_at: now,
-        round: Number(meeting?.vote_round ?? 1) || 1,
+        round: nextRound,
         late,
       })
       .eq("id", body.participantId);

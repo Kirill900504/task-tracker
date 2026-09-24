@@ -167,6 +167,19 @@
   }
   .btn:hover{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
   .btn:active{transform:scale(.97);}
+  /* Отключённая кнопка ничем не отличалась от обычной — ни тоном, ни
+     курсором, — и «уже нельзя нажать» было видно только по факту, что
+     нажатие ничего не делает. Тот же приём, что уже стоял у нескольких
+     кнопок отдельно (.auth-btn, .idea-take), теперь общий для .btn: без
+     него повторное «Буду» на встрече выглядело нажимаемым бесконечно
+     (24.09.2026). */
+  .btn:disabled{opacity:.55; cursor:default;}
+  .btn:disabled:hover{border-color:var(--line-soft); box-shadow:var(--edge); transform:none;}
+  .btn-primary:disabled{opacity:.6;}
+  /* «Это ваш текущий ответ» — не просто отключено, а отмечено: галочка
+     остаётся видна поверх притушенного вида, потому что здесь важно не
+     «нельзя нажать», а «это уже выбрано». */
+  .btn.current:disabled{opacity:.85;}
   .btn-primary{background:var(--accent); color:#F3F8FA; border-color:var(--accent); box-shadow:var(--shadow-1);}
   .btn-primary:hover{opacity:.92; box-shadow:0 0 0 3px var(--accent-soft), var(--shadow-1);}
   .btn-danger-ghost{color:var(--high); border-color:var(--high-bg);}

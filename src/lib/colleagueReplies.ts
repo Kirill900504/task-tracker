@@ -398,34 +398,43 @@ export async function handleColleagueCallback(
     // и после переноса он перестаёт считаться подтверждением сам собой.
     const { data: existing } = await admin
       .from("meeting_participants")
-      .select("id")
+      .select("id, response, late, round")
       .eq("meeting_id", meeting.id)
       .eq("assignee_id", colleague.id)
       .maybeSingle();
 
-    const patch = {
-      response: coming ? "yes" : "no",
-      reason: null,
-      responded_at: new Date().toISOString(),
-      round,
-      late,
-    };
-    if (existing) await admin.from("meeting_participants").update(patch).eq("id", (existing as { id: string }).id);
-    else await admin.from("meeting_participants").insert({ meeting_id: meeting.id, assignee_id: colleague.id, role: "participant", ...patch });
+    // Тот же самый ответ второй раз — не событие, только повторное нажатие
+    // той же кнопки под уже переписанным сообщением. До 24.09.2026 хроника
+    // встречи получала новую строку «будет» на каждое такое нажатие — тот
+    // же дубль, что нашёлся в трекере, только с другой стороны (бот).
+    const prev = existing as { id: string; response: "none" | "yes" | "no"; late: boolean | null; round: number | null } | undefined;
+    const unchanged = !!prev && prev.response === (coming ? "yes" : "no") && !!prev.late === late && (Number(prev.round ?? 1) || 1) === round;
 
-    await recordEvent(admin, {
-      userId: meeting.user_id,
-      kind: "meeting",
-      itemId: meeting.id,
-      text: late ? `🕐 ${colleague.name} будет, но опоздает` : coming ? `✅ ${colleague.name} будет` : `❌ ${colleague.name} не сможет`,
-    });
+    if (!unchanged) {
+      const patch = {
+        response: coming ? "yes" : "no",
+        reason: null,
+        responded_at: new Date().toISOString(),
+        round,
+        late,
+      };
+      if (prev) await admin.from("meeting_participants").update(patch).eq("id", prev.id);
+      else await admin.from("meeting_participants").insert({ meeting_id: meeting.id, assignee_id: colleague.id, role: "participant", ...patch });
 
-    // confirmed_by остаётся в согласии со строками, пока его кто-то читает.
-    const confirmed = ((meeting.confirmed_by as string[]) || []).filter((n) => n !== colleague.name);
-    await admin
-      .from("meetings")
-      .update({ confirmed_by: coming ? [...confirmed, colleague.name] : confirmed })
-      .eq("id", meeting.id);
+      await recordEvent(admin, {
+        userId: meeting.user_id,
+        kind: "meeting",
+        itemId: meeting.id,
+        text: late ? `🕐 ${colleague.name} будет, но опоздает` : coming ? `✅ ${colleague.name} будет` : `❌ ${colleague.name} не сможет`,
+      });
+
+      // confirmed_by остаётся в согласии со строками, пока его кто-то читает.
+      const confirmed = ((meeting.confirmed_by as string[]) || []).filter((n) => n !== colleague.name);
+      await admin
+        .from("meetings")
+        .update({ confirmed_by: coming ? [...confirmed, colleague.name] : confirmed })
+        .eq("id", meeting.id);
+    }
 
     // Предложение, на которое согласились все, становится встречей само.
     // Правило общее с трекером (lib/meetingConfirm): ответить «буду» можно

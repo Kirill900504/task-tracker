@@ -39,6 +39,17 @@ export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | n
   const said =
     me.response === "yes" ? (me.late ? "Вы предупредили, что опоздаете." : "Вы ответили: буду.") : me.response === "no" ? `Вы не сможете${me.reason ? `: ${me.reason}` : ""}.` : "";
 
+  // Какой ответ действует прямо сейчас — чтобы не давать нажать ЕГО ЖЕ
+  // второй раз. До 24.09.2026 все три кнопки оставались нажимаемыми и
+  // после ответа: «Буду» жалась сколько угодно раз, и на каждое нажатие
+  // маршрут честно писал новую строку в хронику — Кирилл поймал это как
+  // четыре одинаковых «будет» подряд в обсуждении одной встречи. Ответ
+  // МЕНЯТЬ можно (переменились планы — это законно, ради этого и кнопки
+  // три), нельзя только повторить тот же самый без всякой причины.
+  const isYes = me.response === "yes" && !me.late;
+  const isLate = me.response === "yes" && !!me.late;
+  const isNo = me.response === "no";
+
   return (
     <div className="my-work">
       <div className="my-work-head">
@@ -61,13 +72,31 @@ export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | n
         />
       ) : (
         <div className="ms-actions">
-          <button type="button" className="btn btn-small btn-primary" disabled={busy} onClick={() => void run("yes", "")}>
+          <button
+            type="button"
+            className={"btn btn-small btn-primary" + (isYes ? " current" : "")}
+            disabled={busy || isYes}
+            title={isYes ? "Вы уже ответили так" : undefined}
+            onClick={() => void run("yes", "")}
+          >
             <Icon name="check" size={14} /> Буду
           </button>
-          <button type="button" className="btn btn-small" disabled={busy} onClick={() => void run("late", "")}>
+          <button
+            type="button"
+            className={"btn btn-small" + (isLate ? " current" : "")}
+            disabled={busy || isLate}
+            title={isLate ? "Вы уже ответили так" : undefined}
+            onClick={() => void run("late", "")}
+          >
             <Icon name="clock" size={14} /> Опоздаю
           </button>
-          <button type="button" className="btn btn-small" disabled={busy} onClick={() => setAsking(true)}>
+          <button
+            type="button"
+            className={"btn btn-small" + (isNo ? " current" : "")}
+            disabled={busy || isNo}
+            title={isNo ? "Вы уже ответили так" : undefined}
+            onClick={() => setAsking(true)}
+          >
             <Icon name="ban" size={14} /> Не смогу
           </button>
         </div>
