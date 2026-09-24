@@ -227,6 +227,35 @@ async function main() {
     check("посторонний обсуждение не читает", rows.length === 0);
   });
 
+  // Постановщик, поручивший задачу другому, сам в строках участия не стоит —
+  // и до 0041 не видел переписку по собственной задаче, а написать в неё
+  // не мог: клиент просит вставленную строку обратно, и отказ на чтении
+  // приходил как «new row violates row-level security policy».
+  const authoredId = "tsk_test_authored_by_b";
+  await db.query(
+    `insert into public.tasks (id, user_id, title, assignee, created_by) values ($1,$2,'Сверить остатки','Вера',$3)`,
+    [authoredId, OWNER, MANAGER_B],
+  );
+  await db.query(
+    `insert into public.item_comments (user_id, item_kind, item_id, author_assignee_id, body)
+     values ($1,'task',$2,$3,'Начну после обеда')`,
+    [OWNER, authoredId, byName["Вера"]],
+  );
+  await as(db, MANAGER_B, async () => {
+    const { rows } = await db.query("select id from public.item_comments where item_id = $1", [authoredId]);
+    check("постановщик читает обсуждение своей задачи, не стоя на ней", rows.length === 1);
+    const { rows: written } = await db.query(
+      `insert into public.item_comments (user_id, item_kind, item_id, author_user_id, author_assignee_id, body)
+       values ($1,'task',$2,$3,$4,'Жду к пятнице') returning id`,
+      [OWNER, authoredId, MANAGER_B, byName["Борис"]],
+    );
+    check("и пишет в него, получая строку обратно", written.length === 1);
+  });
+  await as(db, MANAGER_A, async () => {
+    const { rows } = await db.query("select id from public.item_comments where item_id = $1", [authoredId]);
+    check("а тот, кто ни автор, ни участник, — по-прежнему нет", rows.length === 0);
+  });
+
   console.log("\nОтключённый доступ:");
   await db.query("update public.workspace_members set status = 'disabled' where member_id = $1", [MANAGER_A]);
   await as(db, MANAGER_A, async () => {
