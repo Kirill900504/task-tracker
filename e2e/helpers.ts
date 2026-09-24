@@ -43,7 +43,9 @@ export async function pickAnyExecutor(page: Page) {
 // правильно для работы и лишний шаг для теста, которому важно ровно
 // «нажал и закрылось».
 export async function pickSelfExecutor(page: Page) {
-  const chip = page.locator("#fPeople .participant-chip:not(.chip-add)", { hasText: "(я)" }).first();
+  // Метка «(я)» с экрана убрана 24.09.2026 (Кирилл: «убери это дурацкое
+  // (я)»), поэтому свою строку теперь находят по data-self, а не по тексту.
+  const chip = page.locator('#fPeople .participant-chip[data-self="true"]').first();
   await expect(chip).toBeVisible({ timeout: 20_000 });
   await chip.click();
   const menu = page.locator(".export-menu, .action-sheet").first();

@@ -5,7 +5,7 @@ import ActionMenu from "./ActionMenu";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import type { PersonOption } from "@/hooks/useTaskParticipants";
 import { withoutSelfMark } from "@/lib/actorName";
-import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
+import { isSelfAssignee } from "@/lib/trackerRows";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 // Кто на задаче — одним полем.
@@ -86,15 +86,13 @@ export default function PeoplePicker({
   // правило, стоящее у поля, — обычным требованием формы.
   const hasExecutor = picked.some((p) => p.role === "executor");
 
-  // Пометка «(я)» показывается ТОЛЬКО тому, про кого она написана.
-  //
-  // Это строка владельца, и ему она нужна: список людей — это имена, и
-  // своё среди чужих иначе не найти. Всем остальным она бессмысленна —
-  // «Кирилл (я)» на экране руководителя читается как опечатка, — поэтому
-  // им видно имя. В задачу при этом всегда уходит ПОЛНОЕ имя строки: там
+  // Пометка «(я)» — часть строки в базе (по ней трекер узнаёт владельца),
+  // а не часть имени, и на экране её не показывают даже ему самому: Кирилл
+  // 24.09.2026 назвал «Кирилл Кучеренко (я)» в списке людей дурацким —
+  // свою строку он и так узнаёт по месту и по контексту, а метка читается
+  // как опечатка. В задачу при этом всегда уходит ПОЛНОЕ имя строки: там
   // оно должно совпадать с базой буква в букву.
-  const identity = useWorkspaceRole();
-  const shown = (name: string) => (identity.isOwner ? name : withoutSelfMark(name));
+  const shown = (name: string) => withoutSelfMark(name);
 
   // На телефоне список свёрнут, пока его не раскроют.
   //
@@ -133,6 +131,10 @@ export default function PeoplePicker({
               key={person.id}
               type="button"
               className={"participant-chip" + (role ? " selected role-" + role : "")}
+              // Метка «(я)» с экрана убрана (см. комментарий у shown() выше),
+              // но e2e по-прежнему нужен надёжный способ найти именно свою
+              // строку — data-self держит это без единого слова на экране.
+              data-self={isSelfAssignee(person.name) ? "true" : undefined}
               onClick={(e) => {
                 // Нажал — спросили роль. Нажал второй раз — снял с задачи.
                 // Так это работает у участников встречи (там нажатие просто
