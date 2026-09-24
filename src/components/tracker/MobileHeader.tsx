@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { ReactNode } from "react";
 import PopLayer from "./PopLayer";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import Icon, { type IconName } from "./Icon";
@@ -33,6 +34,7 @@ export type MobileMenuItem = {
 export default function MobileHeader({
   clockText,
   accountName,
+  extra,
   items,
 }: {
   clockText: string;
@@ -41,6 +43,11 @@ export default function MobileHeader({
   // видел, что они сидят под личным аккаунтом в системе» — на телефоне
   // до этого не было ни одной подсказки, чей это вход.
   accountName?: string;
+  // Значки статуса (связь, отказ синхронизации) — перед основной кнопкой,
+  // как в шапке компьютера. Слот, а не жёстко вшитый компонент: шапка не
+  // должна знать про ConnectionStatus, чтобы не читать про облако там,
+  // где речь про меню.
+  extra?: ReactNode;
   items: MobileMenuItem[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -59,6 +66,7 @@ export default function MobileHeader({
           <div className="mobile-date">{accountName ? `${accountName} · ${clockText}` : clockText}</div>
         </div>
       </div>
+      {extra}
       <button
         className={"mobile-icon-btn" + (menuOpen ? " active" : "")}
         id="mobileMoreBtn"

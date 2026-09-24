@@ -1396,13 +1396,23 @@
   .toast-undo:hover{background:var(--accent); color:#F3F8FA;}
   @keyframes toast-in{from{transform:translateY(16px); opacity:0;} to{transform:translateY(0); opacity:1;}}
 
-  .notif-banner{
-    background:var(--high-bg); color:var(--high); border:1px solid var(--long-border); border-color:#5C3A32; border-radius:8px;
-    padding:10px 14px; font-size:13px; margin-bottom:14px; display:none; align-items:center; justify-content:space-between; gap:10px;
-  }
-  .notif-banner.show{display:flex;}
-
   ::placeholder{color:#6C6F73;}
+
+  /* Значки связи и отказа синхронизации в шапке (ConnectionStatus.tsx) —
+     см. там, почему их два. Приглушённый цвет у «нет связи»: это обычное
+     состояние сети, а не поломка; тёплый — у «не всё сохранилось»: там
+     реально нужен взгляд человека. */
+  .conn-status-btn{position:relative;}
+  .conn-status-offline{color:var(--ink-soft); border-color:var(--line-soft);}
+  .conn-status-error{color:var(--high); border-color:#5C3A32; background:var(--high-bg);}
+  .conn-status-error:hover{color:var(--high); box-shadow:none;}
+  .conn-status-badge{
+    position:absolute; top:-5px; right:-5px; min-width:15px; height:15px; padding:0 3px;
+    border-radius:999px; background:var(--high); color:#fff; font-size:9.5px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; line-height:1;
+  }
+  .conn-status-pop{max-width:280px; padding:12px; gap:10px;}
+  .conn-status-text{font-size:12.5px; line-height:1.5; color:var(--ink);}
 
   /* Quote in header */
   .header-quote{
@@ -2121,6 +2131,11 @@
       font-size:17px; line-height:1; cursor:pointer;
     }
     .mobile-icon-btn:active{background:var(--line);}
+    /* Значки связи в шапке телефона — та же цель под палец, что у
+       основной кнопки, но заметно уже: их до двух подряд, и растянутые
+       до 44px квадратов они спорили бы с ней за и так тесную строку. */
+    .mobile-header .conn-status-btn{width:38px; height:38px; border-radius:10px; font-size:15px;}
+    .conn-status-pop{max-width:min(280px, calc(100vw - 24px));}
     .mobile-menu{min-width:230px; right:12px;}
     .mobile-menu .export-item{padding:12px 12px; font-size:14px;}
     .mobile-menu .export-item:disabled{color:var(--ink-soft); cursor:default;}
@@ -2241,9 +2256,26 @@
     /* Модалки — во весь экран, кнопки всегда под рукой */
     /* Выше нижней навигации (z-index 210), иначе она перекрывает кнопки
        модалки — «Сохранить» оказывается недоступной для нажатия. */
-    .overlay{padding:0; align-items:stretch; z-index:400;}
+    /* align-items ОСТАЁТСЯ flex-start (как на компьютере), не stretch.
+       Со stretch родительский флекс-контейнер зажимал .modal РОВНО в
+       высоту экрана, а он сам — флекс-колонка: все его дети (задача,
+       приёмка, обсуждение — после display:contents у .modal-split они
+       все на одном уровне) вписывались уже в неё, а не в неё с прокруткой,
+       и flex-shrink сминал их пропорционально, чтобы влезть в один
+       экран, — заголовок «Результат» на 400px реально становился 21px.
+       Отсюда и «нижняя панель гуляет»: сжатие у каждой задачи своё,
+       кнопки приёмки то наезжали на обсуждение, то наоборот. Кирилл,
+       24.09.2026, по скриншотам. */
+    .overlay{padding:0; align-items:flex-start; z-index:400;}
     .modal{
       max-width:none; width:100%; margin:0; border-radius:0; border:0;
+      /* Прокручивает здесь только .overlay. Общий overflow-y:auto у
+         .modal (см. выше) на телефоне не должен работать ВТОРЫМ
+         скролл-контейнером — иначе именно ОН, а не .overlay, становится
+         точкой отсчёта для .modal-actions{position:sticky}, и кнопки
+         перестают ехать с прокруткой вовсе (стоят там, где встали один
+         раз). См. комментарий у .overlay выше — тот же разбор. */
+      overflow-y:visible;
       /* На телефоне окно и должно быть во весь экран: там нет ни фона,
          который стоило бы показывать, ни места на поля. Общий потолок в
          82vh отсюда снимается — иначе под окном осталась бы полоса
@@ -2286,7 +2318,6 @@
     .quick-add-fab{bottom:calc(78px + env(safe-area-inset-bottom, 0px));}
     #syncStatus{bottom:calc(80px + env(safe-area-inset-bottom, 0px));}
     .ms-link, .ms-link-dismissed{bottom:calc(80px + env(safe-area-inset-bottom, 0px)); left:12px; right:12px; max-width:none;}
-    .sync-error-notice{bottom:calc(132px + env(safe-area-inset-bottom, 0px)); left:12px; right:12px; max-width:none;}
     /* Тосты поднимаются над нижней навигацией, чтобы не спорить с ней. */
     #toast-stack{bottom:calc(84px + env(safe-area-inset-bottom, 0px)); right:12px; left:12px; max-width:none;}
     /* Под палец, а не под курсор */
@@ -2935,18 +2966,6 @@
   .ms-link-actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
   .ms-link-actions .btn{display:inline-flex; align-items:center; gap:6px;}
 
-  /* Отказ синхронизации — та же плавающая плашка, своим (тёплым красным)
-     цветом, и на 50px выше напоминания подключить мессенджер: если видны
-     оба сразу, им нельзя лечь друг на друга. */
-  .sync-error-notice{
-    position:fixed; left:16px; bottom:112px; z-index:146; max-width:320px;
-    display:flex; align-items:center; gap:10px;
-    padding:11px 13px; border-radius:var(--radius-md);
-    background:var(--high-bg); border:1px solid #5C3A32; color:var(--high);
-    font-size:12.5px; line-height:1.45; box-shadow:var(--shadow-2);
-  }
-  .sync-error-text{display:flex; align-items:flex-start; gap:6px;}
-  .sync-error-text .icon{flex:none; margin-top:2px;}
   .ms-link-error{
     padding:8px 10px; border-radius:var(--radius-sm);
     background:var(--high-bg); border:1px solid rgba(224,122,95,.4);

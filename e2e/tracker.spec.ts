@@ -676,18 +676,21 @@ test("work done offline survives a reload and syncs when the network returns", a
   // never reached the database.
   await page.reload();
   await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator("#offlineBanner")).toBeVisible();
+  // «Нет связи» — значок в шапке (ConnectionStatus.tsx), а не текст на
+  // пол-экрана: сама заметность проверяется в mobile.spec.ts, здесь важно
+  // только состояние — есть/нет.
+  await expect(page.locator("#connOfflineBtn")).toBeVisible();
   await expect(page.locator(".task", { hasText: onlineTitle })).toBeVisible();
   await expect(page.locator(".task", { hasText: offlineTitle })).toBeVisible();
 
   // Back on the network: the offline work is pushed without being asked.
   await context.setOffline(false);
-  await expect(page.locator("#offlineBanner")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator("#connOfflineBtn")).toHaveCount(0, { timeout: 30_000 });
   await waitForSaved(page);
 
   await page.reload();
   await expect(page.locator(".task", { hasText: offlineTitle })).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator("#offlineBanner")).toHaveCount(0);
+  await expect(page.locator("#connOfflineBtn")).toHaveCount(0);
 });
 
 // The four keys, driven as real key presses: a remap that silently stops

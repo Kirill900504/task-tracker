@@ -13,7 +13,7 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 import { useBotLink } from "@/hooks/useBotLink";
 import { prefetchTeam } from "@/hooks/useColleagues";
-import SyncErrorBanner from "@/components/tracker/SyncErrorBanner";
+import ConnectionStatus from "@/components/tracker/ConnectionStatus";
 import SyncStatusPill from "@/components/tracker/SyncStatusPill";
 import TasksPanel from "@/components/tracker/TasksPanel";
 import MeetingsPanel from "@/components/tracker/MeetingsPanel";
@@ -558,11 +558,6 @@ export default function NewTracker() {
         fromTaskTitle: task.title,
       }),
     justCreatedId: justCreatedTaskId,
-    extraBanner: offline && (
-      <div className="notif-banner show" id="offlineBanner">
-        <span>📴 Нет связи с облаком — показываю сохранённую копию. Всё, что записываете, отправится, как только связь вернётся.</span>
-      </div>
-    ),
   };
 
   const panels = {
@@ -721,7 +716,6 @@ export default function NewTracker() {
           23.09.2026 она стояла только в десктопной ветке ниже, и
           руководитель, открывший трекер с телефона, о ней не узнавал вовсе. */}
       {messengerMissing && <MessengerLink messenger={myMessenger} />}
-      <SyncErrorBanner />
       {isMobile ? (
         <>
           {/* Одна кнопка в шапке, и её меню — единственное место, куда
@@ -734,6 +728,7 @@ export default function NewTracker() {
           <MobileHeader
             clockText={clockText}
             accountName={withoutSelfMark(myName)}
+            extra={<ConnectionStatus offline={offline} />}
             items={[
               ...(isOwner ? [{ id: "team", label: "Команда", icon: "users" as const, onSelect: () => setTeamOpen(true) }] : []),
               // Поиск вернулся сюда 23.09.2026. Он жил здесь до 22.09.2026,
@@ -896,6 +891,7 @@ export default function NewTracker() {
                 Сами значки — контурные (Icon.tsx), а не эмодзи: цветную
                 наклейку из системного шрифта рисует не трекер, и рядом со
                 словом в шрифте интерфейса она выглядит приклеенной. */}
+            <ConnectionStatus offline={offline} />
             <button className="btn btn-icon" id="searchBtn" title="Поиск по трекеру (/)" aria-label="Поиск по трекеру" onClick={() => setSearchOpen(true)}>
               <Icon name="search" size={15} />
             </button>

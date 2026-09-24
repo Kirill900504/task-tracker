@@ -524,8 +524,9 @@ test("на медленной связи трекер открывается и�
   await expect(page.locator("#mobileNav")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
   // И говорит, что показывает сохранённое, а не делает вид, что всё в
-  // порядке: молчаливая копия — это данные, которым доверяют зря.
-  await expect(page.locator("#offlineBanner")).toBeVisible({ timeout: 60_000 });
+  // порядке: молчаливая копия — это данные, которым доверяют зря. Значок
+  // в шапке (ConnectionStatus.tsx), а не баннер на пол-экрана.
+  await expect(page.locator("#connOfflineBtn")).toBeVisible({ timeout: 60_000 });
 
   await context.unroute("**/rest/v1/**");
   await context.unroute("**/sb/rest/v1/**");

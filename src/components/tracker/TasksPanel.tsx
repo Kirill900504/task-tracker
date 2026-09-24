@@ -9,7 +9,6 @@
 // «как это назвали», а на «где это сейчас»: правило живёт в lib/kanban.ts,
 // панель только показывает его и разбирает перетаскивание.
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isOverdue, isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
 import { KANBAN_COLUMNS, columnOf, moveBetween, type KanbanColumn } from "@/lib/kanban";
@@ -65,7 +64,6 @@ export default function TasksPanel({
   filterAssignee,
   onFilterAssigneeChange,
   justCreatedId,
-  extraBanner,
   mobileColumn,
 }: {
   // Уже сужено родителем до «моё» — где я постановщик, исполнитель,
@@ -144,9 +142,6 @@ export default function TasksPanel({
   filterAssignee: string;
   onFilterAssigneeChange: (name: string) => void;
   justCreatedId?: string | null;
-  // Rendered at the top of the column, in the same slot legacy's
-  // #syncErrorBanner occupied (see SyncErrorBanner).
-  extraBanner?: ReactNode;
   // На телефоне это теперь ВЕСЬ раздел, а не переключатель внутри одного —
   // слова Кирилла 23.09.2026: «убрать кнопки «новые задачи», «в работе» и
   // на приёмке и сделать три полноценных раздела». «Приёмка» уже была
@@ -728,7 +723,6 @@ export default function TasksPanel({
 
   return (
     <div className="main-col dash-panel" id="mainCol" data-panel-id="mainCol">
-      {extraBanner}
       {(() => {
         return (
           // Строки с надписью «ЗАДАЧИ» над этой панелью больше нет: она
