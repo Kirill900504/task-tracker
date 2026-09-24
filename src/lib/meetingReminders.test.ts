@@ -32,15 +32,9 @@ describe("какое напоминание пора слать", () => {
     expect(dueReminder(118)?.audience).toBe("unanswered");
   });
 
-  it("за полчаса и за четверть часа — тем, кто придёт", () => {
-    expect(dueReminder(28)?.kind).toBe("meeting_30m");
+  it("за четверть часа — тем, кто придёт", () => {
     expect(dueReminder(14)?.kind).toBe("meeting_soon");
     expect(dueReminder(14)?.audience).toBe("coming");
-  });
-
-  it("в момент начала — «сейчас»", () => {
-    expect(dueReminder(0)?.kind).toBe("meeting_now");
-    expect(dueReminder(-4)?.kind).toBe("meeting_now");
   });
 
   it("между окнами молчит: пингер ходит часто, а писать надо редко", () => {
@@ -49,8 +43,7 @@ describe("какое напоминание пора слать", () => {
     expect(dueReminder(-30)).toBeNull();
   });
 
-  it("ближайшее к встрече важнее, если окна наложились", () => {
-    // 15 минут попадают и в окно «за 30», и в окно «за 15».
+  it("15 минут — верхняя граница окна «за 15 минут», включительно", () => {
     expect(dueReminder(15)?.kind).toBe("meeting_soon");
   });
 });

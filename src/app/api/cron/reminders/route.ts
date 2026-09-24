@@ -525,11 +525,14 @@ export async function GET(req: Request) {
         const needsReason = silentRefusals.includes(person.name);
         // Дедупликация по человеку, а не по встрече: иначе первый же
         // отправленный участник закроет окно для всех остальных. Вопрос про
-        // причину — свой ключ: это другое сообщение и другой повод.
+        // причину — свой ключ, и он один на встречу независимо от того,
+        // на каком окне (за сутки или за два часа) сработал: до починки
+        // 24.09.2026 ключ включал `window.kind`, и молчащий отказ получал
+        // тот же вопрос «почему» дважды — с обоих ранних напоминаний.
         const { error } = await admin.from("telegram_notifications").insert({
           user_id: userId,
-          kind: window.kind,
-          ref_id: `${m.id}:${person.id}${needsReason ? ":why" : ""}`,
+          kind: needsReason ? "meeting_why" : window.kind,
+          ref_id: `${m.id}:${person.id}`,
           notif_date: today,
         });
         if (error) continue;

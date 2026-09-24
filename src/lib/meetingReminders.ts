@@ -5,34 +5,37 @@
 // ничего не переиграешь, а человек, которого ждут, о встрече вообще не
 // узнавал, если не открыл мессенджер в нужную минуту.
 //
-// Отсюда четыре срока. Ранние — чтобы успеть перенести или дождаться
-// ответа; поздние — чтобы дошли до тех, кто уже согласился. И разное
-// содержание: молчащего спрашивают ещё раз, согласившемуся просто
-// напоминают.
+// Раньше было пять сроков (за сутки, за два часа, за 30 минут, за 15 минут
+// и в момент начала), и три последних падали на того, кто уже ответил
+// «буду», подряд в течение получаса — три сообщения об одном и том же.
+// 24.09.2026, разбор «на что летят пуши»: это ровно тот шум, который учит
+// глушить бота целиком, вместе с «сделал» и «не могу». Один явно избыточный
+// поздний срок оставлен: 15 минут — единственное, что успевает предупредить
+// и не превращается в напоминание о напоминании. Ранние остались оба: их
+// смысл разный (сутки — успеть перенести, два часа — последний шанс
+// ответить), и оба адресованы только тем, кто ещё молчит.
 
 import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback } from "@/lib/colleagues";
 
-export type ReminderKind = "meeting_24h" | "meeting_2h" | "meeting_30m" | "meeting_soon" | "meeting_now";
+export type ReminderKind = "meeting_24h" | "meeting_2h" | "meeting_soon";
 
 export type ReminderWindow = {
   kind: ReminderKind;
-  // За сколько минут до начала. 0 — сама встреча.
+  // За сколько минут до начала.
   beforeMinutes: number;
   // Ширина окна: пингер ходит раз в несколько минут, и попасть в точную
   // минуту он не обязан. Дедупликация всё равно не даст послать дважды.
   windowMinutes: number;
   // Ранние напоминания адресованы тем, кто ещё не ответил: их смысл —
-  // получить ответ, пока время можно двигать. Поздние — тем, кто придёт.
+  // получить ответ, пока время можно двигать. Позднее — тем, кто придёт.
   audience: "unanswered" | "coming";
 };
 
 export const REMINDER_WINDOWS: ReminderWindow[] = [
   { kind: "meeting_24h", beforeMinutes: 24 * 60, windowMinutes: 10, audience: "unanswered" },
   { kind: "meeting_2h", beforeMinutes: 120, windowMinutes: 10, audience: "unanswered" },
-  { kind: "meeting_30m", beforeMinutes: 30, windowMinutes: 8, audience: "coming" },
   { kind: "meeting_soon", beforeMinutes: 15, windowMinutes: 8, audience: "coming" },
-  { kind: "meeting_now", beforeMinutes: 0, windowMinutes: 5, audience: "coming" },
 ];
 
 // Сколько минут осталось до встречи, если сегодня `today` и сейчас
@@ -53,10 +56,6 @@ export function dueReminder(minutesLeft: number | null): ReminderWindow | null {
   for (const w of REMINDER_WINDOWS) {
     const from = w.beforeMinutes;
     const to = w.beforeMinutes - w.windowMinutes;
-    if (w.kind === "meeting_now") {
-      if (minutesLeft <= 0 && minutesLeft >= -w.windowMinutes) return w;
-      continue;
-    }
     if (minutesLeft <= from && minutesLeft > to) return w;
   }
   return null;
@@ -68,12 +67,8 @@ export function reminderHeadline(kind: ReminderKind): string {
       return "Завтра встреча";
     case "meeting_2h":
       return "Через 2 часа встреча";
-    case "meeting_30m":
-      return "Через 30 минут";
-    case "meeting_soon":
-      return "Через 15 минут";
     default:
-      return "Встреча сейчас";
+      return "Через 15 минут";
   }
 }
 
