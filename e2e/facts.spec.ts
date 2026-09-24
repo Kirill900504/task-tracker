@@ -72,6 +72,23 @@ test("карточка задачи говорит, кто поручил, ко�
   await expect(results).toBeVisible({ timeout: 20_000 });
   await expect(results).toContainText("Готово, проверьте");
   await expect(results.locator(".result-when")).toContainText(/\d{2}\.\d{2}\.\d{4}/);
+
+  // Статус — в правом верхнем углу сводки, вровень с «Постановщиком», а
+  // не отдельной строкой (24.09.2026: «убрать лишний отступ, который
+  // образуется за счёт того, что статус отдельной строкой показывается»).
+  const stage = facts.locator(".facts-row.has-badge .tp-stage");
+  await expect(stage).toContainText("на приёмке");
+  await expect(facts.locator(".facts-badge-row")).toHaveCount(0);
+  const author = facts.locator(".fact-label", { hasText: "Постановщик" });
+  const [stageBox, authorBox, factsBox] = [await stage.boundingBox(), await author.boundingBox(), await facts.boundingBox()];
+  expect(Math.abs(stageBox!.y - authorBox!.y)).toBeLessThan(14);
+  expect(stageBox!.x + stageBox!.width).toBeGreaterThan(factsBox!.x + factsBox!.width * 0.7);
+
+  // И решение постановщика — сразу под описанием, ВЫШЕ сводки: ради него
+  // карточку на этой стадии и открывают (24.09.2026).
+  const decisions = page.locator("#taskDecisions");
+  await expect(decisions).toContainText("Принимаете работу?");
+  expect((await decisions.boundingBox())!.y).toBeLessThan(factsBox!.y);
 });
 
 test("обсуждение выглядит перепиской: своя реплика справа, с временем", async ({ page }) => {
