@@ -177,6 +177,14 @@ test("отказ тоже закрывает карточку и уводит з
   // И не закрывается сама собой: отказ решает не за постановщика.
   await expect(page.locator("#col-done .task", { hasText: title })).toHaveCount(0);
 
+  // Ответ даётся один раз (lib/answerRules, 06.10.2026): открыв задачу
+  // снова, человек видит свой отказ — и ни одной кнопки, которой его можно
+  // перекрыть. До этого рядом с отказом стояла «Сделал».
+  await page.locator("#col-review .task", { hasText: title }).click();
+  await expect(page.locator(".my-work-said.declined")).toContainText("Нет доступа к смете", { timeout: 15_000 });
+  await expect(page.locator(".my-work .ms-actions .btn")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
   // Документ доехал до обсуждения задачи — спрашивается база, а не экран:
   // кнопка, после которой файл молча теряется, на экране выглядит точно
   // так же, как работающая.
