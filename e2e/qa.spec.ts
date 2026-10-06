@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
 import { pickSelfExecutor } from "./helpers";
@@ -11,7 +12,11 @@ import { pickSelfExecutor } from "./helpers";
 // никто не набирал, а «(я)» проверяли в одном месте из четырёх. Поэтому
 // здесь спрашивается то, что видит человек, а не то, что лежит в разметке.
 
-const { email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
+const { id: ownerId, email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
+
+const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
 
 async function login(page: Page) {
   await page.goto("/login");
@@ -79,4 +84,67 @@ test("пометки «(я)» нет на экране задачи", async ({ p
   await expect(card.locator("#taskFacts")).toBeVisible();
   await expect(card).not.toContainText("(я)");
   await page.keyboard.press("Escape");
+});
+
+// Равные права (06.10.2026, его слова: «у меня не должно быть преимуществ и
+// привилегий, у всех равные права!»). Задача, которую владельцу поставил
+// коллега, для владельца — чужая работа: он её исполнитель, а не
+// постановщик. Ни удалить её, ни переписать состав, ни закрыть волевым
+// решением он не может — как не может любой другой исполнитель.
+test("владелец не распоряжается задачей, которую ему поставил коллега", async ({ page }) => {
+  test.setTimeout(90_000);
+  const title = `QA от коллеги ${Date.now()}`;
+  const { data: colleague, error } = await admin.auth.admin.createUser({
+    email: `e2e-colleague-${Date.now()}@example.invalid`,
+    password: "E2e-" + Math.random().toString(36).slice(2) + "!Aa1",
+    email_confirm: true,
+  });
+  if (error) throw error;
+  try {
+    await login(page);
+    // Своя строка владельца в списке людей заводится самим трекером при
+    // первом входе — ждём её, по ней база и поставит его исполнителем.
+    let selfName = "";
+    let selfId = "";
+    await expect
+      .poll(async () => {
+        const { data } = await admin.from("assignees").select("id, name").eq("user_id", ownerId);
+        const self = (data || []).find((r) => /\(я\)\s*$/.test(r.name as string));
+        selfName = (self?.name as string) || "";
+        selfId = (self?.id as string) || "";
+        return selfName;
+      }, { timeout: 20_000 })
+      .not.toBe("");
+    const taskId = `qa-${Date.now().toString(36)}`;
+    const { error: insertError } = await admin.from("tasks").insert({
+      id: taskId,
+      user_id: ownerId,
+      created_by: colleague.user.id,
+      title,
+      assignee: selfName,
+    });
+    if (insertError) throw insertError;
+    // Строку «(я)» триггер 0024 не заводит нарочно — участие владельца
+    // ставит само приложение. Здесь — так же, руками.
+    const { error: partError } = await admin
+      .from("task_participants")
+      .insert({ user_id: ownerId, task_id: taskId, assignee_id: selfId, role: "executor" });
+    if (partError) throw partError;
+
+    await page.reload();
+    const card = page.locator(".task", { hasText: title });
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await card.locator(".task-title").click();
+    const modal = page.locator("dialog[open]");
+    await expect(modal.locator("#taskFacts")).toBeVisible();
+    // Как исполнитель он отвечает — это его право, как у всех.
+    await expect(modal.getByRole("button", { name: "Сделал" })).toBeVisible();
+    // А распоряжаться — нет.
+    await expect(modal.getByRole("button", { name: "Удалить" })).toHaveCount(0);
+    await expect(modal.getByRole("button", { name: /Закрыть волевым/ })).toHaveCount(0);
+    await expect(modal.getByRole("button", { name: /\+ добавить/ })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  } finally {
+    await admin.auth.admin.deleteUser(colleague.user.id);
+  }
 });
