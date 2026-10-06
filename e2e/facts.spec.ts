@@ -20,7 +20,7 @@ const { email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
 
 // Свой аккаунт на прогон — как и у остальных наборов; служебный клиент нужен
 // только чтобы не зависеть от порядка тестов.
-createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
@@ -66,6 +66,26 @@ test("карточка задачи говорит, кто поручил, ко�
   // Окно закрывается само: отчёт — это итоговый результат исполнителя, и
   // висеть над ним карточке незачем (пункт 10 Кирилла).
   await expect(page.locator("#overlay")).toHaveCount(0, { timeout: 20_000 });
+
+  // Своя задача закрывается своим же отчётом — без приёмки у самого себя
+  // (отзыв Витовского 25.09.2026, closeIfEveryoneReported).
+  const readTask = async () =>
+    (await admin.from("tasks").select("id, status, approval_state").eq("title", title).maybeSingle()).data as
+      | { id: string; status: string; approval_state: string }
+      | null;
+  await expect.poll(async () => (await readTask())?.status, { timeout: 20_000 }).toBe("done");
+
+  // Дальше карточка проверяется на стадии «на приёмке» — той, где решение
+  // постановщика встаёт наверх. Своя задача туда больше не попадает, поэтому
+  // стадия ставится служебным ключом: проверяется раскладка карточки, а не
+  // путь задачи между двумя людьми.
+  const own = await readTask();
+  await admin
+    .from("tasks")
+    .update({ status: "in_progress", approval_state: "awaiting_review", approved_at: null, completed_at: null, last_completed_on: null })
+    .eq("id", own!.id);
+  await page.reload();
+  await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
 
   await page.locator(`.task:has-text("${title}")`).first().click();
   const results = page.locator("#taskResults");

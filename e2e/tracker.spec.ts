@@ -1001,6 +1001,12 @@ test("закрытие встречи из списка спрашивает и�
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.fill("#askInput", "Договорились по срокам");
   await page.click("#askOkBtn");
+  // Успешная встреча предлагает задачу по своему итогу (отзыв Витовского
+  // 25.09.2026) — предлагает, а не открывает: «Не нужно» закрывает вопрос
+  // и больше ничего не делает.
+  await expect(page.locator(".ask-modal")).toContainText("Поставить задачу по итогам встречи?");
+  await page.click("#askCancelBtn");
+  await expect(page.locator(".ask-modal")).toHaveCount(0);
   // Закрытая встреча уходит из списка в окно завершённых.
   await expect(chip).toHaveCount(0);
   await waitForSaved(page);

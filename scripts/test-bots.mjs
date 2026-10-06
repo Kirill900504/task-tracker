@@ -682,6 +682,23 @@ try {
   const { data: closedMeeting } = await admin.from("meetings").select("status").eq("id", ownMeeting).maybeSingle();
   check("«Без результата» закрывает встречу", closeMeetingPress.status === 200 && closedMeeting?.status === "no_result", closedMeeting);
 
+  // «✍️ Записать мысль» на экране мыслей: следующее сообщение — мысль.
+  // Отзыв Витовского 25.09.2026 («Мысли только открывают список, но не дают
+  // написать»); у руководителя иного пути нет вовсе — его свободный текст
+  // разбирается как поручение.
+  await pressOwner("own10", "i:inew:x");
+  const { data: ideaAsked } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
+  check("«Записать мысль» ждёт текст", ideaAsked?.pending_action?.kind === "new_idea", ideaAsked);
+  const ideaText = "Проверочная мысль " + Date.now();
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: ideaText } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: ideaRow } = await admin.from("ideas").select("id, user_id").eq("text", ideaText).maybeSingle();
+  check("и следующее сообщение записано мыслью", !!ideaRow && ideaRow.user_id === userId, ideaRow);
+  if (ideaRow?.id) await admin.from("ideas").delete().eq("id", ideaRow.id);
+
   await admin.from("tasks").delete().eq("id", ownerTask);
   if (created?.id) await admin.from("tasks").delete().eq("id", created.id);
   await admin.from("meetings").delete().eq("id", ownMeeting);
