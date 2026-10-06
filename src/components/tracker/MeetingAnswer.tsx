@@ -19,7 +19,9 @@ import { openVoteChoices } from "@/lib/answerRules";
 // узнаёт из него ровно ничего. Правило стоит и в базе, и в маршруте
 // (canVoteNo), здесь оно только объясняется человеку.
 
-export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | null; onAnswer: (response: "yes" | "no" | "late", reason: string) => Promise<void> }) {
+// Документы к «не смогу» — приглашение на другое мероприятие, справка —
+// уходят вместе с причиной (06.10.2026); кладёт их окно встречи.
+export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | null; onAnswer: (response: "yes" | "no" | "late", reason: string, files: File[]) => Promise<void> }) {
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState("");
@@ -30,11 +32,11 @@ export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | n
 
   if (!me || me.role === "watcher") return null;
 
-  async function run(response: "yes" | "no" | "late", reason: string) {
+  async function run(response: "yes" | "no" | "late", reason: string, files: File[] = []) {
     setBusy(true);
     setFailed("");
     try {
-      await onAnswer(response, reason);
+      await onAnswer(response, reason, files);
       setAsking(false);
     } catch (e) {
       setFailed(humanError(e, "Не получилось ответить"));
@@ -70,7 +72,7 @@ export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | n
           emptyHint="Причина обязательна: без неё организатор не знает, переносить встречу или нет."
           submitLabel="Отправить"
           busy={busy}
-          onSubmit={(text) => void run("no", text)}
+          onSubmit={(text, _when, files) => void run("no", text, files)}
           onCancel={() => setAsking(false)}
         />
       ) : open.length === 0 ? null : (

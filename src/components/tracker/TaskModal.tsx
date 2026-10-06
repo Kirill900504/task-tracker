@@ -29,6 +29,7 @@ import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { withoutSelfMark } from "@/lib/actorName";
 import { fmtDate } from "@/lib/taskDisplay";
+import { answerWithFiles } from "@/lib/answerFiles";
 
 // Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
 // «Понедельник…Воскресенье» подряд не помещаются никуда, а «Пн Вт Ср» читают
@@ -552,6 +553,7 @@ export default function TaskModal({
                   второй половиной того же компонента, ниже. */}
               {canEdit && (
                 <TeamCompact
+                  taskId={task.id}
                   part="decisions"
                   participants={participants}
                   availablePeople={availablePeople}
@@ -581,8 +583,12 @@ export default function TaskModal({
                   returnedComment={task.approvalState === "returned" ? task.approvalComment || "" : ""}
                   onAccept={() => onAcceptWork?.(myPart.id) ?? Promise.resolve()}
                   onReport={(comment, files) => onReportWork?.(myPart.id, comment, files) ?? Promise.resolve()}
-                  onDecline={(reason) => onDeclineWork?.(myPart.id, reason) ?? Promise.resolve()}
-                  onAskReschedule={(to, reason) => onAskReschedule?.(myPart.id, to, reason) ?? Promise.resolve()}
+                  onDecline={(reason, files) =>
+                    answerWithFiles({ kind: "task", id: task.id }, files, "Документы к отказу", () => onDeclineWork?.(myPart.id, reason) ?? Promise.resolve())
+                  }
+                  onAskReschedule={(to, reason, files) =>
+                    answerWithFiles({ kind: "task", id: task.id }, files, "Документы к просьбе о переносе", () => onAskReschedule?.(myPart.id, to, reason) ?? Promise.resolve())
+                  }
                   onAnswered={onClose}
                 />
               )}
@@ -670,6 +676,7 @@ export default function TaskModal({
                   стадии приёмки тоже перенести вверх». */}
               {canEdit && (
                 <TeamCompact
+                  taskId={task.id}
                   part="team"
                   participants={participants}
                   availablePeople={availablePeople}

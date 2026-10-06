@@ -157,6 +157,16 @@ test("отказ тоже закрывает карточку и уводит з
   await expect(decline).toBeVisible({ timeout: 20_000 });
   await decline.click();
   await page.fill("#myWorkDecline", "Нет доступа к смете");
+  // Документ к отказу (06.10.2026: «возможность вложить документ должна
+  // быть при любом описании завершения задачи»). До этого кнопка была
+  // только у отчёта, и письмо, объясняющее отказ, прикладывать было
+  // некуда.
+  await page.locator(".ms-answer-files input[type=file]").setInputFiles({
+    name: "pismo-postavshchika.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Смета будет в пятницу"),
+  });
+  await expect(page.locator(".ms-answer-file", { hasText: "pismo-postavshchika.txt" })).toBeVisible();
   await page.locator(".ms-answer-actions .btn", { hasText: "Отправить" }).click();
 
   // Отказ — это ответ: ждут уже не исполнителя, а решения постановщика,
@@ -166,4 +176,22 @@ test("отказ тоже закрывает карточку и уводит з
   await expect(page.locator("#col-review .task", { hasText: title })).toBeVisible({ timeout: 15_000 });
   // И не закрывается сама собой: отказ решает не за постановщика.
   await expect(page.locator("#col-done .task", { hasText: title })).toHaveCount(0);
+
+  // Документ доехал до обсуждения задачи — спрашивается база, а не экран:
+  // кнопка, после которой файл молча теряется, на экране выглядит точно
+  // так же, как работающая.
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: task } = await admin.from("tasks").select("id").eq("user_id", userId).eq("title", title).maybeSingle();
+  expect(task?.id).toBeTruthy();
+  await expect
+    .poll(
+      async () => {
+        const { data } = await admin.from("item_comments").select("body, attachments").eq("item_kind", "task").eq("item_id", task!.id).eq("body", "Документы к отказу");
+        return ((data?.[0]?.attachments as { name: string }[] | null) || []).map((a) => a.name);
+      },
+      { timeout: 15_000 },
+    )
+    .toEqual(["pismo-postavshchika.txt"]);
 });

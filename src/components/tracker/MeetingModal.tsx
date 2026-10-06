@@ -16,6 +16,9 @@ import { uid } from "@/lib/uid";
 import MicButton from "./MicButton";
 import MiniCalendar from "./MiniCalendar";
 import AutoGrowTextarea from "./AutoGrowTextarea";
+import AttachFiles from "./AttachFiles";
+import { answerWithFiles } from "@/lib/answerFiles";
+import { humanError } from "@/lib/humanError";
 import { useAsk } from "@/components/Ask";
 import { sortNames } from "@/lib/peopleOrder";
 import Modal from "./Modal";
@@ -148,6 +151,12 @@ export default function MeetingModal({
     if (meeting?.id) markTaskCommentsRead(meeting.id, "meeting");
   }, [meeting?.id]);
   const [result, setResult] = useState(meeting?.result ?? "");
+  // Документы к итогу — протокол, фотография доски, подписанный акт
+  // (06.10.2026: документ прикладывается к любому итогу). Ложатся в
+  // обсуждение встречи, см. lib/answerFiles.
+  const [recapFiles, setRecapFiles] = useState<File[]>([]);
+  const [recapError, setRecapError] = useState("");
+  const [recapBusy, setRecapBusy] = useState(false);
   // Выбора «Назначаю / Предлагаю время» в форме больше нет.
   //
   // Слова Кирилла 21.09.2026: «параметр „как собираем“ убираем. все
@@ -311,10 +320,23 @@ export default function MeetingModal({
     onClose();
   }
 
-  function setStatus(status: MeetingStatus) {
-    if (!meeting) return;
-    onSetStatus(meeting, status, result);
-    onClose();
+  async function setStatus(status: MeetingStatus) {
+    if (!meeting || recapBusy) return;
+    setRecapBusy(true);
+    setRecapError("");
+    try {
+      // Файлы загружаются ДО смены статуса: итог, чей протокол не
+      // загрузился, не закрывает встречу — иначе окно закрылось бы, а
+      // документ пропал молча.
+      await answerWithFiles({ kind: "meeting", id: meeting.id }, status === "planned" ? [] : recapFiles, "Документы к итогу встречи", () =>
+        onSetStatus(meeting, status, result),
+      );
+      onClose();
+    } catch (e) {
+      setRecapError(humanError(e, "Не получилось приложить документы"));
+    } finally {
+      setRecapBusy(false);
+    }
   }
 
   const resolved = isEditing && meeting.status && meeting.status !== "planned" && meeting.status !== "proposed";
@@ -375,7 +397,7 @@ export default function MeetingModal({
                 Пока это предложение: время ни у кого не занято и напоминаний нет. Когда ответят все, встреча
                 назначится сама — или назначьте сейчас, не дожидаясь.
               </div>
-              <button type="button" className="btn btn-small btn-primary" id="confirmMeetingBtn" onClick={() => setStatus("planned")}>
+              <button type="button" className="btn btn-small btn-primary" id="confirmMeetingBtn" onClick={() => void setStatus("planned")}>
                 <Icon name="check" size={15} /> Назначить
               </button>
             </div>
@@ -410,7 +432,7 @@ export default function MeetingModal({
                 <>
                   {result && <ExpandableText text={result} className="task-card-desc" />}
                   <div className="outcome-actions">
-                    <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => setStatus("planned")}>
+                    <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => void setStatus("planned")}>
                       <Icon name="reset" size={15} /> Вернуть в план
                     </button>
                   </div>
@@ -428,16 +450,18 @@ export default function MeetingModal({
                       placeholder="Кратко: что решили, что дальше…"
                       value={result}
                       onChange={setResult}
-                      onEnter={() => setStatus("success")}
+                      onEnter={() => void setStatus("success")}
                     />
                     <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
                   </div>
                   <div className="field-hint">Enter — завершить успешно, Shift+Enter — новая строка.</div>
+                  <AttachFiles files={recapFiles} onChange={setRecapFiles} onError={setRecapError} />
+                  {recapError && <div className="ms-answer-error">{recapError}</div>}
                   <div className="outcome-actions">
-                    <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" onClick={() => setStatus("success")}>
+                    <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" disabled={recapBusy} onClick={() => void setStatus("success")}>
                       <Icon name="check" size={15} /> Успешно
                     </button>
-                    <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" onClick={() => setStatus("no_result")}>
+                    <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" disabled={recapBusy} onClick={() => void setStatus("no_result")}>
                       <Icon name="ban" size={15} /> Без результата
                     </button>
                   </div>
@@ -488,7 +512,14 @@ export default function MeetingModal({
         {meeting ? (
           <div className="modal-split">
             <div className="modal-main">
-              {myVote && onAnswer && !resolved && <MeetingAnswer me={myVote} onAnswer={onAnswer} />}
+              {myVote && onAnswer && !resolved && (
+                <MeetingAnswer
+                  me={myVote}
+                  onAnswer={(response, reason, files) =>
+                    answerWithFiles({ kind: "meeting", id: myVote.meetingId }, files, "Документы к ответу «не смогу»", () => onAnswer(response, reason))
+                  }
+                />
+              )}
 
               {/* Сводка встречи — той же формы, что сводка задачи.
                   Слова Кирилла 21.09.2026: «окно созданной встречи должно
