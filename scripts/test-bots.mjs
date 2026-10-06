@@ -175,6 +175,24 @@ try {
     .maybeSingle();
   check("writes the reason to the meeting, not to a task", explained?.reason === "Буду в Севастополе на приёмке", explained);
 
+  // Ответ даётся один раз (lib/answerRules, 06.10.2026): старая кнопка
+  // «Буду» под тем же сообщением после «Не смогу» не меняет ничего.
+  await post(
+    "/api/telegram/webhook",
+    {
+      update_id: Math.floor(Math.random() * 1e9),
+      callback_query: { id: "cbq2b", data: "m:yes:" + meetingId, message: { chat: { id: colleagueChat }, message_id: 6 } },
+    },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: stillNo } = await admin
+    .from("meeting_participants")
+    .select("response, reason")
+    .eq("meeting_id", meetingId)
+    .eq("assignee_id", assignee.id)
+    .maybeSingle();
+  check("«Буду» после «Не смогу» не меняет ответа", stillNo?.response === "no" && stillNo?.reason === "Буду в Севастополе на приёмке", stillNo);
+
   // ---- Вопрос коллеги, на который раньше не было ответа ----
   //
   // Команд у коллеги не было вовсе: «сегодня» и «просрочено» работали только

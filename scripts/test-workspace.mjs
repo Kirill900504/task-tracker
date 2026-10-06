@@ -182,6 +182,16 @@ try {
   const accept = await post(mgrA, "/api/workspace/report", { action: "accept", participantId: partA.id });
   check("«принял» проходит", accept.status === 200, accept);
 
+  const acceptAgain = await post(mgrA, "/api/workspace/report", { action: "accept", participantId: partA.id });
+  check("второе «принял» — не ошибка", acceptAgain.status === 200, acceptAgain);
+
+  const reschedule = await post(mgrA, "/api/workspace/report", { action: "reschedule", participantId: partA.id, comment: "Жду данные", date: later });
+  check("исполнитель может попросить перенос", reschedule.status === 200, reschedule);
+  const { data: askRow } = await admin.from("task_participants").select("reschedule_reason, reschedule_to").eq("id", partA.id).maybeSingle();
+  check("просьба о переносе видна постановщику", askRow?.reschedule_reason === "Жду данные" && askRow?.reschedule_to === later, askRow);
+  const rescheduleAgain = await post(mgrA, "/api/workspace/report", { action: "reschedule", participantId: partA.id, comment: "Ещё раз", date: later });
+  check("вторую просьбу, пока первая ждёт решения, не шлют", rescheduleAgain.status === 409, rescheduleAgain);
+
   const noComment = await post(mgrA, "/api/workspace/report", { action: "done", participantId: partA.id });
   check("«сделал» без комментария отклоняется", noComment.status === 400, noComment);
 
@@ -197,16 +207,21 @@ try {
 
   const declineB = await post(mgrB, "/api/workspace/report", { action: "decline", participantId: partB.id, comment: "Нет доступа к 1С" });
   check("«не могу» с причиной проходит", declineB.status === 200, declineB);
+  check("ответили все — задача ушла на приёмку", declineB.body?.awaitingReview === true, declineB.body);
 
+  // Ответ даётся один раз (lib/answerRules, 06.10.2026): отказ нельзя
+  // перекрыть отчётом, отчёт — отказом. Открывает ответ заново только
+  // постановщик, возвратом на доработку (ниже).
   const doneB = await post(mgrB, "/api/workspace/report", { action: "done", participantId: partB.id, comment: "Доступ дали, собрал" });
-  check("отчёт после отказа проходит", doneB.status === 200, doneB);
-  check("отчитались все — задача ушла на приёмку", doneB.body?.awaitingReview === true, doneB.body);
+  check("отчёт после отказа не проходит", doneB.status === 409, doneB);
+  const declineA = await post(mgrA, "/api/workspace/report", { action: "decline", participantId: partA.id, comment: "Передумал" });
+  check("отказ после отчёта не проходит", declineA.status === 409, declineA);
 
   const { data: afterDone } = await admin.from("tasks").select("approval_state").eq("id", taskId).maybeSingle();
   check("approval_state = awaiting_review", afterDone?.approval_state === "awaiting_review", afterDone);
 
-  const { data: declinedRow } = await admin.from("task_participants").select("declined_at, decline_reason").eq("id", partB.id).maybeSingle();
-  check("отказ снят отчётом, а не остался висеть", !declinedRow?.declined_at, declinedRow);
+  const { data: declinedRow } = await admin.from("task_participants").select("declined_at, done_at").eq("id", partB.id).maybeSingle();
+  check("отказ остался отказом", !!declinedRow?.declined_at && !declinedRow?.done_at, declinedRow);
 
   // ── Приёмка ────────────────────────────────────────────────────────────
   section("Решение постановщика");
@@ -287,10 +302,8 @@ try {
     .eq("id", taskId);
   check("исполнитель не может подвинуть срок", !dueError && dueCount === 0, { dueError: dueError?.message, dueCount });
 
-  const reschedule = await post(mgrA, "/api/workspace/report", { action: "reschedule", participantId: partA.id, comment: "Жду данные", date: later });
-  check("но может попросить перенос", reschedule.status === 200, reschedule);
-  const { data: askRow } = await admin.from("task_participants").select("reschedule_reason, reschedule_to").eq("id", partA.id).maybeSingle();
-  check("просьба о переносе видна постановщику", askRow?.reschedule_reason === "Жду данные" && askRow?.reschedule_to === later, askRow);
+  const lateAsk = await post(mgrA, "/api/workspace/report", { action: "reschedule", participantId: partA.id, comment: "Жду данные", date: later });
+  check("после отчёта перенос уже не просят", lateAsk.status === 409, lateAsk);
 
   // Правила в маршруте и правила в базе должны совпадать. Пока база
   // разрешала руководителю писать в свою строку напрямую, отчёт без единого
@@ -378,6 +391,17 @@ try {
 
   const foreignVote = await post(mgrA, "/api/workspace/report", { action: "vote", participantId: mpB.id, response: "yes" });
   check("голосовать за другого нельзя", foreignVote.status === 403, foreignVote);
+
+  // Ответ даётся один раз (lib/answerRules, 06.10.2026): после «не смогу»
+  // ничего, после «буду» — только «опоздаю», после «опоздаю» — ничего.
+  const flipB = await post(mgrB, "/api/workspace/report", { action: "vote", participantId: mpB.id, response: "yes" });
+  check("«буду» после «не смогу» не проходит", flipB.status === 409, flipB);
+  const flipA = await post(mgrA, "/api/workspace/report", { action: "vote", participantId: mpA.id, response: "no", comment: "Передумал" });
+  check("«не смогу» после «буду» не проходит", flipA.status === 409, flipA);
+  const lateA = await post(mgrA, "/api/workspace/report", { action: "vote", participantId: mpA.id, response: "late" });
+  check("но предупредить об опоздании можно", lateA.status === 200, lateA);
+  const backA = await post(mgrA, "/api/workspace/report", { action: "vote", participantId: mpA.id, response: "yes" });
+  check("а после «опоздаю» обратно в «буду» нельзя", backA.status === 409, backA);
 
   // Перенос: дата меняется, круг голосования увеличивается — так это делает
   // трекер (см. useMeetingVotes). «Буду» про вторник ничего не говорит про

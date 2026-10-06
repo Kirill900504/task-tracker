@@ -7,6 +7,7 @@ import AnswerForm from "./AnswerForm";
 import Icon from "./Icon";
 import { humanError } from "@/lib/humanError";
 import { markSeen } from "@/lib/seenMark";
+import { openTaskChoices } from "@/lib/answerRules";
 
 // Что от ВАС ждут по этой задаче — внутри самой задачи.
 //
@@ -114,6 +115,11 @@ export default function TaskAnswer({
 
   const reported = !!me.doneAt;
   const declined = !!me.declinedAt && !me.doneAt;
+  // Ответ даётся один раз (lib/answerRules). До 06.10.2026 после «Не могу»
+  // здесь оставалась «Сделал», то есть отказ можно было тут же перекрыть
+  // отчётом, а отчёт — снова отказом через бота. Открывает ответ заново
+  // только постановщик, возвратом на доработку.
+  const open = openTaskChoices({ acceptedAt: me.acceptedAt, doneAt: me.doneAt, declinedAt: me.declinedAt, reschedulePending: !!me.rescheduleTo });
 
   return (
     <div className="my-work">
@@ -191,9 +197,9 @@ export default function TaskAnswer({
         />
       )}
 
-      {!pending && !reported && !closed && (
+      {!pending && !closed && (open.done || open.decline) && (
         <div className="ms-actions">
-          {!me.acceptedAt && !declined && (
+          {open.accept && (
             <button type="button" className="btn btn-small btn-primary" disabled={busy} onClick={() => void run(onAccept)}>
               <Icon name="check" size={14} /> Принял
             </button>
@@ -205,12 +211,12 @@ export default function TaskAnswer({
           <button type="button" className="btn btn-small btn-primary" onClick={() => setPending("done")}>
             <Icon name="flag" size={14} /> Сделал
           </button>
-          {!declined && (
+          {open.decline && (
             <button type="button" className="btn btn-small" onClick={() => setPending("decline")}>
               <Icon name="ban" size={14} /> Не могу
             </button>
           )}
-          {!me.rescheduleTo && (
+          {open.move && (
             <button type="button" className="btn btn-small" onClick={() => setPending("move")}>
               <Icon name="calendar" size={14} /> Прошу перенос
             </button>

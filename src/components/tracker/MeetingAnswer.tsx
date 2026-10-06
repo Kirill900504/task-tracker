@@ -6,6 +6,7 @@ import AnswerForm from "./AnswerForm";
 import Icon from "./Icon";
 import { humanError } from "@/lib/humanError";
 import { markSeen } from "@/lib/seenMark";
+import { openVoteChoices } from "@/lib/answerRules";
 
 // Ваш ответ на встречу — внутри самой встречи.
 //
@@ -45,16 +46,12 @@ export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | n
   const said =
     me.response === "yes" ? (me.late ? "Вы предупредили, что опоздаете." : "Вы ответили: буду.") : me.response === "no" ? `Вы не сможете${me.reason ? `: ${me.reason}` : ""}.` : "";
 
-  // Какой ответ действует прямо сейчас — чтобы не давать нажать ЕГО ЖЕ
-  // второй раз. До 24.09.2026 все три кнопки оставались нажимаемыми и
-  // после ответа: «Буду» жалась сколько угодно раз, и на каждое нажатие
-  // маршрут честно писал новую строку в хронику — Кирилл поймал это как
-  // четыре одинаковых «будет» подряд в обсуждении одной встречи. Ответ
-  // МЕНЯТЬ можно (переменились планы — это законно, ради этого и кнопки
-  // три), нельзя только повторить тот же самый без всякой причины.
-  const isYes = me.response === "yes" && !me.late;
-  const isLate = me.response === "yes" && !!me.late;
-  const isNo = me.response === "no";
+  // Ответ даётся один раз (lib/answerRules): после «буду» остаётся только
+  // «опоздаю», после «опоздаю» и «не смогу» — ничего. До 06.10.2026 гасла
+  // лишь та же самая кнопка, и ответ можно было менять по кругу сколько
+  // угодно. Строка голоса сюда приходит уже с учётом переноса встречи
+  // (MeetingsPanel): ответ о прежнем времени считается неданным.
+  const open = openVoteChoices(me);
 
   return (
     <div className="my-work">
@@ -76,35 +73,23 @@ export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | n
           onSubmit={(text) => void run("no", text)}
           onCancel={() => setAsking(false)}
         />
-      ) : (
+      ) : open.length === 0 ? null : (
         <div className="ms-actions">
-          <button
-            type="button"
-            className={"btn btn-small btn-primary" + (isYes ? " current" : "")}
-            disabled={busy || isYes}
-            title={isYes ? "Вы уже ответили так" : undefined}
-            onClick={() => void run("yes", "")}
-          >
-            <Icon name="check" size={14} /> Буду
-          </button>
-          <button
-            type="button"
-            className={"btn btn-small" + (isLate ? " current" : "")}
-            disabled={busy || isLate}
-            title={isLate ? "Вы уже ответили так" : undefined}
-            onClick={() => void run("late", "")}
-          >
-            <Icon name="clock" size={14} /> Опоздаю
-          </button>
-          <button
-            type="button"
-            className={"btn btn-small" + (isNo ? " current" : "")}
-            disabled={busy || isNo}
-            title={isNo ? "Вы уже ответили так" : undefined}
-            onClick={() => setAsking(true)}
-          >
-            <Icon name="ban" size={14} /> Не смогу
-          </button>
+          {open.includes("yes") && (
+            <button type="button" className="btn btn-small btn-primary" disabled={busy} onClick={() => void run("yes", "")}>
+              <Icon name="check" size={14} /> Буду
+            </button>
+          )}
+          {open.includes("late") && (
+            <button type="button" className="btn btn-small" disabled={busy} onClick={() => void run("late", "")}>
+              <Icon name="clock" size={14} /> Опоздаю
+            </button>
+          )}
+          {open.includes("no") && (
+            <button type="button" className="btn btn-small" disabled={busy} onClick={() => setAsking(true)}>
+              <Icon name="ban" size={14} /> Не смогу
+            </button>
+          )}
         </div>
       )}
     </div>

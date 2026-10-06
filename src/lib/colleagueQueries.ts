@@ -3,6 +3,7 @@ import { signInLink } from "@/lib/recoveryLink";
 import { trackerUrl } from "@/lib/trackerUrl";
 import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback, meetingButtons, taskButtons } from "@/lib/colleagues";
+import { openTaskChoices, openVoteChoices } from "@/lib/answerRules";
 import { botMenu, navRow } from "@/lib/botMenu";
 import { fmtDate } from "@/lib/taskDisplay";
 
@@ -391,7 +392,15 @@ export async function taskCard(
   // Закрытая задача кнопок ответа не получает — отвечать по ней уже не за
   // что; слово сказать всё равно можно.
   const done = task.status === "done";
-  const actions = done ? [[{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }]] : taskButtons(taskId, row.role);
+  // Остальным — только те ответы, что ещё можно дать (lib/answerRules):
+  // после отчёта или отказа кнопок ответа нет, слово остаётся.
+  const open = openTaskChoices({
+    acceptedAt: row.accepted_at,
+    doneAt: row.done_at,
+    declinedAt: row.declined_at,
+    reschedulePending: !!row.reschedule_to && !!row.reschedule_reason,
+  });
+  const actions = done ? [[{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }]] : taskButtons(taskId, row.role, open);
   return { text: lines.join("\n"), buttons: [...actions, ...navButtons()] };
 }
 
@@ -402,7 +411,7 @@ export async function meetingCard(
 ): Promise<BotReply | null> {
   const { data } = await admin
     .from("meeting_participants")
-    .select("response, reason, round, meetings(title, date, time, status, vote_round, participants, deleted_at, user_id)")
+    .select("response, reason, late, round, meetings(title, date, time, status, vote_round, participants, deleted_at, user_id)")
     .eq("assignee_id", colleague.id)
     .eq("meeting_id", meetingId)
     .maybeSingle();
@@ -410,6 +419,7 @@ export async function meetingCard(
   type Row = {
     response: "none" | "yes" | "no";
     reason: string | null;
+    late: boolean | null;
     round: number;
     meetings: {
       title: string;
@@ -431,12 +441,14 @@ export async function meetingCard(
   const lines = [`📅 ${meeting.title}`, "", fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "")];
   const others = (meeting.participants || []).filter(Boolean);
   if (others.length > 1) lines.push("Участники: " + others.join(", "));
-  if (answered) lines.push("", row.response === "yes" ? "✅ Вы подтвердили участие" : `❌ Вы не сможете${row.reason ? ": " + row.reason : ""}`);
+  if (answered) lines.push("", row.response === "yes" ? (row.late ? "🕐 Вы придёте, но опоздаете" : "✅ Вы подтвердили участие") : `❌ Вы не сможете${row.reason ? ": " + row.reason : ""}`);
   else lines.push("", "❓ Ждём вашего ответа");
 
-  // Передумать можно до начала — решение проекта. Поэтому кнопки голоса
-  // остаются и после ответа, а не исчезают вместе с ним.
-  return { text: lines.join("\n"), buttons: [...meetingButtons(meetingId), [{ text: "💬 Ответить", data: encodeCallback("meeting", "msg", meetingId) }], ...navButtons()] };
+  // Ответ даётся один раз (lib/answerRules): после «буду» остаётся только
+  // «опоздаю», после «опоздаю» и «не смогу» — ничего. «Ответить» в наборе
+  // meetingButtons уже есть — второй такой строки здесь не нужно.
+  const choices = openVoteChoices(row, Number(meeting.vote_round ?? 1) || 1);
+  return { text: lines.join("\n"), buttons: [...meetingButtons(meetingId, choices), ...navButtons()] };
 }
 
 // Кто идёт на встречу — тот же расклад, что показывает карточка в трекере.
