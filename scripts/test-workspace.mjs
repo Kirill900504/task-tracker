@@ -619,7 +619,10 @@ try {
   check("но его строки остались в базе", !!survived?.id, survived);
 
   await admin.from("workspace_members").update({ status: "active", disabled_at: null }).eq("member_id", mgrA.id);
-  const afterRestore = await post(mgrA, "/api/workspace/report", { action: "accept", participantId: partA.id });
+  // «Видел», а не «Принял»: по этой задаче он давно отчитался, и ответ
+  // даётся один раз (lib/answerRules) — повторное «Принял» законно
+  // отклоняется. Проверяется здесь доступ, а не правило ответа.
+  const afterRestore = await post(mgrA, "/api/workspace/report", { action: "seen", kind: "task", participantId: partA.id });
   check("возврат доступа возвращает и работу", afterRestore.status === 200, afterRestore);
 
   // ── Руководитель со своим трекером ─────────────────────────────────────
