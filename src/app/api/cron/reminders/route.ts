@@ -50,6 +50,7 @@ type MeetingRow = {
   status: string;
   vote_round?: number | null;
   result?: string | null;
+  created_by?: string | null;
 };
 
 type VoteRow = {
@@ -66,22 +67,56 @@ type VoteRow = {
 // имён: список — то, что видно на карточке, строки — то, кому трекер
 // умеет написать. Организатор добавляется отдельно, потому что своей
 // строки голосования у него нет (он идёт по определению).
+//
+// Организатор — это `created_by`, а не владелец пространства. До
+// 06.10.2026 здесь стоял `notifyOwner`, и владелец получал «время вышло»
+// по чужим встречам, куда его не звали, а руководитель, собравший
+// встречу, не получал ничего. И участник читался через `chatsFor`, то
+// есть владелец, позванный на встречу, тоже не получал ничего: его чат
+// живёт в учётной записи (lib/reach).
 async function tellMeetingPeople(
   admin: ReturnType<typeof createAdminClient>,
   userId: string,
-  meeting: { id: string; title: string },
+  meeting: { id: string; title: string; created_by?: string | null },
   text: string,
 ): Promise<void> {
   const { data: parts } = await admin.from("meeting_participants").select("assignee_id").eq("meeting_id", meeting.id);
   const ids = ((parts || []) as { assignee_id: string }[]).map((r) => r.assignee_id);
+  let ownerReached = false;
   if (ids.length) {
     const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
     for (const person of ((people || []) as ColleagueRow[])) {
-      const target = chatsFor(person)[0];
-      if (target) await sendToColleague(target, text);
+      if (isSelfAssignee(person.name)) ownerReached = true;
+      await sendToPerson(admin, userId, person, text);
     }
   }
-  await notifyOwner(admin, userId, text);
+  await tellOrganizer(admin, userId, meeting.created_by ?? null, ids, ownerReached, text);
+}
+
+// Тот, кто собрал встречу, — если его ещё не позвали строкой участия
+// (тогда он уже получил это сообщение и второе ему ни к чему).
+async function tellOrganizer(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  createdBy: string | null,
+  participantIds: string[],
+  ownerReached: boolean,
+  text: string,
+  buttons?: Parameters<typeof notifyOwner>[3],
+): Promise<void> {
+  if (!createdBy || createdBy === userId) {
+    if (!ownerReached) await notifyOwner(admin, userId, text, buttons);
+    return;
+  }
+  const { data: member } = await admin
+    .from("workspace_members")
+    .select("assignee_id")
+    .eq("member_id", createdBy)
+    .eq("owner_id", userId)
+    .maybeSingle();
+  const assigneeId = (member as { assignee_id?: string } | null)?.assignee_id;
+  if (assigneeId && participantIds.includes(assigneeId)) return;
+  await notifyAuthor(admin, userId, createdBy, text, undefined, buttons);
 }
 
 export async function GET(req: Request) {
@@ -439,7 +474,7 @@ export async function GET(req: Request) {
     // Сегодняшние и завтрашние: за сутки напоминают именно накануне.
     const { data: meetings } = await admin
       .from("meetings")
-      .select("id,title,date,time,participants,status,vote_round,result,duration_min")
+      .select("id,title,date,time,participants,status,vote_round,result,duration_min,created_by")
       .eq("user_id", userId)
       .in("date", [yesterday, today, tomorrow])
       .is("deleted_at", null);
@@ -470,7 +505,10 @@ export async function GET(req: Request) {
             const whenPast = `${m.date.split("-").reverse().join(".")}, ${m.time}`;
             // С кнопками: «прошла, ничего не решили» — ровно тот ответ,
             // который не пишут словами, и встреча висит открытой месяц.
-            await notifyOwner(admin, userId, recapAsk(recap, m.title, whenPast), recapButtons(m.id));
+            // Тому, кто собрал, — кнопки итога разбирает половина
+            // постановщика, и у руководителя она находит его встречу по
+            // created_by так же, как у владельца.
+            await tellOrganizer(admin, userId, m.created_by ?? null, [], false, recapAsk(recap, m.title, whenPast), recapButtons(m.id));
           }
         }
       }
@@ -539,7 +577,7 @@ export async function GET(req: Request) {
       const { error: ownerDup } = await admin
         .from("telegram_notifications")
         .insert({ user_id: userId, kind: window.kind, ref_id: m.id, notif_date: today });
-      if (!ownerDup) await notifyOwner(admin, userId, ownerReminder(window.kind, m.title, when, tally));
+      if (!ownerDup) await tellOrganizer(admin, userId, m.created_by ?? null, [], false, ownerReminder(window.kind, m.title, when, tally));
 
       // Кому именно писать: молчащим — вопрос, согласившимся — напоминание.
       const wanted = window.audience === "unanswered" ? tally.pending : tally.yes;
@@ -558,8 +596,9 @@ export async function GET(req: Request) {
         .in("name", everyone);
 
       for (const person of (people || []) as ColleagueRow[]) {
-        const target = chatsFor(person)[0];
-        if (!target) continue;
+        // Через lib/reach: владелец, позванный на чужую встречу, держит
+        // чат в учётной записи, и chatsFor его строки пуст.
+        if (!(await chatsForPerson(admin, userId, person)).length) continue;
         const needsReason = silentRefusals.includes(person.name);
         // Дедупликация по человеку, а не по встрече: иначе первый же
         // отправленный участник закроет окно для всех остальных. Вопрос про
@@ -574,8 +613,10 @@ export async function GET(req: Request) {
           notif_date: today,
         });
         if (error) continue;
-        await sendToColleague(
-          target,
+        await sendToPerson(
+          admin,
+          userId,
+          person,
           needsReason ? reasonNudge(m.title, when) : participantReminder(window.kind, m.title, when, window.audience),
           // Молчащему кнопки нужны: напоминание без них — это просьба
           // ответить куда-то не сюда. Отказавшемуся они уже не нужны: от
