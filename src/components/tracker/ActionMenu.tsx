@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import PopLayer from "./PopLayer";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
@@ -79,6 +79,24 @@ export default function ActionMenu({
     el.style.right = Math.max(8, window.innerWidth - anchor.right) + "px";
   }, [anchor, isMobile, shownItems.length]);
 
+  // Клавиатура. Меню живёт в верхнем слое, а не рядом с кнопкой, которая его
+  // открыла, — Tab от неё до пунктов не доходит вовсе, и выбрать роль без
+  // мыши было нельзя (QA-проход 06.10.2026). Поэтому фокус встаёт на первый
+  // пункт сам, а стрелки ходят по пунктам. Где есть строка поиска, фокус её.
+  useEffect(() => {
+    if (isMobile || searchPlaceholder) return;
+    menuRef.current?.querySelector<HTMLButtonElement>(".export-item")?.focus();
+  }, [isMobile, searchPlaceholder]);
+
+  function onMenuKey(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>(".export-item") || []);
+    if (!buttons.length) return;
+    e.preventDefault();
+    const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const next = e.key === "ArrowDown" ? (at + 1) % buttons.length : (at - 1 + buttons.length) % buttons.length;
+    buttons[next].focus();
+  }
   return (
     <PopLayer>
       <div className={"export-backdrop" + (isMobile ? " sheet-backdrop" : "")} onClick={onClose} />
@@ -86,6 +104,8 @@ export default function ActionMenu({
         ref={menuRef}
         className={"export-menu action-menu" + (isMobile ? " action-sheet" : "")}
         style={isMobile ? undefined : { top: -9999, right: 8 }}
+        role="menu"
+        onKeyDown={onMenuKey}
       >
         {title && <div className="action-menu-title">{title}</div>}
         {searchPlaceholder && (
@@ -113,6 +133,7 @@ export default function ActionMenu({
           <button
             key={item.id}
             className="export-item"
+            role="menuitem"
             onClick={(e) => {
               e.stopPropagation();
               onClose();

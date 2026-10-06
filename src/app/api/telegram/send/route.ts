@@ -85,6 +85,11 @@ async function deliver(
   return ok ? { ok: true } : { ok: false, error };
 }
 
+// «Никому не дошло» — ответ, а не ошибка запроса, поэтому со статусом 200 и
+// полем `error` (его читают все вызывающие). Раньше это было 400, и каждое
+// приглашение во встречу человека без мессенджера оставляло красную строку
+// в консоли браузера, хотя у большинства людей мессенджера нет и это
+// обычное состояние, а не сбой (QA-проход 06.10.2026).
 function nobodyReachable(unlinked: string[], fallback: string): string {
   return unlinked.length ? `Не подключены ни к Telegram, ни к MAX: ${unlinked.join(", ")}` : fallback;
 }
@@ -132,7 +137,7 @@ export async function POST(req: Request) {
     // Задача самому себе: отправлять нечего и некому, но это не ошибка.
     if (!linked.length && self.length && !unlinked.length) return NextResponse.json({ sentTo, failed, self });
     if (!linked.length) {
-      return NextResponse.json({ error: nobodyReachable(unlinked, "Некому отправлять") }, { status: 400 });
+      return NextResponse.json({ error: nobodyReachable(unlinked, "Некому отправлять"), unreachable: unlinked });
     }
     // Роль каждого на этой задаче: наблюдателю уходит то же сообщение, но
     // без кнопок ответа.
@@ -161,7 +166,7 @@ export async function POST(req: Request) {
     const { linked, unlinked, self } = await recipientsByName(supabase, admin, names, user.id);
     if (!linked.length && self.length && !unlinked.length) return NextResponse.json({ sentTo, failed, self });
     if (!linked.length) {
-      return NextResponse.json({ error: nobodyReachable(unlinked, "Некому отправлять") }, { status: 400 });
+      return NextResponse.json({ error: nobodyReachable(unlinked, "Некому отправлять"), unreachable: unlinked });
     }
     for (const person of linked) {
       const result = await deliver(person, meetingMessage(meeting, from), meetingButtons(meeting.id as string));
@@ -177,7 +182,7 @@ export async function POST(req: Request) {
     const { linked, unlinked, self } = await recipientsByName(supabase, admin, to, user.id);
     if (!linked.length && self.length && !unlinked.length) return NextResponse.json({ sentTo, failed, self });
     if (!linked.length) {
-      return NextResponse.json({ error: nobodyReachable(unlinked, "Выберите, кому отправить") }, { status: 400 });
+      return NextResponse.json({ error: nobodyReachable(unlinked, "Выберите, кому отправить"), unreachable: unlinked });
     }
     for (const person of linked) {
       const result = await deliver(person, ideaMessage(idea.text as string, from), ideaButtons(idea.id as string));
