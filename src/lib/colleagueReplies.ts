@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
-import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, rescheduleButtons, RESCHEDULE_OPTIONS } from "@/lib/colleagues";
+import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, rescheduleButtons, RESCHEDULE_OPTIONS, taskButtons } from "@/lib/colleagues";
+import { choiceOf, lockedTaskText, lockedVoteText, openTaskChoices, openVoteChoices, voteVerdict, type VoteChoice } from "@/lib/answerRules";
 import { uid } from "@/lib/uid";
 import { withoutSelfMark } from "@/lib/actorName";
 import { recordEvent } from "@/lib/itemHistory";
@@ -207,11 +208,19 @@ export async function handleColleagueCallback(
     // is written to this day.
     const { data: part } = await admin
       .from("task_participants")
-      .select("id, role, done_at")
+      .select("id, role, accepted_at, done_at, declined_at, reschedule_requested_at, reschedule_reason")
       .eq("task_id", task.id)
       .eq("assignee_id", colleague.id)
       .maybeSingle();
-    const participant = part as { id: string; role: string; done_at: string | null } | null;
+    const participant = part as {
+      id: string;
+      role: "executor" | "coexecutor" | "watcher";
+      accepted_at: string | null;
+      done_at: string | null;
+      declined_at: string | null;
+      reschedule_requested_at: string | null;
+      reschedule_reason: string | null;
+    } | null;
     if (!participant && task.assignee !== colleague.name) return { toast: "Эта задача уже не ваша" };
 
     // Роль проверяется здесь, а не только при отправке: кнопка могла
@@ -219,6 +228,31 @@ export async function handleColleagueCallback(
     // в сообщении сколько угодно.
     if (participant && participant.role === "watcher") {
       return { toast: "Вы на этой задаче наблюдатель — отвечать не нужно" };
+    }
+
+    // Ответ даётся один раз (lib/answerRules) — правило то же, что в
+    // /api/workspace/report. Здесь оно нужнее всего: кнопки под присланным
+    // сообщением живут вечно, и до 06.10.2026 «Не могу» под ним молча
+    // стирало уже сданный отчёт вместе с файлами, а повторное «Сделал» —
+    // написанный к нему комментарий. Старая кнопка теперь ничего не
+    // пишет, а сообщение переписывается под то, что действует сейчас.
+    const myPart = participant
+      ? {
+          acceptedAt: participant.accepted_at,
+          doneAt: participant.done_at,
+          declinedAt: participant.declined_at,
+          reschedulePending: !!participant.reschedule_requested_at && !!participant.reschedule_reason,
+        }
+      : null;
+    const open = openTaskChoices(myPart);
+    const wants =
+      action.action === "acc" ? open.accept : action.action === "done" ? open.done : action.action === "no" ? open.decline : action.action.startsWith("mv") ? open.move : true;
+    if (participant && myPart && !wants) {
+      return {
+        toast: lockedTaskText(myPart),
+        rewriteTo: `📋 ${task.title}\n\n${lockedTaskText(myPart)}`,
+        rewriteButtons: taskButtons(task.id, participant.role, open),
+      };
     }
 
     if (action.action === "acc") {
@@ -238,6 +272,10 @@ export async function handleColleagueCallback(
       return {
         toast: "Принято",
         rewriteTo: `📋 ${task.title}\n\n✅ Принято в работу`,
+        // Следующий шаг — отчёт, отказ или перенос — обязан остаться под
+        // рукой: переписанное без кнопок сообщение оставляло человека с
+        // «принято» и без единой кнопки, чтобы потом отчитаться.
+        rewriteButtons: participant ? taskButtons(task.id, participant.role, { ...open, accept: false }) : undefined,
         notifyTo: task.created_by,
         notifyOwner: `✅ ${withoutSelfMark(colleague.name)} принял в работу: «${task.title}»`,
         notice: { kind: "accepted", item: task.title, who: withoutSelfMark(colleague.name) },
@@ -408,14 +446,29 @@ export async function handleColleagueCallback(
       .eq("assignee_id", colleague.id)
       .maybeSingle();
 
-    // Тот же самый ответ второй раз — не событие, только повторное нажатие
-    // той же кнопки под уже переписанным сообщением. До 24.09.2026 хроника
-    // встречи получала новую строку «будет» на каждое такое нажатие — тот
-    // же дубль, что нашёлся в трекере, только с другой стороны (бот).
+    // Ответ даётся один раз (lib/answerRules): после «буду» — только
+    // «опоздаю», после «опоздаю» и «не смогу» — ничего до переноса. До
+    // 06.10.2026 бот прямо предлагал «нажмите другую кнопку — ответ можно
+    // менять до начала», и ответ превращался в переключатель.
+    // Тот же ответ второй раз — тоже не событие (до 24.09.2026 хроника
+    // получала новую строку «будет» на каждое такое нажатие, а организатор
+    // — новое сообщение). В обоих случаях старая кнопка ничего не пишет, а
+    // сообщение переписывается под то, что действует сейчас.
     const prev = existing as { id: string; response: "none" | "yes" | "no"; late: boolean | null; round: number | null } | undefined;
-    const unchanged = !!prev && prev.response === (coming ? "yes" : "no") && !!prev.late === late && (Number(prev.round ?? 1) || 1) === round;
+    const verdict = voteVerdict(prev ?? null, action.action as VoteChoice, round);
+    if (verdict !== "ok" && prev) {
+      const was = choiceOf(prev);
+      return {
+        toast: verdict === "same" ? "Ответ уже записан" : lockedVoteText(prev),
+        rewriteTo:
+          `📅 ${meeting.title}\n${when}\n\n` +
+          (was === "no" ? "❌ Вы не сможете" : was === "late" ? "🕐 Вы придёте, но опоздаете" : "✅ Вы подтвердили участие") +
+          (verdict === "locked" ? "\n" + lockedVoteText(prev) : ""),
+        rewriteButtons: meetingButtons(meeting.id as string, openVoteChoices(prev, round)),
+      };
+    }
 
-    if (!unchanged) {
+    {
       const patch = {
         response: coming ? "yes" : "no",
         reason: null,
@@ -453,11 +506,10 @@ export async function handleColleagueCallback(
         rewriteTo:
           `📅 ${meeting.title}\n${when}\n\n` +
           (late ? "🕐 Вы придёте, но опоздаете" : "✅ Вы подтвердили участие") +
-          (scheduled ? "\nВсе ответили — встреча назначена." : "") +
-          "\nПередумали? Нажмите другую кнопку — ответ можно менять до начала.",
-        // Кнопки остаются: «передумать можно до начала» — решение проекта, и
-        // без них оно не действует.
-        rewriteButtons: meetingButtons(meeting.id as string),
+          (scheduled ? "\nВсе ответили — встреча назначена." : ""),
+        // После «буду» из ответов остаётся одна кнопка — «опоздаю», после
+        // «опоздаю» ни одной. «Кто идёт» и «Ответить» остаются всегда.
+        rewriteButtons: meetingButtons(meeting.id as string, late ? [] : ["late"]),
         notifyTo: meeting.created_by,
         notice: { kind: late ? "vote_late" : "vote_yes", item: meeting.title as string, who: withoutSelfMark(colleague.name), what: when },
         notifyOwner: late
@@ -474,9 +526,8 @@ export async function handleColleagueCallback(
       toast: "Передал. Напишите, почему",
       rewriteTo:
         `📅 ${meeting.title}\n${when}\n\n❌ Вы не сможете\n` +
-        "Напишите одним сообщением, почему — это увидит организатор.\n" +
-        "Передумали? Нажмите другую кнопку — ответ можно менять до начала.",
-      rewriteButtons: meetingButtons(meeting.id as string),
+        "Напишите одним сообщением, почему — это увидит организатор.",
+      rewriteButtons: meetingButtons(meeting.id as string, []),
       notifyTo: meeting.created_by,
       notifyOwner: `❌ ${withoutSelfMark(colleague.name)} не сможет быть на встрече «${meeting.title}» (${when})\nСпросил, почему — пришлю, как ответит.`,
       notice: { kind: "vote_no", item: meeting.title as string, who: withoutSelfMark(colleague.name), what: `${when} — причину спросил` },
@@ -487,7 +538,18 @@ export async function handleColleagueCallback(
   if (action.kind === "meeting" && action.action === "who") {
     const roster = await meetingRoster(admin, colleague, action.id);
     if (!roster) return { toast: "Эта встреча уже не ваша" };
-    return { toast: "Показываю", say: roster, sayButtons: meetingButtons(action.id) };
+    // Кнопки ответа — только те, что ещё действуют (lib/answerRules).
+    const { data: mine } = await admin
+      .from("meeting_participants")
+      .select("response, late, round, meetings(vote_round)")
+      .eq("meeting_id", action.id)
+      .eq("assignee_id", colleague.id)
+      .maybeSingle();
+    type RoundRef = { vote_round: number | null };
+    const vote = mine as { response: "none" | "yes" | "no"; late: boolean | null; round: number | null; meetings: RoundRef | RoundRef[] | null } | null;
+    const ref = Array.isArray(vote?.meetings) ? vote?.meetings[0] : vote?.meetings;
+    const choices = openVoteChoices(vote, Number(ref?.vote_round ?? 1) || 1);
+    return { toast: "Показываю", say: roster, sayButtons: meetingButtons(action.id, choices) };
   }
 
   if (action.kind === "idea" && action.action === "task") {

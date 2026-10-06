@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { BOT_CHANNELS } from "@/lib/botTransport";
 import { fmtDate } from "@/lib/taskDisplay";
+import type { TaskChoices, VoteChoice } from "@/lib/answerRules";
 
 // Sending an item to the person it is addressed to, and understanding what
 // they press in reply.
@@ -115,7 +116,13 @@ export function ideaMessage(text: string, from: string): string {
 // когда всё идёт хорошо; человеку, который не может, раньше оставалось
 // молчать — а молчание и есть тот сбой, ради устранения которого всё это
 // затевалось. Причина спрашивается следом, отдельным сообщением.
-export function taskButtons(taskId: string, role: "executor" | "coexecutor" | "watcher" = "executor"): BotButton[][] {
+// open — что ещё можно ответить (lib/answerRules.openTaskChoices). Без него
+// — всё: так задачу присылают в первый раз.
+export function taskButtons(
+  taskId: string,
+  role: "executor" | "coexecutor" | "watcher" = "executor",
+  open: TaskChoices = { accept: true, done: true, decline: true, move: true },
+): BotButton[][] {
   // Наблюдателя не спрашивают — его поставили знать, а не отвечать. Кнопка
   // «Сделал» у него означала бы отчёт, которого от него никто не ждёт, и
   // постановщик получил бы сообщение, будто работу сделал человек, которого
@@ -129,26 +136,27 @@ export function taskButtons(taskId: string, role: "executor" | "coexecutor" | "w
   // продвижении, которого в задаче не происходило.
   if (role === "coexecutor") {
     return [
-      [{ text: "✅ Принял", data: encodeCallback("task", "acc", taskId) }],
+      ...(open.accept ? [[{ text: "✅ Принял", data: encodeCallback("task", "acc", taskId) }]] : []),
       [{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }],
     ];
   }
-  return [
+  const rows: (BotButton | false)[][] = [
     [
-      { text: "✅ Принял", data: encodeCallback("task", "acc", taskId) },
-      { text: "🏁 Сделал", data: encodeCallback("task", "done", taskId) },
+      open.accept && { text: "✅ Принял", data: encodeCallback("task", "acc", taskId) },
+      open.done && { text: "🏁 Сделал", data: encodeCallback("task", "done", taskId) },
     ],
     [
-      { text: "⛔ Не могу", data: encodeCallback("task", "no", taskId) },
+      open.decline && { text: "⛔ Не могу", data: encodeCallback("task", "no", taskId) },
       // Четвёртая дверь. В трекере она была с самого начала, в мессенджере
       // её не было — а четверо из шести в трекер не заходят вовсе, и выбор
       // у них стоял между «не могу» и молчанием. «Не могу» вместо «дайте
       // срок» — это отказ от работы, которую человек готов сделать, и
       // разницу между этими двумя ответами постановщик обязан видеть.
-      { text: "📅 Прошу перенос", data: encodeCallback("task", "mv", taskId) },
+      open.move && { text: "📅 Прошу перенос", data: encodeCallback("task", "mv", taskId) },
     ],
     [{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }],
   ];
+  return rows.map((r) => r.filter((b): b is BotButton => !!b)).filter((r) => r.length);
 }
 
 // На сколько переносим — кнопками, а не датой словами.
@@ -184,13 +192,17 @@ export function rescheduleButtons(taskId: string): BotButton[][] {
 // задерживающемуся на двадцать минут, приходилось выбирать из двух неправд.
 // На практике он жал «буду», и организатор узнавал о задержке в момент
 // задержки.
-export function meetingButtons(meetingId: string): BotButton[][] {
+// choices — какие ответы ещё можно дать (lib/answerRules.openVoteChoices):
+// ответ даётся один раз, и кнопка ответа, который уже нельзя дать, — это
+// обещание, на которое бот ответит отказом.
+export function meetingButtons(meetingId: string, choices: VoteChoice[] = ["yes", "late", "no"]): BotButton[][] {
+  const answers = [
+    choices.includes("yes") && { text: "✅ Буду", data: encodeCallback("meeting", "yes", meetingId) },
+    choices.includes("late") && { text: "🕐 Опоздаю", data: encodeCallback("meeting", "late", meetingId) },
+    choices.includes("no") && { text: "❌ Не смогу", data: encodeCallback("meeting", "no", meetingId) },
+  ].filter((b): b is BotButton => !!b);
   return [
-    [
-      { text: "✅ Буду", data: encodeCallback("meeting", "yes", meetingId) },
-      { text: "🕐 Опоздаю", data: encodeCallback("meeting", "late", meetingId) },
-      { text: "❌ Не смогу", data: encodeCallback("meeting", "no", meetingId) },
-    ],
+    ...(answers.length ? [answers] : []),
     [
       // Состав с ответами был виден только в трекере, а идёт человек,
       // глядя в телефон: «кто ещё будет» — вопрос, который задают перед

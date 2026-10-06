@@ -39,6 +39,7 @@ import { authorLabel } from "@/lib/authorName";
 import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 import { noteParticipantChange } from "@/lib/participantNote";
 import { humanError } from "@/lib/humanError";
+import { openTaskChoices } from "@/lib/answerRules";
 
 export default function TasksPanel({
   tasks,
@@ -639,7 +640,9 @@ export default function TasksPanel({
     // вместо одного. На телефоне это тот самый путь «нашёл задачу →
     // открыл карточку → нашёл кнопку», который здесь длиннее всего.
     const myRow = participants.forTask(t.id).find((p) => p.assigneeId === myMemberAssigneeId);
-    if (myRow && myRow.role === "executor" && !myRow.acceptedAt && !myRow.declinedAt && t.status !== "done") {
+    // Когда пункт есть — решает общее правило ответа (lib/answerRules): после
+    // отчёта или отказа «принял» уже не ответ.
+    if (myRow && myRow.role === "executor" && openTaskChoices(myRow).accept && t.status !== "done") {
       items.unshift({
         id: "accept",
         label: "Принял в работу",

@@ -14,6 +14,7 @@ import { newTaskRow } from "@/lib/newTask";
 import { recordEvent } from "@/lib/itemHistory";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import type { Notice } from "@/lib/noticeQueue";
+import { lockedTaskText, lockedVoteText, openTaskChoices, voteVerdict } from "@/lib/answerRules";
 
 // Ответ руководителя: один путь для трекера и для мессенджера.
 //
@@ -173,16 +174,14 @@ export async function POST(req: Request) {
     const reason = (body.comment || "").trim();
     if (!coming && !canVoteNo(reason)) return NextResponse.json({ error: "Нужна причина" }, { status: 400 });
 
-    const currentRound = Number(vote.round ?? 1) || 1;
     const nextRound = Number(meeting?.vote_round ?? 1) || 1;
-    // Тот же самый ответ второй раз — не событие. До 24.09.2026 кнопка
-    // «Буду» оставалась нажимаемой после ответа, и каждое лишнее нажатие
-    // честно писало в хронику встречи ещё одно «будет» — Кирилл поймал
-    // это как четыре одинаковых строки подряд. Меняющийся ответ (буду →
-    // не смогу, или новый круг после переноса) — по-прежнему событие;
-    // не событие — только буквальный повтор того же самого.
-    const unchanged = vote.response === (coming ? "yes" : "no") && !!vote.late === late && currentRound === nextRound;
-    if (unchanged) return NextResponse.json({ ok: true, scheduled: false });
+    // Ответ даётся один раз (lib/answerRules): после «буду» можно только
+    // предупредить об опоздании, после «опоздаю» и «не смогу» — ничего, до
+    // переноса встречи. Повтор того же ответа — не событие (до 24.09.2026
+    // каждое лишнее нажатие писало в хронику ещё одно «будет»).
+    const verdict = voteVerdict(vote, body.response as "yes" | "late" | "no", nextRound);
+    if (verdict === "same") return NextResponse.json({ ok: true, scheduled: false });
+    if (verdict === "locked") return NextResponse.json({ error: lockedVoteText(vote) }, { status: 409 });
 
     await admin
       .from("meeting_participants")
@@ -223,7 +222,7 @@ export async function POST(req: Request) {
   if (!body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
   const { data: row } = await admin
     .from("task_participants")
-    .select("id, assignee_id, task_id, tasks(title, created_by)")
+    .select("id, assignee_id, task_id, accepted_at, done_at, declined_at, reschedule_requested_at, reschedule_reason, tasks(title, created_by)")
     .eq("id", body.participantId)
     .maybeSingle();
   type TaskRef = { title: string; created_by: string | null };
@@ -231,9 +230,31 @@ export async function POST(req: Request) {
     id: string;
     assignee_id: string;
     task_id: string;
+    accepted_at: string | null;
+    done_at: string | null;
+    declined_at: string | null;
+    reschedule_requested_at: string | null;
+    reschedule_reason: string | null;
     tasks: TaskRef | TaskRef[] | null;
   } | null;
   if (!part || part.assignee_id !== m.assignee_id) return NextResponse.json({ error: "Это не ваша задача" }, { status: 403 });
+
+  // Ответ даётся один раз (lib/answerRules): «Сделал» и «Не могу»
+  // окончательны, пока постановщик не вернёт задачу на доработку; «Принял»
+  // и просьба о переносе не повторяются. Окно эти кнопки уже прячет, но
+  // старая кнопка под сообщением бота и вторая вкладка — нет.
+  const myPart = {
+    acceptedAt: part.accepted_at,
+    doneAt: part.done_at,
+    declinedAt: part.declined_at,
+    reschedulePending: !!part.reschedule_requested_at && !!part.reschedule_reason,
+  };
+  const open = openTaskChoices(myPart);
+  const allowed =
+    body.action === "accept" ? open.accept : body.action === "done" ? open.done : body.action === "decline" ? open.decline : body.action === "reschedule" ? open.move : true;
+  // Второе «Принял» — не ошибка, а эхо первого: отвечаем «да» и молчим.
+  if (!allowed && body.action === "accept" && !myPart.doneAt && !myPart.declinedAt) return NextResponse.json({ ok: true });
+  if (!allowed) return NextResponse.json({ error: lockedTaskText(myPart) }, { status: 409 });
   const taskRef = Array.isArray(part.tasks) ? part.tasks[0] : part.tasks;
   const title = taskRef?.title || "";
   // Ответ адресован тому, кто поручил. Пока поручает только владелец, это

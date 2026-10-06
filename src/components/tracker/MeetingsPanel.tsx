@@ -13,6 +13,7 @@ import Icon from "./Icon";
 import { useMeetingVotes } from "@/hooks/useMeetingVotes";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import { voteTally } from "@/lib/meetingVotes";
+import { currentVote } from "@/lib/answerRules";
 import { isQuietHour } from "@/lib/quietHours";
 import { linkTaskAndMeeting } from "@/lib/itemLink";
 import type { useToasts } from "@/hooks/useToasts";
@@ -548,7 +549,11 @@ export default function MeetingsPanel({
           canConfirm={isMine(modalMeeting, myUserId)}
           // Моя строка голосования: по ней в карточке появляются «Буду /
           // Опоздаю / Не смогу». Раньше они были только на отдельном экране.
-          myVote={modalMeeting ? votes.forMeeting(modalMeeting.id).find((v) => v.assigneeId === meId) || null : null}
+          // Ответ, данный до переноса встречи, о новом времени не говорит
+          // ничего — карточка получает его как неданный, и выбор
+          // открывается заново (lib/answerRules: ответ даётся один раз, но
+          // на каждое время свой).
+          myVote={modalMeeting ? currentVote(votes.forMeeting(modalMeeting.id).find((v) => v.assigneeId === meId) || null, modalMeeting.voteRound ?? 1) : null}
           // Ответы всех, кого позвали: в сводке встречи они стоят прямо у
           // имён. Панель их и так держит — лишнего запроса не появляется.
           votes={modalMeeting ? votes.forMeeting(modalMeeting.id) : []}
