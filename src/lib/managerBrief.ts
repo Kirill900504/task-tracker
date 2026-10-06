@@ -67,7 +67,7 @@ export async function buildManagerBrief(
 
   const { data: rows } = await admin
     .from("task_participants")
-    .select("task_id, role, accepted_at, done_at, declined_at, tasks(title, deadline, status, approval_state, approval_comment, deleted_at)")
+    .select("task_id, role, accepted_at, done_at, declined_at, tasks(title, deadline, status, recur, approval_state, approval_comment, deleted_at)")
     .eq("assignee_id", assignee.id)
     .eq("user_id", ownerId)
     .eq("role", "executor");
@@ -81,6 +81,7 @@ export async function buildManagerBrief(
       title: string;
       deadline: string | null;
       status: string | null;
+      recur: string | null;
       approval_state: string | null;
       approval_comment: string | null;
       deleted_at: string | null;
@@ -90,10 +91,17 @@ export async function buildManagerBrief(
   for (const r of ((rows || []) as unknown as Row[])) {
     const t = r.tasks;
     if (!t || t.deleted_at || r.done_at || t.status === "done") continue;
+    // Принятая разовая задача — закрыта, что бы ни стояло в status.
+    if (t.approval_state === "accepted" && (t.recur || "none") === "none") continue;
+    // У повтора в колонке deadline лежит срок ПЕРВОГО круга, и «срок был
+    // 24.09» через неделю — неправда: повтор просроченным не бывает, так
+    // же как в трекере (isOverdue в taskDisplay и taskLogic). Отзыв
+    // Витовского 25.09.2026 — закрытая ежедневная задача в «Просрочено».
+    const recurring = (t.recur || "none") !== "none";
     const deadline = t.deadline || "";
     if (t.approval_state === "returned") facts.returned.push({ title: t.title, comment: t.approval_comment || "" });
-    if (deadline && deadline < today) facts.overdue.push({ title: t.title, deadline });
-    else if (deadline === today) facts.today.push({ title: t.title, deadline });
+    if (!recurring && deadline && deadline < today) facts.overdue.push({ title: t.title, deadline });
+    else if (!recurring && deadline === today) facts.today.push({ title: t.title, deadline });
     if (!r.accepted_at && !r.declined_at) facts.unanswered.push({ title: t.title });
   }
 

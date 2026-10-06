@@ -4,6 +4,7 @@ import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
 import { sendToTelegram, useColleagues } from "@/hooks/useColleagues";
 import { sendResultText, sendTargets, unreachableNames } from "@/lib/sendTargets";
 import { withoutSelfMark } from "@/lib/actorName";
+import { useAsk } from "@/components/Ask";
 
 // «Кому отправить» — the one menu behind every ✈ in the tracker.
 //
@@ -36,6 +37,7 @@ export default function SendMenu({
   onResult: (message: string) => void;
 }) {
   const { colleagues, loading } = useColleagues();
+  const ask = useAsk();
   // Себе не отправляют — своя строка в списке есть (её видно в «Команде»),
   // но адресатом быть не может.
   const linked = colleagues.filter((c) => c.linked && !c.isMe).map((c) => c.name);
@@ -43,16 +45,32 @@ export default function SendMenu({
   const suggested = targets.filter((t) => t.suggested).map((t) => t.name);
   const missing = unreachableNames(linked, concerns);
 
+  // Отправляем по полному имени строки, а показываем имя: пометка «(я)»
+  // написана для одного человека, а меню читают все (lib/actorName).
+  const shown = (name: string) => withoutSelfMark(name);
+
   async function send(names: string[]) {
+    // Мысль уходит только после «да». Задачу и встречу отправляют тем, кого
+    // они и так касаются, а мысль — личная запись, и промах здесь равен
+    // утечке: 25.09.2026 мысль Кирилла трёхнедельной давности («Питера
+    // Друкера… повторно изучить») пришла Игорю Витковскому, и тот спросил,
+    // ему ли она. Одно нажатие на имя в меню отправляло её сразу и без
+    // отмены — меню открывается под рукой, и случайного нажатия хватало.
+    if (kind === "idea") {
+      const yes = await ask.confirm({
+        title: "Отправить мысль?",
+        question: `Отправить эту мысль: ${names.map(shown).join(", ")}?`,
+        note: "Получатель увидит её в мессенджере и сможет взять в работу.",
+        okText: "Отправить",
+      });
+      if (!yes) return;
+    }
     onResult(names.length > 1 ? "Отправляю…" : `Отправляю ${names[0]}…`);
     const result = await sendToTelegram(kind, id, names);
     onResult("error" in result ? result.error : sendResultText(result));
   }
 
   const items: ActionMenuItem[] = [];
-  // Отправляем по полному имени строки, а показываем имя: пометка «(я)»
-  // написана для одного человека, а меню читают все (lib/actorName).
-  const shown = (name: string) => withoutSelfMark(name);
   // One tap for the usual case: everyone this meeting is actually about.
   if (suggested.length > 1) {
     items.push({ id: "__all", label: `✈ Всем: ${suggested.map(shown).join(", ")}`, onSelect: () => send(suggested) });

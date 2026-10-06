@@ -35,7 +35,12 @@ export const KANBAN_COLUMNS: { id: KanbanColumn; title: string; empty: string }[
 ];
 
 export function columnOf(task: Task, participants: TaskParticipant[]): KanbanColumn {
-  if (task.status === "done" || task.approvalState === "accepted") return "done";
+  if (task.status === "done") return "done";
+  // «Принято» закрывает задачу навсегда только у разовой. У повторяющейся
+  // закрыт ровно круг (status done до конца дня, см. reviewWork), а
+  // «accepted» у неё остался от прежнего правила и висел вечно — задача
+  // вернулась в работу, а доска держала её в «Завершённых».
+  if (task.approvalState === "accepted" && task.recur === "none") return "done";
   // Приёмка — слово постановщика, и оно старше того, что нажали исполнители.
   if (task.approvalState === "awaiting_review") return "review";
   // Возврат на доработку — это снова работа, а не «новая задача»: человек

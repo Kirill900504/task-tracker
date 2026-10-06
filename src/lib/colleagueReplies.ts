@@ -6,6 +6,8 @@ import { uid } from "@/lib/uid";
 import { withoutSelfMark } from "@/lib/actorName";
 import { recordEvent } from "@/lib/itemHistory";
 import { newTaskRow } from "@/lib/newTask";
+import { applyReview } from "@/lib/reviewWork";
+import { isSelfAssignee } from "@/lib/trackerRows";
 import { deliverComment } from "@/lib/commentDelivery";
 import { confirmIfEveryoneAgreed } from "@/lib/meetingConfirm";
 import { colleagueCommandsHelp, matchColleagueCommand, meetingCard, meetingRoster, replyForColleague, taskCard } from "@/lib/colleagueQueries";
@@ -500,11 +502,17 @@ export async function handleColleagueCallback(
     // Мысль, взятая в работу, перестаёт быть мыслью. Задача заводится в
     // том же пространстве, с этим человеком исполнителем и без срока:
     // срок ставит тот, кто спросит, а не тот, кто взялся.
+    //
+    // Постановщик — автор мысли: он её прислал, значит он и поручил. До
+    // 06.10.2026 created_by оставался пустым, а пустой значит «владелец», и
+    // мысль Игоря Витковского, взятая Станиславом Синецким, легла задачей
+    // «Кирилл Кучеренко → Станислав Синецкий» («мысль пришла от Игорька, а
+    // внутри задачи — ты постановщик»). Тот же выбор в /api/workspace/report.
     const title = String(idea.text || "").trim().slice(0, 200) || "Из мысли";
     const taskId = uid();
     const { error: taskError } = await admin
       .from("tasks")
-      .insert(newTaskRow({ id: taskId, userId: idea.user_id, title, assignee: colleague.name }));
+      .insert(newTaskRow({ id: taskId, userId: idea.user_id, title, assignee: colleague.name, createdBy: idea.created_by }));
     if (taskError) return { toast: "Не получилось завести задачу" };
 
     // upsert, а не insert: имя исполнителя стоит в самой задаче, и строку
@@ -561,16 +569,64 @@ export async function handleColleagueCallback(
 export async function closeIfEveryoneReported(admin: SupabaseClient, taskId: string): Promise<boolean> {
   const { data } = await admin
     .from("task_participants")
-    .select("role, done_at, declined_at")
+    .select("role, done_at, done_comment, declined_at")
     .eq("task_id", taskId);
-  type Row = { role: string; done_at: string | null; declined_at: string | null };
+  type Row = { role: string; done_at: string | null; done_comment: string | null; declined_at: string | null };
   const executors = ((data as Row[]) || []).filter((p) => p.role === "executor");
   // Отказ, отменённый собственным отчётом, отказом больше не считается —
   // то же правило, что в hasDeclined: отчёт новее.
   const answered = (p: Row) => !!p.done_at || !!p.declined_at;
   if (!executors.length || executors.some((p) => !answered(p))) return false;
+  // Своя задача — без приёмки у самого себя. Отзыв Витовского 25.09.2026:
+  // «когда ставишь самому себе задачу, она всё равно проходит через
+  // приёмку… пусть сразу закрывается». Он прав: приёмка — это слово
+  // постановщика о чужой работе, а здесь постановщик и есть тот, кто только
+  // что сказал «сделал». Закрывается тем же applyReview, что и обычная
+  // приёмка (хроника, повтор — на круг), но молча: «работу приняли»
+  // самому себе — шум. Только при одном исполнителе и только при отчёте:
+  // отказ от своей же задачи — повод решить, что с ней делать, а не закрыть.
+  if (executors.length === 1 && executors[0].done_at) {
+    const self = await selfTaskOf(admin, taskId);
+    if (self) {
+      await applyReview(admin, self.task, "approve", executors[0].done_comment || "", self.who, true);
+      return false;
+    }
+  }
   await admin.from("tasks").update({ approval_state: "awaiting_review" }).eq("id", taskId);
   return true;
+}
+
+// Задача, единственный исполнитель которой — её же постановщик.
+async function selfTaskOf(
+  admin: SupabaseClient,
+  taskId: string,
+): Promise<{ task: { id: string; title: string; user_id: string; status: string | null }; who: { label: string; userId: string } } | null> {
+  const { data: t } = await admin.from("tasks").select("id, title, user_id, status, created_by").eq("id", taskId).maybeSingle();
+  const task = t as { id: string; title: string; user_id: string; status: string | null; created_by: string | null } | null;
+  if (!task) return null;
+  const { data: p } = await admin
+    .from("task_participants")
+    .select("assignee_id, assignees(name)")
+    .eq("task_id", taskId)
+    .eq("role", "executor")
+    .maybeSingle();
+  type Row = { assignee_id: string; assignees: { name: string } | { name: string }[] | null };
+  const row = p as Row | null;
+  if (!row) return null;
+  const name = (Array.isArray(row.assignees) ? row.assignees[0]?.name : row.assignees?.name) || "";
+  const author = task.created_by || task.user_id;
+  // Владелец: created_by пуст (или его собственный id), и его строка — с «(я)».
+  if (author === task.user_id) {
+    return isSelfAssignee(name) ? { task, who: { label: withoutSelfMark(name), userId: author } } : null;
+  }
+  const { data: m } = await admin
+    .from("workspace_members")
+    .select("assignee_id")
+    .eq("owner_id", task.user_id)
+    .eq("member_id", author)
+    .maybeSingle();
+  if ((m as { assignee_id?: string } | null)?.assignee_id !== row.assignee_id) return null;
+  return { task, who: { label: withoutSelfMark(name), userId: author } };
 }
 
 // Сообщение от коллеги, когда с него ждут комментарий или причину.

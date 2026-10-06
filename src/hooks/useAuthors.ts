@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { createSharedStore } from "@/lib/sharedStore";
 
 // Кто из людей — какой логин.
 //
@@ -15,39 +16,39 @@ import { createClient } from "@/lib/supabase/client";
 //
 // Пусто у того, кто работает один: своё пространство, членств нет, и
 // каждая карточка молчит о постановщике — правильно, он там один.
+//
+// Общим store с подпиской, а не «один запрос на жизнь вкладки», как было.
+// 24.09.2026 Станислав Синецкий открыл задачу, которую сам поручил, и в
+// «Постановщике» прочёл «бывший участник»: единственный запрос ушёл раньше,
+// чем сессия была готова (или промахнулся по сети), вернул пустой список —
+// и пустое навсегда осталось «правдой» до перезагрузки. Ошибка при чтении
+// теперь не превращается в пустой список, а изменение членства или
+// переименование человека перечитывают его само.
+
+async function fetchAll(): Promise<Record<string, string> | null> {
+  const db = createClient();
+  const { data, error } = await db
+    .from("workspace_members")
+    .select("member_id, assignees(name)")
+    .not("member_id", "is", null);
+  if (error || !data) return null;
+
+  type Row = { member_id: string; assignees: { name: string } | { name: string }[] | null };
+  const out: Record<string, string> = {};
+  for (const row of data as unknown as Row[]) {
+    const a = row.assignees;
+    const name = (Array.isArray(a) ? a[0]?.name : a?.name) || "";
+    if (row.member_id && name) out[row.member_id] = name;
+  }
+  return out;
+}
+
+const store = createSharedStore<Record<string, string>>({}, fetchAll, ["workspace_members", "assignees"]);
 
 export function useAuthors(): Record<string, string> {
-  const [byUserId, setByUserId] = useState<Record<string, string>>({});
-
-  const fetchAll = useCallback(async (): Promise<Record<string, string>> => {
-    const db = createClient();
-    const { data } = await db
-      .from("workspace_members")
-      .select("member_id, assignees(name)")
-      .not("member_id", "is", null);
-
-    type Row = { member_id: string; assignees: { name: string } | { name: string }[] | null };
-    const out: Record<string, string> = {};
-    for (const row of ((data as unknown as Row[]) || [])) {
-      const a = row.assignees;
-      const name = (Array.isArray(a) ? a[0]?.name : a?.name) || "";
-      if (row.member_id && name) out[row.member_id] = name;
-    }
-    return out;
-  }, []);
-
+  const { data } = useSyncExternalStore(store.subscribe, store.snapshot, store.serverSnapshot);
   useEffect(() => {
-    let cancelled = false;
-    // Запрос один и на всю жизнь вкладки: членства меняются приглашением,
-    // то есть раз в несколько недель, и перечитывать их по подписке значило
-    // бы держать канал ради события, которого не будет.
-    fetchAll().then((map) => {
-      if (!cancelled) setByUserId(map);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchAll]);
-
-  return byUserId;
+    store.ensure();
+  }, []);
+  return data;
 }

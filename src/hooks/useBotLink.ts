@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useMaxBot } from "@/hooks/useMaxBot";
 import { type ColleagueChannel } from "@/hooks/useColleagues";
 import { useAsk } from "@/components/Ask";
+import { humanError } from "@/lib/humanError";
 
 export function useBotLink() {
   const ask = useAsk();
@@ -78,7 +79,7 @@ export function useBotLink() {
           okText: "Готово",
         });
       } catch (e) {
-        await ask.say({ title: "Не получилось", question: e instanceof Error ? e.message : String(e) });
+        await ask.say({ title: "Не получилось", question: humanError(e, "Попробуйте ещё раз") });
       }
     },
     [ask],

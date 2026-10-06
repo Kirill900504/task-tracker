@@ -49,6 +49,10 @@ export async function applyReview(
   action: ReviewAction,
   comment: string,
   who: { label: string; userId: string },
+  // Не писать исполнителям. Нужно ровно одному случаю — своей задаче,
+  // закрытой собственным отчётом (closeIfEveryoneReported): «работу
+  // приняли» самому себе — это сообщение о том, что ты только что нажал.
+  quiet = false,
 ): Promise<ReviewResult> {
   const text = comment.trim();
   if (action === "return" && !text) return { ok: false, error: "Напишите, что доделать" };
@@ -72,6 +76,46 @@ export async function applyReview(
   // Принято и закрыто — одно и то же событие, и записывается оно одной
   // строкой: «принял, но задача висит открытой» не значит ничего.
   const closed = { status: "done", completed_at: now, last_completed_on: now.slice(0, 10) };
+
+  // Повторяющаяся задача принимается НА ЭТОТ КРУГ, а не навсегда.
+  //
+  // «Ежедневно спросить, как дела» после приёмки получала
+  // approval_state = accepted, и это слово уже ничто не снимало: утром
+  // браузер возвращал повтор в работу (refreshRecurringStatuses), а
+  // «принято» оставалось. Дальше задача жила в двух состояниях сразу —
+  // доска держала её в «Завершённых» с пометкой «сегодня», утренняя сводка
+  // звала её просроченной по сроку первого дня, а напоминания приходили
+  // по задаче, которой человек у себя не видел (отзыв Витовского,
+  // 25.09.2026). Поэтому у повтора приёмка закрывает сегодняшний круг
+  // (status done, last_completed_on — сегодня) и сразу готовит следующий:
+  // приёмка снова открыта, отчёты этого круга сняты. Хроника и сообщение
+  // исполнителю — как у обычной задачи: работу приняли, это событие.
+  if (action === "approve" || action === "force") {
+    const { data: row } = await admin.from("tasks").select("recur").eq("id", task.id).maybeSingle();
+    const recur = (row as { recur?: string } | null)?.recur || "none";
+    if (recur !== "none") {
+      await admin
+        .from("tasks")
+        .update({ approval_state: "open", approval_comment: null, approved_at: null, force_closed_by: null, force_closed_reason: null, ...closed })
+        .eq("id", task.id);
+      await admin
+        .from("task_participants")
+        .update({ done_at: null, done_comment: null, done_files: [], declined_at: null, decline_reason: null })
+        .eq("task_id", task.id)
+        .eq("role", "executor");
+      await recordEvent(admin, {
+        userId: task.user_id,
+        kind: "task",
+        itemId: task.id,
+        text:
+          action === "approve"
+            ? `✅ ${who.label} принял работу за этот круг${text ? ": " + text : ""}`
+            : `🔒 ${who.label} закрыл этот круг волевым решением: ${text}`,
+      });
+      if (!quiet) await tellExecutors(admin, task, action, text);
+      return { ok: true };
+    }
+  }
 
   if (action === "approve") {
     await admin
@@ -120,7 +164,7 @@ export async function applyReview(
             : `🔒 ${who.label} закрыл задачу волевым решением: ${text}`,
   });
 
-  await tellExecutors(admin, task, action, text);
+  if (!quiet) await tellExecutors(admin, task, action, text);
   return { ok: true };
 }
 

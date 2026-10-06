@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useMaxBot } from "@/hooks/useMaxBot";
 import type { ColleagueChannel } from "@/hooks/useColleagues";
 import type { LinkedNow } from "@/lib/messengerLink";
+import { humanError, isNetworkError } from "@/lib/humanError";
 
 // Свой мессенджер глазами руководителя.
 //
@@ -118,17 +119,36 @@ export function useMyMessenger(assigneeId: string): MessengerState {
 
   const connect = useCallback(
     async (channel: ColleagueChannel) => {
-      try {
-        const res = await fetch("/api/telegram/invite", {
+      // Один повтор при обрыве связи. Юрий Нодберг нажал «Подключить» и
+      // получил «Failed to fetch»: запрос не дошёл до сервера вовсе, на
+      // мобильном интернете это обычное моргание. Повторить молча дешевле,
+      // чем просить человека нажать ещё раз, — код подключения от повтора
+      // не портится, выписывается просто новый.
+      const send = () =>
+        fetch("/api/telegram/invite", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ assigneeId, channel }),
         });
+      try {
+        let res: Response;
+        try {
+          res = await send();
+        } catch (first) {
+          if (!isNetworkError(first)) throw first;
+          await new Promise((r) => setTimeout(r, 1200));
+          res = await send();
+        }
+        // Сессия кончилась — middleware уводит запрос на /login, и вместо
+        // JSON приходит страница. Сказать это словами, а не «Unexpected token».
+        if (res.redirected || !(res.headers.get("content-type") || "").includes("json")) {
+          return { ok: false as const, error: "Вход в трекер истёк — обновите страницу и войдите снова." };
+        }
         const data = await res.json();
         if (data.error) return { ok: false as const, error: data.error as string };
         return { ok: true as const, link: (data.link as string) || "", code: (data.code as string) || "" };
       } catch (e) {
-        return { ok: false as const, error: e instanceof Error ? e.message : "Не получилось связаться с сервером" };
+        return { ok: false as const, error: humanError(e, "Не получилось связаться с сервером") };
       }
     },
     [assigneeId],

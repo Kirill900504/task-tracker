@@ -109,9 +109,11 @@ export async function POST(req: Request) {
     const title = text.trim().slice(0, 200) || "Из мысли";
     const taskId = uid();
     // Без срока: срок ставит тот, кто спросит, а не тот, кто взялся.
+    // Постановщик — автор мысли, а не взявший её: прислал он, значит он и
+    // поручил (см. ту же ветку в colleagueReplies). Пустой — владелец.
     const { error: taskError } = await admin
       .from("tasks")
-      .insert(newTaskRow({ id: taskId, userId: m.owner_id, title, assignee: rowName || myName, createdBy: user.id }));
+      .insert(newTaskRow({ id: taskId, userId: m.owner_id, title, assignee: rowName || myName, createdBy: idea?.created_by || null }));
     if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
 
     // upsert, а не insert: имя исполнителя стоит в самой задаче, и строку
@@ -224,7 +226,14 @@ export async function POST(req: Request) {
   const title = taskRef?.title || "";
   // Ответ адресован тому, кто поручил. Пока поручает только владелец, это
   // он и есть; как только поручит руководитель — узнает он, а не Кирилл.
-  const tell = (text: string, notice?: Notice) => notifyAuthor(admin, m.owner_id, taskRef?.created_by || null, text, notice);
+  //
+  // Кроме случая, когда постановщик и есть отвечающий: своя задача, свой
+  // отчёт. Игорь Витковский получил утром сводку «Отчитались о своей
+  // части: Игорь Витковский — „Тест на 2 исполнителях“» — о собственном
+  // нажатии, сделанном накануне (отзыв 25.09.2026).
+  const authorId = taskRef?.created_by || m.owner_id;
+  const tell = (text: string, notice?: Notice) =>
+    authorId === user.id ? Promise.resolve() : notifyAuthor(admin, m.owner_id, taskRef?.created_by || null, text, notice);
 
   if (body.action === "accept") {
     await admin.from("task_participants").update({ accepted_at: now }).eq("id", part.id);

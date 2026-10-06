@@ -5,6 +5,7 @@ import type { Participant } from "@/hooks/useTaskParticipants";
 import { fmtDate } from "@/lib/taskDisplay";
 import AnswerForm from "./AnswerForm";
 import Icon from "./Icon";
+import { humanError } from "@/lib/humanError";
 
 // Что от ВАС ждут по этой задаче — внутри самой задачи.
 //
@@ -99,7 +100,7 @@ export default function TaskAnswer({
       setPending(null);
       if (thenClose) onAnswered?.();
     } catch (e) {
-      setFailed(e instanceof Error ? e.message : "Не получилось отправить ответ");
+      setFailed(humanError(e, "Не получилось отправить ответ"));
     } finally {
       setBusy(false);
     }

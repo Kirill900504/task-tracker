@@ -259,7 +259,20 @@ export async function deliverCallbackNotice(
   outcome: CallbackOutcome,
 ): Promise<void> {
   if (!outcome.notifyOwner) return;
-  const { data } = await admin.from("assignees").select("user_id").eq(channel.chatColumn, chatId).limit(1).maybeSingle();
-  const ownerId = (data as { user_id: string } | null)?.user_id;
-  if (ownerId) await notifyAuthor(admin, ownerId, outcome.notifyTo ?? null, outcome.notifyOwner, outcome.notice);
+  const { data } = await admin.from("assignees").select("id, user_id").eq(channel.chatColumn, chatId).limit(1).maybeSingle();
+  const row = data as { id: string; user_id: string } | null;
+  const ownerId = row?.user_id;
+  if (!ownerId || !row) return;
+  // Нажал сам постановщик — своя задача, своя кнопка. Сообщать ему о его
+  // же нажатии незачем (то же правило, что в /api/workspace/report).
+  if (outcome.notifyTo) {
+    const { data: me } = await admin
+      .from("workspace_members")
+      .select("member_id")
+      .eq("owner_id", ownerId)
+      .eq("assignee_id", row.id)
+      .maybeSingle();
+    if ((me as { member_id?: string } | null)?.member_id === outcome.notifyTo) return;
+  }
+  await notifyAuthor(admin, ownerId, outcome.notifyTo ?? null, outcome.notifyOwner, outcome.notice);
 }

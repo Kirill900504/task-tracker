@@ -230,7 +230,9 @@ export async function resolvePendingAction(
     const notes: string[] = [];
     for (const row of rows) {
       if (!row.assignee) continue;
-      const result = await attachExecutors(admin, pending.userId, row, [row.assignee]);
+      // Автор передаётся: от него зависит и подпись «Задача от …», и то,
+      // что руководителю, записавшему задачу себе, бот её не присылает.
+      const result = await attachExecutors(admin, pending.userId, row, [row.assignee], "executor", pending.createdBy || null);
       assigned.set(row.id, result.attached);
       const note = assignNote(result).trim();
       if (note) notes.push(`«${row.title}»: ${note}`);

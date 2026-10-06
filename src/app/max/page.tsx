@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useAsk } from "@/components/Ask";
+import { humanError } from "@/lib/humanError";
 
 // Подключение бота MAX — одна страница, на которую можно дать ссылку.
 //
@@ -76,7 +77,7 @@ export default function MaxSetupPage() {
       setToken("");
       setState(data as State);
     } catch (e) {
-      setError("Не получилось: " + (e instanceof Error ? e.message : String(e)));
+      setError("Не получилось: " + humanError(e, "без подробностей"));
     } finally {
       setBusy(false);
     }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readInput, reviewInput } from "@/lib/apiInput";
-import { taskButtons, type ColleagueRow } from "@/lib/colleagues";
+import type { ColleagueRow } from "@/lib/colleagues";
 import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
 import { applyReview, type ReviewAction } from "@/lib/reviewWork";
@@ -106,7 +106,9 @@ export async function POST(req: Request) {
         ? "📅 Новый срок по задаче «" + task.title + "»: " + fmtDate(to)
         : "📅 С задачи «" + task.title + "» сняли срок";
       for (const person of ((people || []) as ColleagueRow[])) {
-        await sendToPerson(admin, task.user_id, person, text, taskButtons(task.id, "executor"));
+        // К сведению — без кнопок, по той же причине, что и ответ на просьбу
+        // о переносе ниже.
+        await sendToPerson(admin, task.user_id, person, text);
       }
     }
     return NextResponse.json({ ok: true });
@@ -162,7 +164,11 @@ export async function POST(req: Request) {
         moved
           ? `📅 Срок перенесён: «${task.title}»${when ? "\nНовый срок: " + fmtDate(when) : ""}${comment ? "\n\n" + comment : ""}`
           : `📅 Срок остаётся прежним: «${task.title}»${comment ? "\n\n" + comment : ""}`,
-        taskButtons(task.id, "executor"),
+        // Без кнопок: это уведомление «к сведению», отвечать на него нечем
+        // и незачем. Под ним стояли «Принял / Сделал / Не могу / Прошу
+        // перенос», и Игорь Витковский прочёл это как вопрос, на который
+        // надо выбрать ответ (отзыв 25.09.2026). Так же уже пишет бот,
+        // когда срок продлевают из мессенджера (tellAssignees).
       );
     }
     return NextResponse.json({ ok: true });

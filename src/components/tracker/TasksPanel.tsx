@@ -38,6 +38,7 @@ import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 import { noteParticipantChange } from "@/lib/participantNote";
+import { humanError } from "@/lib/humanError";
 
 export default function TasksPanel({
   tasks,
@@ -413,7 +414,7 @@ export default function TasksPanel({
       // этом узнают исполнители — для них задача снова живая.
       if (t.approvalState === "accepted") {
         void participants.reopen(t.id, "").catch((e) => {
-          toasts.showToast(e instanceof Error ? e.message : "Не получилось вернуть задачу в работу");
+          toasts.showToast(humanError(e, "Не получилось вернуть задачу в работу"));
         });
       }
     } else {
@@ -471,7 +472,7 @@ export default function TasksPanel({
       if (onReview) await participants.approve(t.id, comment.trim());
       else await participants.forceClose(t.id, comment.trim());
     } catch (e) {
-      toasts.showToast(e instanceof Error ? e.message : "Не получилось закрыть задачу");
+      toasts.showToast(humanError(e, "Не получилось закрыть задачу"));
       return;
     }
     // Маршрут ставит done сам; здесь то же самое ставится локально, чтобы
@@ -564,7 +565,7 @@ export default function TasksPanel({
         await participants.acceptWork(myRow.id);
         toasts.showToast("Взяли в работу", dragged.title);
       } catch (e) {
-        toasts.showToast("Не получилось", e instanceof Error ? e.message : "");
+        toasts.showToast("Не получилось", humanError(e, ""));
       }
       return;
     }
@@ -649,7 +650,7 @@ export default function TasksPanel({
               await participants.acceptWork(myRow.id);
               toasts.showToast("Взяли в работу", t.title);
             } catch (e) {
-              toasts.showToast("Не получилось", e instanceof Error ? e.message : "");
+              toasts.showToast("Не получилось", humanError(e, ""));
             }
           })();
         },
@@ -1069,7 +1070,7 @@ export default function TasksPanel({
             } catch (e) {
               // Молча проглоченная приёмка — это задача, которую все
               // считают закрытой, и она не закрыта.
-              toasts.showToast(e instanceof Error ? e.message : "Не получилось принять работу");
+              toasts.showToast(humanError(e, "Не получилось принять работу"));
               return;
             }
             // Задачу закрывает и сам маршрут (см. /api/workspace/review) —
@@ -1094,7 +1095,7 @@ export default function TasksPanel({
             try {
               await participants.returnForRework(modalTask.id, comment);
             } catch (e) {
-              toasts.showToast(e instanceof Error ? e.message : "Не получилось вернуть на доработку");
+              toasts.showToast(humanError(e, "Не получилось вернуть на доработку"));
               return;
             }
             // Возврат — тоже решение, после которого делать в карточке
@@ -1112,7 +1113,7 @@ export default function TasksPanel({
             try {
               await participants.decideReschedule(modalTask.id, participantId, true, date);
             } catch (e) {
-              toasts.showToast(e instanceof Error ? e.message : "Не получилось ответить на просьбу");
+              toasts.showToast(humanError(e, "Не получилось ответить на просьбу"));
             }
           }}
           onRejectReschedule={async (participantId) => {
@@ -1120,7 +1121,7 @@ export default function TasksPanel({
             try {
               await participants.decideReschedule(modalTask.id, participantId, false);
             } catch (e) {
-              toasts.showToast(e instanceof Error ? e.message : "Не получилось ответить на просьбу");
+              toasts.showToast(humanError(e, "Не получилось ответить на просьбу"));
             }
           }}
           onForceCloseWork={async (reason) => {
@@ -1128,7 +1129,7 @@ export default function TasksPanel({
             try {
               await participants.forceClose(modalTask.id, reason);
             } catch (e) {
-              toasts.showToast(e instanceof Error ? e.message : "Не получилось закрыть задачу");
+              toasts.showToast(humanError(e, "Не получилось закрыть задачу"));
               return;
             }
             toggleDone({ ...modalTask, status: "in_progress", approvalState: "accepted", approvalComment: reason });
@@ -1147,7 +1148,7 @@ export default function TasksPanel({
             try {
               await participants.reopen(modalTask.id, comment);
             } catch (e) {
-              toasts.showToast(e instanceof Error ? e.message : "Не получилось вернуть задачу в работу");
+              toasts.showToast(humanError(e, "Не получилось вернуть задачу в работу"));
               return;
             }
             // Маршрут снимает и приёмку, и статус одной записью — здесь то

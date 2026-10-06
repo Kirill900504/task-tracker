@@ -5,6 +5,7 @@ import { REACTIONS, useItemComments, type Comment, type ItemKind } from "@/hooks
 import { useAsk } from "@/components/Ask";
 import ChatMessageMenu, { type ChatMenuAction } from "./ChatMessageMenu";
 import Icon from "./Icon";
+import { humanError } from "@/lib/humanError";
 
 // Обсуждение задачи там же, где задача.
 //
@@ -250,7 +251,7 @@ export default function ItemChat({
       setDraft((current) => current || text);
       setPending((current) => (current.length ? current : files));
       setReplyTo((current) => current || quoting);
-      setError(e instanceof Error ? e.message : "Не отправилось. Проверьте связь и нажмите ещё раз.");
+      setError(humanError(e, "Не отправилось. Проверьте связь и нажмите ещё раз."));
     });
   }
 

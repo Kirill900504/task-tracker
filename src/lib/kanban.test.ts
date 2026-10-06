@@ -171,3 +171,23 @@ describe("columnOf — задача самому себе", () => {
     expect(columnOf(task(), [person({ doneAt: "x" })])).toBe("review");
   });
 });
+
+describe("columnOf — повторяющаяся задача после приёмки", () => {
+  // Отзыв Витовского 25.09.2026: ежедневная задача, принятая один раз,
+  // навсегда осталась «принятой» и стояла в «Завершённых» с пометкой
+  // «сегодня», хотя повтор уже вернул её в работу.
+  it("«принято» у повтора не держит задачу в «Завершённых»", () => {
+    const t = task({ recur: "daily", approvalState: "accepted", status: "in_progress" });
+    expect(columnOf(t, [person({ acceptedAt: "2026-09-24T10:00:00Z" })])).toBe("work");
+  });
+
+  it("круг, закрытый сегодня, — в «Завершённых» до конца дня", () => {
+    const t = task({ recur: "daily", status: "done" });
+    expect(columnOf(t, [person({ acceptedAt: "2026-09-24T10:00:00Z" })])).toBe("done");
+  });
+
+  it("у разовой задачи «принято» по-прежнему значит закрыто", () => {
+    const t = task({ approvalState: "accepted", status: "in_progress" });
+    expect(columnOf(t, [person({ acceptedAt: "2026-09-24T10:00:00Z" })])).toBe("done");
+  });
+});

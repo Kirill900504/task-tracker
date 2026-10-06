@@ -163,8 +163,17 @@ export function useMeetingVotes() {
           else await new Promise((resolve) => setTimeout(resolve, 500));
         }
         if (!exists) return [];
-        await db.from("meeting_participants").insert(
+        // upsert с ignoreDuplicates, а не insert — то же правило, что у
+        // строк участия задачи. Триггер миграции 0024 заводит строки по
+        // массиву имён САМ, вместе с сохранением встречи, но пропускает имя
+        // с «(я)». Вставка пачкой «Кирилл + Нодберг» упиралась в уже
+        // заведённую триггером строку Нодберга, и база отвергала её ЦЕЛИКОМ:
+        // встреча Игоря Витковского с Кириллом и Нодбергом осталась с одной
+        // строкой из двух («ответили 0 из 1», отзыв 01.10.2026), а Кирилл не
+        // получил ни приглашения, ни кнопок «Буду / Не смогу».
+        await db.from("meeting_participants").upsert(
           toAdd.map((assignee_id) => ({ meeting_id: meetingId, assignee_id, role: "participant" as const })),
+          { onConflict: "meeting_id,assignee_id", ignoreDuplicates: true },
         );
       }
       for (const row of toDrop) await db.from("meeting_participants").delete().eq("id", row.id);

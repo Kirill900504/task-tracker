@@ -57,6 +57,9 @@ const GROUPS: { kind: NoticeKind; title: (n: number) => string }[] = [
   { kind: "other", title: (n) => `📌 Ещё (${n})` },
 ];
 
+// Виды, которые говорят о задаче и теряют смысл, когда она закрыта.
+const TASK_KINDS = new Set<string>(["reported_all", "declined", "reschedule", "reported", "accepted"]);
+
 // Строка внутри группы: сначала человек, потом задача, потом его слова.
 // Человек первым потому, что группа уже сказала, ЧТО произошло, и читается
 // это как список фамилий — по нему и ищут глазами.
@@ -149,8 +152,16 @@ export async function flushNotices(
     .update({ sent_at: new Date().toISOString() })
     .in("id", rows.map((r) => r.id));
 
+  // Что к минуте отправки уже решено — в письмо не идёт. Отзыв Витовского
+  // 25.09.2026: «я тут суету наводил, задачи закрывал, а потом через какое-
+  // то время пришла сводка» — с «ждут приёмки» и «просят перенести» по
+  // задачам, которые он уже принял. Письмо, требующее решений, которые
+  // приняты, учит его не читать.
+  const resolved = await resolvedTitles(admin, rows);
+
   let sent = 0;
-  for (const list of groups.values()) {
+  for (const raw of groups.values()) {
+    const list = raw.filter((r) => !(TASK_KINDS.has(r.kind) && resolved.has(`${r.user_id} ${r.item}`)));
     const text = composeDigest(list);
     if (!text) continue;
     try {
@@ -161,6 +172,43 @@ export async function flushNotices(
     }
   }
   return sent;
+}
+
+// Названия задач, которые к этой минуте закрыты, — по пространствам.
+//
+// В очереди лежит название, а не идентификатор (событие кладётся тремя
+// полями — так задумано, см. начало файла), поэтому и сверяется название.
+// Закрытой считается строка, только если закрыты ВСЕ задачи пространства с
+// этим названием: «Отчёт» бывает у двоих, и выкинуть живое событие из-за
+// чужой закрытой задачи хуже, чем показать одно лишнее.
+async function resolvedTitles(admin: SupabaseClient, rows: (QueuedRow & { user_id: string })[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  const bySpace = new Map<string, Set<string>>();
+  for (const r of rows) {
+    if (!TASK_KINDS.has(r.kind) || !r.item) continue;
+    const set = bySpace.get(r.user_id) || new Set<string>();
+    set.add(r.item);
+    bySpace.set(r.user_id, set);
+  }
+  for (const [space, titles] of bySpace) {
+    const { data, error } = await admin
+      .from("tasks")
+      .select("title, status, approval_state, recur, deleted_at")
+      .eq("user_id", space)
+      .in("title", [...titles]);
+    // Не смогли спросить — отправляем как есть: лишняя строка дешевле
+    // потерянной.
+    if (error || !data) continue;
+    const open = new Set<string>();
+    const seen = new Set<string>();
+    for (const t of data as { title: string; status: string | null; approval_state: string | null; recur: string | null; deleted_at: string | null }[]) {
+      seen.add(t.title);
+      const closed = !!t.deleted_at || t.status === "done" || (t.approval_state === "accepted" && (t.recur || "none") === "none");
+      if (!closed) open.add(t.title);
+    }
+    for (const title of seen) if (!open.has(title)) out.add(`${space} ${title}`);
+  }
+  return out;
 }
 
 // Положить событие в очередь.

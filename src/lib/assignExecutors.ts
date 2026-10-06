@@ -3,6 +3,7 @@ import { taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
 import { sendToPerson } from "@/lib/reach";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { isQuietHour } from "@/lib/quietHours";
+import { actorName } from "@/lib/actorName";
 
 // Поставить людей на задачу — серверная половина, одна на всех, кто создаёт
 // задачи не из браузера.
@@ -110,13 +111,29 @@ export async function attachExecutors(
   // «кого вставили», человек получит задачу в трекер и ни слова в
   // мессенджер. Вызывают это только при создании, так что повторить
   // уведомление здесь нечем.
-  const from = await ownerDisplayName(admin, userId);
   const byOwner = !createdBy || createdBy === userId;
+  // Подпись — тот, кто поручил, а не хозяин пространства. До 06.10.2026
+  // здесь всегда стояло имя владельца, и Игорь Витковский, поставивший
+  // задачу САМОМУ СЕБЕ через бота, получил «📋 Задача от Кирилл
+  // Кучеренко» — при том что в трекере постановщиком честно стоял он.
+  const from = byOwner ? await ownerDisplayName(admin, userId) : await actorName(admin, userId, createdBy as string, "участника");
+  // Своя строка руководителя — по членству: себе не пишут и ему.
+  let selfRowId = "";
+  if (!byOwner) {
+    const { data: me } = await admin
+      .from("workspace_members")
+      .select("assignee_id")
+      .eq("owner_id", userId)
+      .eq("member_id", createdBy as string)
+      .maybeSingle();
+    selfRowId = (me as { assignee_id?: string } | null)?.assignee_id || "";
+  }
   for (const person of people) {
     // Себе не пишут — но «себе» это про того, кто поручает, а не про
     // строку владельца вообще: задача, которую владельцу поставил
     // руководитель, обязана до него доехать (см. lib/reach).
     if (isSelfAssignee(person.name) && byOwner) continue;
+    if (selfRowId && person.id === selfRowId) continue;
     await sendToPerson(admin, userId, person, taskMessage(task, from), taskButtons(task.id, role));
   }
   return { attached, missing };

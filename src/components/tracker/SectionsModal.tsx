@@ -9,6 +9,7 @@ import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
 import PeoplePicker from "./PeoplePicker";
+import { humanError } from "@/lib/humanError";
 
 // «Разделы» — одно окно на всё, что с ними делают.
 //
@@ -83,7 +84,7 @@ export default function SectionsModal({
       setFailed("");
       await links.add(section.id, personId, role, ownerId);
     } catch (e) {
-      setFailed(e instanceof Error ? e.message : "Не получилось сохранить");
+      setFailed(humanError(e, "Не получилось сохранить"));
     }
   }
 
@@ -92,7 +93,7 @@ export default function SectionsModal({
       setFailed("");
       await links.remove(rowId);
     } catch (e) {
-      setFailed(e instanceof Error ? e.message : "Не получилось сохранить");
+      setFailed(humanError(e, "Не получилось сохранить"));
     }
   }
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { MeetingVoteRow } from "@/hooks/useMeetingVotes";
 import AnswerForm from "./AnswerForm";
 import Icon from "./Icon";
+import { humanError } from "@/lib/humanError";
 
 // Ваш ответ на встречу — внутри самой встречи.
 //
@@ -30,7 +31,7 @@ export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | n
       await onAnswer(response, reason);
       setAsking(false);
     } catch (e) {
-      setFailed(e instanceof Error ? e.message : "Не получилось ответить");
+      setFailed(humanError(e, "Не получилось ответить"));
     } finally {
       setBusy(false);
     }
