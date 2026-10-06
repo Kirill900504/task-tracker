@@ -290,10 +290,19 @@ export default function TaskModal({
   // Показать задачу постороннему по-прежнему можно из списка (✈ в меню
   // карточки), где это и есть отдельное действие, а не часть формы.
 
+  function focusField(id: string) {
+    const el = document.getElementById(id);
+    el?.scrollIntoView({ block: "center" });
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.focus();
+  }
+
   function save() {
     const title = form.title.trim();
     if (!title) {
-      void ask.say({ title: "Название не заполнено", question: "Укажите название задачи." });
+      // Ответ на «не заполнено» — само поле: форма к этому моменту обычно
+      // прокручена вниз, к «Сохранить», и без этого фокус уходил в никуда,
+      // а пустого названия даже не было видно (QA 06.10.2026).
+      void ask.say({ title: "Название не заполнено", question: "Укажите название задачи." }).then(() => focusField("fTitle"));
       return;
     }
     // Исполнитель обязателен — и при создании, и при правке.
@@ -317,7 +326,7 @@ export default function TaskModal({
         title: "Нужен исполнитель",
         question: "У задачи должен быть хотя бы один исполнитель — тот, кто по ней отчитается.",
         note: "Нажмите человека в поле «Кто на задаче» и выберите «Исполнитель». Соисполнитель и наблюдатель — по желанию.",
-      });
+      }).then(() => focusField("fPeople"));
       return;
     }
     // Имя в задаче — первый исполнитель из набранного состава. Поле

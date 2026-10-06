@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { busyStarts, endsAt, minutesOf, normalizeDuration, overlaps, slotOf, timeOf, warnBefore } from "./meetingTime";
+import { busyStarts, defaultMeetingStart, endsAt, minutesOf, normalizeDuration, overlaps, slotOf, startsInPast, timeOf, warnBefore } from "./meetingTime";
 
 // Занятость человека считается здесь, и ошибка тут стоит дороже обычной:
 // слот, показанный свободным, — это два приглашения на одно время, а
@@ -73,5 +73,42 @@ describe("за сколько предупреждать", () => {
     expect(warnBefore(60)).toBe(10);
     expect(warnBefore(30)).toBe(5);
     expect(warnBefore(undefined)).toBe(5);
+  });
+});
+
+// В 17:26 форма предлагала «сегодня, 10:00», и встреча молча создавалась в
+// прошлом (QA 06.10.2026).
+describe("defaultMeetingStart", () => {
+  const slots = ["09:00", "09:30", "10:00", "17:30", "18:00"];
+  const at = (h: number, m: number) => new Date(2026, 9, 6, h, m);
+
+  it("берёт первый ещё не начавшийся слот сегодня", () => {
+    expect(defaultMeetingStart("2026-10-06", slots, at(17, 26))).toEqual({ date: "2026-10-06", time: "17:30" });
+    expect(defaultMeetingStart("", slots, at(8, 0))).toEqual({ date: "2026-10-06", time: "09:00" });
+  });
+
+  it("слот, который начинается ровно сейчас, уже не предлагает", () => {
+    expect(defaultMeetingStart("2026-10-06", slots, at(17, 30))).toEqual({ date: "2026-10-06", time: "18:00" });
+  });
+
+  it("когда на сегодня слотов не осталось — завтра утром", () => {
+    expect(defaultMeetingStart("2026-10-06", slots, at(18, 5))).toEqual({ date: "2026-10-07", time: "10:00" });
+  });
+
+  it("на другой день — 10:00, как и было", () => {
+    expect(defaultMeetingStart("2026-10-09", slots, at(17, 26))).toEqual({ date: "2026-10-09", time: "10:00" });
+  });
+});
+
+describe("startsInPast", () => {
+  const now = new Date(2026, 9, 6, 17, 26);
+  it("сегодняшнее утро — в прошлом, вечер — нет", () => {
+    expect(startsInPast("2026-10-06", "10:00", now)).toBe(true);
+    expect(startsInPast("2026-10-06", "17:30", now)).toBe(false);
+  });
+  it("вчера — в прошлом, завтра — нет, без даты — не решаем", () => {
+    expect(startsInPast("2026-10-05", "18:00", now)).toBe(true);
+    expect(startsInPast("2026-10-07", "09:00", now)).toBe(false);
+    expect(startsInPast("", "09:00", now)).toBe(false);
   });
 });

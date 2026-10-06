@@ -1831,6 +1831,10 @@
     background:repeating-linear-gradient(135deg, var(--paper-soft), var(--paper-soft) 4px, var(--line-soft) 4px, var(--line-soft) 5px);
   }
   .time-slot.busy.selected{opacity:1; color:#F3F8FA; background:var(--accent); border-style:solid;}
+  /* Сегодняшнее время, которое уже прошло: приглушено, но нажимается —
+     задним числом встречу иногда записывают сознательно (см. MeetingModal). */
+  .time-slot.past{opacity:.45;}
+  .time-slot.past.selected{opacity:1;}
   /* Время следующего этапа — те же кнопки, только помельче: строка переноса
      и так стоит внизу карточки, среди итогов. */
   .time-grid-compact{margin-top:8px;}

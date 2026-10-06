@@ -23,7 +23,7 @@ import Icon from "./Icon";
 import ChipChoice from "./ChipChoice";
 import ItemFacts from "./ItemFacts";
 import ExpandableText from "./ExpandableText";
-import { busyStarts, minutesOf, slotOf } from "@/lib/meetingTime";
+import { busyStarts, defaultMeetingStart, minutesOf, slotOf, startsInPast } from "@/lib/meetingTime";
 import { SEARCH_FROM, matchesPerson } from "@/lib/personSearch";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
@@ -127,9 +127,17 @@ export default function MeetingModal({
   onAnswer?: (response: "yes" | "no" | "late", reason: string) => Promise<void>;
 }) {
   const isEditing = !!meeting;
-  const [date, setDate] = useState(meeting?.date ?? prefill?.date ?? "");
+  // Новой встрече без заданного времени — первый ещё не начавшийся слот, а
+  // не «10:00» вслепую (см. defaultMeetingStart): иначе в пять вечера форма
+  // предлагала сегодняшнее утро, и встреча молча создавалась в прошлом.
+  const [start] = useState(() =>
+    meeting || prefill?.time
+      ? { date: meeting?.date ?? prefill?.date ?? "", time: meeting?.time || prefill?.time || "10:00" }
+      : defaultMeetingStart(prefill?.date ?? "", TIME_SLOTS),
+  );
+  const [date, setDate] = useState(start.date);
   const [title, setTitle] = useState(meeting?.title ?? prefill?.title ?? "");
-  const [time, setTime] = useState(meeting?.time || prefill?.time || "10:00");
+  const [time, setTime] = useState(start.time);
   const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? prefill?.participants ?? []));
   // Кто я в этом пространстве — нужно ровно для одного: не предлагать
   // позвать самого себя (см. selectableAssignees). Ответ прошлого запуска
@@ -240,15 +248,35 @@ export default function MeetingModal({
   // «Сохранить» предлагала послать её кому-то ЕЩЁ — вопрос, которого в
   // карточке никто не задаёт.
 
-  function save() {
+  // После «не заполнено» человек должен оказаться в поле, которое пустует, —
+  // а не в прокрученной вниз форме с фокусом в никуда.
+  function focusTitle() {
+    const el = document.getElementById("mTitle");
+    el?.scrollIntoView({ block: "center" });
+    el?.focus();
+  }
+
+  async function save() {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
-      void ask.say({ title: "Название не заполнено", question: "Укажите название встречи." });
+      await ask.say({ title: "Название не заполнено", question: "Укажите название встречи." });
+      focusTitle();
       return;
     }
     if (!date) {
       void ask.say({ title: "Дата не заполнена", question: "Укажите дату встречи." });
       return;
+    }
+    // Встреча в прошлом — почти всегда промах, а приглашения уйдут людям
+    // сразу. Не запрет: задним числом иногда записывают уже прошедшее.
+    if (!isEditing && startsInPast(date, time)) {
+      const yes = await ask.confirm({
+        title: "Это время уже прошло",
+        question: `${fmtDate(date)}, ${time} — уже в прошлом. Встреча сразу попадёт в «Нужен итог», а приглашения уйдут участникам. Всё равно назначить?`,
+        okText: "Назначить",
+        cancelText: "Выбрать другое время",
+      });
+      if (!yes) return;
     }
     onSave({
       // Сначала сохранённая запись целиком, поверх — поля формы. Всё, чего
@@ -592,6 +620,10 @@ export default function MeetingModal({
               <div className="time-grid" id="mTimeGrid">
                 {TIME_SLOTS.map((slot) => {
                   const busy = busyNamesAt(slot);
+                  // Прошедшее сегодня время приглушено, но не заперто: по
+                  // той же причине, что и занятое (см. ниже), — задним
+                  // числом встречу иногда записывают сознательно.
+                  const past = startsInPast(date, slot);
                   return (
                   <button
                     key={slot}
@@ -600,8 +632,8 @@ export default function MeetingModal({
                     // неправдой: планёрку иногда и правда ставят поверх
                     // другой, решив, что та подождёт. Неправдой было бы и
                     // молчание — именно его Кирилл и просил убрать.
-                    className={"time-slot" + (time === slot ? " selected" : "") + (busy.length ? " busy" : "")}
-                    title={busy.length ? "Заняты: " + busy.join(", ") : undefined}
+                    className={"time-slot" + (time === slot ? " selected" : "") + (busy.length ? " busy" : "") + (past ? " past" : "")}
+                    title={busy.length ? "Заняты: " + busy.join(", ") : past ? "Это время сегодня уже прошло" : undefined}
                     onClick={() => setTime(slot)}
                   >
                     {slot}
@@ -719,7 +751,7 @@ export default function MeetingModal({
               Отмена
             </button>
             {canEdit && (
-              <button className="btn btn-primary" id="meetingSaveBtn" onClick={save}>
+              <button className="btn btn-primary" id="meetingSaveBtn" onClick={() => void save()}>
                 Сохранить
               </button>
             )}

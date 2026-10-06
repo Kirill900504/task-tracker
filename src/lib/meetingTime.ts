@@ -75,3 +75,39 @@ export function endsAt(time: string, duration: unknown): string {
   if (start === null) return "";
   return timeOf(start + normalizeDuration(duration));
 }
+
+// С какого времени новой встречи начинать, если человек его не выбирал.
+//
+// Было «10:00» всегда, и в 17:26 форма предлагала сегодняшнее утро: встреча
+// молча создавалась в прошлом, сразу падала в «Нужен итог», а приглашения
+// уходили людям (QA-проход 06.10.2026). Теперь — первый слот, который ещё не
+// начался; если на сегодня таких не осталось, — завтра с утра. На любой
+// другой день — 10:00, как и было.
+export function defaultMeetingStart(
+  date: string,
+  slots: string[],
+  now: Date = new Date(),
+): { date: string; time: string } {
+  const today = isoDate(now);
+  if (date && date !== today) return { date, time: "10:00" };
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const next = slots.find((s) => (minutesOf(s) ?? -1) > nowMin);
+  if (next) return { date: today, time: next };
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return { date: isoDate(tomorrow), time: "10:00" };
+}
+
+// Начало встречи уже прошло. Только для НОВОЙ встречи: у назначенной это
+// обычное состояние после её начала.
+export function startsInPast(date: string, time: string, now: Date = new Date()): boolean {
+  if (!date) return false;
+  const today = isoDate(now);
+  if (date !== today) return date < today;
+  const start = minutesOf(time);
+  return start !== null && start <= now.getHours() * 60 + now.getMinutes();
+}
+
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
