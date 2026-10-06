@@ -22,10 +22,13 @@ import { setMaxCommands, setTelegramCommands, syncTelegramAppButtons } from "@/l
 import { alarmText, findStuck, nudgeText } from "@/lib/escalation";
 import { endsAt, normalizeDuration, warnBefore } from "@/lib/meetingTime";
 import { endingSoonText, timeIsUpText } from "@/lib/meetingNudges";
+import { buildOwnerWeekly, composeOwnerWeekly, loadOwnerWeekly } from "@/lib/ownerWeekly";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
 const BRIEF_FROM_MINUTES = 8 * 60;
+// Пятничный отчёт владельцу — конец рабочей недели, его слово.
+const OWNER_WEEKLY_FROM_MINUTES = 18 * 60;
 
 // Called every few minutes by an external pinger (Vercel's own free cron is
 // once-a-day only, too coarse for "meeting in 15 minutes"). Checks every
@@ -395,6 +398,18 @@ export async function GET(req: Request) {
       await onceOnly(admin, { userId, kind: "weekly_review", refId: today, date: today }, async () => {
         const facts = await buildWeeklyFacts(admin, userId);
         if (!weeklyIsEmpty(facts)) await notifyOwner(admin, userId, await composeWeekly(facts));
+      });
+    }
+
+    // Пятница, 18:00 — неделя всего пространства, только владельцу
+    // (lib/ownerWeekly). Не привязан к рабочему дню: пятница-праздник не
+    // отменяет недели, которая уже прошла. Время считается настоящим
+    // моментом, а не сдвинутым moscowNow — внутри сравниваются отметки
+    // базы, а они в UTC.
+    if (now.getUTCDay() === 5 && nowMin >= OWNER_WEEKLY_FROM_MINUTES && nowMin < 22 * 60) {
+      await onceOnly(admin, { userId, kind: "owner_weekly", refId: today, date: today }, async () => {
+        const week = buildOwnerWeekly(await loadOwnerWeekly(admin, userId), new Date());
+        for (const part of composeOwnerWeekly(week)) await notifyOwner(admin, userId, part);
       });
     }
 
