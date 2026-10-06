@@ -193,8 +193,12 @@
   /* Любая кнопка со значком — строка из значка и слова, а не блок, в
      котором значок стоит абзацем над текстом. Без этого «Выбрать дату»
      переносилась на две строки: <svg> ведёт себя как картинка в потоке, и
-     white-space:nowrap на неё не действует. */
-  button:has(> .icon){display:inline-flex; align-items:center; gap:7px;}
+     white-space:nowrap на неё не действует.
+     :where() обязателен: без него у правила специфичность (0,1,1), и оно
+     перебивало любое `.класс{display:none}` у кнопки со значком — так
+     мобильная стрелка «Назад» (.modal-back-btn) висела на компьютере над
+     каждым окном (QA-проход 06.10.2026). */
+  button:where(:has(> .icon)){display:inline-flex; align-items:center; gap:7px;}
   /* A flex row rather than inline-blocks separated by whitespace: with an
      icon-only button in the row the baseline alignment left it a pixel off,
      and the gap is the same whether the row wraps or not. */

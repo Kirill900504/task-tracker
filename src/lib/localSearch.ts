@@ -22,17 +22,27 @@ export type SearchResult = {
   done: boolean;
 };
 
-const STOPWORDS = new Set(["что", "как", "где", "все", "всё", "про", "для", "мне", "или", "там", "это"]);
+const STOPWORDS = new Set([
+  "что", "как", "где", "все", "всё", "про", "для", "мне", "или", "там", "это",
+  // Two-letter function words — kept out now that two-letter terms count.
+  "по", "на", "за", "из", "от", "до", "об", "во", "со", "ко", "не", "ни", "же", "ли", "бы", "то", "он", "мы", "вы", "их", "её", "ее", "его", "уж",
+]);
 
 export function queryTerms(query: string): string[] {
   return query
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
-    .filter((w) => w.length >= 3 && !STOPWORDS.has(w))
-    .map(stem);
+    // Two letters are kept: «КП», «ТЗ», «1С» are everyday words here, and
+    // dropping them meant such a search could never find anything. They are
+    // not stemmed — there is nothing to cut off a two-letter abbreviation.
+    .filter((w) => w.length >= 2 && !STOPWORDS.has(w))
+    .map((w) => (w.length >= 3 ? stem(w) : w));
 }
 
 function wordMatches(hayWord: string, term: string): boolean {
+  // A short term matches only the start of a word: fuzzy prefix sharing on
+  // two letters would match half the dictionary.
+  if (term.length < 3) return hayWord.startsWith(term);
   return hayWord.startsWith(term) || sharesPrefix(hayWord, term, 4);
 }
 
