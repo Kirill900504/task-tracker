@@ -8,6 +8,8 @@ import type { Participant, PersonOption } from "@/hooks/useTaskParticipants";
 import { useAsk } from "@/components/Ask";
 import { answerWithFiles } from "@/lib/answerFiles";
 import { withoutSelfMark } from "@/lib/actorName";
+import { isSelfAssignee } from "@/lib/trackerRows";
+import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import ActionMenu from "./ActionMenu";
 import { SEARCH_FROM } from "@/lib/personSearch";
 import Icon, { type IconName } from "./Icon";
@@ -120,6 +122,7 @@ export default function TeamCompact({
   part?: "decisions" | "team";
 }) {
   const ask = useAsk();
+  const identity = useWorkspaceRole();
   // Пометка «(я)» не показывается никому, владельцу тоже: 24.09.2026 он
   // попросил убрать её с экрана целиком («убери это дурацкое (я)»), а здесь
   // её оставили «для него одного» — так она и висела в «Кто на задаче».
@@ -252,6 +255,17 @@ export default function TeamCompact({
   }
 
   const asksOpen = participants.some((p) => p.rescheduleTo || p.rescheduleReason);
+  // Своя задача: единственный исполнитель — тот, кто её поставил. Приёмки у
+  // самого себя нет — сервер закрывает такую задачу сам, как только пришёл
+  // отчёт (closeIfEveryoneReported). Но строки участия доезжают сюда раньше,
+  // чем закрытие, и на эти секунды окно спрашивало «Принимаете работу?» с
+  // кнопками «Принять» и «Вернуть на доработку» — вопрос, которого нет
+  // (QA-проход 06.10.2026). Вместо него — что происходит на самом деле.
+  const executorsNow = participants.filter((p) => p.role === "executor");
+  const selfOnly =
+    executorsNow.length === 1 &&
+    (identity.assigneeId ? executorsNow[0].assigneeId === identity.assigneeId : isSelfAssignee(executorsNow[0].name || ""));
+  const closingOwn = selfOnly && progress.doneCount === 1 && progress.declined.length === 0;
   const decisionsBlock = (
     <>
       {/* Просьбы о переносе — первыми: решение, которого ждут прямо сейчас. */}
@@ -279,14 +293,29 @@ export default function TeamCompact({
 
       {/* Приёмка — то, ради чего постановщик открывает задачу на этой
           стадии; где она стоит в окне, решает part (см. выше). */}
-      {stage === "awaiting_review" && (
+      {stage === "awaiting_review" && closingOwn && (
+        <div className="tp-review">
+          <div className="tp-review-text">Вы отчитались по своей задаче.</div>
+          {/* Обычно сервер закрывает её сам за секунду. Кнопка — выход на
+              случай, когда этого не случилось (задача заведена до
+              автозакрытия, ответ сервера потерялся): без неё блок был бы
+              тупиком. «Вернуть на доработку» самому себе не предлагается. */}
+          <div className="tp-review-actions">
+            <button className="btn btn-small btn-primary" type="button" disabled={busy} onClick={() => void handleApprove()}>
+              Закрыть задачу
+            </button>
+          </div>
+        </div>
+      )}
+
+      {stage === "awaiting_review" && !closingOwn && (
         <div className="tp-review">
           <div className="tp-review-text">
             {progress.declined.length === 0
               ? "Все исполнители отчитались. Принимаете работу?"
               : progress.doneCount === 0
-                ? `Работу не сделают: ${progress.declined.map((d) => d.name).join(", ")}. Решать вам.`
-                : `Отчитались не все: ${progress.declined.map((d) => d.name).join(", ")} не смогут. Решать вам.`}
+                ? `Работу не сделают: ${progress.declined.map((d) => shown(d.name)).join(", ")}. Решать вам.`
+                : `Отчитались не все: ${progress.declined.map((d) => shown(d.name)).join(", ")} не смогут. Решать вам.`}
           </div>
           <div className="tp-review-actions">
             {progress.doneCount > 0 && (

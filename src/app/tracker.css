@@ -3152,6 +3152,12 @@
      правило «нигде ничего не должно вылетать за рамки окна», 24.09.2026 —
      поймано на «Вернули на доработку» с текстом без единого пробела). */
   .my-work-said{font-size:13px; line-height:1.5; color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;}
+  /* «Принято» — плашка на месте кнопки «Принял»: та же форма, чтобы ряд не
+     перестраивался, но не кнопка — нажимать здесь больше нечего. */
+  /* Одно место на «Принял», «Отправляю…» и «Принято»: ширина не зависит от
+     слова, поэтому соседняя «Сделал» не сдвигается ни на пиксель. */
+  .my-work-accept-slot{min-width:118px; justify-content:center;}
+  .my-work-accepted{display:inline-flex; align-items:center; gap:7px; white-space:nowrap; cursor:default; color:var(--accent); border-color:var(--accent-soft, var(--line)); background:transparent; box-shadow:none;}
   .my-work-said.declined{color:var(--high);}
   .my-work-returned{
     font-size:13px; line-height:1.5; color:var(--high);

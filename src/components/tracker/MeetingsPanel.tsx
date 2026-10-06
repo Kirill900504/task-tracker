@@ -240,10 +240,16 @@ export default function MeetingsPanel({
   const all = sortMeetingsForList(meetings, false);
   // Прошедшие без итога — наверх и отдельно. Это единственные встречи в
   // списке, которые чего-то ждут ОТ ВАС: остальные просто впереди.
-  const needRecap = all.filter((m) => awaitsRecap(m));
+  //
+  // «От вас» — значит от организатора: итог записывает тот, кто назначил
+  // (маршрут /api/workspace/recap). Участнику чужая прошедшая встреча здесь
+  // висела жёлтым «нужен итог» без единой кнопки — требование, которое он
+  // выполнить не может (QA-проход 06.10.2026). Для него она остаётся в
+  // общем списке, а итога ждут от организатора.
+  const needRecap = all.filter((m) => awaitsRecap(m) && isMine(m, myUserId));
   // Новые реплики в обсуждении каждой встречи списка — значком на карточке.
   const unread = useUnreadTaskComments(all.map((m) => m.id), "meeting");
-  const sorted = all.filter((m) => !awaitsRecap(m));
+  const sorted = all.filter((m) => !needRecap.includes(m));
   const resolved = sortMeetingsForList(meetings, true).filter((m) => m.status && m.status !== "planned" && m.status !== "proposed");
 
   // Отмена — с причиной, и причину узнают участники (отзыв Витовского

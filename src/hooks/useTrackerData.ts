@@ -503,15 +503,21 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
   // без автора — интерфейс о ролях не знает и знать не должен, — поэтому
   // автор проставляется здесь, один раз и на все три вида. Пропустить это
   // значит завести задачу, которая живёт только в этой вкладке.
+  //
+  // Здесь же — дата постановки у новой строки. Колонку created_at пишет
+  // база, и до эха из неё (несколько секунд) только что заведённая задача
+  // показывала в сводке «Дата постановки —» (QA-проход 06.10.2026). В базу
+  // это поле не уходит (taskToRow/meetingToRow его не пишут), эхо заменит
+  // его настоящим значением.
   const own = useCallback(
-    <T extends { id: string; createdBy?: string }>(item: T, existing: T[]): T => {
-      const ws = workspaceRef.current;
-      if (!ws?.isManager) return item;
-      if (item.createdBy) return item;
+    <T extends { id: string; createdBy?: string; createdAt?: string }>(item: T, existing: T[]): T => {
       // У существующей строки автор уже есть (или её завёл кто-то другой) —
       // присваивать себе чужое нельзя.
       if (existing.some((x) => x.id === item.id)) return item;
-      return { ...item, createdBy: ws.userId };
+      const dated = item.createdAt ? item : { ...item, createdAt: new Date().toISOString() };
+      const ws = workspaceRef.current;
+      if (!ws?.isManager || dated.createdBy) return dated;
+      return { ...dated, createdBy: ws.userId };
     },
     [],
   );

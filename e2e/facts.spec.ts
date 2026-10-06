@@ -121,7 +121,12 @@ test("карточка задачи говорит, кто поручил, ко�
   // И решение постановщика — сразу под описанием, ВЫШЕ сводки: ради него
   // карточку на этой стадии и открывают (24.09.2026).
   const decisions = page.locator("#taskDecisions");
-  await expect(decisions).toContainText("Принимаете работу?");
+  // Задача здесь своя (исполнитель — сам постановщик), поэтому вопроса
+  // «Принимаете работу?» с «Вернуть на доработку» нет — приёмки у самого
+  // себя не бывает (QA 06.10.2026); остаётся одна кнопка закрыть.
+  await expect(decisions).toContainText("Вы отчитались по своей задаче");
+  await expect(decisions.getByRole("button", { name: "Закрыть задачу" })).toBeVisible();
+  await expect(decisions).not.toContainText("Принимаете работу?");
   expect((await decisions.boundingBox())!.y).toBeLessThan(factsBox!.y);
 });
 

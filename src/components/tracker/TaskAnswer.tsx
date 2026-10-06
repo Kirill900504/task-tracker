@@ -154,8 +154,6 @@ export default function TaskAnswer({
         </div>
       )}
 
-      {!reported && me.acceptedAt && !declined && <div className="my-work-said">Вы приняли в работу.</div>}
-
       {failed && <div className="ms-answer-error">{failed}</div>}
 
       {pending === "done" && (
@@ -201,10 +199,23 @@ export default function TaskAnswer({
 
       {!pending && !closed && (open.done || open.decline) && (
         <div className="ms-actions">
-          {open.accept && (
-            <button type="button" className="btn btn-small btn-primary" disabled={busy} onClick={() => void run(onAccept)}>
-              <Icon name="check" size={14} /> Принял
+          {/* «Принял» не исчезает после нажатия, а становится плашкой на
+              том же месте. Раньше кнопка пропадала, ряд перестраивался, и
+              «Сделал» уезжала из-под руки ровно в ту секунду, когда к ней
+              тянутся следом (QA-проход 06.10.2026); строка «Вы приняли в
+              работу» над рядом сдвигала его ещё и вниз. Плашка говорит то
+              же самое и ничего не двигает. Пока ответ идёт — а это до
+              нескольких секунд, — на кнопке написано, что он идёт. */}
+          {open.accept ? (
+            <button type="button" className="btn btn-small btn-primary my-work-accept-slot" disabled={busy} onClick={() => void run(onAccept)}>
+              <Icon name="check" size={14} /> {busy ? "Отправляю…" : "Принял"}
             </button>
+          ) : (
+            me.acceptedAt && (
+              <span className="btn btn-small my-work-accept-slot my-work-accepted" aria-label="Вы приняли в работу">
+                <Icon name="check" size={14} /> Принято
+              </span>
+            )
           )}
           {/* Флажка 🏁 здесь больше нет: соседние три кнопки нарисованы
               контуром из Icon.tsx, а этот рисовала система — и на телефоне

@@ -148,3 +148,27 @@ test("владелец не распоряжается задачей, кото�
     await admin.auth.admin.deleteUser(colleague.user.id);
   }
 });
+
+// «Сделал» не уезжает из-под руки. После «Принял» кнопка исчезала, ряд
+// перестраивался, и второе нажатие приходилось мимо (QA 06.10.2026).
+test("после «Принял» кнопка «Сделал» остаётся на месте", async ({ page }) => {
+  const title = `QA ряд ${Date.now()}`;
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+  await page.locator(".task", { hasText: title }).locator(".task-title").click();
+  const modal = page.locator("dialog[open]");
+  const done = modal.getByRole("button", { name: "Сделал" });
+  await expect(done).toBeVisible({ timeout: 20_000 });
+  // Дата постановки — сразу, а не после эха из базы («Дата постановки —»).
+  await expect(modal.locator("#taskFacts")).toContainText(/\d{2}\.\d{2}\.\d{4}/);
+  const before = await done.boundingBox();
+  await modal.getByRole("button", { name: "Принял" }).click();
+  await expect(modal.locator(".my-work-accepted")).toBeVisible({ timeout: 15_000 });
+  const after = await done.boundingBox();
+  expect(Math.abs(after!.x - before!.x)).toBeLessThan(2);
+  expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
+  await page.keyboard.press("Escape");
+});
