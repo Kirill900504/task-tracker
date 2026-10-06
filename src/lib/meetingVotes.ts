@@ -29,6 +29,8 @@ export type MeetingVote = {
   // в каждом месте, которое спрашивает «yes или no», и в каждом ответ был
   // бы «считать как yes».
   late?: boolean;
+  // Когда последний раз открывал встречу (миграция 0042). Не ответ.
+  seenAt?: string | null;
 };
 
 // The organizer is coming by definition — he called it. Watchers are kept

@@ -27,6 +27,9 @@ export type TaskParticipant = {
   doneFiles?: { path: string; name: string; size: number; type: string }[];
   declinedAt: string | null;
   declineReason: string | null;
+  // Когда человек последний раз открывал задачу (миграция 0042). В
+  // подсчётах не участвует: «видел» — не ответ.
+  seenAt?: string | null;
   // Есть ли куда прислать ему задачу. Не участвует ни в одном подсчёте —
   // это про доставку, а не про ход работы, — и потому необязательно.
   reachable?: boolean;

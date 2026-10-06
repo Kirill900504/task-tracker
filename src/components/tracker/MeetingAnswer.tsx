@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MeetingVoteRow } from "@/hooks/useMeetingVotes";
 import AnswerForm from "./AnswerForm";
 import Icon from "./Icon";
 import { humanError } from "@/lib/humanError";
+import { markSeen } from "@/lib/seenMark";
 
 // Ваш ответ на встречу — внутри самой встречи.
 //
@@ -21,6 +22,10 @@ export default function MeetingAnswer({ me, onAnswer }: { me: MeetingVoteRow | n
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState("");
+  // Открыл встречу, куда его позвали, — организатор увидит «видел».
+  useEffect(() => {
+    if (me && me.role !== "watcher") markSeen("meeting", me.id);
+  }, [me]);
 
   if (!me || me.role === "watcher") return null;
 

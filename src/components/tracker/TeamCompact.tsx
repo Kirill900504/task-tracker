@@ -40,6 +40,15 @@ const ROLE_MENU: { role: TaskParticipantRole; label: string }[] = [
 
 type Status = { cls: string; icon: IconName | null; text: string };
 
+function seenWhen(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const today = new Date();
+  const time = pad(d.getHours()) + ":" + pad(d.getMinutes());
+  return d.toDateString() === today.toDateString() ? "в " + time : pad(d.getDate()) + "." + pad(d.getMonth() + 1) + " в " + time;
+}
+
 function statusOf(p: Participant): Status | null {
   if (p.doneAt) return { cls: "status-done", icon: "flag", text: "сделал" + (p.doneComment ? ": " + p.doneComment : "") };
   if (hasDeclined(p)) return { cls: "status-declined", icon: "ban", text: "не может" + (p.declineReason ? ": " + p.declineReason : "") };
@@ -47,6 +56,12 @@ function statusOf(p: Participant): Status | null {
   // «Ждём ответа» от человека без мессенджера — неправда: задача до него
   // не доехала. См. то же правило в бывшем TaskParticipants.tsx.
   if (p.reachable === false) return { cls: "status-unreachable", icon: "mailbox", text: "не подключён — задача не ушла" };
+  // «Видел, но молчит» и «ещё не видел» — разные разговоры: первому
+  // напоминают, со вторым договариваются (отзыв Витовского 25.09.2026,
+  // миграция 0042).
+  if (p.role === "executor" && p.seenAt) return { cls: "status-waiting", icon: "eye", text: "видел " + seenWhen(p.seenAt) + ", ответа нет" };
+  // Без отметки — по-прежнему «ждём ответа», а не «не открывал»: отметку
+  // ставит только трекер, а половина людей читает задачу в мессенджере.
   if (p.role === "executor") return { cls: "status-waiting", icon: null, text: "ждём ответа" };
   return null;
 }

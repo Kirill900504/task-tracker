@@ -17,6 +17,16 @@ import { onRevive } from "@/lib/revive";
 // это действительно всем и всегда» — здесь не нужно: отметка «непрочитано»
 // мимо одного устройства не стоит переноса на сервер.
 const READ_KEY = "rokas:comments-read";
+// Отметка о прочтении сообщает об этом всем счётчикам на странице: иначе
+// значок на кубике гас только на следующем перечитывании, через минуту
+// после того, как обсуждение уже открыли и прочли.
+const READ_EVENT = "rokas:comments-read";
+
+// Встречи — с 06.10.2026 (отзыв Витовского: «новые сообщения в обсуждениях
+// — красная точка или количество новых»). Ключ задачи — её id, как и был, а
+// у встречи с приставкой: старые отметки задач остаются действительными.
+type Kind = "task" | "meeting";
+const markKey = (kind: Kind, id: string) => (kind === "task" ? id : "m:" + id);
 
 function readMarks(): Record<string, string> {
   try {
@@ -28,12 +38,13 @@ function readMarks(): Record<string, string> {
 
 // Открыли карточку — обсуждение внутри неё считается прочитанным. Зовётся
 // из TaskModal при открытии существующей задачи.
-export function markTaskCommentsRead(taskId: string) {
+export function markTaskCommentsRead(taskId: string, kind: Kind = "task") {
   if (!taskId) return;
   try {
     const marks = readMarks();
-    marks[taskId] = new Date().toISOString();
+    marks[markKey(kind, taskId)] = new Date().toISOString();
     localStorage.setItem(READ_KEY, JSON.stringify(marks));
+    window.dispatchEvent(new Event(READ_EVENT));
   } catch {
     // Приватный режим или запрет на хранилище — переживём без метки, значок
     // просто продолжит показывать то же число.
@@ -42,7 +53,7 @@ export function markTaskCommentsRead(taskId: string) {
 
 type Row = { item_id: string; created_at: string; author_user_id: string | null };
 
-export function useUnreadTaskComments(taskIds: string[]): Record<string, number> {
+export function useUnreadTaskComments(taskIds: string[], kind: Kind = "task"): Record<string, number> {
   const [counts, setCounts] = useState<Record<string, number>>({});
   // Список карточек на доске меняется на каждое перетаскивание и фильтр —
   // а сравнивать эффекту нужно СОДЕРЖИМОЕ, а не ссылку на новый массив.
@@ -65,7 +76,7 @@ export function useUnreadTaskComments(taskIds: string[]): Record<string, number>
       const { data } = await db
         .from("item_comments")
         .select("item_id, created_at, author_user_id")
-        .eq("item_kind", "task")
+        .eq("item_kind", kind)
         .in("item_id", taskIds)
         .eq("system", false)
         .is("deleted_at", null);
@@ -74,7 +85,7 @@ export function useUnreadTaskComments(taskIds: string[]): Record<string, number>
       for (const row of (data || []) as Row[]) {
         // Своё написанное не считается непрочитанным собственным автором.
         if (row.author_user_id && row.author_user_id === userId) continue;
-        const since = marks[row.item_id];
+        const since = marks[markKey(kind, row.item_id)];
         if (since && row.created_at <= since) continue;
         next[row.item_id] = (next[row.item_id] || 0) + 1;
       }
@@ -87,12 +98,15 @@ export function useUnreadTaskComments(taskIds: string[]): Record<string, number>
     // подписки на каждую отдельную задачу разом (дорого) счётчик догоняет
     // раз в минуту и по обычным поводам вернуться на вкладку.
     const stopRevive = onRevive(pull, { everyMs: 60_000 });
+    const onRead = () => void pull();
+    window.addEventListener(READ_EVENT, onRead);
     return () => {
       cancelled = true;
       stopRevive();
+      window.removeEventListener(READ_EVENT, onRead);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- taskIds сравнивается через `key`
-  }, [key]);
+  }, [key, kind]);
 
   return counts;
 }

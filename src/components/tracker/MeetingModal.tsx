@@ -3,7 +3,7 @@
 // Port of the meeting modal from trackerMarkup.ts + openMeetingModal()/
 // meetingSaveBtn/deleteMeetingBtn/setMeetingStatus/performReschedule in
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import ItemChat from "./ItemChat";
 import MeetingAnswer from "./MeetingAnswer";
@@ -29,6 +29,7 @@ import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { isCurrent, voteTally } from "@/lib/meetingVotes";
 import { awaitsRecap } from "@/lib/calendarLogic";
+import { markTaskCommentsRead } from "@/hooks/useUnreadTaskComments";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS: string[] = (() => {
@@ -139,6 +140,11 @@ export default function MeetingModal({
   // lib/authorName.
   const authors = useAuthors();
   const ask = useAsk();
+  // Открыли встречу — её обсуждение прочитано на этом устройстве (значок на
+  // карточке гаснет, см. useUnreadTaskComments).
+  useEffect(() => {
+    if (meeting?.id) markTaskCommentsRead(meeting.id, "meeting");
+  }, [meeting?.id]);
   const [result, setResult] = useState(meeting?.result ?? "");
   // Выбора «Назначаю / Предлагаю время» в форме больше нет.
   //
@@ -306,7 +312,13 @@ export default function MeetingModal({
   function voteOf(name: string): { state: string; mark: string; title: string } {
     const row = votes.find((v) => v.name === name);
     if (!row || row.response === "none" || !isCurrent(row, round)) {
-      return { state: "none", mark: "•", title: `${withoutSelfMark(name)} — пока не ответил` };
+      // «Видел, но молчит» — со вторым договариваются, первому напоминают
+      // (миграция 0042, отзыв Витовского 25.09.2026).
+      return {
+        state: "none",
+        mark: "•",
+        title: row?.seenAt ? `${withoutSelfMark(name)} открывал встречу, но пока не ответил` : `${withoutSelfMark(name)} — пока не ответил`,
+      };
     }
     if (row.response === "no") {
       return { state: "no", mark: "✕", title: `${withoutSelfMark(name)} не сможет${row.reason ? ": " + row.reason : ""}` };

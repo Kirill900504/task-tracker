@@ -73,6 +73,18 @@ export async function POST(req: Request) {
   const myName = withoutSelfMark(rowName) || "Участник";
   const now = new Date().toISOString();
 
+  // «Видел»: человек открыл задачу или встречу (миграция 0042, отзыв
+  // Витовского «чтобы было понятно, что исполнитель заходил в задачу, но
+  // не принял»). Только своя строка — по assignee_id из членства, а не из
+  // запроса. Ни хроники, ни сообщений: это отметка, а не событие, и
+  // постановщик видит её в составе задачи, когда сам туда заглянет.
+  if (body.action === "seen") {
+    if (!body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+    const table = body.kind === "meeting" ? "meeting_participants" : "task_participants";
+    await admin.from(table).update({ seen_at: now }).eq("id", body.participantId).eq("assignee_id", m.assignee_id);
+    return NextResponse.json({ ok: true });
+  }
+
   // «Взять в работу»: мысль становится задачей на этого же человека.
   //
   // Только через сервер. Завести задачу руководитель может сам, а вот

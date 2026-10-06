@@ -59,6 +59,20 @@ test("карточка задачи говорит, кто поручил, ко�
   // круга правок — поля createdAt в Task не существовало вовсе).
   await expect(facts).toContainText(/\d{2}\.\d{2}\.\d{4}/);
 
+  // Открыл задачу, где он исполнитель, — в базе отметка «видел» (миграция
+  // 0042): по ней постановщик отличает «не открывал» от «прочёл и молчит».
+  await expect
+    .poll(
+      async () => {
+        const { data: t } = await admin.from("tasks").select("id").eq("title", title).maybeSingle();
+        if (!t) return null;
+        const { data: p } = await admin.from("task_participants").select("seen_at").eq("task_id", t.id).eq("role", "executor").maybeSingle();
+        return p?.seen_at || null;
+      },
+      { timeout: 20_000 },
+    )
+    .not.toBeNull();
+
   // Отчёт исполнителя попадает в блок «Результат» — с именем и временем.
   await page.locator(".my-work .btn", { hasText: "Сделал" }).click();
   await page.fill("#myWorkDone", "Готово, проверьте");

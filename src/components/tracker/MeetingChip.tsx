@@ -47,6 +47,7 @@ export default function MeetingChip({
   onQuickReschedule,
   votes,
   justCreated,
+  unreadCount,
   // Моя ли это встреча. Чужую нельзя ни перенести, ни удалить, ни закрыть
   // итогом — это решения того, кто её назначил (см. MeetingsPanel).
   canManage = true,
@@ -62,6 +63,9 @@ export default function MeetingChip({
   // слоем (см. useMeetingVotes).
   votes?: { yes: string[]; no: { name: string; reason: string }[]; pending: string[] };
   justCreated?: boolean;
+  // Сколько новых реплик в обсуждении встречи — тот же значок, что у
+  // задачи (useUnreadTaskComments).
+  unreadCount?: number;
   canManage?: boolean;
 }) {
   // The participants tooltip lives in <body> and is positioned from the
@@ -127,6 +131,11 @@ export default function MeetingChip({
       <div className="meeting-body">
         <div className="meeting-head">
           <span className="mtitle">{meeting.title}</span>
+          {!!unreadCount && (
+            <span className="task-mark unread" title={`${unreadCount} новых сообщений в обсуждении`}>
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
           {meeting.status === "success" && (
             <span className="mstatus success" title="Успешно завершена">
               <Icon name="check" size={14} />

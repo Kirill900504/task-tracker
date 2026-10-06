@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Participant } from "@/hooks/useTaskParticipants";
 import { fmtDate } from "@/lib/taskDisplay";
 import AnswerForm from "./AnswerForm";
 import Icon from "./Icon";
 import { humanError } from "@/lib/humanError";
+import { markSeen } from "@/lib/seenMark";
 
 // Что от ВАС ждут по этой задаче — внутри самой задачи.
 //
@@ -85,6 +86,11 @@ export default function TaskAnswer({
   const [pending, setPending] = useState<Pending>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState("");
+  // Открыл задачу, в которой он исполнитель, — постановщик увидит «видел»
+  // (миграция 0042).
+  useEffect(() => {
+    markSeen("task", me?.id);
+  }, [me?.id]);
 
   if (!me || me.role !== "executor") return null;
   if (closed && !me.doneAt && !me.declinedAt) return null;

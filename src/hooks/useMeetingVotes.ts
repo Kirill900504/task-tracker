@@ -33,6 +33,7 @@ type Row = {
   // Придёт, но позже. Для подсчёта это обычный «да» (миграция 0029) — но
   // видеть это Кирилл должен, иначе ответ есть, а на экране его нет.
   late: boolean | null;
+  seen_at: string | null;
   assignees: { name: string } | { name: string }[] | null;
 };
 
@@ -49,7 +50,7 @@ export function useMeetingVotes() {
   const fetchAll = useCallback(async () => {
     const db = createClient();
     const [{ data: rows }, { data: assignees }] = await Promise.all([
-      db.from("meeting_participants").select("id, meeting_id, assignee_id, role, response, reason, round, late, assignees(name)"),
+      db.from("meeting_participants").select("id, meeting_id, assignee_id, role, response, reason, round, late, seen_at, assignees(name)"),
       db.from("assignees").select("id, name"),
     ]);
 
@@ -65,6 +66,7 @@ export function useMeetingVotes() {
         reason: raw.reason,
         round: raw.round,
         late: !!raw.late,
+        seenAt: raw.seen_at,
       });
     }
     const names: Record<string, string> = {};

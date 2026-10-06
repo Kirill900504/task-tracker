@@ -47,6 +47,7 @@ type Row = {
   reschedule_requested_at: string | null;
   reschedule_to: string | null;
   reschedule_reason: string | null;
+  seen_at: string | null;
   assignees: Person | Person[] | null;
 };
 
@@ -165,7 +166,7 @@ export function useTaskParticipants() {
       db
         .from("task_participants")
         .select(
-          "id, task_id, assignee_id, role, accepted_at, done_at, done_comment, done_files, declined_at, decline_reason, reschedule_requested_at, reschedule_to, reschedule_reason, assignees(name, telegram_chat_id, max_user_id)",
+          "id, task_id, assignee_id, role, accepted_at, done_at, done_comment, done_files, declined_at, decline_reason, reschedule_requested_at, reschedule_to, reschedule_reason, seen_at, assignees(name, telegram_chat_id, max_user_id)",
         ),
       // The full list, the owner's own row included: work can be put on
       // yourself, and the send menu is the only place that has a reason to
@@ -195,6 +196,7 @@ export function useTaskParticipants() {
         reachable: reachableOf(raw),
         rescheduleTo: raw.reschedule_to,
         rescheduleReason: raw.reschedule_reason,
+        seenAt: raw.seen_at,
       };
       (grouped[raw.task_id] ||= []).push(p);
     }

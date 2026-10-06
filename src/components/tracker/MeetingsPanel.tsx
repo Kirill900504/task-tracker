@@ -18,6 +18,7 @@ import { linkTaskAndMeeting } from "@/lib/itemLink";
 import type { useToasts } from "@/hooks/useToasts";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useAsk } from "@/components/Ask";
+import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 import { isMine } from "@/lib/ownership";
 import { useDropHandler } from "./dnd/TrackerDnd";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -237,6 +238,8 @@ export default function MeetingsPanel({
   // Прошедшие без итога — наверх и отдельно. Это единственные встречи в
   // списке, которые чего-то ждут ОТ ВАС: остальные просто впереди.
   const needRecap = all.filter((m) => awaitsRecap(m));
+  // Новые реплики в обсуждении каждой встречи списка — значком на карточке.
+  const unread = useUnreadTaskComments(all.map((m) => m.id), "meeting");
   const sorted = all.filter((m) => !awaitsRecap(m));
   const resolved = sortMeetingsForList(meetings, true).filter((m) => m.status && m.status !== "planned" && m.status !== "proposed");
 
@@ -478,6 +481,7 @@ export default function MeetingsPanel({
               onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
               votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
+              unreadCount={unread[m.id]}
               canManage={isMine(m, myUserId)}
             />
           ))}
@@ -498,6 +502,7 @@ export default function MeetingsPanel({
               onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
               votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
+              unreadCount={unread[m.id]}
               canManage={isMine(m, myUserId)}
               justCreated={justCreatedId === m.id}
             />
