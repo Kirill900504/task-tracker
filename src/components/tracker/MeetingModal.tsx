@@ -23,7 +23,7 @@ import Icon from "./Icon";
 import ChipChoice from "./ChipChoice";
 import ItemFacts from "./ItemFacts";
 import ExpandableText from "./ExpandableText";
-import { busyStarts, defaultMeetingStart, minutesOf, slotOf, startsInPast } from "@/lib/meetingTime";
+import { WORKDAY_SLOTS, busyStarts, defaultMeetingStart, minutesOf, slotOf, startsInPast } from "@/lib/meetingTime";
 import { SEARCH_FROM, matchesPerson } from "@/lib/personSearch";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
@@ -32,13 +32,7 @@ import { awaitsRecap } from "@/lib/calendarLogic";
 import { markTaskCommentsRead } from "@/hooks/useUnreadTaskComments";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
-const TIME_SLOTS: string[] = (() => {
-  const out: string[] = [];
-  for (let m = 9 * 60; m <= 18 * 60; m += 30) {
-    out.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
-  }
-  return out;
-})();
+const TIME_SLOTS = WORKDAY_SLOTS;
 
 // Дни, на которые встречи назначают чаще всего, — теми же тремя кнопками,
 // что и срок задачи (см. TaskModal.QUICK_DEADLINES).

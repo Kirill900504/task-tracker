@@ -41,6 +41,7 @@ import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import { columnOf } from "@/lib/kanban";
+import { defaultMeetingStart } from "@/lib/meetingTime";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole, MEMBER_ROLE_LABELS } from "@/hooks/useWorkspaceRole";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
@@ -327,11 +328,14 @@ export default function NewTracker() {
   // replace the task itself.
   const [pendingIdeaConversion, setPendingIdeaConversion] = useState<string | null>(null);
 
+  // Время в этих заготовках встречи нарочно не задаётся: его выбирает форма
+  // (defaultMeetingStart) — первый ещё не начавшийся слот. Жёсткое «10:00»
+  // вечером означало встречу в прошлом, и форма сама же о ней переспрашивала.
   function ideaDroppedOnDate(ideaId: string, date: string) {
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
     setPendingIdeaConversion(idea.id);
-    setOpenMeetingRequest({ title: idea.text, date, time: "10:00" });
+    setOpenMeetingRequest({ title: idea.text, date });
   }
 
   function taskDroppedOnDate(taskId: string, date: string) {
@@ -341,7 +345,6 @@ export default function NewTracker() {
     setOpenMeetingRequest({
       title: task.title,
       date,
-      time: "10:00",
       participants: task.assignee ? [task.assignee] : [],
       fromTaskId: task.id,
       fromTaskTitle: task.title,
@@ -364,7 +367,9 @@ export default function NewTracker() {
   async function convertIdeaToMeeting(ideaId: string) {
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
-    const result = await dateTimeConfirm.ask(`Встреча «${idea.text}» на:`, todayStr(), "10:00");
+    // Тот же выбор, что у формы встречи: не «сегодня, 10:00» вслепую.
+    const start = defaultMeetingStart(todayStr());
+    const result = await dateTimeConfirm.ask(`Встреча «${idea.text}» на:`, start.date, start.time);
     if (!result) return;
     actions.deleteIdea(idea.id);
     const meeting: Meeting = {
@@ -550,7 +555,6 @@ export default function NewTracker() {
       setOpenMeetingRequest({
         title: task.title,
         date: selectedDate ?? todayStr(),
-        time: "10:00",
         participants: people,
         fromTaskId: task.id,
         fromTaskTitle: task.title,

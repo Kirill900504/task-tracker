@@ -83,9 +83,17 @@ export function endsAt(time: string, duration: unknown): string {
 // уходили людям (QA-проход 06.10.2026). Теперь — первый слот, который ещё не
 // начался; если на сегодня таких не осталось, — завтра с утра. На любой
 // другой день — 10:00, как и было.
+// Рабочий день кнопками: 09:00–18:00 через полчаса. Одна сетка на форму
+// встречи и на все места, где время предлагается заранее.
+export const WORKDAY_SLOTS: string[] = (() => {
+  const out: string[] = [];
+  for (let m = 9 * 60; m <= 18 * 60; m += 30) out.push(timeOf(m));
+  return out;
+})();
+
 export function defaultMeetingStart(
   date: string,
-  slots: string[],
+  slots: string[] = WORKDAY_SLOTS,
   now: Date = new Date(),
 ): { date: string; time: string } {
   const today = isoDate(now);
