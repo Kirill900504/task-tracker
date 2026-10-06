@@ -212,7 +212,7 @@ export default function PeoplePicker({
       {menuFor && (
         <ActionMenu
           anchor={menuFor.anchor}
-          title={menuFor.person.name}
+          title={shown(menuFor.person.name)}
           // Только роли. «Убрать с задачи» отсюда ушло — это второе нажатие
           // по самой кнопке; а удаления человека из списка людей нет вовсе
           // (см. комментарий наверху файла).

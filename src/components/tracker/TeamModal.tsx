@@ -441,7 +441,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
             return (
               <ActionMenu
                 anchor={menuFor.anchor}
-                title={menuFor.name}
+                title={withoutSelfMark(menuFor.name)}
                 items={items.map((item) => ({
                   ...item,
                   onSelect: () => {

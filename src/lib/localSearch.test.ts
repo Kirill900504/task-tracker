@@ -63,6 +63,15 @@ describe("queryTerms", () => {
     expect(queryTerms("что там по складу")).toEqual(["склад"]);
   });
 
+  // «КП», «ТЗ», «1С» не находились никогда: слова короче трёх букв
+  // выбрасывались из запроса целиком (QA 06.10.2026).
+  it("keeps two-letter abbreviations and matches them by word start only", () => {
+    expect(queryTerms("КП")).toEqual(["кп"]);
+    expect(matchesTerms("Отправить КП клиенту", queryTerms("кп"))).toBe(true);
+    expect(matchesTerms("Подготовить ТЗ на 1С", queryTerms("1с"))).toBe(true);
+    expect(matchesTerms("Закупка канцелярии", queryTerms("кп"))).toBe(false);
+  });
+
   it("returns nothing for an empty query", () => {
     expect(queryTerms("   ")).toEqual([]);
   });

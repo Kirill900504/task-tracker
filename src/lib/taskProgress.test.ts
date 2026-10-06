@@ -153,6 +153,13 @@ describe("the line on the card", () => {
     expect(progressLabel(list)).toBe("2 из 4 · сделали: Аня, Борис · ждём: Вера, Глеб");
   });
 
+  // Строку читают все участники: коллега видел «сделали: Кирилл (я)» —
+  // чужое «я» как своё (QA 06.10.2026).
+  it("never shows the owner's «(я)» mark", () => {
+    const list = [person("Кирилл Кучеренко (я)", { doneAt: t, doneComment: "ок" }), person("Аня (я)")];
+    expect(progressLabel(list)).toBe("1 из 2 · сделали: Кирилл Кучеренко · ждём: Аня");
+  });
+
   it("names whoever refused", () => {
     const list = [person("Аня", { declinedAt: t, declineReason: "болен" })];
     expect(progressLabel(list)).toBe("0 из 1 · не может: Аня");

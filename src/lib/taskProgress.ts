@@ -12,6 +12,8 @@
 // once, is what keeps the rule from drifting between the card, the bot and
 // the morning briefing.
 
+import { withoutSelfMark } from "@/lib/actorName";
+
 export type TaskParticipantRole = "executor" | "coexecutor" | "watcher";
 
 export type TaskParticipant = {
@@ -172,10 +174,13 @@ export const STAGE_LABEL: Record<TaskStage, string> = {
 export function progressLabel(participants: TaskParticipant[]): string {
   const p = taskProgress(participants);
   if (!p.total) return "";
+  // Имена — без пометки «(я)»: строку читают ВСЕ участники, и коллега видел
+  // «сделали: Кирилл (я)», то есть чужое «я» как своё (QA 06.10.2026).
+  const shown = (names: string[]) => names.map(withoutSelfMark).join(", ");
   const parts = [`${p.doneCount} из ${p.total}`];
-  if (p.doneNames.length) parts.push("сделали: " + p.doneNames.join(", "));
-  if (p.pendingNames.length) parts.push("ждём: " + p.pendingNames.join(", "));
-  if (p.declined.length) parts.push("не может: " + p.declined.map((d) => d.name).join(", "));
+  if (p.doneNames.length) parts.push("сделали: " + shown(p.doneNames));
+  if (p.pendingNames.length) parts.push("ждём: " + shown(p.pendingNames));
+  if (p.declined.length) parts.push("не может: " + shown(p.declined.map((d) => d.name)));
   return parts.join(" · ");
 }
 

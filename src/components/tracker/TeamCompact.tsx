@@ -7,7 +7,6 @@ import { hasDeclined, progressLabel, taskProgress, taskStage } from "@/lib/taskP
 import type { Participant, PersonOption } from "@/hooks/useTaskParticipants";
 import { useAsk } from "@/components/Ask";
 import { withoutSelfMark } from "@/lib/actorName";
-import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import ActionMenu from "./ActionMenu";
 import { SEARCH_FROM } from "@/lib/personSearch";
 import Icon, { type IconName } from "./Icon";
@@ -116,8 +115,10 @@ export default function TeamCompact({
   part?: "decisions" | "team";
 }) {
   const ask = useAsk();
-  const identity = useWorkspaceRole();
-  const shown = (name: string) => (identity.isOwner ? name : withoutSelfMark(name));
+  // Пометка «(я)» не показывается никому, владельцу тоже: 24.09.2026 он
+  // попросил убрать её с экрана целиком («убери это дурацкое (я)»), а здесь
+  // её оставили «для него одного» — так она и висела в «Кто на задаче».
+  const shown = (name: string) => withoutSelfMark(name);
 
   const progress = taskProgress(participants);
   const stage = taskStage(participants, approvalState);
