@@ -225,6 +225,36 @@ export async function findColleagueByChat(
   return (data as { id: string; name: string; user_id: string } | null) || null;
 }
 
+// The owner as a RECIPIENT: his chat lives on his account, not on his row in
+// the people list, so `findColleagueByChat` never finds him. That was fine
+// while he only ever sent work; since managers assign work and meetings to
+// him too, every recipient button in his chat — «Буду», «Принял», «Сделал»
+// — answered «Эта кнопка не для вас» (06.10.2026). His row is the one marked
+// «(я)» in his own space: the same mark `/api/workspace/report` uses.
+export async function findOwnerSelfByChat(
+  admin: SupabaseClient,
+  chatId: number,
+  channel: BotChannelConfig,
+): Promise<{ id: string; name: string; user_id: string } | null> {
+  const { data: account } = await admin
+    .from(channel.accountsTable)
+    .select("user_id")
+    .eq(channel.chatColumn, chatId)
+    .limit(1)
+    .maybeSingle();
+  const ownerId = (account as { user_id: string } | null)?.user_id;
+  if (!ownerId) return null;
+  const { data } = await admin
+    .from("assignees")
+    .select("id, name, user_id")
+    .eq("user_id", ownerId)
+    .like("name", "%(я)")
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  return (data as { id: string; name: string; user_id: string } | null) || null;
+}
+
 export async function listColleagues(admin: SupabaseClient, userId: string): Promise<ColleagueRow[]> {
   const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").eq("user_id", userId).order("created_at");
   return (data || []) as ColleagueRow[];

@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig, BotTransport } from "@/lib/botTransport";
-import { colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
+import { answerOwnOpenQuestion, colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
 import { navButtons } from "@/lib/colleagueQueries";
-import { findColleagueByChat } from "@/lib/colleagues";
+import { findColleagueByChat, findOwnerSelfByChat } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
@@ -807,6 +807,23 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     const menu = ownerMenu();
     await ctx.transport.send(ctx.chatId, menu.text, menu.buttons?.length ? { buttons: menu.buttons } : undefined);
     return;
+  }
+
+  // The owner is a recipient too: a manager sets him a task or a meeting,
+  // he presses «Сделал» or «Не смогу», and the bot asks him for the words.
+  // Those words are the answer, not a new assignment — but only while the
+  // question is fresh (see answerOwnOpenQuestion).
+  const self = await findOwnerSelfByChat(ctx.admin, ctx.chatId, ctx.channel);
+  if (self) {
+    const answered = await answerOwnOpenQuestion(ctx.admin, self, trimmed);
+    if (answered) {
+      await ctx.transport.send(ctx.chatId, answered.reply, answered.buttons?.length ? { buttons: answered.buttons } : undefined);
+      // Telling the author is the point; telling himself is noise.
+      if (answered.notifyOwner && answered.notifyTo && answered.notifyTo !== account.user_id) {
+        await notifyAuthor(ctx.admin, account.user_id, answered.notifyTo, answered.notifyOwner, answered.notice);
+      }
+      return;
+    }
   }
 
   // Read-only query commands ("сегодня", "просрочено", "встречи") are matched

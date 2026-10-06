@@ -64,18 +64,25 @@ async function recipientsByName(
 
 // Одно сообщение человеку: коллеге — в его мессенджер, владельцу — во все,
 // что он подключил (он читает тот, что открыт).
+//
+// «Во все» — буквально: до 06.10.2026 цикл выходил на первом удачном
+// отправлении, то есть владелец получал приглашение в Telegram и никогда в
+// MAX, хотя комментарий выше обещал оба. Коллеге список и так из одного
+// чата (recipientsByName режет его до первого), так что для него не
+// меняется ничего.
 async function deliver(
   person: Recipient,
   text: string,
   buttons: Parameters<typeof sendToColleague>[2],
 ): Promise<{ ok: boolean; error?: string }> {
   let error = "";
+  let ok = false;
   for (const target of person.targets) {
     const result = await sendToColleague(target, text, buttons);
-    if (result.ok) return { ok: true };
-    error = result.error || error;
+    if (result.ok) ok = true;
+    else error = result.error || error;
   }
-  return { ok: false, error };
+  return ok ? { ok: true } : { ok: false, error };
 }
 
 function nobodyReachable(unlinked: string[], fallback: string): string {

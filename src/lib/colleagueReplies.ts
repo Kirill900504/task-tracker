@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
-import { findColleagueByChat, meetingButtons, rescheduleButtons, RESCHEDULE_OPTIONS } from "@/lib/colleagues";
+import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, rescheduleButtons, RESCHEDULE_OPTIONS } from "@/lib/colleagues";
 import { uid } from "@/lib/uid";
+import { withoutSelfMark } from "@/lib/actorName";
 import { recordEvent } from "@/lib/itemHistory";
 import { newTaskRow } from "@/lib/newTask";
 import { deliverComment } from "@/lib/commentDelivery";
@@ -149,7 +150,9 @@ export async function handleColleagueCallback(
   action: CallbackAction,
   channel: BotChannelConfig,
 ): Promise<CallbackOutcome> {
-  const colleague = await findColleagueByChat(admin, chatId, channel);
+  // The owner's chat is on his account, not on a people row — without the
+  // second lookup every recipient button he was sent stayed dead.
+  const colleague = (await findColleagueByChat(admin, chatId, channel)) ?? (await findOwnerSelfByChat(admin, chatId, channel));
   if (!colleague) return { toast: "Этот чат не подключён" };
 
   // «Ответить» ничего не меняет в задаче — оно только направляет следующее
@@ -228,14 +231,14 @@ export async function handleColleagueCallback(
         userId: task.user_id,
         kind: "task",
         itemId: task.id,
-        text: `✅ ${colleague.name} принял в работу`,
+        text: `✅ ${withoutSelfMark(colleague.name)} принял в работу`,
       });
       return {
         toast: "Принято",
         rewriteTo: `📋 ${task.title}\n\n✅ Принято в работу`,
         notifyTo: task.created_by,
-        notifyOwner: `✅ ${colleague.name} принял в работу: «${task.title}»`,
-        notice: { kind: "accepted", item: task.title, who: colleague.name },
+        notifyOwner: `✅ ${withoutSelfMark(colleague.name)} принял в работу: «${task.title}»`,
+        notice: { kind: "accepted", item: task.title, who: withoutSelfMark(colleague.name) },
       };
     }
 
@@ -264,10 +267,10 @@ export async function handleColleagueCallback(
           toast: "Отмечено",
           rewriteTo: `📋 ${task.title}\n\n🏁 Отмечено выполненным.\nНапишите одним сообщением, что именно сделано — это увидит постановщик.`,
           notifyTo: task.created_by,
-          notice: { kind: closed ? "reported_all" : "reported", item: task.title, who: colleague.name },
+          notice: { kind: closed ? "reported_all" : "reported", item: task.title, who: withoutSelfMark(colleague.name) },
           notifyOwner: closed
-            ? `🏁 ${colleague.name} выполнил: «${task.title}» — отчитались все, задача ждёт вашей приёмки`
-            : `🏁 ${colleague.name} выполнил свою часть: «${task.title}»`,
+            ? `🏁 ${withoutSelfMark(colleague.name)} выполнил: «${task.title}» — отчитались все, задача ждёт вашей приёмки`
+            : `🏁 ${withoutSelfMark(colleague.name)} выполнил свою часть: «${task.title}»`,
         };
       }
 
@@ -280,14 +283,14 @@ export async function handleColleagueCallback(
         userId: task.user_id,
         kind: "task",
         itemId: task.id,
-        text: `🏁 ${colleague.name} отметил выполненной`,
+        text: `🏁 ${withoutSelfMark(colleague.name)} отметил выполненной`,
       });
       return {
         toast: "Отмечено выполненным",
         rewriteTo: `📋 ${task.title}\n\n🏁 Выполнено`,
         notifyTo: task.created_by,
-        notifyOwner: `🏁 ${colleague.name} выполнил: «${task.title}»`,
-        notice: { kind: "reported_all", item: task.title, who: colleague.name },
+        notifyOwner: `🏁 ${withoutSelfMark(colleague.name)} выполнил: «${task.title}»`,
+        notice: { kind: "reported_all", item: task.title, who: withoutSelfMark(colleague.name) },
       };
     }
 
@@ -300,8 +303,8 @@ export async function handleColleagueCallback(
           toast: "Передал",
           rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
           notifyTo: task.created_by,
-          notifyOwner: `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
-          notice: { kind: "declined", item: task.title, who: colleague.name },
+          notifyOwner: `⛔ ${withoutSelfMark(colleague.name)} не может выполнить: «${task.title}»`,
+          notice: { kind: "declined", item: task.title, who: withoutSelfMark(colleague.name) },
         };
       }
       await admin
@@ -330,9 +333,9 @@ export async function handleColleagueCallback(
         rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
         notifyTo: task.created_by,
         notifyOwner: answered
-          ? `⛔ ${colleague.name} не может выполнить: «${task.title}» — ответили все, задача ждёт вашего решения`
-          : `⛔ ${colleague.name} не может выполнить: «${task.title}»`,
-        notice: { kind: "declined", item: task.title, who: colleague.name },
+          ? `⛔ ${withoutSelfMark(colleague.name)} не может выполнить: «${task.title}» — ответили все, задача ждёт вашего решения`
+          : `⛔ ${withoutSelfMark(colleague.name)} не может выполнить: «${task.title}»`,
+        notice: { kind: "declined", item: task.title, who: withoutSelfMark(colleague.name) },
       };
     }
 
@@ -425,7 +428,7 @@ export async function handleColleagueCallback(
         userId: meeting.user_id,
         kind: "meeting",
         itemId: meeting.id,
-        text: late ? `🕐 ${colleague.name} будет, но опоздает` : coming ? `✅ ${colleague.name} будет` : `❌ ${colleague.name} не сможет`,
+        text: late ? `🕐 ${withoutSelfMark(colleague.name)} будет, но опоздает` : coming ? `✅ ${withoutSelfMark(colleague.name)} будет` : `❌ ${withoutSelfMark(colleague.name)} не сможет`,
       });
 
       // confirmed_by остаётся в согласии со строками, пока его кто-то читает.
@@ -454,10 +457,10 @@ export async function handleColleagueCallback(
         // без них оно не действует.
         rewriteButtons: meetingButtons(meeting.id as string),
         notifyTo: meeting.created_by,
-        notice: { kind: late ? "vote_late" : "vote_yes", item: meeting.title as string, who: colleague.name, what: when },
+        notice: { kind: late ? "vote_late" : "vote_yes", item: meeting.title as string, who: withoutSelfMark(colleague.name), what: when },
         notifyOwner: late
-          ? `🕐 ${colleague.name} будет на встрече «${meeting.title}» (${when}), но опоздает`
-          : `✅ ${colleague.name} будет на встрече «${meeting.title}» (${when})`,
+          ? `🕐 ${withoutSelfMark(colleague.name)} будет на встрече «${meeting.title}» (${when}), но опоздает`
+          : `✅ ${withoutSelfMark(colleague.name)} будет на встрече «${meeting.title}» (${when})`,
       };
     }
     // Организатору сразу говорится и то, что причины пока нет: иначе
@@ -473,8 +476,8 @@ export async function handleColleagueCallback(
         "Передумали? Нажмите другую кнопку — ответ можно менять до начала.",
       rewriteButtons: meetingButtons(meeting.id as string),
       notifyTo: meeting.created_by,
-      notifyOwner: `❌ ${colleague.name} не сможет быть на встрече «${meeting.title}» (${when})\nСпросил, почему — пришлю, как ответит.`,
-      notice: { kind: "vote_no", item: meeting.title as string, who: colleague.name, what: `${when} — причину спросил` },
+      notifyOwner: `❌ ${withoutSelfMark(colleague.name)} не сможет быть на встрече «${meeting.title}» (${when})\nСпросил, почему — пришлю, как ответит.`,
+      notice: { kind: "vote_no", item: meeting.title as string, who: withoutSelfMark(colleague.name), what: `${when} — причину спросил` },
     };
   }
 
@@ -527,8 +530,8 @@ export async function handleColleagueCallback(
       toast: "Завёл задачу",
       rewriteTo: `💡 ${title}\n\n➕ Взято в работу — теперь это ваша задача`,
       notifyTo: idea.created_by,
-      notifyOwner: `➕ ${colleague.name} взял мысль в работу: «${title}»`,
-      notice: { kind: "idea_taken", item: title, who: colleague.name },
+      notifyOwner: `➕ ${withoutSelfMark(colleague.name)} взял мысль в работу: «${title}»`,
+      notice: { kind: "idea_taken", item: title, who: withoutSelfMark(colleague.name) },
     };
   }
 
@@ -605,25 +608,7 @@ export async function handleColleagueText(
     .eq("assignee_id", colleague.id)
     .eq("user_id", colleague.user_id);
 
-  type Row = {
-    id: string;
-    task_id: string;
-    done_at: string | null;
-    done_comment: string | null;
-    declined_at: string | null;
-    decline_reason: string | null;
-    reschedule_requested_at: string | null;
-    reschedule_to: string | null;
-    reschedule_reason: string | null;
-    tasks: { title: string; created_by: string | null } | { title: string; created_by: string | null }[] | null;
-  };
-
-  const rows = ((data as unknown as Row[]) || []).filter(
-    (r) =>
-      (r.done_at && !r.done_comment) ||
-      (r.declined_at && !r.decline_reason) ||
-      (r.reschedule_requested_at && !r.reschedule_reason),
-  );
+  const rows = openRows((data as unknown as OpenRow[]) || []);
 
   // Нажатое «Ответить» сильнее незакрытого вопроса: человек только что
   // указал пальцем, куда пишет, и спорить с этим значит снова угадывать.
@@ -652,9 +637,76 @@ export async function handleColleagueText(
     return canDictate ? null : handleChatMessage(admin, colleague, body, source);
   }
 
-  // Самая свежая: человек отвечает на то, что нажал только что.
-  const askedAt = (r: Row) => Date.parse(r.done_at || r.declined_at || r.reschedule_requested_at || "") || 0;
-  rows.sort((a, b) => askedAt(b) - askedAt(a));
+  return fillOpenAnswer(admin, colleague, rows, body);
+}
+
+type OpenRow = {
+  id: string;
+  task_id: string;
+  done_at: string | null;
+  done_comment: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
+  reschedule_requested_at: string | null;
+  reschedule_to: string | null;
+  reschedule_reason: string | null;
+  tasks: { title: string; created_by: string | null } | { title: string; created_by: string | null }[] | null;
+};
+
+const askedAt = (r: OpenRow) => Date.parse(r.done_at || r.declined_at || r.reschedule_requested_at || "") || 0;
+
+// A participation row with a question still hanging on it: «сделал» without
+// the words, «не могу» without the reason, a requested date without why.
+// Newest first: the person answers what they pressed just now.
+function openRows(rows: OpenRow[]): OpenRow[] {
+  return rows
+    .filter(
+      (r) =>
+        (r.done_at && !r.done_comment) ||
+        (r.declined_at && !r.decline_reason) ||
+        (r.reschedule_requested_at && !r.reschedule_reason),
+    )
+    .sort((a, b) => askedAt(b) - askedAt(a));
+}
+
+// How long a recipient question may claim the OWNER's next message.
+const OWN_QUESTION_TTL_MS = 2 * 60 * 60 * 1000;
+
+// The owner's half of the same question.
+//
+// His free text is an assignment, not a reply (the pipeline parses it as
+// one), so before 06.10.2026 the reason he typed after «Не смогу» on a
+// meeting a manager set, or the report after «Сделал», would have become a
+// new task. Only a FRESH question claims his text — two hours, the same life
+// as «💬 Ответить» — because unlike a colleague he writes here all day, and
+// a «сделал» left unanswered a week ago must not swallow today's dictation.
+export async function answerOwnOpenQuestion(
+  admin: SupabaseClient,
+  self: { id: string; name: string; user_id: string },
+  text: string,
+): Promise<ColleagueTextResult | null> {
+  const body = text.trim();
+  if (!body) return null;
+  const since = Date.now() - OWN_QUESTION_TTL_MS;
+  const { data } = await admin
+    .from("task_participants")
+    .select(
+      "id, task_id, done_at, done_comment, declined_at, decline_reason, " +
+        "reschedule_requested_at, reschedule_to, reschedule_reason, tasks(title, created_by)",
+    )
+    .eq("assignee_id", self.id)
+    .eq("user_id", self.user_id);
+  const rows = openRows((data as unknown as OpenRow[]) || []).filter((r) => askedAt(r) >= since);
+  if (rows.length) return fillOpenAnswer(admin, self, rows, body);
+  return handleMeetingReason(admin, self, body, since);
+}
+
+async function fillOpenAnswer(
+  admin: SupabaseClient,
+  colleague: { id: string; name: string; user_id: string },
+  rows: OpenRow[],
+  body: string,
+): Promise<ColleagueTextResult> {
   const row = rows[0];
   const taskRef = Array.isArray(row.tasks) ? row.tasks[0] : row.tasks;
   const title = taskRef?.title || "";
@@ -666,13 +718,13 @@ export async function handleColleagueText(
       userId: colleague.user_id,
       kind: "task",
       itemId: row.task_id,
-      text: `📅 ${colleague.name} просит перенос${to}: ${body}`,
+      text: `📅 ${withoutSelfMark(colleague.name)} просит перенос${to}: ${body}`,
     });
     return {
       reply: `Передал: просите перенести «${title}»${to} — ${body}.\nСрок двигает постановщик, я скажу, когда он ответит.`,
       notifyTo: taskRef?.created_by ?? null,
-      notifyOwner: `📅 ${colleague.name} просит перенести «${title}»${to}: ${body}`,
-      notice: { kind: "reschedule", item: title, who: colleague.name, what: `${to.trim() || "на другой срок"} — ${body}` },
+      notifyOwner: `📅 ${withoutSelfMark(colleague.name)} просит перенести «${title}»${to}: ${body}`,
+      notice: { kind: "reschedule", item: title, who: withoutSelfMark(colleague.name), what: `${to.trim() || "на другой срок"} — ${body}` },
     };
   }
 
@@ -684,13 +736,13 @@ export async function handleColleagueText(
       userId: colleague.user_id,
       kind: "task",
       itemId: row.task_id,
-      text: `🏁 ${colleague.name} отчитался: ${body}`,
+      text: `🏁 ${withoutSelfMark(colleague.name)} отчитался: ${body}`,
     });
     return {
       reply: `Записал по задаче «${title}»: ${body}`,
       notifyTo: taskRef?.created_by ?? null,
-      notifyOwner: `🏁 ${colleague.name} по задаче «${title}»: ${body}`,
-      notice: { kind: "reported", item: title, who: colleague.name, what: body },
+      notifyOwner: `🏁 ${withoutSelfMark(colleague.name)} по задаче «${title}»: ${body}`,
+      notice: { kind: "reported", item: title, who: withoutSelfMark(colleague.name), what: body },
     };
   }
 
@@ -699,13 +751,13 @@ export async function handleColleagueText(
     userId: colleague.user_id,
     kind: "task",
     itemId: row.task_id,
-    text: `⛔ ${colleague.name} не может: ${body}`,
+    text: `⛔ ${withoutSelfMark(colleague.name)} не может: ${body}`,
   });
   return {
     reply: `Записал: не сможете «${title}» — ${body}`,
     notifyTo: taskRef?.created_by ?? null,
-    notifyOwner: `⛔ ${colleague.name} не может «${title}»: ${body}`,
-    notice: { kind: "declined", item: title, who: colleague.name, what: body },
+    notifyOwner: `⛔ ${withoutSelfMark(colleague.name)} не может «${title}»: ${body}`,
+    notice: { kind: "declined", item: title, who: withoutSelfMark(colleague.name), what: body },
   };
 }
 
@@ -719,10 +771,12 @@ async function handleMeetingReason(
   admin: SupabaseClient,
   colleague: { id: string; name: string; user_id: string },
   body: string,
+  // Only questions asked after this moment count (see answerOwnOpenQuestion).
+  since = 0,
 ): Promise<ColleagueTextResult | null> {
   const { data } = await admin
     .from("meeting_participants")
-    .select("id, response, reason, responded_at, meetings(title, date, time)")
+    .select("id, response, reason, responded_at, meetings(title, date, time, created_by)")
     .eq("assignee_id", colleague.id)
     .eq("user_id", colleague.user_id)
     .eq("response", "no")
@@ -731,10 +785,10 @@ async function handleMeetingReason(
   type Row = {
     id: string;
     responded_at: string | null;
-    meetings: { title: string; date: string; time: string | null } | { title: string; date: string; time: string | null }[] | null;
+    meetings: { title: string; date: string; time: string | null; created_by?: string | null } | { title: string; date: string; time: string | null; created_by?: string | null }[] | null;
   };
 
-  const rows = ((data as Row[]) || []).slice();
+  const rows = ((data as Row[]) || []).filter((r) => !since || Date.parse(r.responded_at || "") >= since);
   if (!rows.length) return null;
   rows.sort((a, b) => Date.parse(b.responded_at || "") - Date.parse(a.responded_at || ""));
   const row = rows[0];
@@ -745,8 +799,10 @@ async function handleMeetingReason(
   await admin.from("meeting_participants").update({ reason: body }).eq("id", row.id);
   return {
     reply: `Записал: не будете на «${title}» — ${body}`,
-    notifyOwner: `❌ ${colleague.name} не придёт на «${title}» (${when}): ${body}`,
-    notice: { kind: "vote_no", item: title, who: colleague.name, what: body },
+    // The organizer, not the space owner: he asked who is coming.
+    notifyTo: m?.created_by ?? null,
+    notifyOwner: `❌ ${withoutSelfMark(colleague.name)} не придёт на «${title}» (${when}): ${body}`,
+    notice: { kind: "vote_no", item: title, who: withoutSelfMark(colleague.name), what: body },
   };
 }
 

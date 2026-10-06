@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { encodeCallback, decodeCallback, screenButtons, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, rescheduleButtons, chatsFor } from "@/lib/colleagues";
+import { encodeCallback, decodeCallback, screenButtons, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, rescheduleButtons, chatsFor, findOwnerSelfByChat } from "@/lib/colleagues";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
 
 describe("callback data", () => {
   it("survives a round trip", () => {
@@ -186,5 +188,52 @@ describe("chatsFor", () => {
 
   it("gives nothing for someone who has connected nothing", () => {
     expect(chatsFor({ ...row, telegram_chat_id: null, max_user_id: null })).toEqual([]);
+  });
+});
+
+// The owner as a recipient: on 06.10.2026 every «Буду / Опоздаю / Не смогу»
+// in his chat answered «Эта кнопка не для вас», because the lookup only knew
+// chats stored on a people row, and his chat is stored on his account.
+describe("findOwnerSelfByChat", () => {
+  function fakeAdmin(tables: Record<string, Record<string, unknown>[]>) {
+    return {
+      from(table: string) {
+        let rows = tables[table] || [];
+        const q = {
+          select: () => q,
+          eq: (col: string, val: unknown) => ((rows = rows.filter((r) => r[col] === val)), q),
+          like: (col: string, pattern: string) => {
+            const tail = pattern.replace(/^%/, "");
+            rows = rows.filter((r) => String(r[col]).endsWith(tail));
+            return q;
+          },
+          order: () => q,
+          limit: () => q,
+          maybeSingle: async () => ({ data: rows[0] ?? null }),
+        };
+        return q;
+      },
+    } as unknown as SupabaseClient;
+  }
+
+  const admin = fakeAdmin({
+    telegram_accounts: [{ telegram_chat_id: 777, user_id: "owner-1" }],
+    assignees: [
+      { id: "t", name: "Кирилл (тест)", user_id: "owner-1" },
+      { id: "me", name: "Кирилл Кучеренко (я)", user_id: "owner-1" },
+      { id: "other", name: "Кирилл (я)", user_id: "owner-2" },
+    ],
+  });
+
+  it("finds his own «(я)» row in his own space", async () => {
+    expect(await findOwnerSelfByChat(admin, 777, TELEGRAM_CHANNEL)).toEqual({
+      id: "me",
+      name: "Кирилл Кучеренко (я)",
+      user_id: "owner-1",
+    });
+  });
+
+  it("knows nothing about a chat that is not an owner's account", async () => {
+    expect(await findOwnerSelfByChat(admin, 555, TELEGRAM_CHANNEL)).toBeNull();
   });
 });
