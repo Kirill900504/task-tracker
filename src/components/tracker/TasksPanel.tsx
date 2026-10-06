@@ -39,6 +39,7 @@ import { authorLabel } from "@/lib/authorName";
 import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 import { noteParticipantChange } from "@/lib/participantNote";
 import { humanError } from "@/lib/humanError";
+import { answerWithFiles } from "@/lib/answerFiles";
 import { openTaskChoices } from "@/lib/answerRules";
 
 export default function TasksPanel({
@@ -457,7 +458,7 @@ export default function TasksPanel({
     }
 
     const onReview = stageOf(t) === "awaiting_review";
-    const comment = await ask.ask({
+    const answer = await ask.askWithFiles({
       title: onReview ? "Принять работу" : "Закрыть задачу",
       question: onReview ? `Что принимаем по задаче «${t.title}»?` : `Что сделано по задаче «${t.title}»?`,
       note: onReview
@@ -467,11 +468,13 @@ export default function TasksPanel({
       okText: onReview ? "Принять" : "Закрыть",
       required: "Без результата закрывать нельзя.",
     });
-    if (!comment?.trim()) return;
+    const comment = answer?.text.trim();
+    if (!answer || !comment) return;
 
     try {
-      if (onReview) await participants.approve(t.id, comment.trim());
-      else await participants.forceClose(t.id, comment.trim());
+      await answerWithFiles({ kind: "task", id: t.id }, answer.files, onReview ? "Документы к приёмке" : "Документы к закрытию задачи", () =>
+        onReview ? participants.approve(t.id, comment) : participants.forceClose(t.id, comment),
+      );
     } catch (e) {
       toasts.showToast(humanError(e, "Не получилось закрыть задачу"));
       return;

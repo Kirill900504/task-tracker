@@ -19,6 +19,8 @@ import { linkTaskAndMeeting } from "@/lib/itemLink";
 import type { useToasts } from "@/hooks/useToasts";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useAsk } from "@/components/Ask";
+import { answerWithFiles } from "@/lib/answerFiles";
+import { humanError } from "@/lib/humanError";
 import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 import { isMine } from "@/lib/ownership";
 import { useDropHandler } from "./dnd/TrackerDnd";
@@ -366,7 +368,7 @@ export default function MeetingsPanel({
   // прошли, и заставлять выдумывать слова ради формы — худший способ
   // получить осмысленный итог.
   async function quickStatus(m: Meeting, status: "success" | "no_result") {
-    const text = await ask.ask({
+    const answer = await ask.askWithFiles({
       title: status === "success" ? "Встреча прошла успешно" : "Встреча без результата",
       question: "Итог встречи",
       note:
@@ -379,8 +381,14 @@ export default function MeetingsPanel({
       okText: status === "success" ? "Завершить успешно" : "Закрыть без результата",
     });
     // Отмена — это отмена: встреча остаётся в плане.
-    if (text === null) return;
-    setStatus(m, status, text);
+    if (answer === null) return;
+    // Протокол или фотография доски — к итогу, в обсуждение встречи
+    // (lib/answerFiles). Не загрузились — встреча остаётся открытой.
+    try {
+      await answerWithFiles({ kind: "meeting", id: m.id }, answer.files, "Документы к итогу встречи", () => setStatus(m, status, answer.text));
+    } catch (e) {
+      toasts.showToast(humanError(e, "Не получилось приложить документы"));
+    }
   }
 
   // Закрыть встречу как перенесённую на другую, уже созданную.

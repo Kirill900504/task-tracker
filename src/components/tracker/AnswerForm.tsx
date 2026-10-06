@@ -1,8 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import Icon from "./Icon";
-import { tooBigFile } from "@/lib/resultFiles";
+import { useState } from "react";
+import AttachFiles from "./AttachFiles";
 
 // Ответ исполнителя — формой в карточке, а не системным окном браузера.
 //
@@ -24,7 +23,7 @@ export default function AnswerForm({
   emptyHint,
   submitLabel,
   date,
-  withFiles,
+  withFiles = true,
   busy,
   onSubmit,
   onCancel,
@@ -41,10 +40,13 @@ export default function AnswerForm({
   submitLabel: string;
   // Есть только у просьбы о переносе: дата, на которую просят.
   date?: { label: string; initial: string };
-  // Можно ли приложить документы. Есть только у отчёта: «покажи, что
-  // сделал» — это чаще всего акт или фотография, и Кирилл просил, чтобы
-  // результат нёс их с собой, а не отсылал в обсуждение (см. миграцию
-  // 0039). У отказа и просьбы о переносе прикладывать нечего.
+  // Можно ли приложить документы. По умолчанию — да, у любого ответа
+  // (06.10.2026: «возможность вложить документ должна быть при любом
+  // описании завершения задачи, встрече, переносе и так далее»). Раньше
+  // кнопка была только у отчёта, а у отказа и переноса считалось, что
+  // прикладывать нечего, — но письмо поставщика к отказу и справка к
+  // переносу и есть причина. Куда кладутся файлы — решает тот, кто
+  // получает onSubmit (отчёт — в done_files, остальное — lib/answerFiles).
   withFiles?: boolean;
   busy?: boolean;
   onSubmit: (text: string, date: string, files: File[]) => void;
@@ -54,7 +56,6 @@ export default function AnswerForm({
   const [when, setWhen] = useState(date?.initial || "");
   const [error, setError] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,26 +69,6 @@ export default function AnswerForm({
     }
     setError("");
     onSubmit(text.trim(), when, files);
-  }
-
-  function pickFiles(list: FileList | null) {
-    if (!list?.length) return;
-    const chosen = Array.from(list);
-    // 20 МБ — предел корзины, и сказать об этом надо ДО загрузки: иначе
-    // человек ждёт отправки отчёта, а получает отказ на последнем байте.
-    const tooBig = tooBigFile(chosen);
-    if (tooBig) {
-      setError(`«${tooBig.name}» больше 20 МБ — такой файл не пройдёт.`);
-      return;
-    }
-    setError("");
-    setFiles((prev) => [...prev, ...chosen]);
-  }
-
-  function sizeLabel(bytes: number): string {
-    if (bytes < 1024) return `${bytes} Б`;
-    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
-    return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
   }
 
   return (
@@ -120,32 +101,7 @@ export default function AnswerForm({
           <input id={id + "-date"} type="date" value={when} onChange={(e) => setWhen(e.target.value)} />
         </div>
       )}
-      {withFiles && (
-        <div className="ms-answer-files">
-          <input
-            ref={fileInput}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => {
-              pickFiles(e.target.files);
-              // Сброс, иначе один и тот же файл нельзя приложить второй раз.
-              e.target.value = "";
-            }}
-          />
-          <button type="button" className="btn btn-small" onClick={() => fileInput.current?.click()}>
-            <Icon name="clip" size={14} /> Приложить документ
-          </button>
-          {files.map((f, i) => (
-            <span className="ms-answer-file" key={f.name + i}>
-              <Icon name="clip" size={13} /> {f.name} <span className="ms-answer-file-size">{sizeLabel(f.size)}</span>
-              <button type="button" className="chat-mini" onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}>
-                убрать
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
+      {withFiles && <AttachFiles files={files} onChange={setFiles} onError={setError} />}
       {error && <div className="ms-answer-error">{error}</div>}
       <div className="ms-answer-actions">
         <button className="btn btn-small btn-primary" type="submit" disabled={busy}>

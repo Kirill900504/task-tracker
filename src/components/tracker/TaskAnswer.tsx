@@ -58,8 +58,10 @@ export default function TaskAnswer({
   // Отчёт может нести документы: «покажи, что сделал» — это чаще всего акт
   // или фотография (миграция 0039).
   onReport: (comment: string, files: File[]) => Promise<void>;
-  onDecline: (reason: string) => Promise<void>;
-  onAskReschedule: (to: string, reason: string) => Promise<void>;
+  // Документы — у любого ответа, не только у отчёта (06.10.2026). Куда их
+  // положить, решает окно задачи (lib/answerFiles).
+  onDecline: (reason: string, files: File[]) => Promise<void>;
+  onAskReschedule: (to: string, reason: string, files: File[]) => Promise<void>;
   // Ответ ушёл, и задача уехала из этого столбца — карточку можно
   // закрывать.
   //
@@ -178,7 +180,7 @@ export default function TaskAnswer({
           emptyHint="Отказ без причины — это молчание с нажатой кнопкой."
           submitLabel="Отправить"
           busy={busy}
-          onSubmit={(text) => void run(() => onDecline(text), true)}
+          onSubmit={(text, _when, files) => void run(() => onDecline(text, files), true)}
           onCancel={() => setPending(null)}
         />
       )}
@@ -192,7 +194,7 @@ export default function TaskAnswer({
           submitLabel="Попросить перенос"
           date={{ label: "Новый срок", initial: deadline || "" }}
           busy={busy}
-          onSubmit={(text, when) => void run(() => onAskReschedule(when, text))}
+          onSubmit={(text, when, files) => void run(() => onAskReschedule(when, text, files))}
           onCancel={() => setPending(null)}
         />
       )}

@@ -6,6 +6,7 @@ import type { TaskParticipantRole } from "@/lib/taskProgress";
 import { hasDeclined, progressLabel, taskProgress, taskStage } from "@/lib/taskProgress";
 import type { Participant, PersonOption } from "@/hooks/useTaskParticipants";
 import { useAsk } from "@/components/Ask";
+import { answerWithFiles } from "@/lib/answerFiles";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import ActionMenu from "./ActionMenu";
@@ -67,6 +68,7 @@ function statusOf(p: Participant): Status | null {
 }
 
 export default function TeamCompact({
+  taskId,
   participants,
   availablePeople,
   approvalState,
@@ -84,6 +86,9 @@ export default function TeamCompact({
   onAddPerson,
   part,
 }: {
+  // Нужен документам к решению: они ложатся в обсуждение задачи
+  // (lib/answerFiles).
+  taskId: string;
   participants: Participant[];
   availablePeople: PersonOption[];
   approvalState: ApprovalState;
@@ -143,7 +148,7 @@ export default function TeamCompact({
 
   async function handleApprove() {
     if (busy) return;
-    const comment = await ask.ask({
+    const answer = await ask.askWithFiles({
       title: "Приёмка работы",
       question: "Комментарий к приёмке",
       note: "Его увидят исполнители — подтвердите, что именно принимаете.",
@@ -156,10 +161,11 @@ export default function TeamCompact({
       // слова неотличимо от того, что его никто не читал.
       required: "Приёмка без комментария не решение — напишите хотя бы, что именно принимаете.",
     });
-    if (comment === null || busy) return;
+    if (answer === null || busy) return;
+    const comment = answer.text;
     setBusy(true);
     try {
-      await onApproveWork(comment.trim());
+      await answerWithFiles({ kind: "task", id: taskId }, answer.files, "Документы к приёмке", () => onApproveWork(comment.trim()));
     } finally {
       setBusy(false);
     }
@@ -167,7 +173,7 @@ export default function TeamCompact({
 
   async function handleReturn() {
     if (busy) return;
-    const comment = await ask.ask({
+    const answer = await ask.askWithFiles({
       title: "Вернуть на доработку",
       question: "Что доделать?",
       note: "Это увидят исполнители — и это единственное, что объясняет возврат.",
@@ -175,10 +181,11 @@ export default function TeamCompact({
       okText: "Вернуть",
       required: "Возврат без объяснения бессмысленен — напишите, что не так.",
     });
-    if (comment === null || busy) return;
+    if (answer === null || busy) return;
+    const comment = answer.text;
     setBusy(true);
     try {
-      await onReturnWork(comment.trim());
+      await answerWithFiles({ kind: "task", id: taskId }, answer.files, "Документы к возврату на доработку", () => onReturnWork(comment.trim()));
     } finally {
       setBusy(false);
     }
@@ -186,18 +193,19 @@ export default function TeamCompact({
 
   async function handleReturnOne(p: Participant) {
     if (busy || !onReturnOne) return;
-    const comment = await ask.ask({
+    const answer = await ask.askWithFiles({
       title: `Вернуть: ${shown(p.name)}`,
       question: "Что доделать?",
-      note: "Увидит только этот человек. Остальные исполнители и их отчёты не затрагиваются.",
+      note: "Увидит только этот человек. Остальные исполнители и их отчёты не затрагиваются. Приложенные документы лягут в обсуждение задачи.",
       multiline: true,
       okText: "Вернуть",
       required: "Возврат без объяснения бессмысленен — напишите, что не так.",
     });
-    if (comment === null || busy) return;
+    if (answer === null || busy) return;
+    const comment = answer.text;
     setBusy(true);
     try {
-      await onReturnOne(p.id, comment.trim());
+      await answerWithFiles({ kind: "task", id: taskId }, answer.files, `Документы к возврату на доработку: ${shown(p.name)}`, () => onReturnOne(p.id, comment.trim()));
     } finally {
       setBusy(false);
     }
@@ -205,7 +213,7 @@ export default function TeamCompact({
 
   async function handleForceClose() {
     if (busy) return;
-    const reason = await ask.ask({
+    const answer = await ask.askWithFiles({
       title: "Закрыть волевым решением",
       question: "Почему закрываем?",
       note: "Причина останется в задаче: именно она объясняет, почему задача закрыта не как обычно.",
@@ -213,10 +221,11 @@ export default function TeamCompact({
       okText: "Закрыть задачу",
       required: "Причина обязательна: именно она объясняет, почему задача закрыта не как обычно.",
     });
-    if (reason === null || busy) return;
+    if (answer === null || busy) return;
+    const reason = answer.text;
     setBusy(true);
     try {
-      await onForceCloseWork(reason.trim());
+      await answerWithFiles({ kind: "task", id: taskId }, answer.files, "Документы к закрытию задачи", () => onForceCloseWork(reason.trim()));
     } finally {
       setBusy(false);
     }
@@ -224,17 +233,18 @@ export default function TeamCompact({
 
   async function handleReopen() {
     if (busy) return;
-    const comment = await ask.ask({
+    const answer = await ask.askWithFiles({
       title: "Открыть задачу заново",
       question: "Что изменилось?",
       note: "Можно оставить пустым. Отчёты исполнителей никуда не денутся — задача вернётся туда, где была до приёмки, и по ней можно отчитаться заново.",
       multiline: true,
       okText: "Открыть заново",
     });
-    if (comment === null || busy) return;
+    if (answer === null || busy) return;
+    const comment = answer.text;
     setBusy(true);
     try {
-      await onReopenWork(comment.trim());
+      await answerWithFiles({ kind: "task", id: taskId }, answer.files, "Документы к открытию заново", () => onReopenWork(comment.trim()));
     } finally {
       setBusy(false);
     }

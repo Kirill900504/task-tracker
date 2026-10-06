@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Modal from "@/components/tracker/Modal";
+import AttachFiles from "@/components/tracker/AttachFiles";
 
 // Все вопросы трекера — одним окном трекера.
 //
@@ -42,7 +43,16 @@ export type AskOptions = {
   cancelText?: string;
   // Пустой ответ не принимается, и окно не закрывается, пока его не напишут.
   required?: string;
+  // Кнопка «Приложить документ» под полем. Ставит её askWithFiles, а не
+  // вызывающий: ответ тогда другой формы (текст плюс файлы), и путать два
+  // вида ответа через один флажок значило бы проверять тип на каждом
+  // вызове.
+  files?: boolean;
 };
+
+// Ответ окна с документами. Файлы ещё НЕ загружены — куда их класть,
+// решает тот, кто спрашивал (обычно lib/answerFiles).
+export type AskWithFiles = { text: string; files: File[] };
 
 export type ConfirmOptions = {
   title?: string;
@@ -83,6 +93,9 @@ type Pending =
 
 export type AskApi = {
   ask: (options: AskOptions) => Promise<string | null>;
+  // То же «спросить текст», но с кнопкой «Приложить документ»: везде, где
+  // пишут результат или причину (06.10.2026, см. AttachFiles).
+  askWithFiles: (options: Omit<AskOptions, "files">) => Promise<AskWithFiles | null>;
   confirm: (options: ConfirmOptions) => Promise<boolean>;
   say: (options: SayOptions) => Promise<void>;
   choose: (options: ChooseOptions) => Promise<string | null>;
@@ -96,6 +109,10 @@ const AskContext = createContext<AskApi | null>(null);
 // системные окна, как раньше.
 const FALLBACK: AskApi = {
   ask: async (o) => (typeof window === "undefined" ? null : window.prompt(o.question, o.value || "")),
+  askWithFiles: async (o) => {
+    const text = typeof window === "undefined" ? null : window.prompt(o.question, o.value || "");
+    return text === null ? null : { text, files: [] };
+  },
   confirm: async (o) => (typeof window === "undefined" ? false : window.confirm(o.question)),
   say: async (o) => {
     if (typeof window !== "undefined") window.alert(o.question);
@@ -111,6 +128,14 @@ export default function AskProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [text, setText] = useState("");
   const [problem, setProblem] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  // Файлы читаются в момент закрытия, из обработчика — ref, чтобы не
+  // зависеть от того, успело ли состояние перерисоваться.
+  const filesRef = useRef<File[]>([]);
+  function changeFiles(next: File[]) {
+    filesRef.current = next;
+    setFiles(next);
+  }
   // Ответ обещан промисом, и отдать его надо ровно один раз — даже если окно
   // закроют мимо кнопки (Esc, клик по фону).
   const pendingRef = useRef<Pending | null>(null);
@@ -119,6 +144,8 @@ export default function AskProvider({ children }: { children: ReactNode }) {
     pendingRef.current = next;
     setText(initial);
     setProblem("");
+    filesRef.current = [];
+    setFiles([]);
     setPending(next);
   }, []);
 
@@ -128,6 +155,20 @@ export default function AskProvider({ children }: { children: ReactNode }) {
     () => ({
       ask: (options) =>
         new Promise<string | null>((resolve) => open({ kind: "ask", resolve, ...options }, options.value || "")),
+      askWithFiles: (options) =>
+        new Promise<AskWithFiles | null>((resolve) =>
+          open(
+            {
+              kind: "ask",
+              ...options,
+              files: true,
+              // Файлы забираются из ref в момент ответа: окно одно на всё
+              // приложение, и следующий вопрос сбросит их при открытии.
+              resolve: (text) => resolve(text === null ? null : { text, files: filesRef.current }),
+            },
+            options.value || "",
+          ),
+        ),
       confirm: (options) => new Promise<boolean>((resolve) => open({ kind: "confirm", resolve, ...options })),
       say: (options) => new Promise<void>((resolve) => open({ kind: "say", resolve, ...options })),
       choose: (options) => new Promise<string | null>((resolve) => open({ kind: "choose", resolve, ...options })),
@@ -250,6 +291,8 @@ export default function AskProvider({ children }: { children: ReactNode }) {
                   )}
                 </div>
               )}
+
+              {pending.kind === "ask" && pending.files && <AttachFiles files={files} onChange={changeFiles} onError={setProblem} />}
 
               {problem && <div className="ask-problem">{problem}</div>}
 
