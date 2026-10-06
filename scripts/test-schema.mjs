@@ -212,6 +212,38 @@ async function main() {
     check("посторонний её не видит", rows.length === 0);
   });
 
+  // Равные права (миграция 0043): видеть задачу коллеги владелец может, а
+  // распоряжаться ею — нет, как и любой другой участник.
+  console.log("\nВладелец — один из равных:");
+  await as(db, OWNER, async () => {
+    const { rowCount } = await db.query("update public.tasks set title = 'чужое' where id = $1", [keptId]);
+    check("владелец НЕ правит задачу, поставленную руководителем", rowCount === 0);
+  });
+  await as(db, OWNER, async () => {
+    const { rowCount } = await db.query("delete from public.tasks where id = $1", [keptId]);
+    check("владелец НЕ удаляет задачу, поставленную руководителем", rowCount === 0);
+  });
+  await as(db, OWNER, async () => {
+    let refused = false;
+    try {
+      await db.query(
+        "insert into public.task_participants (user_id, task_id, assignee_id, role) values ($1,$2,$3,'watcher')",
+        [OWNER, keptId, byName["Вера"]],
+      );
+    } catch {
+      refused = true;
+    }
+    check("владелец НЕ дописывает людей в задачу руководителя", refused);
+  });
+  await as(db, MANAGER_A, async () => {
+    const { rowCount } = await db.query("update public.tasks set title = 'своё' where id = $1", [keptId]);
+    check("а её постановщик правит", rowCount === 1);
+  });
+  await as(db, OWNER, async () => {
+    const { rowCount } = await db.query("update public.tasks set title = 'своё' where id = $1", [taskId]);
+    check("свою задачу владелец правит, как и прежде", rowCount === 1);
+  });
+
   console.log("\nЧат в задаче:");
   await db.query(
     `insert into public.item_comments (user_id, item_kind, item_id, author_assignee_id, body)

@@ -56,7 +56,9 @@ export async function POST(req: Request) {
   // Рассылает тот, чья это встреча: владелец пространства или тот, кто её
   // собрал. Иначе достаточно было бы знать id, чтобы разослать от их имени
   // что угодно.
-  if (meeting.user_id !== user.id && meeting.created_by !== user.id) {
+  // Итог записывает тот, кто назначил встречу, — владелец пространства
+  // тоже только у своих (равные права, 06.10.2026).
+  if ((meeting.created_by || meeting.user_id) !== user.id) {
     return NextResponse.json({ error: "Это не ваша встреча" }, { status: 403 });
   }
 

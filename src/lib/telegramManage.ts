@@ -60,6 +60,10 @@ export function fuzzyMatch(title: string, query: string): boolean {
 
 type Candidate = { id: string; title: string; extra?: string };
 
+// Только своё: эти команды есть лишь у владельца (его текст в бот), и до
+// 06.10.2026 «закрой задачу …» или «удали встречу …» находили что угодно в
+// пространстве, в том числе поставленное коллегами. «У всех равные права» —
+// его слова; его собственные строки — те, у которых автор не записан.
 async function findCandidates(
   admin: ReturnType<typeof createAdminClient>,
   userId: string,
@@ -68,7 +72,7 @@ async function findCandidates(
   query: string,
 ): Promise<Candidate[]> {
   if (itemType === "task") {
-    let q = admin.from("tasks").select("id, title, status").eq("user_id", userId).is("deleted_at", null);
+    let q = admin.from("tasks").select("id, title, status").eq("user_id", userId).is("created_by", null).is("deleted_at", null);
     if (action === "complete") q = q.eq("status", "in_progress");
     if (action === "reopen") q = q.eq("status", "done");
     const { data } = await q;
@@ -77,7 +81,7 @@ async function findCandidates(
       .map((t) => ({ id: t.id as string, title: t.title as string }));
   }
 
-  let q = admin.from("meetings").select("id, title, date, status").eq("user_id", userId).is("deleted_at", null);
+  let q = admin.from("meetings").select("id, title, date, status").eq("user_id", userId).is("created_by", null).is("deleted_at", null);
   if (action === "success" || action === "no_result") q = q.eq("status", "planned");
   if (action === "reopen") q = q.in("status", ["success", "no_result"]);
   const { data } = await q;
@@ -127,22 +131,22 @@ async function applyAction(
       // Soft delete (spec-audit recommendation #4) — marks the row instead
       // of physically removing it, recoverable indefinitely rather than
       // gone the instant "да" is confirmed.
-      const { error } = await admin.from("tasks").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+      const { error } = await admin.from("tasks").update({ deleted_at: new Date().toISOString() }).eq("id", id).is("created_by", null);
       return { error: error?.message || null };
     }
     const patch = taskPatchFor(action);
     if (!patch) return { error: "Это действие неприменимо к задаче" };
-    const { error } = await admin.from("tasks").update(patch).eq("id", id);
+    const { error } = await admin.from("tasks").update(patch).eq("id", id).is("created_by", null);
     return { error: error?.message || null };
   }
 
   if (action === "delete") {
-    const { error } = await admin.from("meetings").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await admin.from("meetings").update({ deleted_at: new Date().toISOString() }).eq("id", id).is("created_by", null);
     return { error: error?.message || null };
   }
   const status = action === "success" ? "success" : action === "no_result" ? "no_result" : action === "reopen" ? "planned" : null;
   if (!status) return { error: "Это действие неприменимо ко встрече" };
-  const { error } = await admin.from("meetings").update({ status }).eq("id", id);
+  const { error } = await admin.from("meetings").update({ status }).eq("id", id).is("created_by", null);
   return { error: error?.message || null };
 }
 

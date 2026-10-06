@@ -150,7 +150,9 @@ export async function approveTaskFromMeeting(
   // Уже закрыта — второй раз «принято» не говорят: исполнителю ушло бы
   // второе сообщение об одном и том же решении.
   if (task.status === "done" || task.approval_state === "accepted") return false;
-  if (who.userId !== task.user_id && who.userId !== task.created_by) return false;
+  // Принимает постановщик. Владелец пространства — тоже только своё:
+  // пустой created_by и есть его задача (равные права, 06.10.2026).
+  if (who.userId !== (task.created_by || task.user_id)) return false;
 
   if (task.approval_state !== "awaiting_review") {
     const { data: parts } = await admin

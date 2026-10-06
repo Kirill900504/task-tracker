@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { gigaChatComplete } from "@/lib/gigachat/client";
 import { stem } from "@/lib/stem";
+import { involvedFilter } from "@/lib/telegramQueries";
 
 // "Найди всё про Севастополь" — across tasks, meetings, ideas, and the parts
 // the assistant's normal snapshot deliberately leaves out: task descriptions
@@ -39,10 +40,14 @@ export async function searchTracker(admin: SupabaseClient, userId: string, query
   const stems = queryStems(query);
   if (!stems.length) return [];
 
+  // Ищется то, что касается владельца, — как и в его трекере: своё и то,
+  // где он участник; мысли — только свои. До 06.10.2026 поиск в боте шёл
+  // по всему пространству и показывал чужую работу (у всех равные права).
+  const [taskScope, meetingScope] = await Promise.all([involvedFilter(admin, userId, "task"), involvedFilter(admin, userId, "meeting")]);
   const [taskRes, meetingRes, ideaRes] = await Promise.all([
-    admin.from("tasks").select("title,description,assignee,status,deadline").eq("user_id", userId).is("deleted_at", null),
-    admin.from("meetings").select("title,date,time,participants,status,result").eq("user_id", userId).is("deleted_at", null),
-    admin.from("ideas").select("text,done,created_at").eq("user_id", userId).is("deleted_at", null),
+    admin.from("tasks").select("title,description,assignee,status,deadline").eq("user_id", userId).or(taskScope).is("deleted_at", null),
+    admin.from("meetings").select("title,date,time,participants,status,result").eq("user_id", userId).or(meetingScope).is("deleted_at", null),
+    admin.from("ideas").select("text,done,created_at").eq("user_id", userId).is("created_by", null).is("deleted_at", null),
   ]);
 
   const hits: SearchHit[] = [];

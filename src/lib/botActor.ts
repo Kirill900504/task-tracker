@@ -118,3 +118,20 @@ export function actorScope(actor: BotActor): Record<string, string> {
   }
   return actor.isOwner ? { user_id: actor.spaceId } : { user_id: actor.spaceId, created_by: actor.userId };
 }
+
+// «Своё» по автору — вторая половина границы, для `.or()` рядом с
+// `.match(actorScope(actor))`.
+//
+// До 06.10.2026 владелец в боте видел и решал всё пространство: принимал,
+// возвращал, продлевал и закрывал задачи, которые ставили другие. Его
+// слова: «у меня не должно быть преимуществ и привилегий, у всех равные
+// права!». Его собственные строки — с пустым created_by (так их пишут и
+// трекер, и бот), и `.match()` пустое значение выразить не может, отсюда
+// отдельный фильтр. У руководителя он повторяет то, что уже есть в
+// actorScope, — нарочно: одно правило на обоих, без ветки «а владельцу».
+export function authorFilter(actor: BotActor): string {
+  if (!actor?.spaceId || (!actor.isOwner && !actor.userId)) {
+    throw new Error("authorFilter без актора: выборка ушла бы без границы автора");
+  }
+  return actor.isOwner ? "created_by.is.null" : `created_by.eq.${actor.userId}`;
+}

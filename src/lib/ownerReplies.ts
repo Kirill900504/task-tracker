@@ -9,7 +9,7 @@ import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
 import { recordEvent } from "@/lib/itemHistory";
 import { actorName } from "@/lib/actorName";
-import { actorScope, type BotActor } from "@/lib/botActor";
+import { actorScope, authorFilter, type BotActor } from "@/lib/botActor";
 import { latecomerText } from "@/lib/meetingNudges";
 import { sendToPerson } from "@/lib/reach";
 
@@ -125,7 +125,7 @@ async function loadTask(admin: SupabaseClient, actor: BotActor, taskId: string):
     .from("tasks")
     .select("id, title, description, assignee, deadline, status, approval_state, approval_comment")
     .eq("id", taskId)
-    .match(actorScope(actor))
+    .match(actorScope(actor)).or(authorFilter(actor))
     .is("deleted_at", null)
     .maybeSingle();
   return (data as TaskRow | null) || null;
@@ -230,7 +230,7 @@ async function loadMeeting(admin: SupabaseClient, actor: BotActor, meetingId: st
     .from("meetings")
     .select("id, title, date, time, user_id, from_task_id, result, status")
     .eq("id", meetingId)
-    .match(actorScope(actor))
+    .match(actorScope(actor)).or(authorFilter(actor))
     .is("deleted_at", null)
     .maybeSingle();
   return (data as MeetingRow | null) || null;
@@ -511,7 +511,7 @@ export async function handleOwnerCallback(
       .from("ideas")
       .select("id, text, important")
       .eq("id", action.id)
-      .match(actorScope(actor))
+      .match(actorScope(actor)).or(authorFilter(actor))
       .is("deleted_at", null)
       .maybeSingle();
     const idea = data as { id: string; text: string; important: boolean } | null;
@@ -545,13 +545,13 @@ export async function handleOwnerCallback(
       .from("ideas")
       .update({ done: true, done_at: new Date().toISOString() })
       .eq("id", action.id)
-      .match(actorScope(actor));
+      .match(actorScope(actor)).or(authorFilter(actor));
     if (error) return { toast: "Не получилось" };
     return { toast: "Вычеркнул", rewriteTo: "✓ Вычеркнуто.", rewriteButtons: ownerNav() };
   }
 
   if (action.action === "itask" && action.kind === "idea") {
-    const { data } = await admin.from("ideas").select("id, text").eq("id", action.id).match(actorScope(actor)).maybeSingle();
+    const { data } = await admin.from("ideas").select("id, text").eq("id", action.id).match(actorScope(actor)).or(authorFilter(actor)).maybeSingle();
     const idea = data as { id: string; text: string } | null;
     if (!idea) return { toast: "Эта мысль не найдена" };
     // Дальше — обычный мастер, начиная со второго шага: название уже есть.

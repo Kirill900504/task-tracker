@@ -119,6 +119,14 @@ describe("approveTaskFromMeeting", () => {
     expect(await approveTaskFromMeeting(admin, meeting, "принято", { label: "Юрий", userId: "boss-9" })).toBe(true);
   });
 
+  // Равные права (06.10.2026): у владельца пространства нет поблажки на
+  // чужую работу — задачу руководителя принимает руководитель.
+  it("владелец не принимает задачу, которую поставил кто-то другой", async () => {
+    const admin = fakeAdmin({ ...onReview, created_by: "boss-9" }, []);
+    expect(await approveTaskFromMeeting(admin, meeting, "принято", owner)).toBe(false);
+    expect(applyReview).not.toHaveBeenCalled();
+  });
+
   it("задача уже закрыта — второй раз «принято» не говорят", async () => {
     const admin = fakeAdmin({ ...onReview, status: "done", approval_state: "accepted" }, []);
     expect(await approveTaskFromMeeting(admin, meeting, "принято", owner)).toBe(false);

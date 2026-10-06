@@ -22,7 +22,7 @@ import { whenButtons, whoButtons, type NewTaskPending } from "@/lib/ownerNewTask
 import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
 import { deliverComment } from "@/lib/commentDelivery";
-import { actorScope, findActorByChat, type BotActor } from "@/lib/botActor";
+import { actorScope, authorFilter, findActorByChat, type BotActor } from "@/lib/botActor";
 import { actorName, withoutSelfMark } from "@/lib/actorName";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
@@ -587,7 +587,7 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
       .from("tasks")
       .select("id, title, user_id")
       .eq("id", ask.taskId)
-      .match(actorScope(actor))
+      .match(actorScope(actor)).or(authorFilter(actor))
       .is("deleted_at", null)
       .maybeSingle();
     const task = taskRow as { id: string; title: string; user_id: string } | null;
@@ -613,7 +613,7 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
       .from("meetings")
       .select("id, title, date, time, user_id, from_task_id, result")
       .eq("id", ask.meetingId)
-      .match(actorScope(actor))
+      .match(actorScope(actor)).or(authorFilter(actor))
       .is("deleted_at", null)
       .maybeSingle();
     const meeting = row as MeetingRecapRow | null;

@@ -62,6 +62,10 @@ export async function planBulkMove(userId: string, req: BulkMoveRequest): Promis
       .from("tasks")
       .select("id,title")
       .eq("user_id", userId)
+      // Переносится только своё: у всех равные права (06.10.2026), и срок
+      // чужой задачи двигает её постановщик, а не тот, кто сказал «перенеси
+      // всё с понедельника».
+      .is("created_by", null)
       .eq("deadline", fromDate)
       .eq("status", "in_progress")
       .is("deleted_at", null);
@@ -72,6 +76,7 @@ export async function planBulkMove(userId: string, req: BulkMoveRequest): Promis
       .from("meetings")
       .select("id,title,time,status")
       .eq("user_id", userId)
+      .is("created_by", null)
       .eq("date", fromDate)
       .is("deleted_at", null);
     plan.meetings = (data || [])

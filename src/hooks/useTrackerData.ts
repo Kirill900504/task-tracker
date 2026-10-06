@@ -238,7 +238,14 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     // (см. NewTracker), поэтому сравнение строгое.
     // id в сигнатуре не для дела: без обязательного поля TypeScript считает
     // тип «слабым» и отказывается принимать функцию в filter.
-    const mine = (x: { id: string; createdBy?: string }) => !manager || (x.createdBy || "") === manager.userId;
+    //
+    // У владельца то же правило, а не «всё пространство моё». 06.10.2026,
+    // его словами: «у меня не должно быть преимуществ и привилегий, у всех
+    // равные права». Его собственные строки — с пустым created_by (так их
+    // пишут и трекер, и бот), чужие несут id того, кто их поставил, — и до
+    // базы от него доезжает только своё, как и у любого постановщика.
+    const mine = (x: { id: string; createdBy?: string }) =>
+      manager ? (x.createdBy || "") === manager.userId : !x.createdBy;
 
     syncChainRef.current = syncChainRef.current
       .then(async () => {

@@ -45,7 +45,10 @@ export async function POST(req: Request) {
   // строку админ-клиент, который эти политики не видит вовсе.
   const { data: task } = await admin.from("tasks").select("id, title, user_id, created_by").eq("id", body.taskId).maybeSingle();
   if (!task) return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
-  const allowed = task.user_id === user.id || task.created_by === user.id;
+  // Состав меняет постановщик — и только он, владелец тоже (06.10.2026: «у
+  // меня не должно быть преимуществ и привилегий»). Пустой created_by — это
+  // задача самого владельца.
+  const allowed = (task.created_by || task.user_id) === user.id;
   if (!allowed) return NextResponse.json({ error: "Нет прав менять состав этой задачи" }, { status: 403 });
 
   type NameRow = { name: string } | { name: string }[] | null;

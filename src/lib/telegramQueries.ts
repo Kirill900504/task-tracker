@@ -1,5 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { moscowNow, dateStr, isDueToday, isOverdue, type TaskRow } from "@/lib/taskLogic";
+import { isSelfAssignee } from "@/lib/trackerRows";
 
 // Read-only Telegram commands ("что на сегодня", "просрочено", "встречи").
 // Deliberately matched by EXACT normalized phrase, not substring — a
@@ -33,6 +35,24 @@ function fmtDate(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
+// Что касается владельца — как и в трекере (видимость по человеку,
+// 23.09.2026): поставленное им самим (автор не записан) и то, где он
+// участник. До 06.10.2026 эти три команды отвечали про всё пространство —
+// то есть показывали ему чужую работу, которой в его трекере нет.
+export async function involvedFilter(
+  admin: SupabaseClient,
+  userId: string,
+  kind: "task" | "meeting",
+): Promise<string> {
+  const { data: people } = await admin.from("assignees").select("id, name").eq("user_id", userId);
+  const me = ((people || []) as { id: string; name: string }[]).find((p) => isSelfAssignee(p.name));
+  if (!me) return "created_by.is.null";
+  const table = kind === "task" ? "task_participants" : "meeting_participants";
+  const column = kind === "task" ? "task_id" : "meeting_id";
+  const { data: rows } = await admin.from(table).select(column).eq("assignee_id", me.id);
+  const ids = ((rows || []) as Record<string, string>[]).map((r) => r[column]).filter(Boolean);
+  return ids.length ? `created_by.is.null,id.in.(${ids.join(",")})` : "created_by.is.null";
+}
 async function replyToday(admin: ReturnType<typeof createAdminClient>, userId: string): Promise<string> {
   const now = moscowNow();
   const today = dateStr(now);
@@ -41,6 +61,7 @@ async function replyToday(admin: ReturnType<typeof createAdminClient>, userId: s
     .from("tasks")
     .select("id, title, assignee, status, deadline, recur, recur_weekday, recur_monthday, recur_year_day, recur_year_month")
     .eq("user_id", userId)
+    .or(await involvedFilter(admin, userId, "task"))
     .eq("status", "in_progress")
     .is("deleted_at", null);
   const tasks = ((taskRows || []) as TaskRow[]).filter((t) => isDueToday(t, now, today));
@@ -49,6 +70,7 @@ async function replyToday(admin: ReturnType<typeof createAdminClient>, userId: s
     .from("meetings")
     .select("title, time, participants")
     .eq("user_id", userId)
+    .or(await involvedFilter(admin, userId, "meeting"))
     .eq("date", today)
     .eq("status", "planned")
     .is("deleted_at", null)
@@ -81,6 +103,7 @@ async function replyOverdue(admin: ReturnType<typeof createAdminClient>, userId:
     .from("tasks")
     .select("id, title, assignee, status, deadline, recur, recur_weekday, recur_monthday, recur_year_day, recur_year_month")
     .eq("user_id", userId)
+    .or(await involvedFilter(admin, userId, "task"))
     .eq("status", "in_progress")
     .eq("recur", "none")
     .not("deadline", "is", null)
@@ -104,6 +127,7 @@ async function replyMeetings(admin: ReturnType<typeof createAdminClient>, userId
     .from("meetings")
     .select("title, date, time, participants")
     .eq("user_id", userId)
+    .or(await involvedFilter(admin, userId, "meeting"))
     .eq("status", "planned")
     .gte("date", today)
     .is("deleted_at", null)

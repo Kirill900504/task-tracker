@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { actorScope, type BotActor } from "./botActor";
+import { actorScope, authorFilter, type BotActor } from "./botActor";
 
 // Граница пространства в боте держится на одной функции, и цена ошибки в
 // ней несимметрична: лишний фильтр даёт пустой список, пропущенный —
@@ -38,5 +38,23 @@ describe("actorScope", () => {
 
   it("падает на не-владельце без своего id: иначе он увидел бы всё", () => {
     expect(() => actorScope({ ...manager, userId: "" })).toThrow();
+  });
+});
+
+// Равные права (06.10.2026): у владельца в боте нет поблажки на чужую
+// работу. Пространство у него по-прежнему своё целиком (actorScope), но
+// решать он может только то, у чего автор не записан, — свои строки.
+describe("authorFilter", () => {
+  it("владельцу — только свои строки (автор не записан)", () => {
+    expect(authorFilter(owner)).toBe("created_by.is.null");
+  });
+
+  it("руководителю — то же правило, что и в actorScope", () => {
+    expect(authorFilter(manager)).toBe("created_by.eq.u2");
+  });
+
+  it("падает вслепую, как и actorScope", () => {
+    expect(() => authorFilter("u1" as unknown as BotActor)).toThrow();
+    expect(() => authorFilter({ ...manager, userId: "" })).toThrow();
   });
 });

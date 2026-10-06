@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
-import { actorScope, type BotActor } from "@/lib/botActor";
+import { actorScope, authorFilter, type BotActor } from "@/lib/botActor";
 import { botMenu, navRow } from "@/lib/botMenu";
 
 // О чём ПОСТАНОВЩИК может спросить бота — и что он может нажать.
@@ -57,7 +57,7 @@ export async function ownerTasks(admin: SupabaseClient, actor: BotActor): Promis
   const { data } = await admin
     .from("tasks")
     .select("id, title, assignee, deadline, status, approval_state, priority")
-    .match(actorScope(actor))
+    .match(actorScope(actor)).or(authorFilter(actor))
     .is("deleted_at", null)
     .neq("status", "done")
     .order("deadline", { nullsFirst: false });
@@ -78,7 +78,7 @@ export async function ownerMeetings(admin: SupabaseClient, actor: BotActor, toda
   const { data } = await admin
     .from("meetings")
     .select("id, title, date, time, result, participants, status")
-    .match(actorScope(actor))
+    .match(actorScope(actor)).or(authorFilter(actor))
     .is("deleted_at", null)
     .in("status", ["planned", "proposed"])
     .gte("date", today)
@@ -261,7 +261,7 @@ export async function ownerIdeasReply(admin: SupabaseClient, actor: BotActor): P
   const { data } = await admin
     .from("ideas")
     .select("id, text, important, created_at")
-    .match(actorScope(actor))
+    .match(actorScope(actor)).or(authorFilter(actor))
     .eq("done", false)
     .is("deleted_at", null)
     .order("important", { ascending: false })
