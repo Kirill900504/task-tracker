@@ -70,7 +70,7 @@ export const reportInput = z.object({
 });
 
 export const reviewInput = z.object({
-  action: z.enum(["approve", "return", "force", "reopen", "moved", "kept", "deadline"]),
+  action: z.enum(["approve", "return", "return_one", "force", "reopen", "moved", "kept", "deadline"]),
   taskId: ID,
   comment: z.string().max(4000).optional(),
   participantId: UUID.optional(),

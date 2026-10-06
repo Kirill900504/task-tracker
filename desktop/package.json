@@ -1,6 +1,6 @@
 {
   "name": "rokas-desktop",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "private": true,
   "description": "Планировщик задач — настольное приложение",
   "main": "main.js",

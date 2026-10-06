@@ -7,6 +7,7 @@ import type { PersonOption } from "@/hooks/useTaskParticipants";
 import { withoutSelfMark } from "@/lib/actorName";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { SEARCH_FROM, matchesPerson } from "@/lib/personSearch";
 
 // Кто на задаче — одним полем.
 //
@@ -107,11 +108,18 @@ export default function PeoplePicker({
   const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(false);
   const COLLAPSED_COUNT = 6;
-  const collapsed = isMobile && !expanded && people.length > COLLAPSED_COUNT + 2;
+  // Поиск — когда людей больше, чем видно одним взглядом (lib/personSearch).
+  // Выбранные остаются на виду при любом запросе: снять человека с задачи
+  // должно быть можно, не стирая того, что набрано в поле.
+  const [query, setQuery] = useState("");
+  const searchable = people.length >= SEARCH_FROM;
+  const searching = searchable && !!query.trim();
+  const matched = searching ? people.filter((p) => !!roleOf(p.id) || matchesPerson(p.name, query)) : people;
+  const collapsed = !searching && isMobile && !expanded && people.length > COLLAPSED_COUNT + 2;
   const visiblePeople = collapsed
     ? people.filter((p, i) => i < COLLAPSED_COUNT || !!roleOf(p.id) || p.name.trim().endsWith("(я)"))
-    : people;
-  const hiddenCount = people.length - visiblePeople.length;
+    : matched;
+  const hiddenCount = searching ? 0 : people.length - visiblePeople.length;
 
   return (
     <div className="field people-field">
@@ -123,6 +131,27 @@ export default function PeoplePicker({
           </span>
         )}
       </label>
+      {searchable && (
+        <input
+          className="people-search"
+          type="search"
+          placeholder="Найти человека…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          // Enter в поле поиска не должен отправлять форму задачи: когда
+          // найден ровно один, Enter выбирает его — так быстрее, чем мышью.
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            const only = matched.filter((p) => !roleOf(p.id));
+            if (only.length === 1) {
+              const el = document.querySelector<HTMLElement>(`#fPeople [data-person="${only[0].id}"]`);
+              if (el) setMenuFor({ person: only[0], anchor: el.getBoundingClientRect() });
+            }
+          }}
+          aria-label="Найти человека"
+        />
+      )}
       <div className="participant-grid" id="fPeople">
         {visiblePeople.map((person) => {
           const role = roleOf(person.id);
@@ -130,6 +159,7 @@ export default function PeoplePicker({
             <button
               key={person.id}
               type="button"
+              data-person={person.id}
               className={"participant-chip" + (role ? " selected role-" + role : "")}
               // Метка «(я)» с экрана убрана (см. комментарий у shown() выше),
               // но e2e по-прежнему нужен надёжный способ найти именно свою
@@ -153,6 +183,9 @@ export default function PeoplePicker({
             </button>
           );
         })}
+        {searching && visiblePeople.every((p) => !!roleOf(p.id)) && (
+          <span className="people-search-empty">Никого не нашёл по «{query.trim()}»</span>
+        )}
         {hiddenCount > 0 && (
           <button type="button" className="participant-chip chip-more" id="morePeopleBtn" onClick={() => setExpanded(true)}>
             Ещё {hiddenCount}

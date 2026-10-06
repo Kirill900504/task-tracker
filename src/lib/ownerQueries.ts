@@ -268,11 +268,17 @@ export async function ownerIdeasReply(admin: SupabaseClient, actor: BotActor): P
     .order("created_at", { ascending: false })
     .limit(PAGE);
   const ideas = (data || []) as { id: string; text: string; important: boolean }[];
-  if (!ideas.length) return { text: "Мыслей пока нет. Продиктуйте — запишу.", buttons: ownerNav() };
+  // «Записать» — первой кнопкой. Отзыв Витовского 25.09.2026: «Мысли —
+  // только открывает список мыслей, но не даёт возможность написать». У
+  // владельца была обходная дорога («запиши мысль…» свободным текстом), у
+  // руководителя свободный текст — поручение, и дороги не было вовсе.
+  const write = [{ text: "✍️ Записать мысль", data: encodeCallback("idea", "inew", "x") }];
+  if (!ideas.length) return { text: "Мыслей пока нет.", buttons: [write, ...ownerNav()] };
   const lines = ideas.map((i) => `${i.important ? "🚩" : "•"} ${i.text}`);
   return {
     text: `💡 Мысли (${ideas.length}):\n\n${lines.join("\n")}`,
     buttons: [
+      write,
       ...ideas.map((i) => [{ text: `${i.important ? "🚩 " : ""}${short(i.text, 26)}`, data: encodeCallback("idea", "ishow", i.id) }]),
       ...ownerNav(),
     ],

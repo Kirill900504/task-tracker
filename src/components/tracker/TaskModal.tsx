@@ -106,6 +106,7 @@ export default function TaskModal({
   onRemoveParticipant,
   onApproveWork,
   onReturnWork,
+  onReturnOne,
   onForceCloseWork,
   onReopenWork,
   onAcceptReschedule,
@@ -135,6 +136,7 @@ export default function TaskModal({
   onRemoveParticipant: (participantId: string) => void;
   onApproveWork: (comment: string) => void;
   onReturnWork: (comment: string) => void;
+  onReturnOne?: (participantId: string, comment: string) => void | Promise<void>;
   onForceCloseWork: (reason: string) => void;
   onReopenWork: (comment: string) => void;
   onAcceptReschedule: (participantId: string, date: string) => void;
@@ -551,6 +553,7 @@ export default function TaskModal({
                   onRemoveParticipant={onRemoveParticipant}
                   onApproveWork={onApproveWork}
                   onReturnWork={onReturnWork}
+                  onReturnOne={onReturnOne}
                   onForceCloseWork={onForceCloseWork}
                   onReopenWork={onReopenWork}
                   onAcceptReschedule={onAcceptReschedule}
@@ -668,6 +671,7 @@ export default function TaskModal({
                   onRemoveParticipant={onRemoveParticipant}
                   onApproveWork={onApproveWork}
                   onReturnWork={onReturnWork}
+                  onReturnOne={onReturnOne}
                   onForceCloseWork={onForceCloseWork}
                   onReopenWork={onReopenWork}
                   onAcceptReschedule={onAcceptReschedule}
@@ -793,17 +797,30 @@ export default function TaskModal({
 
         <div className="field">
           <label>Повторение задачи</label>
+          {/* «По будням» — отдельной кнопкой, рядом с «Каждый день». Отзыв
+              Витовского 25.09.2026: «если ставишь задачу с повторением, пусть
+              система учитывает выходные». Умела она это давно — недельный
+              повтор с кнопкой «Будни», — но спрятанным на второй ступени, и
+              «каждый день» выбирали вместо него. Внутри это тот же недельный
+              повтор пн–пт: второго вида повтора ради одной кнопки не нужно. */}
           <ChipChoice
             id="fRecur"
-            value={form.recur}
+            value={form.recur === "weekly" && isWorkweek ? "workdays" : form.recur}
             options={[
               { value: "none", label: "Не повторяется" },
+              { value: "workdays", label: "По будням" },
               { value: "daily", label: "Каждый день" },
               { value: "weekly", label: "Каждую неделю" },
               { value: "monthly", label: "Каждый месяц" },
               { value: "yearly", label: "Каждый год" },
             ]}
-            onSelect={(v) => setForm((f) => ({ ...f, recur: v as RecurKind }))}
+            onSelect={(v) =>
+              setForm((f) =>
+                v === "workdays"
+                  ? { ...f, recur: "weekly" as RecurKind, recurWeekdays: ["1", "2", "3", "4", "5"], recurWeekday: "1" }
+                  : { ...f, recur: v as RecurKind },
+              )
+            }
           />
 
           <div className={"recur-config" + (form.recur === "weekly" ? " open" : "")} id="recurWeekly">

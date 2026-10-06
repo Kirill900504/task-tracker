@@ -24,6 +24,7 @@ import ChipChoice from "./ChipChoice";
 import ItemFacts from "./ItemFacts";
 import ExpandableText from "./ExpandableText";
 import { busyStarts, minutesOf, slotOf } from "@/lib/meetingTime";
+import { SEARCH_FROM, matchesPerson } from "@/lib/personSearch";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { isCurrent, voteTally } from "@/lib/meetingVotes";
@@ -91,7 +92,8 @@ export default function MeetingModal({
   prefill?: MeetingPrefill;
   assignees: string[];
   onSave: (m: Meeting) => void;
-  onDelete: () => void;
+  // true — встречу отменили (причина названа), false — передумали.
+  onDelete: () => boolean | Promise<boolean>;
   onClose: () => void;
   onSetStatus: (meeting: Meeting, status: MeetingStatus, result: string) => void;
   // Единственный путь изменить «когда» и «кого» у назначенной встречи.
@@ -198,6 +200,16 @@ export default function MeetingModal({
     }
     return [...taken];
   };
+
+  // Кто из позванных занят в ВЫБРАННОЕ время — красным прямо на имени.
+  //
+  // Отзыв Витовского 25.09.2026: «ставлю тебя и Макарова на 10:00, система
+  // подсказывает, что у Макарова уже встреча… пусть красным подсвечивает;
+  // переносишь на 11:00 — все имена синие, значит всё ок». Штриховка на
+  // кнопке времени говорила это только тому, кто навёл на неё мышь, и
+  // только про другие слоты — про выбранный она молчала.
+  const busyNow = new Set(time ? busyNamesAt(time) : []);
+  const [peopleQuery, setPeopleQuery] = useState("");
 
   // Esc закрывает окно — как и любое другое окно трекера.
 
@@ -599,12 +611,40 @@ export default function MeetingModal({
                   purpose (he runs the meetings, so he is never the one being
                   picked); if he is already listed on an existing meeting that
                   stays untouched — see save(). */}
+              {selectableAssignees.length >= SEARCH_FROM && (
+                <input
+                  className="people-search"
+                  type="search"
+                  placeholder="Найти человека…"
+                  value={peopleQuery}
+                  onChange={(e) => setPeopleQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Enter не сохраняет встречу из поля поиска; один найденный —
+                    // выбирается им.
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    const found = selectableAssignees.filter((n) => !participants.includes(n) && matchesPerson(n, peopleQuery));
+                    if (found.length === 1) {
+                      toggleParticipant(found[0]);
+                      setPeopleQuery("");
+                    }
+                  }}
+                  aria-label="Найти человека"
+                />
+              )}
               <div className="participant-grid" id="mParticipants">
-                {selectableAssignees.map((name) => (
+                {selectableAssignees
+                  .filter((name) => participants.includes(name) || matchesPerson(name, peopleQuery))
+                  .map((name) => (
                   <button
                     key={name}
                     type="button"
-                    className={"participant-chip" + (participants.includes(name) ? " selected" : "")}
+                    className={
+                      "participant-chip" +
+                      (participants.includes(name) ? " selected" : "") +
+                      (participants.includes(name) && busyNow.has(name) ? " busy-now" : "")
+                    }
+                    title={participants.includes(name) && busyNow.has(name) ? `${withoutSelfMark(name)} в ${time} уже на другой встрече` : undefined}
                     onClick={() => toggleParticipant(name)}
                   >
                     {/* Метка «(я)» написана для одного человека, а читают
@@ -614,6 +654,12 @@ export default function MeetingModal({
                   </button>
                 ))}
               </div>
+              {busyNow.size > 0 && (
+                <div className="field-hint busy-now-hint">
+                  В {time} уже на другой встрече: {[...busyNow].map(withoutSelfMark).join(", ")}. Можно оставить — или выбрать
+                  время, где все свободны.
+                </div>
+              )}
             </div>
 
             <div className="field">
@@ -645,14 +691,14 @@ export default function MeetingModal({
                 id="deleteMeetingBtn"
                 onClick={() =>
                   void (async () => {
-                    const yes = await ask.confirm({ question: "Удалить эту встречу?", okText: "Удалить", danger: true });
-                    if (!yes) return;
-                    onDelete();
-                    onClose();
+                    // Причину отмены спрашивает сам обработчик (MeetingsPanel):
+                    // окно закрывается, только если встречу действительно
+                    // отменили.
+                    if (await onDelete()) onClose();
                   })()
                 }
               >
-                Удалить
+                Отменить встречу
               </button>
             )}
           </div>

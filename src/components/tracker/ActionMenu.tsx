@@ -1,10 +1,11 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import PopLayer from "./PopLayer";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import Icon, { type IconName } from "./Icon";
+import { matchesPerson } from "@/lib/personSearch";
 
 // The small menu that hangs off a card's «⋯» button. Everything a card can
 // do that isn't worth a permanent button lives here — and on a phone it is
@@ -34,15 +35,26 @@ export default function ActionMenu({
   title,
   items,
   onClose,
+  searchPlaceholder,
 }: {
   // Where the button that opened it is. Unused by the phone's sheet.
   anchor: DOMRect | null;
   title?: string;
   items: ActionMenuItem[];
   onClose: () => void;
+  // Строка поиска над пунктами — для меню, где пункты это люди («+
+  // добавить» у готовой задачи). Совпадение то же, что у остальных списков
+  // людей (lib/personSearch). Пункты с id, начинающимся на «new-», в поиске
+  // не участвуют и видны всегда: «+ новый человек» нужен как раз тогда,
+  // когда поиск никого не нашёл.
+  searchPlaceholder?: string;
 }) {
   const isMobile = useIsMobile();
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const [query, setQuery] = useState("");
+  const shownItems = searchPlaceholder && query.trim()
+    ? items.filter((item) => item.id.startsWith("new-") || matchesPerson(item.label, query))
+    : items;
 
   // Меню открывается ПОВЕРХ окна (роль человека — поверх карточки задачи),
   // и Escape должен закрыть только его: хук останавливает событие, поэтому
@@ -55,11 +67,17 @@ export default function ActionMenu({
   useLayoutEffect(() => {
     const el = menuRef.current;
     if (isMobile || !el || !anchor) return;
+    // Потолок — экран. Без него «Кого добавить» из пятнадцати имён уходило
+    // за нижний край, и последних людей было не выбрать вовсе (отзыв
+    // Витовского 25.09.2026: «список выходит за рамки экрана»). Дальше —
+    // прокрутка внутри меню.
+    el.style.maxHeight = window.innerHeight - 16 + "px";
     let top = anchor.bottom + 6;
     if (top + el.offsetHeight > window.innerHeight - 8) top = Math.max(8, anchor.top - el.offsetHeight - 6);
+    if (top + el.offsetHeight > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - el.offsetHeight);
     el.style.top = top + "px";
     el.style.right = Math.max(8, window.innerWidth - anchor.right) + "px";
-  }, [anchor, isMobile, items.length]);
+  }, [anchor, isMobile, shownItems.length]);
 
   return (
     <PopLayer>
@@ -70,7 +88,28 @@ export default function ActionMenu({
         style={isMobile ? undefined : { top: -9999, right: 8 }}
       >
         {title && <div className="action-menu-title">{title}</div>}
-        {items.map((item) => (
+        {searchPlaceholder && (
+          <input
+            className="people-search action-menu-search"
+            type="search"
+            autoFocus={!isMobile}
+            placeholder={searchPlaceholder}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              // Один найденный — Enter выбирает его.
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              const real = shownItems.filter((item) => !item.id.startsWith("new-"));
+              if (real.length === 1) {
+                onClose();
+                real[0].onSelect();
+              }
+            }}
+            aria-label={searchPlaceholder}
+          />
+        )}
+        {shownItems.map((item) => (
           <button
             key={item.id}
             className="export-item"

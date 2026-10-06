@@ -9,6 +9,7 @@ import { useAsk } from "@/components/Ask";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import ActionMenu from "./ActionMenu";
+import { SEARCH_FROM } from "@/lib/personSearch";
 import Icon, { type IconName } from "./Icon";
 
 // «Кто на задаче» и приёмка — одним компактным блоком.
@@ -60,6 +61,7 @@ export default function TeamCompact({
   onRemoveParticipant,
   onApproveWork,
   onReturnWork,
+  onReturnOne,
   onForceCloseWork,
   onReopenWork,
   onAcceptReschedule,
@@ -76,6 +78,8 @@ export default function TeamCompact({
   onRemoveParticipant: (participantId: string) => void;
   onApproveWork: (comment: string) => void | Promise<void>;
   onReturnWork: (comment: string) => void | Promise<void>;
+  // Вернуть на доработку одного исполнителя — не дожидаясь остальных.
+  onReturnOne?: (participantId: string, comment: string) => void | Promise<void>;
   onForceCloseWork: (reason: string) => void | Promise<void>;
   onReopenWork: (comment: string) => void | Promise<void>;
   onAcceptReschedule: (participantId: string, date: string) => void;
@@ -160,6 +164,25 @@ export default function TeamCompact({
     setBusy(true);
     try {
       await onReturnWork(comment.trim());
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReturnOne(p: Participant) {
+    if (busy || !onReturnOne) return;
+    const comment = await ask.ask({
+      title: `Вернуть: ${shown(p.name)}`,
+      question: "Что доделать?",
+      note: "Увидит только этот человек. Остальные исполнители и их отчёты не затрагиваются.",
+      multiline: true,
+      okText: "Вернуть",
+      required: "Возврат без объяснения бессмысленен — напишите, что не так.",
+    });
+    if (comment === null || busy) return;
+    setBusy(true);
+    try {
+      await onReturnOne(p.id, comment.trim());
     } finally {
       setBusy(false);
     }
@@ -338,6 +361,11 @@ export default function TeamCompact({
               label: r.label,
               onSelect: () => onSetParticipantRole(personMenu.p.id, r.role),
             })),
+            // Отчитался или отказался — значит, его ответ можно вернуть ему
+            // одному, не ожидая остальных (отзыв Витовского 25.09.2026).
+            ...(onReturnOne && stage !== "done" && personMenu.p.role === "executor" && (personMenu.p.doneAt || hasDeclined(personMenu.p))
+              ? [{ id: "return-one", label: "Вернуть ему на доработку", onSelect: () => void handleReturnOne(personMenu.p) }]
+              : []),
             { id: "remove", label: "Убрать с задачи", onSelect: () => onRemoveParticipant(personMenu.p.id) },
           ]}
           onClose={() => setPersonMenu(null)}
@@ -348,6 +376,7 @@ export default function TeamCompact({
         <ActionMenu
           anchor={addMenu}
           title="Кого добавить"
+          searchPlaceholder={unpicked.length >= SEARCH_FROM ? "Найти человека…" : undefined}
           items={[
             ...unpicked.map((person) => ({
               id: person.id,

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
+import type { Meeting, MeetingPrefill, MeetingStatus, TaskPrefill } from "@/types/tracker";
 import { addDaysIso, awaitsRecap, sortMeetingsForList } from "@/lib/calendarLogic";
 import { fmtDate, todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
@@ -39,6 +39,7 @@ export default function MeetingsPanel({
   onRequestedMeetingSaved,
   onIdeaDropped,
   onTaskDropped,
+  onTaskFromMeeting,
   justCreatedId,
 }: {
   // Свой auth-id: чужую встречу видно, потому что тебя на неё позвали, но
@@ -86,6 +87,8 @@ export default function MeetingsPanel({
   // Задача, принесённая в блок встреч: открывает форму встречи, заполненную
   // по ней, и оставляет саму задачу на доске.
   onTaskDropped: (taskId: string) => void;
+  // Открыть форму новой задачи, заполненную по итогу встречи.
+  onTaskFromMeeting?: (prefill: TaskPrefill) => void;
   justCreatedId?: string | null;
 }) {
   // Голосование по встречам — один слой на всю панель, как участники у
@@ -237,9 +240,53 @@ export default function MeetingsPanel({
   const sorted = all.filter((m) => !awaitsRecap(m));
   const resolved = sortMeetingsForList(meetings, true).filter((m) => m.status && m.status !== "planned" && m.status !== "proposed");
 
-  function deleteMeeting(m: Meeting) {
+  // Отмена — с причиной, и причину узнают участники (отзыв Витовского
+  // 25.09.2026: «любая отмена должна нести какую-то причину»). Вопрос
+  // задаётся здесь, одним местом на крестик в списке и «Удалить» в окне
+  // встречи: два места — две версии одного вопроса.
+  //
+  // Сообщение уходит, когда истекло время на «Отменить» во всплывашке, а не
+  // сразу: отмена, отменённая через секунду, не должна успеть дойти до
+  // людей. Закрытая за эти секунды вкладка всё равно его отправит
+  // (sendBeacon на pagehide).
+  async function deleteMeeting(m: Meeting): Promise<boolean> {
+    const reason = await ask.ask({
+      title: "Отменить встречу?",
+      question: `Почему отменяется «${m.title}»?`,
+      note: "Причину увидят все, кого звали, — в мессенджере и в обсуждении встречи.",
+      placeholder: "Например: перенесли на следующую неделю, вопрос решён",
+      multiline: true,
+      okText: "Отменить встречу",
+      cancelText: "Не отменять",
+      required: "Без причины встречу не отменить.",
+    });
+    if (!reason?.trim()) return false;
     actions.deleteMeeting(m.id);
-    toasts.showToast("Встреча удалена", m.title, () => actions.restoreMeeting(m));
+    const payload = JSON.stringify({ meetingId: m.id, reason: reason.trim() });
+    // Отправить один раз — либо по таймеру, либо при уходе со страницы.
+    let sent = false;
+    const clock: { timer?: ReturnType<typeof setTimeout> } = {};
+    function onHide() {
+      if (sent) return;
+      sent = true;
+      clearTimeout(clock.timer);
+      navigator.sendBeacon?.("/api/workspace/meeting-cancel", new Blob([payload], { type: "application/json" }));
+    }
+    function send() {
+      window.removeEventListener("pagehide", onHide);
+      if (sent) return;
+      sent = true;
+      void fetch("/api/workspace/meeting-cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload }).catch(() => {});
+    }
+    clock.timer = setTimeout(send, 6500);
+    window.addEventListener("pagehide", onHide, { once: true });
+    toasts.showToast("Встреча отменена", m.title, () => {
+      sent = true;
+      clearTimeout(clock.timer);
+      window.removeEventListener("pagehide", onHide);
+      actions.restoreMeeting(m);
+    });
+    return true;
   }
 
   function setStatus(m: Meeting, status: MeetingStatus, resultText: string) {
@@ -277,6 +324,30 @@ export default function MeetingsPanel({
     toasts.showToast(status === "planned" ? "Встреча возвращена в план" : "Итог встречи сохранён и отправлен участникам", m.title, () =>
       actions.saveMeeting({ ...m, ...prev }),
     );
+    // После успешной встречи — предложить задачу по её итогу. Отзыв
+    // Витовского 25.09.2026: «нажал „Успешно“, всплыло окно — ставить
+    // задачу?». Договорились на встрече — значит кому-то что-то делать, и
+    // записать это нужно сейчас, пока помнится, кто и что. Только
+    // предложение: «просто прошла» — тоже исход, и окно формы без спроса
+    // учило бы закрывать его не глядя.
+    if (status === "success" && onTaskFromMeeting) {
+      void (async () => {
+        const yes = await ask.confirm({
+          title: "Встреча закрыта",
+          question: "Поставить задачу по итогам встречи?",
+          note: resultText.trim() ? `Итог: ${resultText.trim()}` : undefined,
+          okText: "Поставить задачу",
+          cancelText: "Не нужно",
+        });
+        if (!yes) return;
+        const said = resultText.trim();
+        onTaskFromMeeting({
+          title: said ? (said.length > 120 ? said.slice(0, 119) + "…" : said) : "",
+          desc: `По итогам встречи «${m.title}» (${fmtDate(m.date)}${m.time ? ", " + m.time : ""})${said ? ": " + said : ""}`,
+          deadline: "",
+        });
+      })();
+    }
   }
 
   // Закрыть встречу кнопкой прямо в списке — и сразу сказать, чем она
@@ -403,7 +474,7 @@ export default function MeetingsPanel({
               meeting={m}
               selectedDay={selectedDay}
               onOpen={() => setModalState({ open: true, meeting: m })}
-              onDelete={() => deleteMeeting(m)}
+              onDelete={() => void deleteMeeting(m)}
               onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
               votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
@@ -423,7 +494,7 @@ export default function MeetingsPanel({
               meeting={m}
               selectedDay={selectedDay}
               onOpen={() => setModalState({ open: true, meeting: m })}
-              onDelete={() => deleteMeeting(m)}
+              onDelete={() => void deleteMeeting(m)}
               onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
               votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
@@ -488,7 +559,7 @@ export default function MeetingsPanel({
           prefill={modalPrefill}
           assignees={assignees}
           onSave={handleModalSave}
-          onDelete={() => modalMeeting && deleteMeeting(modalMeeting)}
+          onDelete={() => (modalMeeting ? deleteMeeting(modalMeeting) : Promise.resolve(false))}
           onClose={closeModal}
           onSetStatus={setStatus}
           isMove={!!movingFrom && !modalMeeting}

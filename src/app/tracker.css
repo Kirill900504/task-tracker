@@ -1829,6 +1829,17 @@
 
   /* Participants: tap-to-toggle chips over a few rows, no dropdown. */
   .participant-grid{display:flex; flex-wrap:wrap; gap:7px;}
+  /* Поиск над списком людей (lib/personSearch). Тот же вид, что у полей
+     формы, только ниже ростом: это фильтр над кнопками, а не поле задачи. */
+  .people-search{
+    width:100%; margin:0 0 8px; padding:7px 11px; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
+    font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--ink);
+  }
+  .people-search:focus{outline:none; border-color:var(--accent);}
+  .people-search-empty{font-size:12.5px; color:var(--ink-soft); padding:7px 2px;}
+  @media (max-width:800px){ .people-search{font-size:16px; min-height:40px;} }
+  /* Тот же поиск в меню «+ добавить»: строка над пунктами меню. */
+  .action-menu-search{margin:4px 8px 6px; width:calc(100% - 16px);}
   .participant-chip{
     padding:7px 13px; border:1px solid var(--line-soft); border-radius:999px; cursor:pointer;
     background:var(--paper-soft); color:var(--ink); font-family:var(--sans); font-size:12.5px; font-weight:600;
@@ -1842,6 +1853,9 @@
   .participant-chip:hover{border-color:var(--accent); color:var(--accent); box-shadow:var(--shadow-1); transform:translateY(-1px);}
   .participant-chip:active{transform:translateY(0);}
   .participant-chip.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:600;}
+  /* Позван, но в выбранное время уже на другой встрече (MeetingModal). */
+  .participant-chip.selected.busy-now{background:var(--high); border-color:var(--high);}
+  .busy-now-hint{color:var(--high);}
   /* Роль видно на самой кнопке: исполнитель — просто выбранный, остальные
      подписаны, потому что их меньшинство и их легко перепутать с главным. */
   .participant-chip .chip-role{opacity:.8; font-weight:500;}
@@ -1962,7 +1976,11 @@
     position:fixed; z-index:121; min-width:220px; padding:6px;
     background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
     box-shadow:var(--shadow-2); display:flex; flex-direction:column; gap:1px;
+    /* Длинное меню прокручивается внутри себя, а не уходит за край экрана
+       (высоту на компьютере задаёт ActionMenu по окну). */
+    overflow-y:auto; overscroll-behavior:contain;
   }
+  .export-menu > .export-item, .export-menu > .action-menu-title, .export-menu > .people-search{flex-shrink:0;}
   /* Пункт меню — строка из значка и подписи. Значок необязателен, и без
      него подпись остаётся на том же месте, где была: собственной колонки
      под значок нет, иначе меню, где значок есть у половины пунктов,
@@ -2450,6 +2468,7 @@
       left:0; right:0; bottom:0; top:auto; z-index:420;
       min-width:0; padding:8px 10px calc(10px + env(safe-area-inset-bottom, 0px));
       border-radius:16px 16px 0 0; border-bottom:0;
+      max-height:80vh;
       /* Проявляется, а не выезжает: лист с кнопками появляется под самым
          пальцем, и движущаяся под ним кнопка — это промах по соседней. */
       animation:sheet-fade .14s ease-out;

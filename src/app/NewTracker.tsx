@@ -609,6 +609,7 @@ export default function NewTracker() {
             // выбранного — сегодняшний; поправить его можно прямо в форме.
             onTaskDropped={(id) => taskDroppedOnDate(id, selectedDate ?? todayStr())}
             justCreatedId={justCreatedMeetingId}
+            onTaskFromMeeting={(prefill) => setOpenTaskRequest(prefill)}
           />
         ),
         // Общие пропы панели задач — одни на все три монтирования: полную

@@ -28,6 +28,39 @@ const APP_ORIGIN = new URL(APP_URL).origin;
 // missing file is not an error — it just means "no preference yet".
 const stateFile = () => path.join(app.getPath("userData"), "window-state.json");
 
+// Автозапуск вместе с Windows — включён с первого запуска.
+//
+// Отзыв Витовского 25.09.2026: «сделать автозапуск в винде, чтобы прога
+// постоянно болталась и приходили уведомления». Трекер, который надо не
+// забыть открыть, — это трекер, который не открывают: ради «не забыть»
+// он и затевался. Включается ОДИН раз, при первом запуске версии, где это
+// появилось (отметка в userData), — дальше решает человек галочкой
+// «Запускать вместе с Windows» в меню «Трекер», и его выбор не
+// перезаписывается ни обновлением, ни следующим запуском.
+const autostartMark = () => path.join(app.getPath("userData"), "autostart-decided");
+
+function ensureAutostartOnce() {
+  // Разработческий запуск (npm start) прописал бы в автозапуск сам
+  // electron.exe — а это не то приложение.
+  if (!app.isPackaged || process.platform !== "win32") return;
+  try {
+    if (fs.existsSync(autostartMark())) return;
+    app.setLoginItemSettings({ openAtLogin: true });
+    fs.writeFileSync(autostartMark(), new Date().toISOString());
+  } catch {
+    // Не смогли записать — значит, спросим в следующий раз; приложение от
+    // этого не должно не открыться.
+  }
+}
+
+function autostartOn() {
+  try {
+    return app.getLoginItemSettings().openAtLogin;
+  } catch {
+    return false;
+  }
+}
+
 function readWindowState() {
   try {
     const saved = JSON.parse(fs.readFileSync(stateFile(), "utf8"));
@@ -170,6 +203,7 @@ if (!app.requestSingleInstanceLock()) {
     // трекера, чтобы кнопки «Команда» и «Выйти» не оказались под
     // системными «свернуть/закрыть».
     nativeTheme.themeSource = "dark";
+    ensureAutostartOnce();
     buildMenu();
     createWindow();
     checkForUpdates();
@@ -198,6 +232,23 @@ function buildMenu() {
           { label: "Во весь экран", accelerator: "F11", role: "togglefullscreen" },
           { type: "separator" },
           { label: "Проверить обновления", click: () => checkForUpdates({ tellMe: true }) },
+          ...(app.isPackaged && process.platform === "win32"
+            ? [
+                {
+                  label: "Запускать вместе с Windows",
+                  type: "checkbox",
+                  checked: autostartOn(),
+                  click: (item) => {
+                    app.setLoginItemSettings({ openAtLogin: item.checked });
+                    try {
+                      fs.writeFileSync(autostartMark(), new Date().toISOString());
+                    } catch {
+                      // см. ensureAutostartOnce
+                    }
+                  },
+                },
+              ]
+            : []),
           { type: "separator" },
           { label: "Выход", accelerator: "CmdOrCtrl+Q", role: "quit" },
         ],

@@ -519,6 +519,21 @@ export function useTaskParticipants() {
   const approve = useCallback((taskId: string, comment: string) => review("approve", taskId, comment), [review]);
   const returnForRework = useCallback((taskId: string, comment: string) => review("return", taskId, comment), [review]);
   const forceClose = useCallback((taskId: string, reason: string) => review("force", taskId, reason), [review]);
+  // Вернуть одному исполнителю, не дожидаясь остальных (см. return_one в
+  // /api/workspace/review).
+  const returnOne = useCallback(
+    async (taskId: string, participantId: string, comment: string) => {
+      const res = await fetch("/api/workspace/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "return_one", taskId, participantId, comment }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.error) throw new Error(data?.error || "Не получилось вернуть");
+      await load();
+    },
+    [load],
+  );
   // Приёмку снимает только сервер: колонка не принадлежит движку
   // синхронизации, и снятая в браузере галочка «сделано» оставляла задачу
   // в «Завершённых» навсегда.
@@ -550,6 +565,7 @@ export function useTaskParticipants() {
       decideReschedule,
       approve,
       returnForRework,
+      returnOne,
       forceClose,
       reopen,
       acceptWork,
@@ -571,6 +587,7 @@ export function useTaskParticipants() {
       decideReschedule,
       approve,
       returnForRework,
+      returnOne,
       forceClose,
       reopen,
       acceptWork,

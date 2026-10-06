@@ -5,6 +5,7 @@ import { REACTIONS, useItemComments, type Comment, type ItemKind } from "@/hooks
 import { useAsk } from "@/components/Ask";
 import ChatMessageMenu, { type ChatMenuAction } from "./ChatMessageMenu";
 import Icon from "./Icon";
+import MicButton from "./MicButton";
 import { humanError } from "@/lib/humanError";
 
 // Обсуждение задачи там же, где задача.
@@ -693,6 +694,12 @@ export default function ItemChat({
             e.target.value = "";
           }}
         />
+        {/* Диктовка — тот же микрофон, что у названия задачи и мысли.
+            Отзыв Витовского 25.09.2026: «добавить голосовой ввод в
+            обсуждениях». Надиктованное дописывается в поле, а не уходит
+            само: распознавание ошибается, и прочесть перед отправкой
+            дешевле, чем исправлять отправленное. */}
+        <MicButton value={draft} onChange={setDraft} title="Надиктовать сообщение" />
         <button
           type="button"
           className="btn btn-small chat-clip"

@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readInput, reviewInput } from "@/lib/apiInput";
-import type { ColleagueRow } from "@/lib/colleagues";
+import { taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
 import { applyReview, type ReviewAction } from "@/lib/reviewWork";
-import { actorName } from "@/lib/actorName";
+import { actorName, withoutSelfMark } from "@/lib/actorName";
 import { fmtDate } from "@/lib/taskDisplay";
 
 // Решение постановщика по отчёту: принять, вернуть, закрыть волевым.
@@ -72,6 +72,50 @@ export async function POST(req: Request) {
   if (!isAuthor) return NextResponse.json({ error: "Это решение не ваше" }, { status: 403 });
 
   const comment = (body.comment || "").trim();
+
+  // Вернуть на доработку ОДНОГО исполнителя, не трогая остальных.
+  //
+  // Отзыв Витовского 25.09.2026: «сделал задачу на двоих, один отчитался —
+  // но я не могу вернуть задачу в работу, пока не дождусь второго… один
+  // сотрудник не должен зависеть от другого». Возврат был только общим и
+  // только с приёмки, то есть отчёт первого лежал без ответа, пока не
+  // отчитается второй. Здесь снимается отчёт (или отказ) одного человека;
+  // задача, стоявшая на приёмке, возвращается в работу, потому что
+  // «ответили все» больше не правда.
+  if (body.action === "return_one") {
+    if (!comment) return NextResponse.json({ error: "Напишите, что доделать" }, { status: 400 });
+    const { data: partRow } = await admin
+      .from("task_participants")
+      .select("id, assignee_id, task_id, role")
+      .eq("id", body.participantId || "")
+      .maybeSingle();
+    const one = partRow as { id: string; assignee_id: string; task_id: string; role: string } | null;
+    if (!one || one.task_id !== task.id) return NextResponse.json({ error: "Этого человека нет на задаче" }, { status: 404 });
+    await admin
+      .from("task_participants")
+      .update({ done_at: null, done_comment: null, done_files: [], declined_at: null, decline_reason: null })
+      .eq("id", one.id);
+    await admin.from("tasks").update({ approval_state: "open" }).eq("id", task.id).eq("approval_state", "awaiting_review");
+    const { data: personRow } = await admin
+      .from("assignees")
+      .select("id, name, telegram_chat_id, max_user_id")
+      .eq("id", one.assignee_id)
+      .maybeSingle();
+    const person = personRow as ColleagueRow | null;
+    const label = await actorName(admin, task.user_id, user.id);
+    await recordEvent(admin, {
+      userId: task.user_id,
+      kind: "task",
+      itemId: task.id,
+      text: `↩ ${label} вернул на доработку ${person ? withoutSelfMark(person.name) : "исполнителю"}: ${comment}`,
+    });
+    if (person) {
+      await sendToPerson(admin, task.user_id, person, `↩ Вернули на доработку: «${task.title}»
+
+${label}: ${comment}`, taskButtons(task.id, "executor"));
+    }
+    return NextResponse.json({ ok: true });
+  }
 
   // Срок двинули — и об этом должны узнать те, кто по нему работает.
   //

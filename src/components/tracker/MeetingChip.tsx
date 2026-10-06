@@ -8,7 +8,6 @@ import type { Meeting } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
 import { awaitsRecap } from "@/lib/calendarLogic";
 import { sanitizeAssigneeList } from "@/lib/trackerRows";
-import { useAsk } from "@/components/Ask";
 
 // Карточка встречи в списке — устроена как карточка задачи.
 //
@@ -69,7 +68,6 @@ export default function MeetingChip({
   // anchor's rect, exactly as legacy's showPeopleTooltip() did: the meetings
   // list scrolls (#meetingsForDay{overflow:auto}), so a tooltip nested inside
   // a chip gets clipped for meetings near the bottom of the list.
-  const ask = useAsk();
   const [peopleAnchor, setPeopleAnchor] = useState<DOMRect | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const participants = sanitizeAssigneeList(meeting.participants);
@@ -205,19 +203,17 @@ export default function MeetingChip({
       {/* Отмена встречи — в правом верхнем углу, где её и ищут. Заметной
           кнопкой, а не значком, проступающим на наведение: наведения нет
           на телефоне вовсе, и невидимая кнопка равна отсутствующей.
-          Спрашивает перед удалением, поэтому промах пальцем ничего не
-          стоит. */}
+          Спрашивает причину перед отменой, поэтому промах пальцем ничего
+          не стоит. */}
       {showQuickActions && (
         <button
           className="meeting-del"
-          title={`Удалить встречу «${meeting.title}»`}
-          aria-label="Удалить встречу"
+          title={`Отменить встречу «${meeting.title}»`}
+          aria-label="Отменить встречу"
           onClick={(e) => {
             e.stopPropagation();
-            void (async () => {
-              const yes = await ask.confirm({ question: `Удалить встречу «${meeting.title}»?`, okText: "Удалить", danger: true });
-              if (yes) onDelete();
-            })();
+            // Спрашивает сам обработчик — причину отмены (MeetingsPanel).
+            onDelete();
           }}
         >
           <Icon name="close" size={15} />

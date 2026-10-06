@@ -20,6 +20,7 @@ import { onceOnly } from "@/lib/onceOnly";
 import { findSilent, composeSilence } from "@/lib/silence";
 import { setMaxCommands, setTelegramCommands, syncTelegramAppButtons } from "@/lib/botCommands";
 import { alarmText, findStuck, nudgeText } from "@/lib/escalation";
+import { findWaiting, unacceptedText, unreviewedText } from "@/lib/waitingNudges";
 import { endsAt, normalizeDuration, warnBefore } from "@/lib/meetingTime";
 import { endingSoonText, timeIsUpText } from "@/lib/meetingNudges";
 import { buildOwnerWeekly, composeOwnerWeekly, loadOwnerWeekly } from "@/lib/ownerWeekly";
@@ -295,6 +296,28 @@ export async function GET(req: Request) {
               what: "просрочена на " + step + " дн., ответа нет",
             });
           }
+        });
+      }
+    }
+
+    // Не взяли за несколько часов, не принимают сутки — по одному разу на
+    // задачу (lib/waitingNudges). Днём и в рабочий день: «ждёт вашего
+    // ответа», пришедшее в субботу, учит отключать уведомления.
+    if (workingDay && !quiet) {
+      const waiting = await findWaiting(admin, userId, Date.now());
+      for (const w of waiting.unaccepted) {
+        await onceOnly(admin, { userId, kind: "unaccepted_nudge", refId: w.participantId, date: today }, async () => {
+          const { data: person } = await admin
+            .from("assignees")
+            .select("id, name, telegram_chat_id, max_user_id")
+            .eq("id", w.assigneeId)
+            .maybeSingle();
+          if (person) await sendToPerson(admin, userId, person as ColleagueRow, unacceptedText(w.title), taskButtons(w.taskId, "executor"));
+        });
+      }
+      for (const w of waiting.unreviewed) {
+        await onceOnly(admin, { userId, kind: "unreviewed_nudge", refId: w.taskId + ":" + w.since, date: today }, async () => {
+          await notifyAuthor(admin, userId, w.createdBy, unreviewedText(w.title), undefined, briefButtons());
         });
       }
     }

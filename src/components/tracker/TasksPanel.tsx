@@ -1103,6 +1103,15 @@ export default function TasksPanel({
             // а не вас.
             closeModal();
           }}
+          onReturnOne={async (participantId, comment) => {
+            if (!modalTask) return;
+            try {
+              await participants.returnOne(modalTask.id, participantId, comment);
+              toasts.showToast("Вернули на доработку", "Человеку сказано, остальных это не касается.");
+            } catch (e) {
+              toasts.showToast(humanError(e, "Не получилось вернуть"));
+            }
+          }}
           onAcceptReschedule={async (participantId, date) => {
             if (!modalTask) return;
             // Срок — колонка синхронизации, поэтому двигается обычным

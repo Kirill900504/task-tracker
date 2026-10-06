@@ -529,6 +529,17 @@ export async function handleOwnerCallback(
     };
   }
 
+  // Записать мысль: следующее сообщение станет ею (разбор — assignerPending
+  // в botPipeline, общий для владельца и руководителя).
+  if (action.action === "inew" && action.kind === "idea") {
+    return {
+      toast: "Напишите мысль",
+      say: "✍️ Напишите мысль одним сообщением — запишу её в ваши «Мысли». Можно голосовым.",
+      sayButtons: ownerNav(),
+      setPending: { kind: "new_idea", at: new Date().toISOString() },
+    };
+  }
+
   if (action.action === "idone" && action.kind === "idea") {
     const { error } = await admin
       .from("ideas")

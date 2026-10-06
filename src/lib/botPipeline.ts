@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig, BotTransport } from "@/lib/botTransport";
 import { answerOwnOpenQuestion, colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
 import { navButtons } from "@/lib/colleagueQueries";
-import { findColleagueByChat, findOwnerSelfByChat } from "@/lib/colleagues";
+import { encodeCallback, findColleagueByChat, findOwnerSelfByChat } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
@@ -17,7 +17,7 @@ import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
 import { attachExecutors, attachMeetingParticipants, assignNote, selfAssigneeName } from "@/lib/assignExecutors";
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 import { newTaskRow } from "@/lib/newTask";
-import { ownerListReply, ownerMeetingsReply, ownerMenu } from "@/lib/ownerQueries";
+import { ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav } from "@/lib/ownerQueries";
 import { whenButtons, whoButtons, type NewTaskPending } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
@@ -556,6 +556,31 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
   // Возврат на доработку: нажали кнопку, теперь пишут, что именно
   // доделать. Правила возврата общие с трекером (lib/reviewWork):
   // отчёты обнуляются, людям говорится сразу, в хронику пишется строка.
+  // Мысль, начатая кнопкой «✍️ Записать мысль». Автор — нажавший: у
+  // руководителя created_by его, у владельца пусто (так помечены все его
+  // строки, см. lib/ownership).
+  if ((waiting as { kind?: string }).kind === "new_idea") {
+    const text = trimmed.slice(0, 2000);
+    if (!text) {
+      await say(ctx, "Пустое сообщение — не мысль. Нажмите «✍️ Записать мысль» ещё раз и напишите её.");
+      return true;
+    }
+    const { error } = await ctx.admin.from("ideas").insert({
+      id: uid(),
+      user_id: actor.spaceId,
+      created_by: actor.isOwner ? null : actor.userId,
+      text,
+      important: false,
+      done: false,
+    });
+    await ctx.transport.send(
+      ctx.chatId,
+      error ? "Не получилось записать мысль — попробуйте ещё раз." : `💡 Записал: «${text.length > 80 ? text.slice(0, 79) + "…" : text}»`,
+      { buttons: [[{ text: "💡 Мои мысли", data: encodeCallback("idea", "olist", "all") }], ...ownerNav()] },
+    );
+    return true;
+  }
+
   if ((waiting as ReturnPending).kind === "review_return") {
     const ask = waiting as ReturnPending;
     const { data: taskRow } = await ctx.admin

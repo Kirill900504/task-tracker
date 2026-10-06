@@ -18,6 +18,24 @@ import { useDragState, useDropHandler, type DropTarget } from "./dnd/TrackerDnd"
 const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
+// Стоит ли точка задачи на этом дне.
+//
+// Повтор отвечает «да» на ЛЮБОЙ день (ежедневная задача «должна» и в
+// прошлом мае), и одна ежедневная задача заливала точками весь месяц —
+// отзыв Витовского 25.09.2026, где у каждого дня сентября стояла точка и
+// понять по календарю нельзя было ничего. Поэтому у повтора точки — только
+// с сегодняшнего дня вперёд и не раньше дня постановки: прошлые круги
+// календарь не планирует, их итог живёт в самой задаче. Закрытая задача
+// (сделана или принята) точки не ставит вовсе.
+function onCalendar(t: Task, day: Date, ds: string): boolean {
+  if (t.status === "done") return false;
+  if (t.recur === "none") return t.approvalState !== "accepted" && isTaskDueOnDate(t, day);
+  const today = todayStr();
+  const created = (t.createdAt || "").slice(0, 10);
+  if (ds < today || (created && ds < created)) return false;
+  return isTaskDueOnDate(t, day);
+}
+
 export default function CalendarPanel({
   tasks,
   meetings,
@@ -120,7 +138,7 @@ export default function CalendarPanel({
         ))}
         {gridDates.map((cd) => {
           const ds = dateStr(cd);
-          const dueTasks = tasks.filter((t) => t.status !== "done" && isTaskDueOnDate(t, cd));
+          const dueTasks = tasks.filter((t) => onCalendar(t, cd, ds));
           const dayMeetings = meetings.filter((m) => m.date === ds);
           return (
             <CalendarDay
