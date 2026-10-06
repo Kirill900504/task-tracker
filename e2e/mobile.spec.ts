@@ -8,7 +8,21 @@ import { userFilePath } from "./userFile";
 // its own navigation, its own first screen — so it needs its own tests. The
 // disposable account and the base URL are the same ones the desktop suite
 // uses (see e2e/global-setup.ts).
-const { email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
+const { id: userId, email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
+
+// Доска «как у свежего аккаунта» — для тестов, которые проверяют, чего на
+// ней НЕТ («Загрузки» в меню, «Просрочено» над доской). Аккаунт один на
+// прогон, и к мобильным тестам предыдущие наборы уже оставляют на нём
+// поручения и просрочку: в общем прогоне эти тесты краснели, а в одиночку
+// проходили, то есть проверяли порядок запуска, а не трекер. Задачи
+// снимаются мягко (deleted_at), тем же путём, что «Удалить» в трекере;
+// прогон идёт в один воркер, так что чужой тест в эту секунду не работает.
+async function clearBoard() {
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  await admin.from("tasks").update({ deleted_at: new Date().toISOString() }).eq("user_id", userId).is("deleted_at", null);
+}
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -22,6 +36,7 @@ async function login(page: Page) {
 }
 
 test("the phone gets its own shell: compact header, tabs, and tasks first", async ({ page }) => {
+  await clearBoard();
   await login(page);
 
   // The desktop header — logo, quote and eight buttons — is not there.
@@ -83,6 +98,7 @@ test("the phone gets its own shell: compact header, tabs, and tasks first", asyn
 // строка тут — отдельная его фраза, и вернуть любую из этих вещей можно
 // одной случайной правкой, которая нигде больше себя не проявит.
 test("на телефоне убрано всё, что дублирует подпись вкладки", async ({ page }) => {
+  await clearBoard();
   await login(page);
 
   // Задачи: вместо кнопки во всю ширину — «+», и ничего больше. Ни
