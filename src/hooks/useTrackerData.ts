@@ -626,14 +626,23 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     // Что лежит в облаке прямо сейчас. Одно и то же чтение на старте и на
     // догоне — иначе это была бы вторая правда об одном и том же (в этом
     // проекте вторая копия расходилась с первой трижды).
-    const loadAll = (ms?: number) =>
+    // `retry: false` — для быстрой пробы при уже показанной копии.
+    //
+    // postgrest-js (с 2.1xx) сам повторяет неудачный GET с паузами 1, 2 и
+    // 4 секунды. Для обычной загрузки это подарок, а для пробы — ровно то,
+    // что ломало её смысл: без сети каждый запрос отказывает мгновенно, но
+    // ответ об этом приходил только после всех повторов, то есть через
+    // ~6 секунд, и всё это время копия выглядела живыми данными. Значок
+    // «нет связи» появлялся позже, чем человек успевал что-то записать
+    // (QA-проход 06.10.2026; тот же сдвиг годами краснил e2e офлайна).
+    const loadAll = (ms?: number, retry = true) =>
       withTimeout(
         Promise.all([
-          db.from("tasks").select("*").is("deleted_at", null),
-          db.from("meetings").select("*").is("deleted_at", null),
-          db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }),
-          db.from("assignees").select("*").order("created_at", { ascending: true }),
-          db.from("sections").select("*").order("sort_order", { ascending: true }),
+          db.from("tasks").select("*").is("deleted_at", null).retry(retry),
+          db.from("meetings").select("*").is("deleted_at", null).retry(retry),
+          db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }).retry(retry),
+          db.from("assignees").select("*").order("created_at", { ascending: true }).retry(retry),
+          db.from("sections").select("*").order("sort_order", { ascending: true }).retry(retry),
         ]),
         ms,
       );
@@ -723,7 +732,10 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         // пробуется коротко, и по её молчанию сразу поднимается «нет
         // связи»; настоящая попытка продолжается следом, с обычным
         // терпением, и снимает баннер, когда ответит.
-        results = await loadAll(fastStart ? FAST_PROBE_MS : undefined);
+        results = await loadAll(fastStart ? FAST_PROBE_MS : undefined, !fastStart);
+        // Без повторов отказ сети приходит не исключением, а строкой с
+        // ошибкой — для пробы это тот же ответ «связи нет».
+        if (fastStart && results.some((r) => r.error)) throw new Error("probe failed");
       } catch {
         if (cancelled) return;
         if (fastStart) {
@@ -756,8 +768,13 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         // offline copy instead of showing an error page: everything changed
         // from here is stored locally and pushed by the usual retry (and by
         // the `online` listener below) once the network is back.
+        // Копия к этому моменту уже на экране (быстрый старт), и с первого
+        // кадра человек мог успеть что-то записать. startFromCache здесь
+        // вернул бы списки к сохранённым и стёр бы эту работу с экрана — а
+        // значит и из того, что потом уйдёт в базу. Поэтому только флаг:
+        // ровно для этого markOffline и отделён от startFromCache.
         if (cached) {
-          startFromCache(cached);
+          markOffline();
           return;
         }
         failLoad(failed.error!.message);
