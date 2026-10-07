@@ -130,6 +130,10 @@ export function telegramTransport(): BotTransport {
       const result = await sendTelegramMessage(chatId, text, buttons?.length ? { buttons } : undefined);
       return { ok: result.ok, error: result.error, messageId: result.messageId != null ? String(result.messageId) : undefined };
     },
+    async edit(chatId, messageId, text, buttons) {
+      const inline = buttons?.map((row) => row.map(toInline));
+      await editTelegramMessage(chatId, Number(messageId), text, inline?.length ? { buttons: inline } : undefined);
+    },
     // Ответ на нажатие и правка сообщения — два независимых вызова Telegram,
     // и уходят они одновременно. По очереди это был лишний полёт до серверов
     // Telegram на каждое нажатие, прямо в том месте, где человек смотрит на

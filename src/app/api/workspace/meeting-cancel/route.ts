@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { mirrorClosed } from "@/lib/botMirror";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordEvent } from "@/lib/itemHistory";
@@ -57,6 +58,9 @@ export async function POST(req: Request) {
   const who = await actorName(admin, meeting.user_id, user.id);
   const when = fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "");
   await recordEvent(admin, { userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `🚫 ${who} отменил встречу: ${reason}` });
+  // Приглашения в мессенджерах теряют «Буду / Не смогу» — у всех и в обоих
+  // мессенджерах (lib/botMirror). После ответа вкладке.
+  after(() => mirrorClosed(admin, "meeting", meeting.id, `📅 ${meeting.title}\n${when}\n\n🚫 Встреча отменена.\n${who}: ${reason}`));
 
   // Прошедшую встречу «отменить» — это убрать запись, а не сообщить
   // людям: они на ней уже были (или не были), и письмо об отмене вчерашнего

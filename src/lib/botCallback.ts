@@ -231,7 +231,7 @@ async function tellMeeting(admin: SupabaseClient, meetingId: string, text: strin
   const ownerId = rows[0].user_id;
   const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", rows.map((r) => r.assignee_id));
   // Всем сразу, а не по очереди (см. reviewWork — та же причина).
-  await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, ownerId, person, text, meetingButtons(meetingId))));
+  await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, ownerId, person, text, meetingButtons(meetingId), { kind: "meeting", itemId: meetingId })));
 }
 
 async function tellAssignees(admin: SupabaseClient, taskId: string, text: string): Promise<void> {

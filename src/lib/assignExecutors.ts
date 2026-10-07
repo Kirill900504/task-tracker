@@ -134,7 +134,7 @@ export async function attachExecutors(
     // руководитель, обязана до него доехать (см. lib/reach).
     if (isSelfAssignee(person.name) && byOwner) continue;
     if (selfRowId && person.id === selfRowId) continue;
-    await sendToPerson(admin, userId, person, taskMessage(task, from), taskButtons(task.id, role));
+    await sendToPerson(admin, userId, person, taskMessage(task, from), taskButtons(task.id, role), { kind: "task", itemId: task.id });
   }
   return { attached, missing };
 }

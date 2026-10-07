@@ -30,7 +30,14 @@ export type MeetingRef = {
 // Разослать итог и записать его следы. Сам статус встречи меняет тот, кто
 // зовёт: в трекере это движок синхронизации (колонка его), в боте —
 // closeMeeting ниже.
-export async function deliverRecap(admin: SupabaseClient, meeting: MeetingRef, result: string): Promise<number> {
+export async function deliverRecap(
+  admin: SupabaseClient,
+  meeting: MeetingRef,
+  result: string,
+  // Чем кончилась. Пусто — исход не назван (старые вызовы), и строка в
+  // хронике говорит только об итоге.
+  outcome?: "success" | "no_result",
+): Promise<number> {
   const when = fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "");
   const text = `📝 Итог встречи «${meeting.title}» (${when}):\n\n${result}`;
 
@@ -48,7 +55,19 @@ export async function deliverRecap(admin: SupabaseClient, meeting: MeetingRef, r
     sent = delivered.filter(Boolean).length;
   }
 
-  await recordEvent(admin, { userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `📝 Итог разослан участникам (${sent})` });
+  // В обсуждение встречи — сам итог, а не только факт рассылки. До
+  // 07.10.2026 здесь стояло «📝 Итог разослан участникам (2)», а слова
+  // итога жили только в поле встречи и в мессенджерах. Слова Кирилла:
+  // «комментарии при успешном или неуспешном завершении события любого
+  // должны прикрепляться к чату задачи или встречи текущей». Ярлык и слова
+  // разделены «: » — лента рисует их разной важностью (splitEvent).
+  const label = outcome === "success" ? "✅ Встреча прошла успешно" : outcome === "no_result" ? "⚪ Встреча без результата" : "📝 Итог встречи";
+  await recordEvent(admin, {
+    userId: meeting.user_id,
+    kind: "meeting",
+    itemId: meeting.id,
+    text: `${label} · итог разослан (${sent}): ${result}`,
+  });
 
   // Встреча, выросшая из задачи, возвращает в неё ответ (миграция 0037).
   if (meeting.from_task_id) {
@@ -85,7 +104,7 @@ export async function closeMeeting(
     })
     .eq("id", meeting.id);
 
-  if (result.trim()) await deliverRecap(admin, meeting, result.trim());
+  if (result.trim()) await deliverRecap(admin, meeting, result.trim(), outcome);
   else {
     await recordEvent(admin, {
       userId: meeting.user_id,

@@ -94,7 +94,7 @@ export async function confirmIfEveryoneAgreed(admin: SupabaseClient, meetingId: 
   if (ids.length) {
     const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
     const text = `✅ Встреча назначена: «${meeting.title}»\n${when}\n\nВсе ответили «буду».`;
-    await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, meeting.user_id, person, text, meetingButtons(meetingId))));
+    await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, meeting.user_id, person, text, meetingButtons(meetingId), { kind: "meeting", itemId: meetingId })));
   }
 
   return { confirmed: true, title: meeting.title };

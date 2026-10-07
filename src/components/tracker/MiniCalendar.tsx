@@ -43,12 +43,19 @@ export default function MiniCalendar({
   // датой отвечает на вопрос «когда» так же, а место занимает в одну
   // строку.
   popover,
+  // Раньше этого дня выбрать нельзя. Слова Кирилла 07.10.2026: «запрети
+  // возможность создавать любые события в прошедшем времени». День в
+  // прошлом гаснет и не нажимается — а не принимается, чтобы потом
+  // отказать при сохранении: отказ на последнем шаге стоит заполненной
+  // формы, погасший день не стоит ничего.
+  minDate,
 }: {
   value: string;
   onChange: (iso: string) => void;
   id?: string;
   clearable?: boolean;
   popover?: boolean;
+  minDate?: string;
 }) {
   // Показанный месяц ведётся отдельно от выбранной даты: листать вперёд,
   // ничего не выбирая, — обычное дело.
@@ -112,6 +119,7 @@ export default function MiniCalendar({
         ))}
         {days.map((d) => {
           const iso = dateStr(d);
+          const blocked = !!minDate && iso < minDate;
           return (
             <button
               key={iso}
@@ -121,8 +129,11 @@ export default function MiniCalendar({
                 "mini-cal-day" +
                 (d.getMonth() === month ? "" : " other") +
                 (iso === today ? " today" : "") +
-                (iso === value ? " selected" : "")
+                (iso === value ? " selected" : "") +
+                (blocked ? " blocked" : "")
               }
+              disabled={blocked}
+              title={blocked ? "Этот день уже прошёл" : undefined}
               onClick={() => {
                 onChange(iso);
                 // Выбрали дату — всплывающий календарь закрылся: его ради

@@ -157,6 +157,26 @@ export default function MeetingsPanel({
     if (openMeetingRequest !== null) onOpenMeetingHandled();
     if (openExistingMeetingId) onOpenExistingHandled?.();
   }
+  // Строки голосования держатся за списком участников, а не редактируются
+  // рядом с ним: два списка одних и тех же людей расходятся за неделю.
+  // Одна функция на все пути, которыми встреча появляется: форма, быстрый
+  // перенос ⇢ и перенос на время, предложенное участником, — иначе
+  // встреча, перенесённая не формой, приходила людям без приглашения.
+  function inviteNewcomers(m: Meeting) {
+    void votes.sync(m.id, m.participants).then((added) => {
+      // Позвать тех, кого только что добавили. «Встреча» — из того
+      // минимума уведомлений, который нельзя отключить: человек, которого
+      // ждут и не позвали, не придёт, и виноват будет трекер. Ночью
+      // молчим — встреча всё равно попадёт в утреннюю сводку.
+      if (!added.length || isQuietHour()) return;
+      void fetch("/api/telegram/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "meeting", id: m.id, to: added }),
+      }).catch(() => {});
+    });
+  }
+
   function handleModalSave(m: Meeting) {
     const before = modalMeeting;
     actions.saveMeeting(m);
@@ -170,20 +190,7 @@ export default function MeetingsPanel({
       movedSavedRef.current = true;
       closeAsMoved(movingFrom, m);
     }
-    // Строки голосования держатся за списком участников, а не редактируются
-    // рядом с ним: два списка одних и тех же людей расходятся за неделю.
-    void votes.sync(m.id, m.participants).then((added) => {
-      // Позвать тех, кого только что добавили. «Встреча» — из того
-      // минимума уведомлений, который нельзя отключить: человек, которого
-      // ждут и не позвали, не придёт, и виноват будет трекер. Ночью
-      // молчим — встреча всё равно попадёт в утреннюю сводку.
-      if (!added.length || isQuietHour()) return;
-      void fetch("/api/telegram/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "meeting", id: m.id, to: added }),
-      }).catch(() => {});
-    });
+    inviteNewcomers(m);
     if (before) void bumpVoteRoundIfMoved(m.id, before, m);
 
     // Встреча, выросшая из задачи: отметка в обсуждении обеих. Строка в
@@ -301,6 +308,44 @@ export default function MeetingsPanel({
     return true;
   }
 
+  // Мой голос по встрече — с учётом переноса: ответ о прежнем времени
+  // считается неданным (lib/answerRules), и выбор открывается заново.
+  function myVoteOf(m: Meeting) {
+    if (!meId) return null;
+    return currentVote(votes.forMeeting(m.id).find((v) => v.assigneeId === meId) || null, m.voteRound ?? 1);
+  }
+
+  // Ответ из карточки в списке — тем же маршрутом, что из окна встречи и
+  // из мессенджера. «Не смогу» без причины не уходит: причину увидят в
+  // обсуждении встречи (07.10.2026: «комментарий с причиной отказа должен
+  // быть обязательный… прикрепляться к чату внутри конкретной встречи»).
+  async function voteFromList(m: Meeting, choice: "yes" | "late" | "no") {
+    const row = myVoteOf(m);
+    if (!row) return;
+    let reason = "";
+    let files: File[] = [];
+    if (choice === "no") {
+      const answer = await ask.askWithFiles({
+        title: "Не сможете прийти",
+        question: `Почему не получится на «${m.title}»?`,
+        note: "Причину увидят организатор и все участники — в обсуждении встречи.",
+        placeholder: "Что мешает прийти",
+        multiline: true,
+        okText: "Отправить",
+        required: "Без причины организатор не знает, переносить встречу или нет.",
+      });
+      if (!answer || !answer.text.trim()) return;
+      reason = answer.text.trim();
+      files = answer.files;
+    }
+    try {
+      await answerWithFiles({ kind: "meeting", id: m.id }, files, "Документы к ответу «не смогу»", () => votes.answer(row.id, choice, reason));
+      toasts.showToast(choice === "no" ? "Организатор узнает, что вы не сможете" : choice === "late" ? "Отметили, что опоздаете" : "Отметили, что будете", m.title);
+    } catch (e) {
+      toasts.showToast(humanError(e, "Не получилось ответить"), m.title);
+    }
+  }
+
   function setStatus(m: Meeting, status: MeetingStatus, resultText: string) {
     const prev = { status: m.status, result: m.result, movedToDate: m.movedToDate, resolvedAt: m.resolvedAt };
     actions.saveMeeting({
@@ -411,7 +456,21 @@ export default function MeetingsPanel({
       movedToDate: followUp.date,
       resolvedAt: new Date().toISOString(),
     });
+    // Строка о переносе — в обсуждение обеих встреч (07.10.2026: «любые
+    // комментарии при переносе события… должны прикрепляться к чату»).
+    // Уходит, когда истекло время на «Отменить», — та же причина, что у
+    // отмены встречи: перенос, отменённый через секунду, не должен успеть
+    // оставить след.
+    const note = (resultNote ?? "").trim();
+    const timer = setTimeout(() => {
+      void fetch("/api/workspace/meeting-moved", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromId: m.id, toId: followUp.id, note }),
+      }).catch(() => {});
+    }, 6500);
     toasts.showToast("Встреча перенесена", m.title, () => {
+      clearTimeout(timer);
       actions.deleteMeeting(followUp.id);
       actions.saveMeeting({ ...m, ...prev });
     });
@@ -434,6 +493,7 @@ export default function MeetingsPanel({
       resolvedAt: "",
     };
     actions.saveMeeting(followUp);
+    inviteNewcomers(followUp);
     closeAsMoved(m, followUp, resultNote);
   }
 
@@ -496,6 +556,9 @@ export default function MeetingsPanel({
               onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
               votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
+              voteRows={votes.forMeeting(m.id)}
+              myVote={myVoteOf(m)}
+              onVote={(choice) => void voteFromList(m, choice)}
               unreadCount={unread[m.id]}
               canManage={isMine(m, myUserId)}
             />
@@ -517,6 +580,9 @@ export default function MeetingsPanel({
               onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
               votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
+              voteRows={votes.forMeeting(m.id)}
+              myVote={myVoteOf(m)}
+              onVote={(choice) => void voteFromList(m, choice)}
               unreadCount={unread[m.id]}
               canManage={isMine(m, myUserId)}
               justCreated={justCreatedId === m.id}
@@ -582,6 +648,25 @@ export default function MeetingsPanel({
           }
           prefill={modalPrefill}
           assignees={assignees}
+          // Организатор принимает время, предложенное участником, — тем же
+          // переносом, что и ⇢ в списке: новая встреча с тем же составом,
+          // приглашения заново, прежняя закрывается как перенесённая.
+          onAcceptProposal={(p) => {
+            if (!modalMeeting) return;
+            const from = modalMeeting;
+            void (async () => {
+              const yes = await ask.confirm({
+                title: "Перенести встречу",
+                question: `Перенести «${from.title}» на ${p.date.split("-").reverse().join(".")}, ${p.time}?`,
+                note: `Предложил(а): ${p.by}. Все участники получат приглашение на новое время и ответят заново.`,
+                okText: "Перенести",
+                cancelText: "Не сейчас",
+              });
+              if (!yes) return;
+              reschedule(from, p.date, p.time, p.reason ? `По предложению: ${p.by} — ${p.reason}` : `По предложению: ${p.by}`);
+              closeModal();
+            })();
+          }}
           onSave={handleModalSave}
           onDelete={() => (modalMeeting ? deleteMeeting(modalMeeting) : Promise.resolve(false))}
           onClose={closeModal}

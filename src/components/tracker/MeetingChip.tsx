@@ -8,6 +8,10 @@ import type { Meeting } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
 import { awaitsRecap } from "@/lib/calendarLogic";
 import { sanitizeAssigneeList } from "@/lib/trackerRows";
+import { withoutSelfMark } from "@/lib/actorName";
+import { isCurrent, type MeetingVote } from "@/lib/meetingVotes";
+import { openVoteChoices, type VoteChoice } from "@/lib/answerRules";
+import { prefetchComments } from "@/hooks/useItemComments";
 
 // Карточка встречи в списке — устроена как карточка задачи.
 //
@@ -51,6 +55,9 @@ export default function MeetingChip({
   // Моя ли это встреча. Чужую нельзя ни перенести, ни удалить, ни закрыть
   // итогом — это решения того, кто её назначил (см. MeetingsPanel).
   canManage = true,
+  voteRows = [],
+  myVote = null,
+  onVote,
 }: {
   meeting: Meeting;
   selectedDay: string | null;
@@ -67,6 +74,14 @@ export default function MeetingChip({
   // задачи (useUnreadTaskComments).
   unreadCount?: number;
   canManage?: boolean;
+  // Строки голосования этой встречи — по ним у каждого имени в подсказке
+  // свой знак. Подсчёт (votes) для этого не годится: опоздавший стоит там
+  // как «Имя (опоздает)», и сравнение по имени молча теряло его галочку.
+  voteRows?: MeetingVote[];
+  // Мой голос по этой встрече, уже с учётом переноса (currentVote). Есть —
+  // значит меня позвали, и ответить можно прямо в карточке.
+  myVote?: MeetingVote | null;
+  onVote?: (choice: VoteChoice) => void;
 }) {
   // The participants tooltip lives in <body> and is positioned from the
   // anchor's rect, exactly as legacy's showPeopleTooltip() did: the meetings
@@ -86,6 +101,37 @@ export default function MeetingChip({
   // уходит из списка: она ещё требует одного действия.
   const waitingRecap = awaitsRecap(meeting);
   const showQuickActions = canManage && (!meeting.status || meeting.status === "planned" || waitingRecap);
+  const round = meeting.voteRound || 1;
+  const live = !meeting.status || meeting.status === "planned" || meeting.status === "proposed";
+
+  // Позвали — отвечают здесь же, не открывая встречу.
+  //
+  // Слова Кирилла 07.10.2026: «когда человек приглашённый гость, нужно
+  // сразу добавить кнопки подтверждения участия или „не смогу“ прямо в
+  // прямоугольничках». Ряд тот же, что у организатора («Успех / Провал /
+  // Перенос»): у карточки один ряд действий, а чьи это действия, решает
+  // то, кто на неё смотрит. Прошедшей встрече отвечать уже не о чем.
+  const canVote = !!onVote && !!myVote && myVote.role !== "watcher" && live && !waitingRecap && !showQuickActions;
+  const choices: VoteChoice[] = canVote ? openVoteChoices(myVote, round) : [];
+  const mySaid = canVote && myVote && myVote.response !== "none" && isCurrent(myVote, round) ? myVote : null;
+
+  // Знак у имени в подсказке — по строке голоса, а не по подсчёту.
+  function stateOf(name: string): "yes" | "late" | "no" | "none" | "unknown" {
+    const row = voteRows.find((v) => v.name === name);
+    if (!row) return votes ? "none" : confirmed.includes(name) ? "yes" : "unknown";
+    if (row.response === "none" || !isCurrent(row, round)) return "none";
+    if (row.response === "no") return "no";
+    return row.late ? "late" : "yes";
+  }
+
+  // Все позванные сказали «буду» — встреча собрана; хоть один «не смогу» —
+  // организатору есть о чём подумать. Корешком у левого края, как роль у
+  // задачи: полоску узнают не сравнивая, а рамка вокруг карточки уже
+  // занята выбранным днём (07.10.2026: «выделяй лёгкой зелёной рамкой или
+  // какой-нибудь приятной пометкой… а где один или более не может —
+  // аналогичным не раздражающим маркером»).
+  const gathered = live && !!votes && votes.no.length === 0 && votes.pending.length === 0 && votes.yes.length > 0;
+  const someoneOut = live && !!votes && votes.no.length > 0;
 
   // Placed by writing to the DOM once it has been measured (its own size
   // decides whether it fits below the anchor), before paint — the same
@@ -121,11 +167,17 @@ export default function MeetingChip({
         (waitingRecap ? " awaits-recap" : "") +
         (justCreated ? " just-created" : "") +
         (isDragging ? " dragging" : "") +
-        (canManage ? "" : " readonly")
+        (canManage ? "" : " readonly") +
+        (gathered ? " all-in" : "") +
+        (someoneOut ? " has-decline" : "")
       }
       ref={setNodeRef}
       {...attributes}
       {...listeners}
+      // Обсуждение просится заранее — пока мышь на карточке, до нажатия:
+      // окно встречи открывается уже с перепиской (07.10.2026, «на долю
+      // секунды появляется пустой чат»).
+      onPointerEnter={() => prefetchComments("meeting", meeting.id)}
       onClick={onOpen}
     >
       <div className="meeting-body">
@@ -173,6 +225,56 @@ export default function MeetingChip({
             читались сразу, но занимали под каждой встречей четыре строки.
             Полное название осталось подсказкой — она отвечает на «успех
             чего?», когда такой вопрос возникает. */}
+        {/* Свой ответ — тем же рядом, где у организатора исходы. Уже
+            ответил — отметка, что именно, и то, что ещё можно (после
+            «буду» — «опоздаю», дальше ничего: ответ даётся один раз). */}
+        {canVote && (choices.length > 0 || mySaid) && (
+          <div className="meeting-actions vote">
+            {mySaid && (
+              <span className={"meeting-my-vote " + (mySaid.response === "no" ? "no" : mySaid.late ? "late" : "yes")}>
+                <Icon name={mySaid.response === "no" ? "close" : mySaid.late ? "clock" : "check"} size={13} />
+                {mySaid.response === "no" ? "Не смогу" : mySaid.late ? "Опоздаю" : "Буду"}
+              </span>
+            )}
+            {choices.includes("yes") && (
+              <button
+                className="meeting-act vote-yes"
+                title="Подтвердить участие"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onVote?.("yes");
+                }}
+              >
+                Буду
+              </button>
+            )}
+            {choices.includes("late") && (
+              <button
+                className="meeting-act vote-late"
+                title="Приду, но позже начала"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onVote?.("late");
+                }}
+              >
+                Опоздаю
+              </button>
+            )}
+            {choices.includes("no") && (
+              <button
+                className="meeting-act vote-no"
+                title="Не смогу — спросим причину, её увидят в обсуждении встречи"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onVote?.("no");
+                }}
+              >
+                Не смогу
+              </button>
+            )}
+          </div>
+        )}
+
         {showQuickActions && (
           <div className="meeting-actions">
             <button
@@ -233,20 +335,28 @@ export default function MeetingChip({
         <PopLayer>
           <div ref={tooltipRef} id="peopleTooltip" className="people-tooltip" style={{ display: "block", top: -9999, left: -9999 }}>
             {/* Отказ и молчание — разные вещи, и именно эта разница нужна,
-                чтобы понимать, кого ещё спрашивать. */}
+                чтобы понимать, кого ещё спрашивать. Знаки цветные
+                (07.10.2026: «галочки или крестики сделай цветными и
+                выразительными, чтобы сразу бросалось в глаза»).
+                Причины отказа здесь больше нет — его же словами, «тут он
+                как раз не нужен вовсе»: она лежит в обсуждении встречи,
+                рядом с отметкой об отказе. */}
             {participants.map((p) => {
-              const said = votes?.no.find((n) => n.name === p);
-              const coming = votes ? votes.yes.includes(p) : confirmed.includes(p);
+              const state = stateOf(p);
               return (
-                <div className="prow" key={p}>
-                  {coming ? <Icon name="check" size={12} /> : said ? <Icon name="close" size={12} /> : votes ? <span className="prow-dot">·</span> : null}{" "}
-                  {p}
-                  {/* Отказ без причины — не то же самое, что отказ с
-                      причиной, и молчать об этом в списке значит выдавать
-                      половину ответа за целый. Бот причину спрашивает и
-                      переспрашивает, но увидеть, что её пока нет, нужно
-                      здесь. */}
-                  {said ? (said.reason ? ` — ${said.reason}` : " — причину не назвал") : ""}
+                <div className={"prow vote-" + state} key={p}>
+                  <span className="prow-mark" aria-hidden>
+                    {state === "yes" ? (
+                      <Icon name="check" size={13} />
+                    ) : state === "no" ? (
+                      <Icon name="close" size={13} />
+                    ) : state === "late" ? (
+                      <Icon name="clock" size={13} />
+                    ) : state === "none" ? (
+                      "•"
+                    ) : null}
+                  </span>
+                  {withoutSelfMark(p)}
                 </div>
               );
             })}

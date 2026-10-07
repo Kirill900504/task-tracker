@@ -4,6 +4,7 @@ import { downloadTelegramFile, telegramTransport } from "@/lib/telegram";
 import { decodeCallback, findColleagueByChat } from "@/lib/colleagues";
 import { handleColleagueFile } from "@/lib/colleagueReplies";
 import { deliverCallbackNotice, handleBotCallback } from "@/lib/botCallback";
+import { mirrorAnswer } from "@/lib/botMirror";
 import type { BotContext } from "@/lib/botPipeline";
 import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
 
@@ -67,7 +68,15 @@ export async function POST(req: Request) {
     if (outcome.say) {
       await transport.send(pressedChatId, outcome.say, outcome.sayButtons?.length ? { buttons: outcome.sayButtons } : undefined);
     }
-    await deliverCallbackNotice(admin, pressedChatId, TELEGRAM_CHANNEL, outcome);
+    // Ответ, данный здесь, переписывает и остальные сообщения о том же — в
+    // MAX прежде всего (lib/botMirror). Нажатое уже переписано выше, его
+    // пропускаем. Одновременно с вестью постановщику: друг от друга они не
+    // зависят.
+    const pressedMessageId = callbackQuery.message?.message_id != null ? String(callbackQuery.message.message_id) : undefined;
+    await Promise.all([
+      deliverCallbackNotice(admin, pressedChatId, TELEGRAM_CHANNEL, outcome),
+      outcome.mirror ? mirrorAnswer(admin, outcome.mirror, { channel: "telegram", messageId: pressedMessageId }) : undefined,
+    ]);
     return NextResponse.json({ ok: true });
   }
 

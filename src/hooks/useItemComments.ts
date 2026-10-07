@@ -70,6 +70,14 @@ export type Comment = {
   // Убранное позже цитируемое сообщение оставляет здесь null, а не рвёт
   // это: сама цитата всё равно уже сказана.
   replyTo?: { id: string; body: string; authorName: string } | null;
+  // Предложение перенести встречу (миграция 0044): участник просит другое
+  // время, остальные отвечают реакцией 👍 / 👎, организатор переносит
+  // одним нажатием. Пусто у обычной реплики.
+  proposal?: { date: string; time: string } | null;
+  // Кто поставил реакцию — нужно предложению времени: «подходит» и «не
+  // подходит» по именам, а не числом, иначе организатор не знает, кого
+  // ещё спросить.
+  reactors?: Record<string, string[]>;
 };
 
 type ReplyRow = {
@@ -91,6 +99,12 @@ type CommentRow = {
   author_assignee_id: string | null;
   assignees: { name: string } | { name: string }[] | null;
   reply_to: string | null;
+  proposal?: { date: string; time: string } | null;
+  // Реакции — встроенным списком в той же строке, одним запросом с
+  // лентой. До 07.10.2026 они читались ОТДЕЛЬНЫМ запросом, и запрос этот
+  // был без единого фильтра: каждое открытие любой карточки тянуло все
+  // реакции пространства на все сообщения всех задач.
+  comment_reactions?: (ReactionRow & { assignees?: { name: string } | { name: string }[] | null })[] | null;
   // Самоссылка через PostgREST: embed по имени колонки-внешнего ключа
   // (`reply:reply_to(...)`), а не по имени таблицы — только так embed
   // идёт «вперёд», к тому сообщению, НА КОТОРОЕ отвечают, а не «назад», к
@@ -133,77 +147,152 @@ function toggleReaction(list: Comment["reactions"], emoji: string, on: boolean):
   return list.map((r) => (r.emoji === emoji ? { ...r, count: r.count - 1, mine: false } : r));
 }
 
+// Последняя прочитанная лента каждого элемента — на время жизни вкладки.
+//
+// Слова Кирилла 07.10.2026: «когда открываешь назначенную встречу, на долю
+// секунды появляется пустой чат, а потом сразу же чат с историей. Это дико
+// раздражает визуально и путает». Лента читалась заново при КАЖДОМ
+// открытии окна, и всё это время окно показывало форму без сообщений.
+// Теперь второе и следующие открытия рисуют известное сразу, а сеть
+// поправляет его фоном; первое — открывается уже прочитанным, потому что
+// карточки просят ленту заранее, при наведении (prefetchComments).
+const feedCache = new Map<string, Comment[]>();
+const inflight = new Map<string, Promise<Comment[]>>();
+const cacheKey = (kind: ItemKind, itemId: string) => kind + ":" + itemId;
+
+// Подписанные ссылки живут час; храним их 50 минут и не просим заново на
+// каждое перечитывание ленты — это был второй последовательный запрос на
+// пути к первому кадру у любой переписки с файлами.
+const signedUrls = new Map<string, { url: string; until: number }>();
+
+async function loadComments(kind: ItemKind, itemId: string): Promise<Comment[]> {
+  if (!itemId) return [];
+  const db = createClient();
+  const { userId: meId } = await me();
+
+  const { data: rows } = await db
+    .from("item_comments")
+    .select(
+      "id, body, attachments, created_at, edited_at, source, system, author_user_id, author_assignee_id, reply_to, proposal, assignees(name), " +
+        "reply:reply_to(id, body, author_user_id, assignees(name)), " +
+        "comment_reactions(id, emoji, actor_user_id, assignees(name))",
+    )
+    .eq("item_kind", kind)
+    .eq("item_id", itemId)
+    .is("deleted_at", null)
+    .order("created_at");
+
+  // Подписанные ссылки — одной пачкой на весь список и только для тех
+  // файлов, чьей ссылки ещё нет.
+  const list = (rows || []) as unknown as CommentRow[];
+  const now = Date.now();
+  const missing = list.flatMap((r) => (r.attachments || []).map((a) => a.path)).filter((p) => (signedUrls.get(p)?.until ?? 0) <= now);
+  if (missing.length) {
+    const { data: signed } = await db.storage.from(BUCKET).createSignedUrls(missing, 3600);
+    for (const item of signed || []) {
+      if (item.path && item.signedUrl) signedUrls.set(item.path, { url: item.signedUrl, until: now + 50 * 60_000 });
+    }
+  }
+
+  const result = list.map((row) => {
+    const mine = !!row.author_user_id && row.author_user_id === meId;
+    const grouped = new Map<string, { count: number; mine: boolean }>();
+    const reactors: Record<string, string[]> = {};
+    for (const r of row.comment_reactions || []) {
+      const cur = grouped.get(r.emoji) || { count: 0, mine: false };
+      grouped.set(r.emoji, { count: cur.count + 1, mine: cur.mine || r.actor_user_id === meId });
+      const who = r.actor_user_id === meId ? "Вы" : withoutSelfMark((Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "");
+      if (who) (reactors[r.emoji] ||= []).push(who);
+    }
+    const replyRow = row.reply;
+    return {
+      id: row.id,
+      body: row.body,
+      attachments: (row.attachments || []).map((a) => ({ ...a, url: signedUrls.get(a.path)?.url })),
+      createdAt: row.created_at,
+      editedAt: row.edited_at,
+      authorName: nameOf(row, meId, "Кирилл"),
+      mine,
+      source: row.source,
+      system: !!row.system,
+      reactions: [...grouped.entries()].map(([emoji, v]) => ({ emoji, count: v.count, mine: v.mine })),
+      reactors,
+      // reply_to стоит, а сама реплика уже убрана (мягко) — embed вернёт
+      // null, и цитата в ленте не покажется вовсе: то же самое, что
+      // отсутствие reply_to с точки зрения того, кто читает.
+      replyTo: replyRow ? { id: replyRow.id, body: replyRow.body, authorName: nameOf(replyRow, meId, "Кирилл") } : null,
+      proposal: row.proposal && row.proposal.date ? row.proposal : null,
+    };
+  });
+  feedCache.set(cacheKey(kind, itemId), result);
+  return result;
+}
+
+// Прочитать ленту заранее — карточка зовёт это при наведении и нажатии,
+// то есть за те сотни миллисекунд, что проходят до открытия окна. Повторный
+// вызов, пока первый в пути, не уходит в сеть второй раз.
+export function prefetchComments(kind: ItemKind, itemId: string): void {
+  const key = cacheKey(kind, itemId);
+  if (!itemId || feedCache.has(key) || inflight.has(key)) return;
+  const job = loadComments(kind, itemId).finally(() => inflight.delete(key));
+  inflight.set(key, job);
+  job.catch(() => {});
+}
+
+// Предложить другое время встречи — репликой в её обсуждении.
+//
+// Слова Кирилла 07.10.2026: «добавь возможность запросить перенос у
+// приглашённых участников встречи… один из четырёх запрашивает другое
+// время, остальные ставят реакцию, приемлемо ли для них новое время».
+// Реплика, а не отдельная сущность: у неё уже есть автор, время, доставка
+// в мессенджеры и реакции, а «подходит / не подходит» — это 👍 / 👎 на неё.
+// Текст написан так, чтобы читаться и в мессенджере, где кнопок под ним нет.
+export async function postProposal(meetingId: string, date: string, time: string, reason: string): Promise<void> {
+  const db = createClient();
+  const { userId, assigneeId } = await me();
+  const when = `${date.split("-").reverse().join(".")}, ${time}`;
+  const text = `🕐 Предлагаю перенести встречу на ${when}${reason.trim() ? ` — ${reason.trim()}` : ""}.\nПодходит? Ответьте 👍 или 👎 в обсуждении встречи.`;
+  const { data, error } = await db
+    .from("item_comments")
+    .insert({
+      item_kind: "meeting",
+      item_id: meetingId,
+      body: text,
+      attachments: [],
+      author_user_id: userId || null,
+      author_assignee_id: assigneeId,
+      source: "app",
+      proposal: { date, time },
+    })
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(describeDbError(error));
+  feedCache.delete(cacheKey("meeting", meetingId));
+  const savedId = (data as { id: string } | null)?.id;
+  if (savedId) {
+    void fetch("/api/workspace/comment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commentId: savedId }),
+    }).catch(() => {});
+  }
+}
+
 export function useItemComments(kind: ItemKind, itemId: string) {
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [comments, setComments] = useState<Comment[]>(() => feedCache.get(cacheKey(kind, itemId)) ?? []);
   // Отдельным списком, а не вперемешку с пришедшими: лента перечитывается
   // целиком на каждое движение в базе — в том числе на чужое сообщение,
   // пришедшее ровно тогда, когда отправляется своё. Своё, лежи оно в общем
   // списке, такой перечиткой стёрло бы.
   const [outbox, setOutbox] = useState<Outgoing[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Ждать есть чего, только если ленты этого элемента ещё не видели.
+  const [loading, setLoading] = useState(() => !feedCache.has(cacheKey(kind, itemId)));
 
-  const fetchAll = useCallback(async (): Promise<Comment[]> => {
-    if (!itemId) return [];
-    const db = createClient();
-    const { userId: meId } = await me();
-
-    const [{ data: rows }, { data: reactions }] = await Promise.all([
-      db
-        .from("item_comments")
-        .select(
-          "id, body, attachments, created_at, edited_at, source, system, author_user_id, author_assignee_id, reply_to, assignees(name), " +
-            "reply:reply_to(id, body, author_user_id, assignees(name))",
-        )
-        .eq("item_kind", kind)
-        .eq("item_id", itemId)
-        .is("deleted_at", null)
-        .order("created_at"),
-      db.from("comment_reactions").select("id, comment_id, emoji, actor_user_id"),
-    ]);
-
-    const byComment = new Map<string, ReactionRow[]>();
-    for (const r of ((reactions || []) as ReactionRow[])) {
-      const list = byComment.get(r.comment_id);
-      if (list) list.push(r);
-      else byComment.set(r.comment_id, [r]);
-    }
-
-    // Подписанные ссылки — одной пачкой на весь список: по одной на файл
-    // это десяток запросов на открытие карточки.
-    const allPaths = ((rows || []) as unknown as CommentRow[]).flatMap((r) => (r.attachments || []).map((a) => a.path));
-    const urlByPath = new Map<string, string>();
-    if (allPaths.length) {
-      const { data: signed } = await db.storage.from(BUCKET).createSignedUrls(allPaths, 3600);
-      for (const item of signed || []) {
-        if (item.path && item.signedUrl) urlByPath.set(item.path, item.signedUrl);
-      }
-    }
-
-    return ((rows || []) as unknown as CommentRow[]).map((row) => {
-      const mine = !!row.author_user_id && row.author_user_id === meId;
-      const grouped = new Map<string, { count: number; mine: boolean }>();
-      for (const r of byComment.get(row.id) || []) {
-        const cur = grouped.get(r.emoji) || { count: 0, mine: false };
-        grouped.set(r.emoji, { count: cur.count + 1, mine: cur.mine || r.actor_user_id === meId });
-      }
-      const replyRow = row.reply;
-      return {
-        id: row.id,
-        body: row.body,
-        attachments: (row.attachments || []).map((a) => ({ ...a, url: urlByPath.get(a.path) })),
-        createdAt: row.created_at,
-        editedAt: row.edited_at,
-        authorName: nameOf(row, meId, "Кирилл"),
-        mine,
-        source: row.source,
-        system: !!row.system,
-        reactions: [...grouped.entries()].map(([emoji, v]) => ({ emoji, count: v.count, mine: v.mine })),
-        // reply_to стоит, а сама реплика уже убрана (мягко) — embed вернёт
-        // null, и цитата в ленте не покажется вовсе: то же самое, что
-        // отсутствие reply_to с точки зрения того, кто читает.
-        replyTo: replyRow ? { id: replyRow.id, body: replyRow.body, authorName: nameOf(replyRow, meId, "Кирилл") } : null,
-      };
-    });
+  const fetchAll = useCallback((): Promise<Comment[]> => {
+    // Чтение, начатое заранее (prefetchComments), подхватывается, а не
+    // повторяется.
+    const pending = inflight.get(cacheKey(kind, itemId));
+    return pending ?? loadComments(kind, itemId);
   }, [kind, itemId]);
 
   useEffect(() => {

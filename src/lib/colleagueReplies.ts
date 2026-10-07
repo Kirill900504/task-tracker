@@ -15,6 +15,7 @@ import { colleagueCommandsHelp, matchColleagueCommand, meetingCard, meetingRoste
 import type { ColleagueQuery } from "@/lib/colleagueQueries";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import type { Notice } from "@/lib/noticeQueue";
+import { mirrorAnswer, type MirrorRef } from "@/lib/botMirror";
 
 // What happens when a colleague presses a button under a task or a meeting.
 //
@@ -55,6 +56,9 @@ export type CallbackOutcome = {
   // Вид события для сводки: с ним строка ляжет в очередь и выйдет одним
   // письмом вместе с соседними, а не отдельным сообщением в ленту.
   notice?: Notice;
+  // Чьи ещё сообщения об этом элементе переписать после ответа (в другом
+  // мессенджере того же человека) — см. lib/botMirror.
+  mirror?: MirrorRef;
 };
 
 // Ответ бота на сообщение коллеги. Кнопки здесь потому же, почему они есть
@@ -157,6 +161,22 @@ export async function handleColleagueCallback(
   // second lookup every recipient button he was sent stayed dead.
   const colleague = (await findColleagueByChat(admin, chatId, channel)) ?? (await findOwnerSelfByChat(admin, chatId, channel));
   if (!colleague) return { toast: "Этот чат не подключён" };
+  const outcome = await colleagueCallback(admin, colleague, action);
+  // Ответ (а не чтение) переписывает и остальные сообщения человека об этом
+  // же элементе — в другом мессенджере в первую очередь (lib/botMirror).
+  // Сделает это вебхук, когда переписано нажатое: он знает, какое
+  // сообщение пропустить.
+  if ((action.kind === "task" || action.kind === "meeting") && !["msg", "list", "show", "who"].includes(action.action)) {
+    outcome.mirror = { kind: action.kind, itemId: action.id, assigneeId: colleague.id };
+  }
+  return outcome;
+}
+
+async function colleagueCallback(
+  admin: SupabaseClient,
+  colleague: { id: string; name: string; user_id: string },
+  action: CallbackAction,
+): Promise<CallbackOutcome> {
 
   // «Ответить» ничего не меняет в задаче — оно только направляет следующее
   // сообщение. Поэтому стоит до всех проверок состояния: ответить можно и
@@ -479,12 +499,19 @@ export async function handleColleagueCallback(
       if (prev) await admin.from("meeting_participants").update(patch).eq("id", prev.id);
       else await admin.from("meeting_participants").insert({ meeting_id: meeting.id, assignee_id: colleague.id, role: "participant", ...patch });
 
-      await recordEvent(admin, {
-        userId: meeting.user_id,
-        kind: "meeting",
-        itemId: meeting.id,
-        text: late ? `🕐 ${withoutSelfMark(colleague.name)} будет, но опоздает` : coming ? `✅ ${withoutSelfMark(colleague.name)} будет` : `❌ ${withoutSelfMark(colleague.name)} не сможет`,
-      });
+      // Отказ в хронику НЕ пишется — он запишется вместе с причиной, когда
+      // она придёт (handleMeetingReason). Слова Кирилла 07.10.2026:
+      // «комментарий с причиной отказа должен быть обязательный, он должен
+      // прикрепляться к чату внутри конкретной встречи». Строка «не
+      // сможет» без причины в обсуждении и была тем, что он увидел.
+      if (coming) {
+        await recordEvent(admin, {
+          userId: meeting.user_id,
+          kind: "meeting",
+          itemId: meeting.id,
+          text: late ? `🕐 ${withoutSelfMark(colleague.name)} будет, но опоздает` : `✅ ${withoutSelfMark(colleague.name)} будет`,
+        });
+      }
 
       // confirmed_by остаётся в согласии со строками, пока его кто-то читает.
       const confirmed = ((meeting.confirmed_by as string[]) || []).filter((n) => n !== colleague.name);
@@ -517,20 +544,17 @@ export async function handleColleagueCallback(
           : `✅ ${withoutSelfMark(colleague.name)} будет на встрече «${meeting.title}» (${when})`,
       };
     }
-    // Организатору сразу говорится и то, что причины пока нет: иначе
-    // «не сможет» без объяснения выглядит как весь ответ целиком, и он либо
-    // идёт спрашивать сам, либо не спрашивает вовсе. Причина придёт вторым
-    // сообщением, а если человек промолчит — его спросят ещё раз вместе с
-    // напоминанием о встрече (см. cron/reminders).
+    // Причина обязательна (07.10.2026), и организатор узнаёт об отказе
+    // ВМЕСТЕ с ней — одним сообщением из handleMeetingReason, а не двумя
+    // («не сможет, спросил почему» и следом причина). Промолчавшего
+    // спросят ещё раз вместе с напоминанием о встрече (cron/reminders), а в
+    // трекере отказ виден сразу: «не смогут: 1».
     return {
-      toast: "Передал. Напишите, почему",
+      toast: "Напишите, почему",
       rewriteTo:
         `📅 ${meeting.title}\n${when}\n\n❌ Вы не сможете\n` +
-        "Напишите одним сообщением, почему — это увидит организатор.",
+        "Напишите одним сообщением, почему — это обязательно: причину увидят организатор и все участники в обсуждении встречи.",
       rewriteButtons: meetingButtons(meeting.id as string, []),
-      notifyTo: meeting.created_by,
-      notifyOwner: `❌ ${withoutSelfMark(colleague.name)} не сможет быть на встрече «${meeting.title}» (${when})\nСпросил, почему — пришлю, как ответит.`,
-      notice: { kind: "vote_no", item: meeting.title as string, who: withoutSelfMark(colleague.name), what: `${when} — причину спросил` },
     };
   }
 
@@ -819,7 +843,22 @@ export async function answerOwnOpenQuestion(
   return handleMeetingReason(admin, self, body, since);
 }
 
+// Слова к отчёту, отказу или просьбе о переносе — и следом все сообщения
+// человека об этой задаче переписываются под новое состояние, в обоих
+// мессенджерах (lib/botMirror): иначе в MAX висело бы «Напишите, что
+// сделано» после того, как в Telegram уже написали.
 async function fillOpenAnswer(
+  admin: SupabaseClient,
+  colleague: { id: string; name: string; user_id: string },
+  rows: OpenRow[],
+  body: string,
+): Promise<ColleagueTextResult> {
+  const result = await fillOpenAnswerRow(admin, colleague, rows, body);
+  await mirrorAnswer(admin, { kind: "task", itemId: rows[0].task_id, assigneeId: colleague.id });
+  return result;
+}
+
+async function fillOpenAnswerRow(
   admin: SupabaseClient,
   colleague: { id: string; name: string; user_id: string },
   rows: OpenRow[],
@@ -894,7 +933,7 @@ async function handleMeetingReason(
 ): Promise<ColleagueTextResult | null> {
   const { data } = await admin
     .from("meeting_participants")
-    .select("id, response, reason, responded_at, meetings(title, date, time, created_by)")
+    .select("id, meeting_id, response, reason, responded_at, meetings(title, date, time, created_by)")
     .eq("assignee_id", colleague.id)
     .eq("user_id", colleague.user_id)
     .eq("response", "no")
@@ -902,6 +941,7 @@ async function handleMeetingReason(
 
   type Row = {
     id: string;
+    meeting_id: string;
     responded_at: string | null;
     meetings: { title: string; date: string; time: string | null; created_by?: string | null } | { title: string; date: string; time: string | null; created_by?: string | null }[] | null;
   };
@@ -915,6 +955,17 @@ async function handleMeetingReason(
   const when = m ? fmtDate(m.date) + (m.time ? ", " + m.time : "") : "";
 
   await admin.from("meeting_participants").update({ reason: body }).eq("id", row.id);
+  // Отказ с причиной — в обсуждение встречи, одной строкой. Туда его и
+  // смотрят: подсказка над составом в трекере причину больше не
+  // показывает (07.10.2026, «тут он как раз не нужен вовсе»).
+  await recordEvent(admin, {
+    userId: colleague.user_id,
+    kind: "meeting",
+    itemId: row.meeting_id,
+    text: `❌ ${withoutSelfMark(colleague.name)} не сможет: ${body}`,
+  });
+  // И в другом мессенджере сообщение перестаёт просить причину.
+  await mirrorAnswer(admin, { kind: "meeting", itemId: row.meeting_id, assigneeId: colleague.id });
   return {
     reply: `Записал: не будете на «${title}» — ${body}`,
     // The organizer, not the space owner: he asked who is coming.

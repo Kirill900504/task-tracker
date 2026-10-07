@@ -5,6 +5,7 @@ import { russianFetch } from "@/lib/russianCa";
 import { maxSettings } from "@/lib/botSettings";
 import { decodeCallback } from "@/lib/colleagues";
 import { deliverCallbackNotice, handleBotCallback } from "@/lib/botCallback";
+import { mirrorAnswer } from "@/lib/botMirror";
 import type { BotContext } from "@/lib/botPipeline";
 import { MAX_CHANNEL } from "@/lib/botTransport";
 
@@ -121,7 +122,12 @@ export async function POST(req: Request) {
     if (outcome.say) {
       await transport.send(chatId, outcome.say, outcome.sayButtons?.length ? { buttons: outcome.sayButtons } : undefined);
     }
-    await deliverCallbackNotice(admin, chatId, MAX_CHANNEL, outcome);
+    // То же, что в Telegram: ответ переписывает и сообщения о том же в
+    // другом мессенджере (lib/botMirror), кроме нажатого.
+    await Promise.all([
+      deliverCallbackNotice(admin, chatId, MAX_CHANNEL, outcome),
+      outcome.mirror ? mirrorAnswer(admin, outcome.mirror, { channel: "max", messageId: message?.body?.mid }) : undefined,
+    ]);
     return NextResponse.json({ ok: true });
   }
 

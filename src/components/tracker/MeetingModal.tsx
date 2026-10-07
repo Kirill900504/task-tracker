@@ -5,7 +5,8 @@
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
 import { useEffect, useMemo, useState } from "react";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
-import ItemChat from "./ItemChat";
+import ItemChat, { mentionPeople } from "./ItemChat";
+import { postProposal } from "@/hooks/useItemComments";
 import MeetingAnswer from "./MeetingAnswer";
 import type { MeetingVoteRow } from "@/hooks/useMeetingVotes";
 import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
@@ -85,6 +86,7 @@ export default function MeetingModal({
   myVote = null,
   votes = [],
   onAnswer,
+  onAcceptProposal,
 }: {
   meeting: Meeting | null;
   prefill?: MeetingPrefill;
@@ -122,19 +124,36 @@ export default function MeetingModal({
   // состав «с заполненными реакциями по факту отклика участников».
   votes?: MeetingVoteRow[];
   onAnswer?: (response: "yes" | "no" | "late", reason: string) => Promise<void>;
+  // Организатор переносит встречу на время, предложенное участником
+  // (кнопка на самом предложении в обсуждении).
+  onAcceptProposal?: (proposal: { date: string; time: string; reason: string; by: string }) => void;
 }) {
   const isEditing = !!meeting;
   // Новой встрече без заданного времени — первый ещё не начавшийся слот, а
   // не «10:00» вслепую (см. defaultMeetingStart): иначе в пять вечера форма
   // предлагала сегодняшнее утро, и встреча молча создавалась в прошлом.
-  const [start] = useState(() =>
-    meeting || prefill?.time
-      ? { date: meeting?.date ?? prefill?.date ?? "", time: meeting?.time || prefill?.time || "10:00" }
-      : defaultMeetingStart(prefill?.date ?? "", TIME_SLOTS),
-  );
-  const [date, setDate] = useState(start.date);
+  const [start] = useState(() => {
+    const asked =
+      meeting || prefill?.time
+        ? { date: meeting?.date ?? prefill?.date ?? "", time: meeting?.time || prefill?.time || "10:00" }
+        : defaultMeetingStart(prefill?.date ?? "", TIME_SLOTS);
+    // Новая встреча, предложенная на прошедшее время (задача, брошенная на
+    // вчерашний день календаря; перенос «на +1 день» встречи недельной
+    // давности), начинается с ближайшего слота впереди: прошлое форма всё
+    // равно не примет.
+    return !meeting && startsInPast(asked.date, asked.time) ? defaultMeetingStart("", TIME_SLOTS) : asked;
+  });
+  const [date, setDateRaw] = useState(start.date);
   const [title, setTitle] = useState(meeting?.title ?? prefill?.title ?? "");
   const [time, setTime] = useState(start.time);
+  // Выбор дня тянет за собой время, если оно на этот день уже прошло:
+  // «Сегодня» в шесть вечера при выбранных 10:00 — время, которое форма не
+  // примет, и человек не должен гадать, почему не сохраняется. Время
+  // сдвигается на ближайший слот впереди.
+  function setDate(next: string) {
+    setDateRaw(next);
+    if (startsInPast(next, time)) setTime(defaultMeetingStart(next, TIME_SLOTS).time);
+  }
   const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? prefill?.participants ?? []));
   // Кто я в этом пространстве — нужно ровно для одного: не предлагать
   // позвать самого себя (см. selectableAssignees). Ответ прошлого запуска
@@ -270,16 +289,18 @@ export default function MeetingModal({
       void ask.say({ title: "Дата не заполнена", question: "Укажите дату встречи." });
       return;
     }
-    // Встреча в прошлом — почти всегда промах, а приглашения уйдут людям
-    // сразу. Не запрет: задним числом иногда записывают уже прошедшее.
+    // Встреча в прошлом — запрет, а не вопрос. До 07.10.2026 здесь было
+    // «всё равно назначить?» ради записи задним числом, и встреча на 10:00,
+    // назначенная в 10:26, уходила людям приглашением на то, что уже
+    // началось. Слова Кирилла: «запрети возможность создавать любые события
+    // в прошедшем времени». Прошедшие дни и слоты в форме и так погашены —
+    // эта проверка ловит то, что прошло, пока форма была открыта.
     if (!isEditing && startsInPast(date, time)) {
-      const yes = await ask.confirm({
+      await ask.say({
         title: "Это время уже прошло",
-        question: `${fmtDate(date)}, ${time} — уже в прошлом. Встреча сразу попадёт в «Нужен итог», а приглашения уйдут участникам. Всё равно назначить?`,
-        okText: "Назначить",
-        cancelText: "Выбрать другое время",
+        question: `${fmtDate(date)}, ${time} — уже в прошлом. Выберите время впереди.`,
       });
-      if (!yes) return;
+      return;
     }
     onSave({
       // Сначала сохранённая запись целиком, поверх — поля формы. Всё, чего
@@ -365,7 +386,8 @@ export default function MeetingModal({
       };
     }
     if (row.response === "no") {
-      return { state: "no", mark: "✕", title: `${withoutSelfMark(name)} не сможет${row.reason ? ": " + row.reason : ""}` };
+      // Причина — в обсуждении встречи, а не в подсказке (07.10.2026).
+      return { state: "no", mark: "✕", title: `${withoutSelfMark(name)} не сможет — причина в обсуждении` };
     }
     if (row.late) return { state: "late", mark: "🕐", title: `${withoutSelfMark(name)} будет, но опоздает` };
     return { state: "yes", mark: "✓", title: `${withoutSelfMark(name)} будет` };
@@ -518,6 +540,8 @@ export default function MeetingModal({
                   onAnswer={(response, reason, files) =>
                     answerWithFiles({ kind: "meeting", id: myVote.meetingId }, files, "Документы к ответу «не смогу»", () => onAnswer(response, reason))
                   }
+                  // Прошедшую встречу переносить поздно — предлагать нечего.
+                  onPropose={awaitsRecap(meeting) ? undefined : (date, time, reason) => postProposal(meeting.id, date, time, reason)}
                 />
               )}
 
@@ -587,7 +611,18 @@ export default function MeetingModal({
             </div>
 
             <div className="modal-chat-pane">
-              <ItemChat kind="meeting" itemId={meeting.id} mentionCandidates={participants.map((p) => withoutSelfMark(p))} />
+              {/* Тегнуть можно каждого, кто в этой встрече, — и того, кто
+                  её назначил. 07.10.2026: «почему мне не даёт выбрать Игоря
+                  Витковского, ведь он такой же участник встречи, не смотря
+                  на то что в позиции назначителя». Организатор в списке
+                  позванных не стоит (он идёт по определению), и упоминания
+                  брали только этот список. */}
+              <ItemChat
+                kind="meeting"
+                itemId={meeting.id}
+                mentionCandidates={mentionPeople([organizer, ...participants])}
+                onAcceptProposal={canEdit && !resolved ? onAcceptProposal : undefined}
+              />
             </div>
           </div>
         ) : (
@@ -621,7 +656,7 @@ export default function MeetingModal({
                   завтра, и открывать ради этого сетку месяца — лишнее
                   движение. */}
               <div className="deadline-row">
-                <MiniCalendar popover id="mDate" value={date} onChange={setDate} />
+                <MiniCalendar popover id="mDate" value={date} onChange={setDate} minDate={isoInDays(0)} />
                 {QUICK_DAYS.map((q) => (
                   <button
                     key={q.label}
@@ -645,9 +680,9 @@ export default function MeetingModal({
               <div className="time-grid" id="mTimeGrid">
                 {TIME_SLOTS.map((slot) => {
                   const busy = busyNamesAt(slot);
-                  // Прошедшее сегодня время приглушено, но не заперто: по
-                  // той же причине, что и занятое (см. ниже), — задним
-                  // числом встречу иногда записывают сознательно.
+                  // Прошедшее сегодня время заперто (07.10.2026, «запрети
+                  // создавать события в прошедшем времени»). Занятое — нет:
+                  // это разные вещи, см. ниже.
                   const past = startsInPast(date, slot);
                   return (
                   <button
@@ -658,7 +693,8 @@ export default function MeetingModal({
                     // другой, решив, что та подождёт. Неправдой было бы и
                     // молчание — именно его Кирилл и просил убрать.
                     className={"time-slot" + (time === slot ? " selected" : "") + (busy.length ? " busy" : "") + (past ? " past" : "")}
-                    title={busy.length ? "Заняты: " + busy.join(", ") : past ? "Это время сегодня уже прошло" : undefined}
+                    title={past ? "Это время сегодня уже прошло" : busy.length ? "Заняты: " + busy.join(", ") : undefined}
+                    disabled={past}
                     onClick={() => setTime(slot)}
                   >
                     {slot}

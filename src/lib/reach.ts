@@ -3,6 +3,7 @@ import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
 import { ownerChats, sendToColleague } from "@/lib/botDelivery";
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { rememberSent } from "@/lib/botMirror";
 
 // Как достучаться до человека по строке в списке людей — до ЛЮБОГО,
 // включая владельца.
@@ -45,11 +46,24 @@ export async function sendToPerson(
   person: ColleagueRow,
   text: string,
   buttons?: BotButton[][],
+  // О чём это сообщение, если под ним кнопки ответа: тогда оно
+  // запоминается, и ответ, данный в другом мессенджере или в трекере,
+  // перепишет и его (lib/botMirror). Без этого приглашение в MAX так и
+  // предлагало «Буду», когда человек уже ответил в Telegram.
+  memo?: { kind: "task" | "meeting"; itemId: string },
 ): Promise<number> {
   const targets = await chatsForPerson(admin, ownerId, person);
   if (!targets.length) return 0;
   const chosen = isSelfAssignee(person.name) ? targets : targets.slice(0, 1);
   // Во все выбранные чаты — одновременно (у владельца их два: Telegram и MAX).
   const results = await Promise.all(chosen.map((target) => sendToColleague(target, text, buttons)));
+  if (memo && buttons?.length) {
+    await rememberSent(
+      admin,
+      ownerId,
+      { ...memo, assigneeId: person.id },
+      chosen.map((target, i) => ({ ...target, messageId: results[i].ok ? results[i].messageId : undefined })),
+    );
+  }
   return results.filter((r) => r.ok).length;
 }

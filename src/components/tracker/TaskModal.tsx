@@ -11,7 +11,7 @@ import { markTaskCommentsRead } from "@/hooks/useUnreadTaskComments";
 import { uid } from "@/lib/uid";
 import TeamCompact from "./TeamCompact";
 import TaskAnswer from "./TaskAnswer";
-import ItemChat from "./ItemChat";
+import ItemChat, { mentionPeople } from "./ItemChat";
 import { STAGE_LABEL, taskStage, type TaskParticipantRole } from "@/lib/taskProgress";
 import type { Participant, PendingParticipant, PersonOption } from "@/hooks/useTaskParticipants";
 import PeoplePicker, { type PickedPerson } from "./PeoplePicker";
@@ -330,6 +330,14 @@ export default function TaskModal({
       }).then(() => focusField("fPeople"));
       return;
     }
+    // Срок в прошлом — только тот, что уже стоял (задача просрочена и её
+    // открыли). Новый срок раньше сегодняшнего дня не ставится: календарь
+    // такие дни гасит, а эта проверка ловит полночь, пережитую открытой
+    // формой.
+    if (form.deadline && form.deadline < isoInDays(0) && form.deadline !== (task?.deadline || "")) {
+      void ask.say({ title: "Этот день уже прошёл", question: "Срок не может быть в прошлом — выберите сегодня или позже." }).then(() => focusField("fDeadline"));
+      return;
+    }
     // Имя в задаче — первый исполнитель из набранного состава. Поле
     // «Исполнитель» исчезло, но колонка осталась: её читают карточка,
     // фильтр, бот и сводки, и триггер миграции 0024 заводит по ней строку
@@ -490,6 +498,10 @@ export default function TaskModal({
           value={form.deadline}
           onChange={(iso) => setForm((f) => ({ ...f, deadline: iso }))}
           clearable
+          // Срок в прошлом не ставится (07.10.2026, «запрети создавать
+          // любые события в прошедшем времени»): задача, рождённая
+          // просроченной, с первой секунды шлёт ступени просрочки.
+          minDate={isoInDays(0)}
         />
         {QUICK_DEADLINES.map((q) => (
           <button
@@ -698,7 +710,17 @@ export default function TaskModal({
             </div>
 
             <div className="modal-chat-pane">
-              <ItemChat kind="task" itemId={task.id} mentionCandidates={participants.map((p) => p.name)} />
+              {/* Тегнуть можно всех, кто на задаче, — и постановщика тоже:
+                  в строках участия его нет, а писать ему как раз чаще всех
+                  (07.10.2026, тот же вопрос про встречу). */}
+              <ItemChat
+                kind="task"
+                itemId={task.id}
+                mentionCandidates={mentionPeople([
+                  authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name)),
+                  ...participants.map((p) => p.name),
+                ])}
+              />
             </div>
           </div>
         ) : (

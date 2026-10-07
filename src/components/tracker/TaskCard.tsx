@@ -11,6 +11,7 @@ import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
 import Icon from "./Icon";
 import type { MyRole } from "@/lib/myRole";
 import type { TaskStage } from "@/lib/taskProgress";
+import { prefetchComments } from "@/hooks/useItemComments";
 
 // Кубик на доске.
 //
@@ -207,6 +208,10 @@ export default function TaskCard({
       {...dragProps?.attributes}
       {...dragProps?.listeners}
       {...swipe.handlers}
+      // Обсуждение просится заранее, пока указатель на карточке: окно
+      // задачи открывается уже с перепиской, а не с пустой лентой
+      // (07.10.2026). pointerenter приходит и от пальца — перед касанием.
+      onPointerEnter={() => prefetchComments("task", task.id)}
       onClick={onOpen}
     >
       {/* Корешок роли — у левого края, во всю высоту. Первое, что видно в

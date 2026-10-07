@@ -207,5 +207,7 @@ async function tellExecutors(
   // написанная через chatsFor, для него молчала (см. lib/reach).
   // Всем исполнителям сразу, а не по очереди: приёмка задачи на четверых
   // ждала четыре отправки подряд, прежде чем окно закрывалось (07.10.2026).
-  await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, task.user_id, person, text, buttons)));
+  await Promise.all(
+    ((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, task.user_id, person, text, buttons, { kind: "task", itemId: task.id })),
+  );
 }

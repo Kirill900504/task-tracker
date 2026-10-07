@@ -7,6 +7,7 @@ import ChatMessageMenu, { type ChatMenuAction } from "./ChatMessageMenu";
 import Icon from "./Icon";
 import MicButton from "./MicButton";
 import { humanError } from "@/lib/humanError";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // Обсуждение задачи там же, где задача.
 //
@@ -151,16 +152,43 @@ function applyMention(draft: string, name: string): string {
   return draft.slice(0, at) + "@" + name + " ";
 }
 
+// Кого можно тегнуть: имена без пометки «(я)», без повторов и без
+// заглушек вместо имени («владелец», «бывший участник» — так подписывается
+// постановщик, когда имени не нашлось, и тегнуть такую строку некого).
+export function mentionPeople(names: string[]): string[] {
+  const out: string[] = [];
+  for (const raw of names) {
+    const name = withoutSelfMark(raw || "").trim();
+    if (!name || name === "владелец" || name === "бывший участник" || out.includes(name)) continue;
+    out.push(name);
+  }
+  return out;
+}
+
+// Быстрые реакции — те, что ставят чаще всего, одним нажатием при
+// наведении на сообщение, как в Slack и Telegram Desktop. Полный набор
+// по-прежнему в меню по правой кнопке; здесь — только чтобы «👍 ок» не
+// стоило двух нажатий и прицеливания в меню.
+const QUICK_REACTIONS = ["👍", "✅", "🔥", "🙏"] as const;
+
+function fmtWhen(p: { date: string; time: string }): string {
+  return `${p.date.split("-").reverse().join(".")}, ${p.time}`;
+}
+
 export default function ItemChat({
   kind,
   itemId,
   mentionCandidates = [],
+  onAcceptProposal,
 }: {
   kind: ItemKind;
   itemId: string;
   // Кого можно тегнуть — участники этого же элемента. Пусто — подсказка и
   // подсветка просто не появляются, форма ввода при этом работает как раньше.
   mentionCandidates?: string[];
+  // Есть только у организатора встречи: перенести её на время, которое
+  // предложил участник, — одним нажатием на самом предложении.
+  onAcceptProposal?: (proposal: { date: string; time: string; reason: string; by: string }) => void;
 }) {
   // «По задаче» в обсуждении встречи — мелочь, но именно из таких мелочей
   // складывается ощущение, что окно собрано из чужих кусков.
@@ -327,7 +355,21 @@ export default function ItemChat({
   }
 
   return (
-    <div className="chat">
+    <div
+      className="chat"
+      // Файл, брошенный на обсуждение мышью из папки, — вложение, как в
+      // любом мессенджере. Перетаскивание карточек трекера сюда не
+      // относится: оно на pointer-событиях (dnd-kit) и dataTransfer не
+      // несёт, поэтому `Files` в типах — признак файла с диска.
+      onDragOver={(e) => {
+        if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer?.files?.length) return;
+        e.preventDefault();
+        pickFiles(e.dataTransfer.files);
+      }}
+    >
       <div className="chat-head">
         <span className="chat-title">Обсуждение</span>
         {comments.length > 0 && <span className="chat-count">{comments.length}</span>}
@@ -346,27 +388,33 @@ export default function ItemChat({
           «Загрузка…». То же самое, что было на старте трекера, только в
           миниатюре: ждать нормально, читать о том, что ждёшь, — нет.
           Три полосы разной длины, как реплики разной длины. */}
-      {loading && (
-        <div className="chat-skeleton" aria-hidden>
-          <div className="chat-skel-line" style={{ width: "62%" }} />
-          <div className="chat-skel-line" style={{ width: "44%" }} />
-          <div className="chat-skel-line" style={{ width: "71%" }} />
-        </div>
-      )}
-
-      {!loading && comments.length === 0 && (
-        <div className="chat-empty">
-          Пока тихо. Здесь видно всё, что говорили по {about}, — и это видят все её участники.
-        </div>
-      )}
-
       {/* Лента — как в мессенджере: своё справа, чужое слева.
           Слова Кирилла 21.09.2026: «сделай современный чат, с возможностью
           быстро переписываться с функциями чата и удобным отображением
           имён участников, режим чата как в телеграм или МАХ (когда твои
-          сообщения справа, сообщения коллег слева)». */}
-      {!loading && comments.length > 0 && (
-        <div className="chat-feed" ref={feed}>
+          сообщения справа, сообщения коллег слева)».
+
+          Место ленты занято ВСЕГДА — и пока она едет, и когда она пуста.
+          07.10.2026: «на долю секунды появляется пустой чат, а потом сразу
+          же чат с историей». Пустой кадр был не только пустым, но и другой
+          формы: без ленты поле ввода поднималось под самый заголовок, а с
+          приходом сообщений уезжало вниз — окно прыгало. Теперь меняется
+          только содержимое ленты, а поле стоит на своём месте. */}
+      <div className={"chat-feed" + (loading || comments.length === 0 ? " is-empty" : "")} ref={feed}>
+        {loading && (
+          <div className="chat-skeleton" aria-hidden>
+            <div className="chat-skel-line" style={{ width: "62%" }} />
+            <div className="chat-skel-line" style={{ width: "44%" }} />
+            <div className="chat-skel-line" style={{ width: "71%" }} />
+          </div>
+        )}
+        {!loading && comments.length === 0 && (
+          <div className="chat-empty">
+            Пока тихо. Здесь видно всё, что говорили по {about}, — и это видят все её участники.
+          </div>
+        )}
+        {!loading && comments.length > 0 && (
+        <>
           {comments.map((c, i) => {
             const prev = comments[i - 1];
             const newDay = !prev || !sameDay(prev.createdAt, c.createdAt);
@@ -418,7 +466,7 @@ export default function ItemChat({
                               key={r.emoji}
                               type="button"
                               className={"chat-reaction" + (r.mine ? " mine" : "")}
-                              title={r.mine ? "Убрать реакцию" : "Поддержать"}
+                              title={(c.reactors?.[r.emoji]?.join(", ") || "") + (r.mine ? " · нажмите, чтобы убрать" : "") || "Поддержать"}
                               onClick={() => void react(c.id, r.emoji, !r.mine)}
                             >
                               {r.emoji} {r.count}
@@ -503,7 +551,64 @@ export default function ItemChat({
                         </div>
                       ) : (
                         <>
-                          {c.body && <div className="chat-body">{renderWithMentions(c.body, mentionCandidates)}</div>}
+                          {c.proposal ? (
+                            (() => {
+                              // Предложение другого времени — карточкой, а не
+                              // текстом: дата крупно, ответы участников по
+                              // именам и, у организатора, перенос одним
+                              // нажатием. «Подходит / Не подходит» — это 👍 / 👎
+                              // на реплику, один из двух.
+                              const yes = c.reactors?.["👍"] || [];
+                              const no = c.reactors?.["👎"] || [];
+                              const myYes = c.reactions.some((r) => r.emoji === "👍" && r.mine);
+                              const myNo = c.reactions.some((r) => r.emoji === "👎" && r.mine);
+                              const reason = (c.body.split(" — ")[1] || "").split(".\n")[0].trim();
+                              const choose = (emoji: "👍" | "👎") => {
+                                const on = emoji === "👍" ? !myYes : !myNo;
+                                if (on && emoji === "👍" && myNo) void react(c.id, "👎", false);
+                                if (on && emoji === "👎" && myYes) void react(c.id, "👍", false);
+                                void react(c.id, emoji, on);
+                              };
+                              return (
+                                <div className="chat-proposal">
+                                  <div className="chat-proposal-head">
+                                    <Icon name="clock" size={14} /> Предлагает перенести на <b>{fmtWhen(c.proposal)}</b>
+                                  </div>
+                                  {reason && <div className="chat-proposal-reason">{reason}</div>}
+                                  <div className="chat-proposal-votes">
+                                    {yes.length > 0 && <span className="yes">Подходит: {yes.join(", ")}</span>}
+                                    {no.length > 0 && <span className="no">Не подходит: {no.join(", ")}</span>}
+                                    {!yes.length && !no.length && <span className="none">Пока никто не ответил</span>}
+                                  </div>
+                                  {!c.sending && (
+                                    <div className="chat-proposal-actions">
+                                      {!c.mine && (
+                                        <>
+                                          <button type="button" className={"btn btn-small" + (myYes ? " on-yes" : "")} onClick={() => choose("👍")}>
+                                            👍 Подходит
+                                          </button>
+                                          <button type="button" className={"btn btn-small" + (myNo ? " on-no" : "")} onClick={() => choose("👎")}>
+                                            👎 Не подходит
+                                          </button>
+                                        </>
+                                      )}
+                                      {onAcceptProposal && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-small btn-primary"
+                                          onClick={() => onAcceptProposal({ ...c.proposal!, reason, by: c.authorName })}
+                                        >
+                                          <Icon name="calendar" size={14} /> Перенести на это время
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            c.body && <div className="chat-body">{renderWithMentions(c.body, mentionCandidates)}</div>
+                          )}
 
                           {c.attachments.length > 0 && (
                             <div className="chat-files">
@@ -540,6 +645,40 @@ export default function ItemChat({
                             {SOURCE_MARK[c.source] || ""}
                           </span>
 
+                          {/* Быстрые реакции — при наведении, одним нажатием
+                              (как в Slack и Telegram Desktop). На телефоне
+                              наведения нет, там то же самое делает долгое
+                              нажатие с полным набором. */}
+                          {!c.sending && !c.proposal && (
+                            <div className="chat-quick" onClick={(e) => e.stopPropagation()}>
+                              {QUICK_REACTIONS.map((emoji) => {
+                                const on = c.reactions.some((r) => r.emoji === emoji && r.mine);
+                                return (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    className={"chat-quick-btn" + (on ? " on" : "")}
+                                    title={on ? "Убрать реакцию" : "Поставить реакцию"}
+                                    onClick={() => void react(c.id, emoji, !on)}
+                                  >
+                                    {emoji}
+                                  </button>
+                                );
+                              })}
+                              <button
+                                type="button"
+                                className="chat-quick-btn"
+                                title="Ответить на это сообщение"
+                                onClick={() => {
+                                  setReplyTo(c);
+                                  draftRef.current?.focus();
+                                }}
+                              >
+                                <Icon name="reply" size={14} />
+                              </button>
+                            </div>
+                          )}
+
                           {/* Под сообщением — только реакции, которые уже стоят.
                               «изменить», «убрать» и выбор эмодзи живут в меню по
                               правой кнопке: три служебных слова под КАЖДОЙ
@@ -552,7 +691,7 @@ export default function ItemChat({
                                   key={r.emoji}
                                   type="button"
                                   className={"chat-reaction" + (r.mine ? " mine" : "")}
-                                  title={r.mine ? "Убрать реакцию" : "Поддержать"}
+                                  title={(c.reactors?.[r.emoji]?.join(", ") || "") + (r.mine ? " · нажмите, чтобы убрать" : "") || "Поддержать"}
                                   onClick={() => void react(c.id, r.emoji, !r.mine)}
                                 >
                                   {r.emoji} {r.count}
@@ -568,8 +707,9 @@ export default function ItemChat({
               </div>
             );
           })}
-        </div>
-      )}
+        </>
+        )}
+      </div>
 
       {/* Меню сообщения — одно на всю ветку, а не по штуке на реплику:
           открыто всегда не больше одного. */}
@@ -667,6 +807,15 @@ export default function ItemChat({
           value={draft}
           placeholder={`Написать по ${about}… ${mentionCandidates.length ? "(@ — позвать кого-то из участников)" : ""}`}
           onChange={(e) => setDraft(e.target.value)}
+          // Снимок экрана вставляется прямо в поле (Ctrl+V), как в любом
+          // мессенджере: «покажи, что сделал» чаще всего и есть скриншот, и
+          // сохранять его в файл ради кнопки со скрепкой — лишние шаги.
+          onPaste={(e) => {
+            const files = Array.from(e.clipboardData?.files || []);
+            if (!files.length) return;
+            e.preventDefault();
+            pickFiles(e.clipboardData.files);
+          }}
           onKeyDown={(e) => {
             // Enter отправляет, Shift+Enter переносит строку: сообщение в
             // обсуждении почти всегда одно предложение. Пока открыт список

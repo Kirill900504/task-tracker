@@ -206,6 +206,28 @@ export function useMeetingVotes() {
   // от вас ждут»; теперь — в самой встрече, где её и читают.
   const answer = useCallback(
     async (participantId: string, response: "yes" | "no" | "late", reason: string) => {
+      // Экран отвечает раньше облака: «Буду» в карточке меняется в ту же
+      // долю секунды, а не после маршрута и перечитывания (правило «кнопка
+      // меняет экран, а потом базу»). Отказ маршрута вернёт правду reload'ом.
+      setByMeeting((prev) => {
+        const next: Record<string, MeetingVoteRow[]> = {};
+        for (const [id, rows] of Object.entries(prev)) {
+          next[id] = rows.map((r) =>
+            r.id === participantId
+              ? {
+                  ...r,
+                  response: response === "no" ? "no" : "yes",
+                  late: response === "late",
+                  reason: response === "no" ? reason : null,
+                  // Ответ — о текущем времени встречи: круг строки не ниже
+                  // круга встречи, иначе currentVote счёл бы его прошлым.
+                  round: Math.max(r.round, 999),
+                }
+              : r,
+          );
+        }
+        return next;
+      });
       const res = await fetch("/api/workspace/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

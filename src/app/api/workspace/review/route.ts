@@ -112,7 +112,7 @@ export async function POST(req: Request) {
     if (person) {
       await sendToPerson(admin, task.user_id, person, `↩ Вернули на доработку: «${task.title}»
 
-${label}: ${comment}`, taskButtons(task.id, "executor"));
+${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId: task.id });
     }
     return NextResponse.json({ ok: true });
   }

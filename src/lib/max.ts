@@ -156,7 +156,7 @@ export async function sendMaxDocument(
   }
 }
 
-export async function editMaxMessage(messageId: string, text: string): Promise<void> {
+export async function editMaxMessage(messageId: string, text: string, buttons?: BotButton[][]): Promise<void> {
   const settings = await maxSettings();
   if (!settings) return;
   try {
@@ -164,8 +164,10 @@ export async function editMaxMessage(messageId: string, text: string): Promise<v
       method: "PUT",
       headers: headers(settings.token),
       // An empty attachment list is what removes the buttons — the point of
-      // the rewrite is that they stop being offered.
-      body: JSON.stringify({ text: clip(text), attachments: [] }),
+      // the rewrite is that they stop being offered. Непустой — заменяет
+      // их: ответ, данный в Telegram, оставляет в MAX ровно те кнопки,
+      // что ещё действуют (lib/botMirror).
+      body: JSON.stringify({ text: clip(text), attachments: buttons?.length ? [keyboardAttachment(buttons)] : [] }),
     });
   } catch {
     /* cosmetic */
@@ -222,6 +224,8 @@ export function maxTransport(): BotTransport {
     channel: "max",
     label: "MAX",
     send: (chatId, text, options) => sendMaxMessage(chatId, text, options),
+    // В MAX сообщение адресуется одним своим id, без чата.
+    edit: (_chatId, messageId, text, buttons) => editMaxMessage(messageId, text, buttons),
     async resolveCallback({ callbackId, chatId, toast, rewriteTo, rewriteButtons, more }) {
       // One call where the message can carry the outcome; a separate line in
       // the chat where it cannot, so a press is never silent.

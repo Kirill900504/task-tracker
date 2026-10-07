@@ -23,6 +23,10 @@ export type BotTransport = {
   // How the messenger is named to the person reading the reply.
   label: string;
   send(chatId: number, text: string, options?: { buttons?: BotButton[][] }): Promise<BotSendResult>;
+  // Переписать уже отправленное сообщение — не в ответ на нажатие под ним,
+  // а потому, что ответили в другом месте: в другом мессенджере или в
+  // трекере (lib/botMirror). Пустые кнопки снимают их совсем.
+  edit(chatId: number, messageId: string, text: string, buttons?: BotButton[][]): Promise<void>;
   // A pressed button, answered: a short toast where the messenger has them,
   // and the message rewritten to say what happened, so buttons that no
   // longer do anything stop being offered.

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { BOT_CHANNELS } from "@/lib/botTransport";
 import { fmtDate } from "@/lib/taskDisplay";
+import { withoutSelfMark } from "@/lib/actorName";
 import type { TaskChoices, VoteChoice } from "@/lib/answerRules";
 
 // Sending an item to the person it is addressed to, and understanding what
@@ -104,7 +105,8 @@ export function meetingMessage(
 ): string {
   const lines = [`📅 Встреча от ${from}:`, "", meeting.title, "", fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "")];
   const others = (meeting.participants || []).filter(Boolean);
-  if (others.length > 1) lines.push("Участники: " + others.join(", "));
+  // «(я)» — пометка для одного человека, а читают сообщение все.
+  if (others.length > 1) lines.push("Участники: " + others.map(withoutSelfMark).join(", "));
   return lines.join("\n");
 }
 

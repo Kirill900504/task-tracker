@@ -1617,6 +1617,45 @@
      в списке имён, набранном шрифтом интерфейса. */
   .people-tooltip .prow .icon{flex:none;}
   .people-tooltip .prow-dot{color:var(--ink-soft); width:12px; text-align:center;}
+  /* Отклик — цветом знака, а не словом: в списке из восьми имён «кто не
+     придёт» должно читаться раньше самих имён (07.10.2026). Знак на
+     цветной подложке, иначе тонкая галочка на тёмном фоне теряется. */
+  .people-tooltip .prow-mark{
+    flex:none; width:18px; height:18px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    font-weight:700; color:var(--ink-soft);
+  }
+  .people-tooltip .prow.vote-yes .prow-mark{background:rgba(63,169,104,.18); color:#5BD08A;}
+  .people-tooltip .prow.vote-late .prow-mark{background:rgba(224,184,77,.18); color:#F0C75E;}
+  .people-tooltip .prow.vote-no .prow-mark{background:rgba(224,122,95,.2); color:#FF8C70;}
+  .people-tooltip .prow.vote-no{color:var(--ink);}
+  .people-tooltip .prow.vote-none{color:var(--ink-soft);}
+  /* Корешок встречи — тот же приём, что роль у задачи (.task-role-bar):
+     полоска у левого края, которую узнают, не сравнивая. Зелёная — все
+     позванные сказали «буду», тёплая — кто-то не сможет. Рамка карточки
+     при этом не трогается: ею уже говорит выбранный день. */
+  .meeting-chip{position:relative;}
+  .meeting-chip.all-in, .meeting-chip.has-decline{overflow:hidden;}
+  .meeting-chip.all-in::before, .meeting-chip.has-decline::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+  }
+  .meeting-chip.all-in::before{background:var(--success);}
+  .meeting-chip.has-decline::before{background:var(--med);}
+  .meeting-chip.all-in .mpeople{color:#5BD08A;}
+  .meeting-chip.has-decline .mpeople-no{color:var(--med);}
+  /* Свой ответ в карточке — тем же рядом, что исходы у организатора.
+     Уже данный ответ — плашкой без рамки кнопки: на него не нажимают. */
+  .meeting-actions.vote .meeting-act.vote-yes{color:#5BD08A; border-color:rgba(63,169,104,.45);}
+  .meeting-actions.vote .meeting-act.vote-yes:hover{background:rgba(63,169,104,.14); border-color:var(--success);}
+  .meeting-actions.vote .meeting-act.vote-late:hover{color:var(--med); border-color:var(--med);}
+  .meeting-actions.vote .meeting-act.vote-no:hover{color:var(--high); border-color:var(--high);}
+  .meeting-my-vote{
+    min-height:32px; display:inline-flex; align-items:center; justify-content:center; gap:5px;
+    border-radius:var(--radius-sm); font-family:var(--display); font-size:11.5px; font-weight:700;
+  }
+  .meeting-my-vote.yes{background:rgba(63,169,104,.14); color:#5BD08A;}
+  .meeting-my-vote.late{background:rgba(224,184,77,.14); color:#F0C75E;}
+  .meeting-my-vote.no{background:rgba(224,122,95,.14); color:#FF8C70;}
   /* Три исхода встречи — одним словом каждый и все в одной строке.
      Значками они были неразличимы: «✓» под встречей одинаково похоже и на
      «прошла успешно», и на «я приду». Целые фразы это объяснили, но встали
@@ -1756,6 +1795,7 @@
      в блоке календарь — чтобы однотипный был». Две сетки месяца на одном
      экране обязаны выглядеть одной и той же вещью. */
   .mini-cal-day.today{color:var(--accent); font-weight:700; border-color:var(--accent);}
+  .mini-cal-day.blocked, .mini-cal-day.blocked:hover{opacity:.28; cursor:not-allowed; background:none; border-color:transparent; color:var(--ink-faint, #8a9095);}
   .mini-cal-day.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:700; box-shadow:var(--shadow-1);}
   @media (max-width:800px){ .mini-cal{max-width:none;} .mini-cal-day{min-height:38px;} }
   /* Всплывающий вариант (в карточке задачи): строка с датой, календарь — по
@@ -1833,8 +1873,8 @@
   .time-slot.busy.selected{opacity:1; color:#F3F8FA; background:var(--accent); border-style:solid;}
   /* Сегодняшнее время, которое уже прошло: приглушено, но нажимается —
      задним числом встречу иногда записывают сознательно (см. MeetingModal). */
-  .time-slot.past{opacity:.45;}
-  .time-slot.past.selected{opacity:1;}
+  .time-slot.past{opacity:.3; cursor:not-allowed; text-decoration:line-through;}
+  .time-slot.past:hover{border-color:var(--line-soft); color:inherit; background:none;}
   /* Время следующего этапа — те же кнопки, только помельче: строка переноса
      и так стоит внизу карточки, среди итогов. */
   .time-grid-compact{margin-top:8px;}
@@ -2827,6 +2867,55 @@
      непонятно, к чему относится то, что сейчас откроется. */
   .chat-msg.menu-open{border-color:var(--accent);}
   .chat-msg.mine{background:var(--accent-soft); border-color:rgba(62,138,168,.45);}
+  /* Пустая или ещё едущая лента занимает то же место, что полная: поле
+     ввода не прыгает к заголовку и обратно (07.10.2026, «на долю секунды
+     появляется пустой чат»). Текст «пока тихо» — по центру этого места. */
+  .chat-feed.is-empty{justify-content:center;}
+  .chat-feed.is-empty .chat-empty{text-align:center; padding:12px 8px;}
+  /* Быстрые реакции — плашкой над углом пузыря, только при наведении. На
+     телефоне наведения нет: там долгое нажатие открывает полный набор. */
+  /* Сбоку от пузыря, а не над ним: лента прокручивается, и плашка над
+     первым сообщением обрезалась бы её краем. Пузырь не шире 78% ленты —
+     место сбоку есть всегда. */
+  .chat-quick{
+    position:absolute; top:50%; left:calc(100% + 6px); transform:translateY(-50%);
+    display:none; gap:2px; z-index:2;
+    background:var(--paper); border:1px solid var(--line); border-radius:999px;
+    padding:2px 4px; box-shadow:var(--shadow-2);
+  }
+  .chat-msg.mine .chat-quick{left:auto; right:calc(100% + 6px);}
+  /* Мостик через зазор: иначе по дороге мыши от пузыря к плашке наведение
+     теряется, и плашка исчезает из-под курсора. */
+  .chat-quick::before{content:""; position:absolute; top:-6px; bottom:-6px; right:100%; width:10px;}
+  .chat-msg.mine .chat-quick::before{right:auto; left:100%;}
+  @media (hover:hover){ .chat-msg:hover .chat-quick{display:flex;} }
+  .chat-quick-btn{
+    width:28px; height:26px; border:none; background:none; border-radius:999px; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; font-size:14px; color:var(--ink-soft);
+    transition:background .12s ease, transform .12s ease;
+  }
+  .chat-quick-btn:hover{background:var(--paper-soft); transform:scale(1.12); color:var(--ink);}
+  .chat-quick-btn.on{background:var(--accent-soft);}
+  /* Предложение другого времени — карточкой внутри пузыря: дата крупно,
+     ответы по именам, кнопки под ними. */
+  .propose-form{display:flex; flex-direction:column; gap:8px; margin-top:6px;}
+  .propose-form .field{margin:0;}
+  .propose-reason{
+    width:100%; resize:vertical; min-height:44px; font:inherit; font-size:16px;
+    background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 10px;
+  }
+  @media (min-width:801px){ .propose-reason{font-size:13px;} }
+  .chat-proposal{display:flex; flex-direction:column; gap:7px; min-width:min(260px, 100%);}
+  .chat-proposal-head{display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink);}
+  .chat-proposal-head b{color:var(--today); font-variant-numeric:tabular-nums;}
+  .chat-proposal-reason{font-size:13px; color:var(--ink); line-height:1.45; white-space:pre-wrap;}
+  .chat-proposal-votes{display:flex; flex-direction:column; gap:2px; font-size:12px;}
+  .chat-proposal-votes .yes{color:#5BD08A;}
+  .chat-proposal-votes .no{color:#FF8C70;}
+  .chat-proposal-votes .none{color:var(--ink-soft);}
+  .chat-proposal-actions{display:flex; flex-wrap:wrap; gap:6px;}
+  .chat-proposal-actions .on-yes{border-color:var(--success); color:#5BD08A; background:rgba(63,169,104,.12);}
+  .chat-proposal-actions .on-no{border-color:var(--high); color:#FF8C70; background:rgba(224,122,95,.12);}
   /* Сообщение уже в ленте, но ещё не подтверждено базой. Бледность — весь
      рассказ об этом: подпись «отправляется» заняла бы строку ради того, что
      живёт доли секунды, а на плохой связи видно и так. Переход плавный,

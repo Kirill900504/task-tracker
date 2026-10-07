@@ -6,6 +6,7 @@ import { encodeCallback, meetingButtons, taskButtons } from "@/lib/colleagues";
 import { openTaskChoices, openVoteChoices } from "@/lib/answerRules";
 import { botMenu, navRow } from "@/lib/botMenu";
 import { fmtDate } from "@/lib/taskDisplay";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // О чём коллега может спросить бота.
 //
@@ -336,6 +337,9 @@ export async function taskCard(
   colleague: { id: string; name: string; user_id: string },
   taskId: string,
   today: string,
+  // Без строки меню внизу — для присланного сообщения, которое
+  // переписывают под новый ответ (lib/botMirror): меню у него не было.
+  withNav = true,
 ): Promise<BotReply | null> {
   const { data } = await admin
     .from("task_participants")
@@ -401,13 +405,14 @@ export async function taskCard(
     reschedulePending: !!row.reschedule_to && !!row.reschedule_reason,
   });
   const actions = done ? [[{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }]] : taskButtons(taskId, row.role, open);
-  return { text: lines.join("\n"), buttons: [...actions, ...navButtons()] };
+  return { text: lines.join("\n"), buttons: withNav ? [...actions, ...navButtons()] : actions };
 }
 
 export async function meetingCard(
   admin: SupabaseClient,
   colleague: { id: string; name: string; user_id: string },
   meetingId: string,
+  withNav = true,
 ): Promise<BotReply | null> {
   const { data } = await admin
     .from("meeting_participants")
@@ -440,15 +445,26 @@ export async function meetingCard(
   const answered = row.round === Number(meeting.vote_round ?? 1) && row.response !== "none";
   const lines = [`📅 ${meeting.title}`, "", fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "")];
   const others = (meeting.participants || []).filter(Boolean);
-  if (others.length > 1) lines.push("Участники: " + others.join(", "));
-  if (answered) lines.push("", row.response === "yes" ? (row.late ? "🕐 Вы придёте, но опоздаете" : "✅ Вы подтвердили участие") : `❌ Вы не сможете${row.reason ? ": " + row.reason : ""}`);
+  if (others.length > 1) lines.push("Участники: " + others.map(withoutSelfMark).join(", "));
+  if (answered) {
+    lines.push(
+      "",
+      row.response === "yes"
+        ? row.late
+          ? "🕐 Вы придёте, но опоздаете"
+          : "✅ Вы подтвердили участие"
+        : row.reason
+          ? `❌ Вы не сможете: ${row.reason}`
+          : "❌ Вы не сможете\nНапишите одним сообщением, почему — это увидит организатор.",
+    );
+  }
   else lines.push("", "❓ Ждём вашего ответа");
 
   // Ответ даётся один раз (lib/answerRules): после «буду» остаётся только
   // «опоздаю», после «опоздаю» и «не смогу» — ничего. «Ответить» в наборе
   // meetingButtons уже есть — второй такой строки здесь не нужно.
   const choices = openVoteChoices(row, Number(meeting.vote_round ?? 1) || 1);
-  return { text: lines.join("\n"), buttons: [...meetingButtons(meetingId, choices), ...navButtons()] };
+  return { text: lines.join("\n"), buttons: withNav ? [...meetingButtons(meetingId, choices), ...navButtons()] : meetingButtons(meetingId, choices) };
 }
 
 // Кто идёт на встречу — тот же расклад, что показывает карточка в трекере.

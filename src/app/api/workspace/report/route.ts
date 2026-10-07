@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { mirrorAnswer } from "@/lib/botMirror";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readInput, reportInput } from "@/lib/apiInput";
@@ -182,6 +183,9 @@ export async function POST(req: Request) {
     const verdict = voteVerdict(vote, body.response as "yes" | "late" | "no", nextRound);
     if (verdict === "same") return NextResponse.json({ ok: true, scheduled: false });
     if (verdict === "locked") return NextResponse.json({ error: lockedVoteText(vote) }, { status: 409 });
+    // Ответ из трекера — и в мессенджерах приглашение перестаёт
+    // предлагать «Буду / Не смогу» (lib/botMirror). После ответа браузеру.
+    after(() => mirrorAnswer(admin, { kind: "meeting", itemId: vote.meeting_id, assigneeId: vote.assignee_id }));
 
     await admin
       .from("meeting_participants")
@@ -267,6 +271,12 @@ export async function POST(req: Request) {
   const authorId = taskRef?.created_by || m.owner_id;
   const tell = (text: string, notice?: Notice) =>
     authorId === user.id ? Promise.resolve() : notifyAuthor(admin, m.owner_id, taskRef?.created_by || null, text, notice);
+  // Ответ, данный в трекере, переписывает и сообщения о задаче в
+  // мессенджерах (lib/botMirror): иначе там так и висят «Принял / Сделал»
+  // после того, как человек уже отчитался. После ответа браузеру — ждать
+  // полётов до Telegram и MAX ему незачем. Если ветка ниже откажет,
+  // правка просто перерисует то же состояние.
+  after(() => mirrorAnswer(admin, { kind: "task", itemId: part.task_id, assigneeId: part.assignee_id }));
 
   if (body.action === "accept") {
     await admin.from("task_participants").update({ accepted_at: now }).eq("id", part.id);

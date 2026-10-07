@@ -117,13 +117,16 @@ export type DeliveryResult = { delivered: number; skipped: "system" | "throttled
 export async function deliverComment(admin: SupabaseClient, commentId: string): Promise<DeliveryResult> {
   const { data } = await admin
     .from("item_comments")
-    .select("id, item_kind, item_id, body, user_id, author_user_id, author_assignee_id, system, created_at, attachments")
+    .select("id, item_kind, item_id, body, user_id, author_user_id, author_assignee_id, system, created_at, attachments, proposal")
     .eq("id", commentId)
     .maybeSingle();
-  const comment = data as CommentRow | null;
+  const comment = data as (CommentRow & { proposal?: unknown }) | null;
   if (!comment || comment.system) return { delivered: 0, skipped: "system" };
 
-  if (!(await isNewConversation(admin, comment.item_kind, comment.item_id, comment.id))) {
+  // Предложение другого времени уходит сразу, без порога «первое после
+  // паузы»: на него ждут ответа от каждого, и до утренней сводки встреча
+  // может уже начаться.
+  if (!comment.proposal && !(await isNewConversation(admin, comment.item_kind, comment.item_id, comment.id))) {
     return { delivered: 0, skipped: "throttled" };
   }
 

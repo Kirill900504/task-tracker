@@ -8,6 +8,7 @@ import { chatsForPerson } from "@/lib/reach";
 import { actorName } from "@/lib/actorName";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import type { BotChannelConfig } from "@/lib/botTransport";
+import { rememberSent } from "@/lib/botMirror";
 
 // Sending a task, a meeting or a thought to the colleague it concerns.
 //
@@ -74,9 +75,21 @@ async function deliver(
   person: Recipient,
   text: string,
   buttons: Parameters<typeof sendToColleague>[2],
+  // Что это за сообщение — чтобы ответ, данный под ним или в другом
+  // мессенджере, переписал и его (lib/botMirror). Мысль не запоминается:
+  // ответа «буду / сделал» у неё нет.
+  memo?: { admin: ReturnType<typeof createAdminClient>; spaceId: string; kind: "task" | "meeting"; itemId: string },
 ): Promise<{ ok: boolean; error?: string }> {
   // В оба мессенджера человека — одновременно (см. «одновременно» ниже).
   const results = await Promise.all(person.targets.map((target) => sendToColleague(target, text, buttons)));
+  if (memo) {
+    await rememberSent(
+      memo.admin,
+      memo.spaceId,
+      { kind: memo.kind, itemId: memo.itemId, assigneeId: person.id },
+      person.targets.map((target, i) => ({ ...target, messageId: results[i].ok ? results[i].messageId : undefined })),
+    );
+  }
   if (results.some((r) => r.ok)) return { ok: true };
   return { ok: false, error: results.map((r) => r.error).filter(Boolean).pop() || "" };
 }
@@ -152,7 +165,14 @@ export async function POST(req: Request) {
     // шестерых ждала шесть таких полётов подряд, пока кнопка «крутилась»
     // (07.10.2026). Итог раскладывается в исходном порядке людей.
     const results = await Promise.all(
-      linked.map((person) => deliver(person, taskMessage(task, from), taskButtons(task.id as string, roleOf.get(person.id) || "executor"))),
+      linked.map((person) =>
+        deliver(person, taskMessage(task, from), taskButtons(task.id as string, roleOf.get(person.id) || "executor"), {
+          admin,
+          spaceId: ownerId,
+          kind: "task",
+          itemId: task.id as string,
+        }),
+      ),
     );
     results.forEach((result, i) => {
       if (result.ok) sentTo.push(linked[i].name);
@@ -170,7 +190,16 @@ export async function POST(req: Request) {
     if (!linked.length) {
       return NextResponse.json({ error: nobodyReachable(unlinked, "Некому отправлять"), unreachable: unlinked });
     }
-    const results = await Promise.all(linked.map((person) => deliver(person, meetingMessage(meeting, from), meetingButtons(meeting.id as string))));
+    const results = await Promise.all(
+      linked.map((person) =>
+        deliver(person, meetingMessage(meeting, from), meetingButtons(meeting.id as string), {
+          admin,
+          spaceId: ownerId,
+          kind: "meeting",
+          itemId: meeting.id as string,
+        }),
+      ),
+    );
     results.forEach((result, i) => {
       if (result.ok) sentTo.push(linked[i].name);
       else failed.push(`${linked[i].name} (${result.error})`);

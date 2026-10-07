@@ -332,7 +332,7 @@ export async function GET(req: Request) {
               .select("id, name, telegram_chat_id, max_user_id")
               .in("id", task.waiting.map((w) => w.assigneeId));
             for (const person of ((people || []) as ColleagueRow[])) {
-              await sendToPerson(admin, userId, person, nudgeText(task, step), taskButtons(task.taskId, "executor"));
+              await sendToPerson(admin, userId, person, nudgeText(task, step), taskButtons(task.taskId, "executor"), { kind: "task", itemId: task.taskId });
             }
           }
 
@@ -362,7 +362,9 @@ export async function GET(req: Request) {
             .select("id, name, telegram_chat_id, max_user_id")
             .eq("id", w.assigneeId)
             .maybeSingle();
-          if (person) await sendToPerson(admin, userId, person as ColleagueRow, unacceptedText(w.title), taskButtons(w.taskId, "executor"));
+          if (person) {
+            await sendToPerson(admin, userId, person as ColleagueRow, unacceptedText(w.title), taskButtons(w.taskId, "executor"), { kind: "task", itemId: w.taskId });
+          }
         });
       }
       for (const w of waiting.unreviewed) {
@@ -642,6 +644,7 @@ export async function GET(req: Request) {
           // ответить куда-то не сюда. Отказавшемуся они уже не нужны: от
           // него ждут не нажатия, а одной строки текста.
           !needsReason && window.audience === "unanswered" ? meetingButtons(m.id) : undefined,
+          { kind: "meeting", itemId: m.id },
         );
       }
     }
