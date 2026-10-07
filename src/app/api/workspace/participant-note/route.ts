@@ -79,6 +79,6 @@ export async function POST(req: Request) {
         ? `➖ ${actorName} убрал с задачи: ${targetName}`
         : `🔄 ${actorName} назначил: ${targetName} — ${roleLabel}`;
 
-  await recordEvent(admin, { userId: task.user_id, kind: "task", itemId: task.id, text });
+  await recordEvent(admin, { actorUserId: user.id, userId: task.user_id, kind: "task", itemId: task.id, text });
   return NextResponse.json({ ok: true });
 }

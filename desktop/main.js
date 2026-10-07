@@ -112,7 +112,23 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: true,
+      // Свёрнутое окно не засыпает. По умолчанию Chromium душит таймеры
+      // фоновой страницы, и подписка на события живёт урывками — а
+      // всплывающее уведомление (07.10.2026) нужно именно тогда, когда
+      // трекер свёрнут и человек в другой программе.
+      backgroundThrottling: false,
     },
+  });
+
+  // Нажали на уведомление — поднять окно. Страница не может сделать это
+  // сама, а моста между ней и оболочкой нет нарочно (см. webPreferences),
+  // поэтому она подаёт знак переходом внутри страницы на адрес с меткой
+  // #rokas-raise (useDesktopAlerts.raiseWindow), и метку тут же снимает.
+  mainWindow.webContents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
+    if (!isMainFrame || !url.endsWith("#rokas-raise")) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   if (state.maximized) mainWindow.maximize();
@@ -203,6 +219,11 @@ if (!app.requestSingleInstanceLock()) {
     // трекера, чтобы кнопки «Команда» и «Выйти» не оказались под
     // системными «свернуть/закрыть».
     nativeTheme.themeSource = "dark";
+    // Уведомления Windows подписываются именем приложения и узнают его по
+    // этому идентификатору — тому же, что установщик записал в ярлык
+    // (appId в package.json, он не меняется никогда). Без этой строки окно
+    // уведомления подписано «electron.app.…» или не появляется вовсе.
+    if (process.platform === "win32") app.setAppUserModelId("ru.rokas.tracker");
     ensureAutostartOnce();
     buildMenu();
     createWindow();

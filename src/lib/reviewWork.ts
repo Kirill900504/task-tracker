@@ -104,6 +104,7 @@ export async function applyReview(
         .eq("task_id", task.id)
         .eq("role", "executor");
       await recordEvent(admin, {
+        actorUserId: who.userId,
         userId: task.user_id,
         kind: "task",
         itemId: task.id,
@@ -151,6 +152,7 @@ export async function applyReview(
   // связи), а запись о решении остаться должна в любом случае — именно её
   // потом и ищут, когда спрашивают «а что просили доделать».
   await recordEvent(admin, {
+    actorUserId: who.userId,
     userId: task.user_id,
     kind: "task",
     itemId: task.id,

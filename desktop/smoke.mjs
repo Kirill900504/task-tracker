@@ -94,6 +94,26 @@ const check = (ok, what) => {
   check(title.length > 0, "у окна есть заголовок: " + title);
 
   await shot(win, path.join(here, "smoke-login.png"));
+
+  // Нажатие на уведомление поднимает свёрнутое окно. Страница подаёт знак
+  // меткой в адресе (useDesktopAlerts.raiseWindow), оболочка его ловит;
+  // если метку переименуют с одной стороны и забудут с другой, уведомление
+  // будет открывать задачу в окне, которого не видно.
+  console.log("Нажатие на уведомление:");
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize());
+  await win.waitForTimeout(500);
+  await win.evaluate(() => {
+    const back = location.pathname + location.search;
+    history.replaceState(history.state, "", back + "#rokas-raise");
+    history.replaceState(history.state, "", back);
+  });
+  let raised = false;
+  for (let i = 0; i < 20 && !raised; i++) {
+    await win.waitForTimeout(100);
+    raised = await app.evaluate(({ BrowserWindow }) => !BrowserWindow.getAllWindows()[0].isMinimized());
+  }
+  check(raised, "свёрнутое окно разворачивается по метке #rokas-raise");
+  check(!/#rokas-raise/.test(win.url()), "метка в адресе не остаётся");
   await app.close();
 }
 

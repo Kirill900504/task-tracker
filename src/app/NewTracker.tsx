@@ -10,6 +10,8 @@ import { useTrackerData } from "@/hooks/useTrackerData";
 import { useToasts } from "@/hooks/useToasts";
 import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useDesktopAlerts } from "@/hooks/useDesktopAlerts";
+import AlertsButton from "@/components/tracker/AlertsButton";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 import { useBotLink } from "@/hooks/useBotLink";
 import { prefetchTeam, useColleagues } from "@/hooks/useColleagues";
@@ -266,6 +268,19 @@ export default function NewTracker() {
   const [openExistingTaskId, setOpenExistingTaskId] = useState<string | null>(null);
   const [openExistingMeetingId, setOpenExistingMeetingId] = useState<string | null>(null);
   const [highlightIdeaId, setHighlightIdeaId] = useState<string | null>(null);
+  // Всплывающие уведомления: реплики коллег, новые задачи и встречи на мне,
+  // перенос и ход работы — окном Windows поверх всех программ, а нажатие
+  // открывает ту самую задачу или встречу (hooks/useDesktopAlerts).
+  useDesktopAlerts({
+    ready: fresh && !offline,
+    tasks: visibleTasks,
+    meetings: visibleMeetings,
+    myUserId: identity.userId,
+    myAssigneeId: identity.assigneeId,
+    mineOnlyId,
+    showToast: toasts.showToast,
+    openItem: (kind, id) => (kind === "task" ? setOpenExistingTaskId(id) : setOpenExistingMeetingId(id)),
+  });
   // Один фильтр на панель задач и панель «Люди»: нажатие на человека и
   // выбор в списке — это один и тот же вопрос, заданный двумя способами.
   const [filterAssignee, setFilterAssignee] = useState("all");
@@ -992,27 +1007,9 @@ export default function NewTracker() {
             <button className="btn btn-icon" id="searchBtn" title="Поиск по трекеру (/)" aria-label="Поиск по трекеру" onClick={() => setSearchOpen(true)}>
               <Icon name="search" size={15} />
             </button>
-            {notifications.permission !== "unsupported" && (
-              <button
-                className={"btn btn-icon" + (notifications.permission === "granted" ? " active" : "")}
-                id="notifPermBtn"
-                // Granted is a dead end — the browser ignores a second
-                // request — so the bell stops being a button and just
-                // reports that notifications are on.
-                disabled={notifications.permission === "granted"}
-                title={
-                  notifications.permission === "granted"
-                    ? "Уведомления включены"
-                    : notifications.permission === "denied"
-                      ? "Уведомления запрещены в настройках браузера для этого сайта"
-                      : "Включить уведомления"
-                }
-                aria-label={notifications.permission === "granted" ? "Уведомления включены" : "Включить уведомления"}
-                onClick={notifications.requestPermission}
-              >
-                <Icon name={notifications.permission === "granted" ? "bell" : "bell-off"} size={15} />
-              </button>
-            )}
+            {/* Колокольчик — настройка уведомлений, а не только запрос
+                разрешения: см. AlertsButton. */}
+            <AlertsButton permission={notifications.permission} requestPermission={notifications.requestPermission} />
             {installPrompt.visible && (
               <button className="btn btn-primary" id="installAppBtn" onClick={installPrompt.promptInstall}>
                 <Icon name="install" /> Установить

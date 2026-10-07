@@ -195,7 +195,10 @@ async function loadComments(kind: ItemKind, itemId: string): Promise<Comment[]> 
   }
 
   const result = list.map((row) => {
-    const mine = !!row.author_user_id && row.author_user_id === meId;
+    // Строка хроники бывает подписана тем, кто совершил действие (см.
+    // recordEvent), но своей репликой от этого не становится: править её
+    // база не даст, и «Изменить» под ней было бы кнопкой, которая молчит.
+    const mine = !row.system && !!row.author_user_id && row.author_user_id === meId;
     const grouped = new Map<string, { count: number; mine: boolean }>();
     const reactors: Record<string, string[]> = {};
     for (const r of row.comment_reactions || []) {

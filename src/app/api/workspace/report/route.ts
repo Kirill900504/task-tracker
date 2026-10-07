@@ -143,7 +143,7 @@ export async function POST(req: Request) {
       { onConflict: "task_id,assignee_id" },
     );
     await admin.from("idea_recipients").update({ converted_task_id: taskId, seen_at: now }).eq("id", recipient.id);
-    await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: taskId, text: `➕ ${myName} взял мысль в работу` });
+    await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: taskId, text: `➕ ${myName} взял мысль в работу` });
     // Мысль тоже кто-то отправил — ему и знать, что её взяли.
     await notifyAuthor(admin, m.owner_id, idea?.created_by || null, `➕ ${myName} взял мысль в работу: «${title}»`);
     return NextResponse.json({ ok: true, taskId });
@@ -217,6 +217,7 @@ export async function POST(req: Request) {
 
     const when = meeting ? fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "") : "";
     await recordEvent(admin, {
+      actorUserId: user.id,
       userId: m.owner_id,
       kind: "meeting",
       itemId: vote.meeting_id,
@@ -298,7 +299,7 @@ export async function POST(req: Request) {
   if (body.action === "accept") {
     await admin.from("task_participants").update({ accepted_at: now }).eq("id", part.id);
     await admin.from("tasks").update({ accepted_at: now }).eq("id", part.task_id);
-    await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `✅ ${myName} принял в работу` });
+    await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `✅ ${myName} принял в работу` });
     await tell(`✅ ${myName} принял в работу: «${title}»`, { kind: "accepted", item: title, who: myName });
     return NextResponse.json({ ok: true });
   }
@@ -332,6 +333,7 @@ export async function POST(req: Request) {
     // функция, потому что «отчитались все» не должно значить разное в
     // зависимости от того, откуда пришёл последний отчёт.
     await recordEvent(admin, {
+      actorUserId: user.id,
       userId: m.owner_id,
       kind: "task",
       itemId: part.task_id,
@@ -374,7 +376,7 @@ export async function POST(req: Request) {
         reschedule_reason: null,
       })
       .eq("id", part.id);
-    await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `⛔ ${myName} не может: ${reason}` });
+    await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `⛔ ${myName} не может: ${reason}` });
     // Отказ — тоже ответ, и после него задача ждёт решения постановщика, а
     // не исполнителя. Раньше здесь не вызывалось ничего, и задача с
     // единственным отказавшимся исполнителем оставалась «в работе»
@@ -399,7 +401,7 @@ export async function POST(req: Request) {
       .update({ reschedule_requested_at: now, reschedule_to: body.date || null, reschedule_reason: reason })
       .eq("id", part.id);
     const to = body.date ? ` на ${fmtDate(body.date)}` : "";
-    await recordEvent(admin, { userId: m.owner_id, kind: "task", itemId: part.task_id, text: `📅 ${myName} просит перенос${to}: ${reason}` });
+    await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `📅 ${myName} просит перенос${to}: ${reason}` });
     await tell(`📅 ${myName} просит перенести «${title}»${to}: ${reason}`, { kind: "reschedule", item: title, who: myName, what: `${to.trim() || "на другой срок"} — ${reason}` });
     return NextResponse.json({ ok: true });
   }

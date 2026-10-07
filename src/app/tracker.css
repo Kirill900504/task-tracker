@@ -1447,6 +1447,21 @@
     align-self:flex-start; margin-top:4px; background:var(--accent-soft); border:1px solid transparent;
     color:var(--accent); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; font-family:var(--sans); font-weight:600;
   }
+  /* Уведомление о событии (lib/desktopAlerts): текст — кнопка «открыть»,
+     под ним ряд своих кнопок. Перевод строки в тексте — настоящий: «что
+     написали» и «где» читаются двумя строками, как в окне Windows. */
+  .toast-open{
+    display:flex; flex-direction:column; gap:2px; text-align:left; background:none; border:0; padding:0;
+    color:inherit; font:inherit; cursor:pointer; min-width:0;
+  }
+  .toast-open:hover b{color:var(--accent);}
+  .toast-open .toast-body{white-space:pre-line;}
+  .toast-actions{display:flex; gap:6px; flex-wrap:wrap;}
+  /* «Не беспокоить» в шапке обсуждения — к правому краю, мелко: это
+     настройка, а не действие с перепиской. */
+  .chat-head .chat-mute{margin-left:auto; width:28px; height:28px;}
+  .chat-head .chat-mute:not(.active){color:var(--ink-soft);}
+  .chat-head .chat-mute:hover{color:var(--ink);}
   .toast-undo:hover{background:var(--accent); color:#F3F8FA;}
   @keyframes toast-in{from{transform:translateY(16px); opacity:0;} to{transform:translateY(0); opacity:1;}}
 

@@ -104,6 +104,7 @@ export async function POST(req: Request) {
     const person = personRow as ColleagueRow | null;
     const label = await actorName(admin, task.user_id, user.id);
     await recordEvent(admin, {
+      actorUserId: user.id,
       userId: task.user_id,
       kind: "task",
       itemId: task.id,
@@ -132,6 +133,7 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
     const was = (body.comment || "").trim();
     const moved = to ? (was ? "перенесён с " + fmtDate(was) + " на " + fmtDate(to) : "поставлен на " + fmtDate(to)) : "снят";
     await recordEvent(admin, {
+      actorUserId: user.id,
       userId: task.user_id,
       kind: "task",
       itemId: task.id,
@@ -185,6 +187,7 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
     const when = body.date || part.reschedule_to;
     const moved = body.action === "moved";
     await recordEvent(admin, {
+      actorUserId: user.id,
       userId: task.user_id,
       kind: "task",
       itemId: task.id,

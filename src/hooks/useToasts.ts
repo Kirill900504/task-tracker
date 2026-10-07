@@ -7,11 +7,18 @@
 // after 15s — same timings as the original.
 import { useCallback, useRef, useState } from "react";
 
+export type ToastAction = { label: string; onClick: () => void };
+
 export interface Toast {
   id: string;
   title: string;
   body?: string;
   onUndo?: () => void;
+  // Уведомление о событии (lib/desktopAlerts), а не отчёт о своём
+  // действии: нажатие на него открывает то, о чём оно, а под текстом
+  // стоят его кнопки — «Открыть» и «Не беспокоить».
+  onOpen?: () => void;
+  actions?: ToastAction[];
 }
 
 let nextId = 0;
@@ -30,9 +37,9 @@ export function useToasts() {
   }, []);
 
   const showToast = useCallback(
-    (title: string, body?: string, onUndo?: () => void) => {
+    (title: string, body?: string, onUndo?: () => void, extra?: Pick<Toast, "onOpen" | "actions">) => {
       const id = "toast" + nextId++;
-      setToasts((prev) => [...prev, { id, title, body, onUndo }]);
+      setToasts((prev) => [...prev, { id, title, body, onUndo, ...extra }]);
       const timer = setTimeout(() => dismiss(id), onUndo ? 6000 : 15000);
       timers.current.set(id, timer);
       return id;

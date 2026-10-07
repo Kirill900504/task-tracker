@@ -168,13 +168,16 @@ export default function MeetingsPanel({
   // Одна функция на все пути, которыми встреча появляется: форма, быстрый
   // перенос ⇢ и перенос на время, предложенное участником, — иначе
   // встреча, перенесённая не формой, приходила людям без приглашения.
-  function inviteNewcomers(m: Meeting) {
+  // `announce: false` — при переносе: людям об этом пишет маршрут
+  // meeting-moved одним сообщением «было → стало» с кнопками ответа, а
+  // обычное приглашение рядом с ним читалось бы как вторая встреча.
+  function inviteNewcomers(m: Meeting, announce = true) {
     void votes.sync(m.id, m.participants).then((added) => {
       // Позвать тех, кого только что добавили. «Встреча» — из того
       // минимума уведомлений, который нельзя отключить: человек, которого
       // ждут и не позвали, не придёт, и виноват будет трекер. Ночью
       // молчим — встреча всё равно попадёт в утреннюю сводку.
-      if (!added.length || isQuietHour()) return;
+      if (!announce || !added.length || isQuietHour()) return;
       void fetch("/api/telegram/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -196,7 +199,7 @@ export default function MeetingsPanel({
       movedSavedRef.current = true;
       closeAsMoved(movingFrom, m);
     }
-    inviteNewcomers(m);
+    inviteNewcomers(m, !movingFrom);
     if (before) void bumpVoteRoundIfMoved(m.id, before, m);
 
     // Встреча, выросшая из задачи: отметка в обсуждении обеих. Строка в
@@ -510,7 +513,7 @@ export default function MeetingsPanel({
       resolvedAt: "",
     };
     actions.saveMeeting(followUp);
-    inviteNewcomers(followUp);
+    inviteNewcomers(followUp, false);
     closeAsMoved(m, followUp, resultNote);
   }
 

@@ -74,12 +74,13 @@ export async function POST(req: Request) {
     user_id: meeting.user_id,
     from_task_id: meeting.from_task_id,
   };
-  const sent = result ? await deliverRecap(admin, ref, result, outcome) : 0;
+  const sent = result ? await deliverRecap(admin, ref, result, outcome, user.id) : 0;
   // Закрыта без слов — в обсуждении всё равно остаётся отметка, чем
   // кончилась: иначе лента встречи обрывается на «будет / не сможет», и
   // через неделю не понять, была ли она вообще.
   if (!result && outcome) {
     await recordEvent(admin, {
+      actorUserId: user.id,
       userId: meeting.user_id,
       kind: "meeting",
       itemId: meeting.id,

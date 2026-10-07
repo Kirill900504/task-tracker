@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { refreshRecurringStatuses, todayStr } from "@/lib/taskDisplay";
 import type { Meeting, Task } from "@/types/tracker";
+import { isQuiet, readAlertPrefs } from "@/lib/alertPrefs";
+import { openFromAlert, raiseWindow } from "@/hooks/useDesktopAlerts";
 
 const LS_NOTIFIED = "kkt_notified_v2";
 
@@ -59,7 +61,7 @@ export function useNotifications({
   tasks: Task[];
   meetings: Meeting[];
   saveTask: (task: Task) => void;
-  showToast: (title: string, body?: string) => void;
+  showToast: (title: string, body?: string, onUndo?: () => void, extra?: { onOpen?: () => void }) => void;
   // useTrackerData's initial load is async — this hook mounts (and its
   // effects run) before `tasks`/`meetings` are populated. Running the
   // first check on that empty snapshot, gated only on an empty-deps mount
@@ -84,10 +86,18 @@ export function useNotifications({
     saveNotified(notifiedRef.current);
   }
 
-  function browserNotify(title: string, body: string) {
+  // Нажатие на окно Windows открывает встречу, о которой оно (07.10.2026:
+  // «чтобы при нажатии на уведомление переходило в конкретное окно
+  // встречи»), — так же, как у остальных уведомлений (useDesktopAlerts).
+  function browserNotify(title: string, body: string, meetingId?: string) {
     if (canNativeNotify()) {
       try {
-        new Notification(title, { body });
+        const n = new Notification(title, { body, icon: "/icon-192.png", tag: meetingId ? "meet15:" + meetingId : undefined });
+        n.onclick = () => {
+          raiseWindow();
+          if (meetingId) openFromAlert("meeting", meetingId);
+          n.close();
+        };
       } catch {
         /* ignore — same as legacy's try/catch around `new Notification` */
       }
@@ -124,6 +134,11 @@ export function useNotifications({
       fn();
       if (!requireGranted || canNativeNotify()) markNotified(key);
     }
+    // Напоминание выключается в меню колокольчика, и тишина на час его
+    // тоже глушит (lib/alertPrefs). Отметку «уже сказали» молчание не
+    // ставит: включили обратно в пределах тех же 15 минут — напомнит.
+    const prefs = readAlertPrefs();
+    if (!prefs.reminders || isQuiet(prefs)) return;
     meetings.forEach((m) => {
       if (m.date !== today || !m.time) return;
       const [hh, mm] = m.time.split(":").map(Number);
@@ -132,8 +147,10 @@ export function useNotifications({
       const who = m.participants.length ? " · " + m.participants.join(", ") : "";
 
       if (nowMin >= mMin - 15 && nowMin < mMin) {
-        fireOnce(`toast_meet15_${m.id}_${today}`, () => showToast("Встреча через 15 минут", `${m.time} — ${m.title}${who}`));
-        fireOnce(`native_meet15_${m.id}_${today}`, () => browserNotify("Через 15 минут: " + m.title, m.time + who), true);
+        fireOnce(`toast_meet15_${m.id}_${today}`, () =>
+          showToast("Встреча через 15 минут", `${m.time} — ${m.title}${who}`, undefined, { onOpen: () => openFromAlert("meeting", m.id) }),
+        );
+        fireOnce(`native_meet15_${m.id}_${today}`, () => browserNotify("Через 15 минут: " + m.title, m.time + who, m.id), true);
       }
       // Второго сигнала «встреча начинается» нет (07.10.2026, «убери
       // лишние оповещения»): пятнадцатиминутного достаточно, и его же

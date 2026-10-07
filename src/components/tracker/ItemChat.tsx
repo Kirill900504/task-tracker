@@ -9,6 +9,7 @@ import FileList from "./FileList";
 import MicButton from "./MicButton";
 import { humanError } from "@/lib/humanError";
 import { withoutSelfMark } from "@/lib/actorName";
+import { ChatMuteButton } from "./AlertsButton";
 
 // Обсуждение задачи там же, где задача.
 //
@@ -358,6 +359,9 @@ export default function ItemChat({
   return (
     <div
       className="chat"
+      // По этой метке всплывающее уведомление узнаёт, что обсуждение уже
+      // открыто перед глазами, и не повторяет его (useDesktopAlerts).
+      data-chat={kind + ":" + itemId}
       // Файл, брошенный на обсуждение мышью из папки, — вложение, как в
       // любом мессенджере. Перетаскивание карточек трекера сюда не
       // относится: оно на pointer-событиях (dnd-kit) и dataTransfer не
@@ -381,6 +385,7 @@ export default function ItemChat({
         {comments.some((c) => !c.system) && (
           <span className="chat-hint">Правая кнопка на сообщении — реакции и действия</span>
         )}
+        {kind !== "idea" && <ChatMuteButton kind={kind} itemId={itemId} />}
       </div>
 
       {/* Пока лента едет — её форма, а не слово о ней.

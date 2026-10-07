@@ -24,7 +24,19 @@ export type ItemKind = "task" | "meeting";
 
 export async function recordEvent(
   admin: SupabaseClient,
-  event: { userId: string; kind: ItemKind; itemId: string; text: string },
+  event: {
+    userId: string;
+    kind: ItemKind;
+    itemId: string;
+    text: string;
+    // Кто совершил действие, если он вошёл в трекер. Строка от этого не
+    // становится его репликой — она по-прежнему system, её не правят и не
+    // рассылают, — но всплывающее уведомление на ПК (lib/desktopAlerts)
+    // узнаёт по этому полю своё действие и не сообщает человеку о том, что
+    // он только что сделал сам. Нажатие в мессенджере у коллеги без входа
+    // приходит без него: там «я» на ПК заведомо кто-то другой.
+    actorUserId?: string | null;
+  },
 ): Promise<void> {
   // Молча: хроника — это польза, а не обязанность. Уронить отчёт человека
   // из-за того, что не записалась строка о нём, было бы обменом наоборот.
@@ -35,6 +47,7 @@ export async function recordEvent(
     body: event.text,
     source: "app",
     system: true,
+    ...(event.actorUserId ? { author_user_id: event.actorUserId } : {}),
   });
   if (error) console.error("item history:", error.message);
 }

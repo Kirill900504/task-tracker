@@ -26,12 +26,46 @@ export default function ToastStack({
             <Icon name="bell" size={16} />
           </div>
           <div className="toast-text">
-            <b>{t.title}</b>
-            {t.body && <span className="toast-body">{t.body}</span>}
+            {/* Уведомление о событии открывается нажатием на сам текст —
+                так же, как окно Windows, которое оно повторяет, когда
+                трекер на переднем плане. */}
+            {t.onOpen ? (
+              <button
+                className="toast-open"
+                onClick={() => {
+                  t.onOpen?.();
+                  onDismiss(t.id);
+                }}
+              >
+                <b>{t.title}</b>
+                {t.body && <span className="toast-body">{t.body}</span>}
+              </button>
+            ) : (
+              <>
+                <b>{t.title}</b>
+                {t.body && <span className="toast-body">{t.body}</span>}
+              </>
+            )}
             {t.onUndo && (
               <button className="toast-undo" onClick={() => onUndo(t.id)}>
                 Отменить
               </button>
+            )}
+            {!!t.actions?.length && (
+              <div className="toast-actions">
+                {t.actions.map((a) => (
+                  <button
+                    key={a.label}
+                    className="toast-undo"
+                    onClick={() => {
+                      a.onClick();
+                      onDismiss(t.id);
+                    }}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
           {/* A button, and placed over the text rather than floated into it —

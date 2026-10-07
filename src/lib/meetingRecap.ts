@@ -37,6 +37,9 @@ export async function deliverRecap(
   // Чем кончилась. Пусто — исход не назван (старые вызовы), и строка в
   // хронике говорит только об итоге.
   outcome?: "success" | "no_result",
+  // Кто подвёл итог — строка хроники запоминает его (см. recordEvent),
+  // чтобы всплывающее уведомление не сообщало организатору его же итог.
+  actorUserId?: string,
 ): Promise<number> {
   const when = fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "");
   const text = `📝 Итог встречи «${meeting.title}» (${when}):\n\n${result}`;
@@ -63,6 +66,7 @@ export async function deliverRecap(
   // разделены «: » — лента рисует их разной важностью (splitEvent).
   const label = outcome === "success" ? "✅ Встреча прошла успешно" : outcome === "no_result" ? "⚪ Встреча без результата" : "📝 Итог встречи";
   await recordEvent(admin, {
+    actorUserId,
     userId: meeting.user_id,
     kind: "meeting",
     itemId: meeting.id,
@@ -72,6 +76,7 @@ export async function deliverRecap(
   // Встреча, выросшая из задачи, возвращает в неё ответ (миграция 0037).
   if (meeting.from_task_id) {
     await recordEvent(admin, {
+      actorUserId,
       userId: meeting.user_id,
       kind: "task",
       itemId: meeting.from_task_id,
@@ -104,9 +109,10 @@ export async function closeMeeting(
     })
     .eq("id", meeting.id);
 
-  if (result.trim()) await deliverRecap(admin, meeting, result.trim(), outcome);
+  if (result.trim()) await deliverRecap(admin, meeting, result.trim(), outcome, who?.userId);
   else {
     await recordEvent(admin, {
+      actorUserId: who?.userId,
       userId: meeting.user_id,
       kind: "meeting",
       itemId: meeting.id,

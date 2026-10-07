@@ -57,7 +57,7 @@ export async function POST(req: Request) {
 
   const who = await actorName(admin, meeting.user_id, user.id);
   const when = fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "");
-  await recordEvent(admin, { userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `🚫 ${who} отменил встречу: ${reason}` });
+  await recordEvent(admin, { actorUserId: user.id, userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `🚫 ${who} отменил встречу: ${reason}` });
   // Приглашения в мессенджерах теряют «Буду / Не смогу» — у всех и в обоих
   // мессенджерах (lib/botMirror). После ответа вкладке.
   after(() => mirrorClosed(admin, "meeting", meeting.id, `📅 ${meeting.title}\n${when}\n\n🚫 Встреча отменена.\n${who}: ${reason}`));
