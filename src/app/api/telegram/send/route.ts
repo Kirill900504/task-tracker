@@ -140,7 +140,7 @@ export async function POST(req: Request) {
   const failed: string[] = [];
 
   if (kind === "task") {
-    const { data: task } = await supabase.from("tasks").select("id, title, description, deadline, priority, assignee").eq("id", id).maybeSingle();
+    const { data: task } = await supabase.from("tasks").select("id, title, description, deadline, priority, assignee, number").eq("id", id).maybeSingle();
     if (!task) return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
     const { linked, unlinked, self } = await recipientsByName(supabase, admin, to.length ? to : [task.assignee as string], user.id);
     // Задача самому себе: отправлять нечего и некому, но это не ошибка.

@@ -36,6 +36,8 @@ export type TaskRow = {
   // Когда завели. Ставит база (`default now()`), taskToRow не пишет — как
   // и всё остальное в этом хвосте.
   created_at?: string | null;
+  // Номер ставит триггер (миграция 0045), taskToRow его не пишет.
+  number?: number | null;
 };
 
 export type MeetingRow = {
@@ -145,6 +147,7 @@ export function taskFromRow(r: TaskRow): Task {
     approvalComment: r.approval_comment || "",
     createdBy: r.created_by || "",
     createdAt: r.created_at || "",
+    ...(r.number != null ? { number: r.number } : {}),
   };
 }
 

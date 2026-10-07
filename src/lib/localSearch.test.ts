@@ -127,3 +127,17 @@ describe("searchAll", () => {
     expect(hit.meta).toContain("Игорь Витковский");
   });
 });
+
+describe("поиск по номеру задачи", () => {
+  const list = { tasks: [task({ id: "a", title: "Смета", number: 42 }), task({ id: "b", title: "Отчёт 42", number: 7 })], meetings: [], ideas: [] };
+
+  it("«#42» находит задачу с этим номером первой", () => {
+    const got = searchAll("#42", list);
+    expect(got[0].id).toBe("a");
+    expect(got[0].meta).toContain("#42");
+  });
+
+  it("голое число тоже номер, но и текст с ним не теряется", () => {
+    expect(searchAll("42", list).map((r) => r.id)).toEqual(["a", "b"]);
+  });
+});

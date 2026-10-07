@@ -555,6 +555,9 @@ export default function TaskModal({
 
             Новая задача открывается полной формой: пока её никто не видел,
             править в ней можно что угодно. */}
+        {/* Номер над заголовком, а не в нём: заголовок — это название
+            задачи, и его читают (и сравнивают тесты) целиком. */}
+        {isEditing && task?.number != null && <div className="task-modal-num">Задача #{task.number}</div>}
         <h2 id="modalTitle">{isEditing ? form.title || "Задача" : "Новая задача"}</h2>
         <input type="hidden" id="taskId" value={task?.id ?? ""} readOnly />
 

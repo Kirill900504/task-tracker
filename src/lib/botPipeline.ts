@@ -171,14 +171,16 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
       assignee: named || onMyself,
       deadline: (input.deadline as string) || null,
     });
-    const { error } = await ctx.admin.from("tasks").insert(row);
+    // Номер ставит база (миграция 0045) — забираем его ответом на вставку,
+    // чтобы сообщение исполнителю пришло уже с «#42».
+    const { data: inserted, error } = await ctx.admin.from("tasks").insert(row).select("number").maybeSingle();
     if (error) {
       await say(ctx, "Не получилось сохранить задачу: " + error.message);
       return;
     }
 
     const extra = Array.isArray(input.executors) ? (input.executors as unknown[]).filter((n): n is string => typeof n === "string") : [];
-    const assigned = await attachExecutors(ctx.admin, userId, row, [row.assignee, ...extra]);
+    const assigned = await attachExecutors(ctx.admin, userId, { ...row, number: inserted?.number ?? null }, [row.assignee, ...extra]);
 
     const lines = [`✓ Задача: «${row.title}»`];
     if (row.deadline) lines.push("Срок: " + fmtDate(row.deadline as string));

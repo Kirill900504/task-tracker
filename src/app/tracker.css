@@ -892,6 +892,8 @@
   .task-meta:empty{display:none;}
   /* «Кто поручил → кому» — одной группой, чтобы стрелка не отрывалась от
      имён переносом строки. */
+  .task-num{color:var(--ink-soft); font-variant-numeric:tabular-nums; opacity:.8;}
+  .task-modal-num{font-size:12.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; margin-bottom:2px;}
   .task-who{display:inline-flex; align-items:center; gap:5px; min-width:0; flex-wrap:wrap;}
   .task-assignee{font-weight:700; color:var(--assignee); overflow-wrap:anywhere;}
   .task-from{color:var(--ink-soft); overflow-wrap:anywhere;}

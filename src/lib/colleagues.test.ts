@@ -237,3 +237,10 @@ describe("findOwnerSelfByChat", () => {
     expect(await findOwnerSelfByChat(admin, 555, TELEGRAM_CHANNEL)).toBeNull();
   });
 });
+
+describe("номер задачи в сообщении", () => {
+  it("стоит в первой строке, если он есть", () => {
+    expect(taskMessage({ title: "Смета", number: 42 }, "Кирилл").split("\n")[0]).toBe("📋 Задача #42 от Кирилл:");
+    expect(taskMessage({ title: "Смета" }, "Кирилл").split("\n")[0]).toBe("📋 Задача от Кирилл:");
+  });
+});

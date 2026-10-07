@@ -57,7 +57,7 @@ async function ownerDisplayName(admin: SupabaseClient, userId: string): Promise<
 export async function attachExecutors(
   admin: SupabaseClient,
   userId: string,
-  task: { id: string; title: string; description?: string; deadline?: string | null; priority?: string },
+  task: { id: string; title: string; description?: string; deadline?: string | null; priority?: string; number?: number | null },
   names: string[],
   // Кем ставим. По умолчанию исполнителями — так эту функцию звали всегда,
   // и так её зовут разобранная фраза и форма задачи. Роль понадобилась,

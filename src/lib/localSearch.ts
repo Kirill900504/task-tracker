@@ -57,6 +57,7 @@ export function matchesTerms(haystack: string, terms: string[]): boolean {
 
 function taskMeta(t: Task): string {
   const bits: string[] = [];
+  if (t.number != null) bits.push(`#${t.number}`);
   if (t.assignee) bits.push(t.assignee);
   if (t.deadline) bits.push(fmtDate(t.deadline));
   if (t.status === "done") bits.push("завершена");
@@ -76,12 +77,19 @@ export function searchAll(
   data: { tasks: Task[]; meetings: Meeting[]; ideas: Idea[] },
   limitPerKind = 8,
 ): SearchResult[] {
+  // «#42» или просто «42» — это номер задачи (миграция 0045), и такая
+  // задача идёт первой: номер называют, когда точно знают, что ищут.
+  const asNumber = /^\s*#?\s*(\d{1,6})\s*$/.exec(query);
+  const byNumber = asNumber ? data.tasks.find((t) => t.number === Number(asNumber[1])) : undefined;
+
   const terms = queryTerms(query);
-  if (!terms.length) return [];
+  if (!terms.length && !byNumber) return [];
 
   const results: SearchResult[] = [];
+  if (byNumber) results.push({ kind: "task", id: byNumber.id, title: byNumber.title, meta: taskMeta(byNumber), done: byNumber.status === "done" });
 
   const tasks = data.tasks
+    .filter((t) => t !== byNumber)
     .filter((t) => matchesTerms([t.title, t.desc, t.assignee].filter(Boolean).join(" "), terms))
     // Open work first: what you are searching for is usually still to be done.
     .sort((a, b) => Number(a.status === "done") - Number(b.status === "done"))

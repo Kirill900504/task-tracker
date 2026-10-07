@@ -90,8 +90,14 @@ export function screenButtons(rows: BotButton[][]): BotButton[][] {
   );
 }
 
-export function taskMessage(task: { title: string; description?: string; deadline?: string | null; priority?: string }, from: string): string {
-  const lines = [`📋 Задача от ${from}:`, "", task.title];
+export function taskMessage(
+  task: { title: string; description?: string; deadline?: string | null; priority?: string; number?: number | null },
+  from: string,
+): string {
+  // Номер (миграция 0045) — тот же, что на карточке: по нему задачу
+  // называют в ответ, и «#42» в трекере ищется поиском.
+  const num = task.number != null ? ` #${task.number}` : "";
+  const lines = [`📋 Задача${num} от ${from}:`, "", task.title];
   if (task.description) lines.push("", task.description);
   const bits: string[] = [];
   if (task.deadline) bits.push("срок: " + fmtDate(task.deadline));

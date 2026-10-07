@@ -109,9 +109,12 @@ export async function createTaskFromBot(
 ): Promise<{ text: string }> {
   const executors = people.filter((p) => p.role === "executor").map((p) => p.name);
   const id = uid();
-  const { error } = await admin.from("tasks").insert(
-    newTaskRow({ id, userId, title, assignee: executors[0] || people[0]?.name || "", deadline: deadline || null, createdBy }),
-  );
+  // Номер ставит база (миграция 0045) — он нужен сообщению исполнителю.
+  const { data: inserted, error } = await admin
+    .from("tasks")
+    .insert(newTaskRow({ id, userId, title, assignee: executors[0] || people[0]?.name || "", deadline: deadline || null, createdBy }))
+    .select("number")
+    .maybeSingle();
   if (error) return { text: "Не получилось сохранить задачу: " + error.message };
 
   // По одному вызову на роль: внутри они вставляются пачкой, а роль у
@@ -123,7 +126,7 @@ export async function createTaskFromBot(
     // createdBy передаётся дальше: по нему attachExecutors понимает, значит
     // ли строка «… (я)» в списке «себе» — или это руководитель поручает
     // задачу владельцу, и тому надо сказать, как любому другому.
-    const result = await attachExecutors(admin, userId, { id, title, deadline: deadline || null }, names, role, createdBy);
+    const result = await attachExecutors(admin, userId, { id, title, deadline: deadline || null, number: inserted?.number ?? null }, names, role, createdBy);
     const note = assignNote(result);
     if (note) notes.push(note);
   }
