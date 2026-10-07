@@ -3214,6 +3214,12 @@
   /* Готовые ответы (AnswerForm.quick): переносятся строками, а не
      прокручиваются вбок — на телефоне полоса прокрутки прячет половину. */
   .ms-answer-quick{display:flex; flex-wrap:wrap; gap:6px;}
+  /* Повестка встречи (MeetingAgenda). */
+  .agenda-list{margin:6px 0 8px; padding-left:20px; display:flex; flex-direction:column; gap:8px;}
+  .agenda-item{line-height:1.4;}
+  .agenda-text{overflow-wrap:anywhere;}
+  .agenda-note{margin-top:2px; font-size:13px; color:var(--success);}
+  .agenda-actions{display:flex; gap:6px; margin-top:4px;}
   .ms-answer-text{
     width:100%; resize:vertical; min-height:70px;
     padding:9px 10px; border-radius:var(--radius-sm);

@@ -156,3 +156,36 @@ test("«Повторить» у закрытой задачи открывает
   await expect(page.locator('#fPeople .participant-chip[data-self="true"]')).toHaveClass(/role-executor/);
   await page.keyboard.press("Escape");
 });
+
+test("повестка: пункт дописывается, получает итог и становится задачей", async ({ page }) => {
+  await login(page);
+  const title = "Повестка " + Date.now();
+  await page.click("#addMeetingBtn");
+  await page.fill("#mTitle", title);
+  await page.click("#meetingSaveBtn");
+  const chip = page.locator(".meeting-chip", { hasText: title });
+  await expect(chip).toBeVisible();
+  // Строка встречи должна доехать до базы, прежде чем к ней цепляться.
+  await expect
+    .poll(async () => (await admin.from("meetings").select("id").eq("user_id", ownerId).eq("title", title).maybeSingle()).data?.id, { timeout: 20_000 })
+    .toBeTruthy();
+  await chip.click();
+  const point = "Смета по складу";
+  await page.fill("#agendaInput", point);
+  await page.locator("#agendaInput").press("Enter");
+  await expect(page.locator(".agenda-item", { hasText: point })).toBeVisible();
+  await expect
+    .poll(async () => (await admin.from("meeting_agenda").select("text").eq("text", point).limit(1)).data?.length || 0, { timeout: 20_000 })
+    .toBe(1);
+
+  await page.locator(".agenda-item", { hasText: point }).getByRole("button", { name: "Итог" }).click();
+  const ask = page.locator(".ask-modal");
+  await ask.locator("textarea, input").first().fill("Игорь считает до пятницы");
+  await ask.getByRole("button", { name: "Записать" }).click();
+  await expect(page.locator(".agenda-note")).toContainText("Игорь считает до пятницы");
+
+  await page.locator(".agenda-item", { hasText: point }).getByRole("button", { name: "В задачу" }).click();
+  await expect(page.locator("#modalTitle")).toHaveText("Новая задача");
+  await expect(page.locator("#fTitle")).toHaveValue(point);
+  await page.keyboard.press("Escape");
+});

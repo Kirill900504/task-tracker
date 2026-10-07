@@ -692,6 +692,19 @@ export default function MeetingsPanel({
           // кто её назначил. Участник просит перенос в обсуждении (кнопка
           // «Предложить другое время»). 07.10.2026: кнопка стояла у каждого
           // приглашённого — «перенести… может только организатор».
+          onAgendaTask={
+            onTaskFromMeeting && modalMeeting
+              ? (item) => {
+                  const m = modalMeeting;
+                  closeModal();
+                  onTaskFromMeeting({
+                    title: item.text.length > 120 ? item.text.slice(0, 119) + "…" : item.text,
+                    desc: `Из повестки встречи «${m.title}» (${fmtDate(m.date)}${m.time ? ", " + m.time : ""})${item.note ? ". Решили: " + item.note : ""}`,
+                    deadline: "",
+                  });
+                }
+              : undefined
+          }
           onReschedule={
             modalMeeting && isMine(modalMeeting, myUserId)
               ? () => {

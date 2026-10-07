@@ -30,6 +30,8 @@ import Icon from "./Icon";
 import ChipChoice from "./ChipChoice";
 import ItemFacts from "./ItemFacts";
 import ExpandableText from "./ExpandableText";
+import MeetingAgenda from "./MeetingAgenda";
+import type { AgendaItem } from "@/hooks/useMeetingAgenda";
 import { WORKDAY_SLOTS, busyStarts, defaultMeetingStart, minutesOf, slotOf, startsInPast } from "@/lib/meetingTime";
 import { SEARCH_FROM, matchesPerson } from "@/lib/personSearch";
 import { useAuthors } from "@/hooks/useAuthors";
@@ -82,6 +84,7 @@ export default function MeetingModal({
   onClose,
   onSetStatus,
   onReschedule,
+  onAgendaTask,
   canEdit = true,
   canConfirm = false,
   isMove,
@@ -103,6 +106,8 @@ export default function MeetingModal({
   // Открывает форму НОВОЙ встречи с тем же составом; старая закроется как
   // перенесённая, когда новая будет сохранена (см. MeetingsPanel).
   onReschedule?: () => void;
+  // Пункт повестки → форма новой задачи (MeetingAgenda).
+  onAgendaTask?: (item: AgendaItem) => void;
   // Чужая встреча: её видно, потому что позвали, но закрывать, переносить
   // и удалять её вправе организатор. База откажет всё равно — и откажет
   // молча, поэтому кнопок здесь просто нет.
@@ -651,6 +656,10 @@ export default function MeetingModal({
                   <span className="meeting-move-sub">время или состав</span>
                 </button>
               )}
+
+              {/* Повестка — под сводкой и кнопкой переноса, над итогом: до
+                  встречи её дописывают, на встрече по ней идут. */}
+              <MeetingAgenda meetingId={meeting.id} isOrganizer={canEdit} closed={!!resolved} onTask={onAgendaTask} />
 
               {!decisionsFirst && decisionBlocks}
             </div>
