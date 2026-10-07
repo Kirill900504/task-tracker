@@ -5,6 +5,7 @@ import { REACTIONS, useItemComments, type Comment, type ItemKind } from "@/hooks
 import { useAsk } from "@/components/Ask";
 import ChatMessageMenu, { type ChatMenuAction } from "./ChatMessageMenu";
 import Icon from "./Icon";
+import FileList from "./FileList";
 import MicButton from "./MicButton";
 import { humanError } from "@/lib/humanError";
 import { withoutSelfMark } from "@/lib/actorName";
@@ -610,31 +611,9 @@ export default function ItemChat({
                             c.body && <div className="chat-body">{renderWithMentions(c.body, mentionCandidates)}</div>
                           )}
 
-                          {c.attachments.length > 0 && (
-                            <div className="chat-files">
-                              {c.attachments.map((a) => (
-                                <a
-                                  key={a.path}
-                                  className={"chat-file" + (a.type.startsWith("image/") ? " image" : "")}
-                                  href={a.url || "#"}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title={a.name}
-                                >
-                                  {/* Фотографию показываем, остальное называем: акт и
-                                      выгрузку узнают по имени, а установленную кассу — нет. */}
-                                  {a.type.startsWith("image/") && a.url ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img src={a.url} alt={a.name} />
-                                  ) : (
-                                    <span className="chat-file-name">
-                                      <Icon name="clip" size={14} /> {a.name}
-                                    </span>
-                                  )}
-                                </a>
-                              ))}
-                            </div>
-                          )}
+                          {/* Фотографию показываем, остальное называем: акт и
+                              выгрузку узнают по имени, а установленную кассу — нет. */}
+                          <FileList className="chat-files" files={c.attachments} />
 
                           {/* Время — в углу пузыря, как в мессенджере: оно
                               нужно взглядом, а не чтением, и строки над

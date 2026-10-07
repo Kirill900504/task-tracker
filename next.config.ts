@@ -22,10 +22,15 @@ const CSP = [
   // calls eval, so the deployed policy stays without it.
   process.env.NODE_ENV === "production" ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // Supabase in img-src and frame-src: attachments are signed Storage URLs on
+  // the Supabase host, and without it every photo in a report or a thread
+  // rendered as a broken-image icon (07.10.2026 — the file itself was fine,
+  // the browser simply refused to load it). frame-src is the PDF viewer.
+  `img-src 'self' data: blob: ${SUPABASE_ORIGIN}`,
+  `frame-src 'self' ${SUPABASE_ORIGIN}`,
   "font-src 'self' data:",
   `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS}`,
-  "media-src 'self' blob:",
+  `media-src 'self' blob: ${SUPABASE_ORIGIN}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",

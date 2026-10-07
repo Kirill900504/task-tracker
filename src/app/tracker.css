@@ -1266,17 +1266,7 @@
   /* Документы к результату: фотографию показываем, остальное называем —
      акт и выгрузку узнают по имени, а установленную кассу нет. Та же
      логика, что у вложений обсуждения. */
-  .result-files{display:flex; flex-wrap:wrap; gap:8px; margin-top:7px;}
-  .result-file{
-    display:inline-flex; align-items:center; gap:6px; max-width:100%;
-    padding:5px 10px; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
-    background:var(--paper); color:var(--ink); font-size:12.5px; text-decoration:none;
-    transition:border-color .12s ease;
-  }
-  .result-file:hover{border-color:var(--accent);}
-  .result-file-size{color:var(--ink-soft);}
-  .result-file.image{padding:0; overflow:hidden;}
-  .result-file.image img{display:block; max-width:180px; max-height:140px; object-fit:cover;}
+  .result-files{margin-top:7px;}
 
   /* Прикрепление документа в форме отчёта. Кнопка и список выбранного —
      до отправки: ошибиться файлом легко, а узнать об этом после «Отправить
@@ -3259,17 +3249,52 @@
 
   /* Файлы в обсуждении. Фотографию видно, остальное названо: акт узнают по
      имени, а установленную кассу — только глазами. */
-  .chat-files{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
-  .chat-file{
-    display:inline-flex; align-items:center; max-width:100%;
-    border:1px solid var(--line); border-radius:var(--radius-sm);
-    background:var(--paper-soft); text-decoration:none; color:var(--ink);
-    padding:6px 9px; font-size:12.5px; min-height:36px;
+  .chat-files{margin-top:8px;}
+
+  /* Вложения (FileList.tsx) — одни и те же в отчёте и в обсуждении.
+     Миниатюра как в мессенджере: картинка кадрируется в рамку постоянной
+     высоты, чтобы три фотографии разного формата стояли ровной полосой, а
+     не лесенкой; целиком её показывает окно просмотра по нажатию. */
+  .file-list{display:flex; flex-wrap:wrap; gap:8px;}
+  .file-item{
+    display:inline-flex; align-items:center; max-width:100%; min-height:36px;
+    padding:6px 10px; border:1px solid var(--line); border-radius:var(--radius-sm);
+    background:var(--paper-soft); color:var(--ink); font-size:12.5px; text-decoration:none;
+    transition:border-color .12s ease;
   }
-  .chat-file:hover{border-color:var(--accent);}
-  .chat-file.image{padding:0; overflow:hidden; border-radius:var(--radius-sm);}
-  .chat-file.image img{display:block; max-width:180px; max-height:140px; object-fit:cover;}
-  .chat-file-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px;}
+  .file-item:hover{border-color:var(--accent);}
+  .file-item.image{padding:0; overflow:hidden; cursor:zoom-in;}
+  .file-item.image img{display:block; height:110px; width:auto; max-width:200px; min-width:70px; object-fit:cover;}
+  .file-item-name{display:inline-flex; align-items:center; gap:6px; min-width:0;}
+  .file-item-text{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px;}
+  .file-item-size{color:var(--ink-soft); flex-shrink:0;}
+  .file-viewer-host{display:contents;}
+
+  /* Окно просмотра: картинка во весь экран поверх всего открытого, тёмный
+     фон, имя и «скачать» сверху. Щелчок мимо картинки и Esc закрывают его,
+     карточка под ним остаётся. */
+  .overlay.viewer{padding:0; align-items:stretch; background:rgba(8,10,11,.92); z-index:700;}
+  .viewer{
+    position:relative; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-height:0; padding:56px 16px 16px; outline:none;
+  }
+  .viewer-bar{
+    position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:6px;
+    padding:10px 12px calc(10px) 16px; padding-top:calc(10px + env(safe-area-inset-top, 0px));
+  }
+  .viewer-name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); font-size:14px;}
+  .viewer-count{margin-left:10px; color:var(--ink-soft); font-variant-numeric:tabular-nums;}
+  .viewer-btn, .viewer-nav{
+    display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; padding:0;
+    border-radius:999px; border:1px solid var(--line); background:rgba(46,56,60,.7); color:var(--ink); cursor:pointer;
+  }
+  .viewer-btn:hover, .viewer-nav:hover{border-color:var(--accent);}
+  .viewer-image{max-width:100%; max-height:100%; object-fit:contain; border-radius:var(--radius-sm); cursor:default;}
+  .viewer-frame{width:min(1000px, 100%); flex:1; border:0; border-radius:var(--radius-sm); background:#fff;}
+  .viewer-nav{position:absolute; top:50%; transform:translateY(-50%); width:44px; height:44px;}
+  .viewer-nav.prev{left:12px;}
+  .viewer-nav.next{right:12px;}
+  .overlay.viewer .modal-back-btn{display:none;}
   .chat-pending{
     display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; padding:8px;
     border:1px dashed var(--line); border-radius:var(--radius-sm);
