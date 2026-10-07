@@ -283,14 +283,14 @@ export default function IdeaItem({
       )}
       {sentAnchor && sent.length > 0 && (
         <PopLayer>
-          <div ref={sentRef} className="people-tooltip" id="ideaSentTooltip" style={{ display: "block", top: -9999, left: -9999 }}>
+          <div ref={sentRef} className="people-tooltip idea-sent-tooltip" id="ideaSentTooltip" style={{ display: "block", top: -9999, left: -9999 }}>
             <div className="ptitle">Отправлено</div>
             {sent.map((s) => (
               <div className={"prow " + (s.state === "none" ? "vote-none" : "vote-yes")} key={s.name}>
                 <span className="prow-mark" aria-hidden>
                   {s.state === "none" ? "•" : <Icon name={s.state === "taken" ? "arrow-right" : "check"} size={13} />}
                 </span>
-                {s.name}
+                <span className="prow-name">{s.name}</span>
                 <span className="prow-note">{s.state === "taken" ? "взял в работу" : s.state === "seen" ? "принял" : "не ответил"}</span>
               </div>
             ))}

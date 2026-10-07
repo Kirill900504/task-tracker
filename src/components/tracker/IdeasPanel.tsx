@@ -207,6 +207,11 @@ export default function IdeasPanel({
           else if (answer === "taken") recipients.markLocally(row.id, { convertedTaskId: "pending" });
           else recipients.markLocally(row.id, { seenAt: new Date().toISOString() });
         }}
+        // Не через addText: тот очищает поле ввода, а в нём может лежать
+        // недописанная своя мысль.
+        onKeep={(row) =>
+          actions.saveIdea({ id: uid(), text: row.idea?.text || "", important: false, done: false, createdAt: formatIdeaCreatedAt(new Date()), doneAt: "" })
+        }
       />
       {showReview && !reviewTotal && (
         <button type="button" className="idea-review-strip" id="ideaReviewBtn" onClick={() => setReviewTotal(queue.length)}>

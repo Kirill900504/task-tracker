@@ -14,9 +14,11 @@ import Icon from "./Icon";
 // быть какой-то формат приёмки в приложении на ПК и мобильной версии».
 //
 // Устроено как короткая очередь над своими мыслями: каждая присланная —
-// кто, когда, что, и два ответа. «В работу» заводит задачу на меня тем же
-// маршрутом, что и кнопка в боте; «Принял» — прочитал, задачей это не
-// станет. После любого ответа мысль уходит из блока, а автор видит ответ в
+// кто, когда, что, и три ответа. «В работу» заводит задачу на меня тем же
+// маршрутом, что и кнопка в боте; «Сохранить» кладёт копию в мои мысли с
+// сегодняшней датой, и она встаёт в общий порядок как только что
+// записанная (его же решение 23.09.2026 — «получить и сохранить», см.
+// docs/next-ten.md, п. 12); «Принял» — прочитал, у себя не храню. После любого ответа мысль уходит из блока, а автор видит ответ в
 // списке «кому отправлена» у своей мысли. Блока нет вовсе, пока отвечать
 // не на что: пустой заголовок над списком — та самая надпись, которая
 // называет очевидное.
@@ -24,19 +26,23 @@ export default function IncomingIdeas({
   rows,
   authorOf,
   onAnswered,
+  onKeep,
 }: {
   rows: IdeaRecipientRow[];
   // Имя того, кто прислал (authorLabel: пустой created_by — владелец).
   authorOf: (createdBy: string | null) => string;
   // Ответ записан: убрать строку с экрана сразу или вернуть при отказе.
   onAnswered: (row: IdeaRecipientRow, answer: "taken" | "seen" | "failed") => void;
+  // «Сохранить»: завести копию в своих мыслях. Зовётся только после того,
+  // как ответ записан, — иначе отказ и повторное нажатие дали бы две копии.
+  onKeep: (row: IdeaRecipientRow) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ id: string; text: string } | null>(null);
 
   if (!rows.length) return null;
 
-  async function answer(row: IdeaRecipientRow, action: "take_idea" | "ack_idea") {
+  async function answer(row: IdeaRecipientRow, action: "take_idea" | "ack_idea", keep = false) {
     setBusy(row.id);
     setError(null);
     // Экран отвечает раньше облака — строка уходит сразу, а не после ответа.
@@ -49,6 +55,7 @@ export default function IncomingIdeas({
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.error) throw new Error(data?.error || "Не получилось ответить");
+      if (keep) onKeep(row);
     } catch (e) {
       onAnswered(row, "failed");
       setError({ id: row.id, text: e instanceof Error ? e.message : "Не получилось ответить" });
@@ -77,6 +84,15 @@ export default function IncomingIdeas({
               onClick={() => void answer(row, "take_idea")}
             >
               В работу
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy === row.id}
+              title="Сохранить в свои мысли"
+              onClick={() => void answer(row, "ack_idea", true)}
+            >
+              Сохранить
             </button>
             <button
               type="button"

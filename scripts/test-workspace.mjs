@@ -445,6 +445,30 @@ try {
   const { data: ideaTaskSeen } = await mgrA.db.from("tasks").select("id").eq("id", take.body.taskId).maybeSingle();
   check("и видит её у себя", ideaTaskSeen?.id === take.body.taskId, ideaTaskSeen);
 
+  // Приёмка мысли в самом трекере (07.10.2026): «Принял» без задачи, и
+  // автор — руководитель, а не владелец — видит, кому мысль ушла (0050).
+  section("Мысль от руководителя: «Принял» и кому отправлена");
+  const ideaB = randomUUID();
+  await mgrB.db.from("ideas").insert({ id: ideaB, user_id: owner.id, text: "Сверить цены у поставщика", created_by: mgrB.id });
+  const { data: recB } = await admin
+    .from("idea_recipients")
+    .insert({ user_id: owner.id, idea_id: ideaB, assignee_id: personA.id })
+    .select("id")
+    .maybeSingle();
+  const { data: authorSees } = await mgrB.db.from("idea_recipients").select("id, assignee_id").eq("idea_id", ideaB);
+  check("автор-руководитель видит, кому отправил мысль", authorSees?.length === 1 && authorSees[0].assignee_id === personA.id, authorSees);
+  const { data: incomingA } = await mgrA.db
+    .from("idea_recipients")
+    .select("id, ideas(text)")
+    .eq("idea_id", ideaB)
+    .maybeSingle();
+  check("получатель видит присланную мысль вместе с текстом", !!incomingA?.ideas, incomingA);
+  const ackForeign = await post(mgrB, "/api/workspace/report", { action: "ack_idea", recipientId: recB.id });
+  check("«Принял» за другого не проходит", ackForeign.status === 403, ackForeign);
+  const ack = await post(mgrA, "/api/workspace/report", { action: "ack_idea", recipientId: recB.id });
+  const { data: ackRow } = await admin.from("idea_recipients").select("seen_at, converted_task_id").eq("id", recB.id).maybeSingle();
+  check("«Принял» отмечает мысль, не заводя задачи", ack.status === 200 && !!ackRow?.seen_at && !ackRow?.converted_task_id, { ack, ackRow });
+
   // ── Обсуждение ─────────────────────────────────────────────────────────
   section("Обсуждение внутри задачи");
   const { error: commentError } = await mgrA.db.from("item_comments").insert({
