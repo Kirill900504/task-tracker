@@ -2375,8 +2375,16 @@
     .quick-add-fab{bottom:calc(78px + env(safe-area-inset-bottom, 0px));}
     #syncStatus{bottom:calc(80px + env(safe-area-inset-bottom, 0px));}
     .ms-link, .ms-link-dismissed{bottom:calc(80px + env(safe-area-inset-bottom, 0px)); left:12px; right:12px; max-width:none;}
-    /* Тосты поднимаются над нижней навигацией, чтобы не спорить с ней. */
-    #toast-stack{bottom:calc(84px + env(safe-area-inset-bottom, 0px)); right:12px; left:12px; max-width:none;}
+    /* Тосты поднимаются над нижней навигацией — и над круглой «+» тоже.
+       Стояли они с 84px, а «+» занимает полосу 78…134px у правого края:
+       крестик тоста приходился ровно под неё, и закрыть уведомление на
+       телефоне было нельзя ни на одной вкладке (аудит раскладки 07.10.2026,
+       все размеры от 360 до 768). */
+    #toast-stack{bottom:calc(146px + env(safe-area-inset-bottom, 0px)); right:12px; left:12px; max-width:none;}
+    /* Под палец: правило «не мельче 36px» — и для крестика встречи, и для
+       значков у мысли (были 28 и 31). */
+    .meeting-del{width:36px; height:36px;}
+    .idea-flag, .idea-del{min-width:36px; min-height:36px;}
     /* Под палец, а не под курсор */
     .toast{padding-right:52px;}
     .toast .close{width:40px; height:40px; top:4px; right:4px;}

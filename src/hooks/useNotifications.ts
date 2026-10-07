@@ -7,7 +7,7 @@
 // as legacy — it's a per-device "don't repeat this notification" cache,
 // deliberately never synced to Supabase.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isDueToday, refreshRecurringStatuses, todayStr } from "@/lib/taskDisplay";
+import { refreshRecurringStatuses, todayStr } from "@/lib/taskDisplay";
 import type { Meeting, Task } from "@/types/tracker";
 
 const LS_NOTIFIED = "kkt_notified_v2";
@@ -102,34 +102,17 @@ export function useNotifications({
       });
     }
 
-    const today = todayStr();
-
-    refreshed.forEach((t) => {
-      if (t.status === "done") return;
-      let due = false;
-      let label = "";
-      if (t.recur === "none") {
-        if (t.deadline === today) {
-          due = true;
-          label = t.title;
-        }
-      } else if (isDueToday(t)) {
-        due = true;
-        label = t.title + " (повторяющаяся)";
-      }
-      if (!due) return;
-      const toastKey = `toast_${t.id}_${today}`;
-      const nativeKey = `native_${t.id}_${today}`;
-      if (!notifiedRef.current[toastKey]) {
-        markNotified(toastKey);
-        showToast("Задача на сегодня", label + (t.assignee ? " — " + t.assignee : ""));
-      }
-      if (!notifiedRef.current[nativeKey]) {
-        browserNotify("Задача на сегодня: " + t.title, t.assignee || "");
-        if (canNativeNotify()) markNotified(nativeKey);
-      }
-    });
-  }, [tasks, saveTask, showToast]);
+    // Всплывающих «Задача на сегодня» здесь больше нет — ни окошком в
+    // трекере, ни уведомлением браузера.
+    //
+    // 07.10.2026, его словами: «убери лишние оповещения». Первое открытие
+    // за день показывало ОТДЕЛЬНОЕ окошко на каждую задачу со сроком
+    // сегодня: десять задач — десять окошек стопкой, поверх панели мыслей
+    // на компьютере и поверх кнопки «+» на телефоне. Всё это уже видно без
+    // них — экран «Сегодня», красная дата на карточке, календарь и утренняя
+    // сводка в мессенджере. Сама функция осталась ради пересчёта
+    // повторяющихся задач выше: он не оповещение, а работа.
+  }, [tasks, saveTask]);
 
   const checkMeetingReminders = useCallback(() => {
     const today = todayStr();
@@ -152,10 +135,9 @@ export function useNotifications({
         fireOnce(`toast_meet15_${m.id}_${today}`, () => showToast("Встреча через 15 минут", `${m.time} — ${m.title}${who}`));
         fireOnce(`native_meet15_${m.id}_${today}`, () => browserNotify("Через 15 минут: " + m.title, m.time + who), true);
       }
-      if (nowMin >= mMin && nowMin <= mMin + 1) {
-        fireOnce(`toast_meet0_${m.id}_${today}`, () => showToast("Встреча начинается", `${m.time} — ${m.title}${who}`));
-        fireOnce(`native_meet0_${m.id}_${today}`, () => browserNotify("Встреча сейчас: " + m.title, m.time + who), true);
-      }
+      // Второго сигнала «встреча начинается» нет (07.10.2026, «убери
+      // лишние оповещения»): пятнадцатиминутного достаточно, и его же
+      // присылает мессенджер.
     });
   }, [meetings, showToast]);
 

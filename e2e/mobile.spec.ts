@@ -327,6 +327,20 @@ test("a notification is closed by its cross on the phone too", async ({ page }) 
   const box = await toast.locator(".close").boundingBox();
   expect(box?.width).toBeGreaterThanOrEqual(36);
   expect(box?.height).toBeGreaterThanOrEqual(36);
+  // И палец до него ДОСТАЁТ: крестик стоял ровно под круглой «+», и нажатие
+  // в его центр приходилось в «+» (аудит раскладки 07.10.2026). Размер этого
+  // не ловит — ловит то, что лежит сверху в этой точке.
+  const onTop = await page.evaluate(({ x, y }) => {
+    const hit = document.elementFromPoint(x, y);
+    return !!hit?.closest(".toast .close");
+  }, { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 });
+  expect(onTop).toBe(true);
+  // Строже точки: у короткого однострочного тоста крестик опускается ниже,
+  // и перекрытие было именно у таких. Поэтому — никакого пересечения с «+»
+  // вообще, при любой высоте тоста: стопка обязана начинаться выше неё.
+  const fab = await page.locator(".quick-add-fab:visible").first().boundingBox();
+  const stack = await page.locator("#toast-stack").boundingBox();
+  if (fab && stack) expect(stack.y + stack.height).toBeLessThanOrEqual(fab.y + 1);
 
   await toast.locator(".close").click();
   await expect(toast).toHaveCount(0);
