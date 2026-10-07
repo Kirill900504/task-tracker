@@ -28,7 +28,8 @@ import ResultFiles from "./ResultFiles";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { withoutSelfMark } from "@/lib/actorName";
-import { fmtDate } from "@/lib/taskDisplay";
+import { fmtDate, todayStr } from "@/lib/taskDisplay";
+import { isSnoozed, snoozeChoices } from "@/lib/snooze";
 import { answerWithFiles } from "@/lib/answerFiles";
 import { isSelfTask } from "@/lib/selfTask";
 
@@ -1024,6 +1025,33 @@ export default function TaskModal({
             )}
           </div>
           <div className="left">
+            {/* «Отложить до…» (миграция 0049) — у своей открытой задачи:
+                убрать её с глаз до дня, когда к ней пора вернуться, и в тот
+                день получить напоминание. Исполнителей это не касается. */}
+            {isEditing && canEdit && task.status !== "done" && (
+              <button
+                className="btn"
+                id="snoozeTaskBtn"
+                title="Убрать с доски до выбранного дня и напомнить в этот день"
+                onClick={() =>
+                  void (async () => {
+                    const today = todayStr();
+                    const snoozed = isSnoozed(task.snoozedUntil, today);
+                    const picked = await ask.choose({
+                      title: "Отложить до…",
+                      question: snoozed ? `Сейчас отложена до ${fmtDate(task.snoozedUntil || "")}.` : "Когда напомнить?",
+                      note: "До этого дня задача не видна на вашей доске, в сам день бот о ней напомнит. У исполнителей всё остаётся как было.",
+                      options: [...(snoozed ? [{ value: "", label: "Вернуть сейчас" }] : []), ...snoozeChoices(today)],
+                    });
+                    if (picked === null) return;
+                    onSave({ ...task, snoozedUntil: picked }, []);
+                    onClose();
+                  })()
+                }
+              >
+                {isSnoozed(task.snoozedUntil, todayStr()) ? `Отложена до ${fmtDate(task.snoozedUntil || "")}` : "Отложить…"}
+              </button>
+            )}
             {isEditing && task.status === "done" && onRepeat && (
               <button
                 className="btn"

@@ -10,7 +10,8 @@
 // панель только показывает его и разбирает перетаскивание.
 import { useMemo, useState } from "react";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
-import { isOverdue, isTaskDueOnDate, taskSortFn } from "@/lib/taskDisplay";
+import { isOverdue, isTaskDueOnDate, taskSortFn, todayStr } from "@/lib/taskDisplay";
+import { isSnoozed } from "@/lib/snooze";
 import { KANBAN_COLUMNS, columnOf, moveBetween, type KanbanColumn } from "@/lib/kanban";
 import { matchesView, myRoleOn, showsOverdue, type BoardView } from "@/lib/myRole";
 import { moveWithin } from "@/lib/dndOrder";
@@ -162,6 +163,9 @@ export default function TasksPanel({
   // «Просрочено» — не сортировка и не раздел, а вопрос «что горит»: он
   // задаётся чаще всех прочих фильтров вместе взятых.
   const [onlyOverdue, setOnlyOverdue] = useState(false);
+  // Показать отложенные (миграция 0049). Отложенное уходит с доски автора
+  // до своего дня, а кнопка с числом — единственный путь к нему раньше.
+  const [showSnoozed, setShowSnoozed] = useState(false);
   // Чьи задачи показывает доска: то, что ждут от меня, то, что поручил я,
   // или всё сразу.
   //
@@ -311,7 +315,11 @@ export default function TasksPanel({
 
   const sectionById = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections]);
 
+  const today = todayStr();
+  const snoozedMine = (t: Task) => authored(t) && t.status !== "done" && isSnoozed(t.snoozedUntil, today);
+  const snoozedCount = tasks.filter(snoozedMine).length;
   const filtered = tasks.filter((t) => {
+    if (!showSnoozed && snoozedMine(t)) return false;
     if (filterAssignee !== "all" && t.assignee !== filterAssignee) return false;
     if (onlyOverdue && !isOverdue(t)) return false;
     if (sharedBoard && !matchesView(view, t, roleOn(t), myUserId)) return false;
@@ -887,6 +895,20 @@ export default function TasksPanel({
               {!isMobile && " Просрочено"}
               {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
             </button>
+            )}
+            {(snoozedCount > 0 || showSnoozed) && (
+              <button
+                type="button"
+                className={"filter-pill" + (showSnoozed ? " active" : "")}
+                id="showSnoozedBtn"
+                aria-pressed={showSnoozed}
+                title="Задачи, которые вы отложили до другого дня"
+                onClick={() => setShowSnoozed((v) => !v)}
+              >
+                <Icon name="clock" size={14} />
+                {!isMobile && " Отложено"}
+                <span className="filter-pill-count">{snoozedCount}</span>
+              </button>
             )}
             {/* «Завершённые» — только на компьютере. Слова Кирилла
                 20.09.2026: «смотреть во всех разделах завершённые в

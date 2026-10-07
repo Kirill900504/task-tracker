@@ -355,6 +355,25 @@ export async function GET(req: Request) {
       });
     }
 
+    // Отложенная задача вернулась (миграция 0049): в день, до которого её
+    // отложили, постановщику — одной строкой, сразу, а не в сводке: сводка
+    // выходит дважды в неделю, а откладывают как раз «до четверга». Один
+    // раз на задачу и день — переотложили, и напомнят в новый день.
+    if (!quiet) {
+      const { data: back } = await admin
+        .from("tasks")
+        .select("id, title, created_by")
+        .eq("user_id", userId)
+        .eq("snoozed_until", today)
+        .neq("status", "done")
+        .is("deleted_at", null);
+      for (const t of (back || []) as { id: string; title: string; created_by: string | null }[]) {
+        await onceOnly(admin, { userId, kind: "snooze_back", refId: `${t.id}:${today}`, date: today }, async () => {
+          await notifyAuthor(admin, userId, t.created_by, `⏰ Сегодня вы просили напомнить: «${t.title}» — она снова на доске.`);
+        });
+      }
+    }
+
     // Просроченное подаёт голос: три дня — человеку, семь — постановщику,
     // четырнадцать — обоим и в последний раз.
     //

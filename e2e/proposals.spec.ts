@@ -189,3 +189,26 @@ test("повестка: пункт дописывается, получает и
   await expect(page.locator("#fTitle")).toHaveValue(point);
   await page.keyboard.press("Escape");
 });
+
+test("«Отложить…» убирает задачу с доски автора до выбранного дня", async ({ page }) => {
+  await login(page);
+  const title = "Отложить " + Date.now();
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator(".task", { hasText: title });
+  await expect(card).toBeVisible();
+  await card.click();
+  await page.click("#snoozeTaskBtn");
+  await page.locator(".ask-modal").getByRole("button", { name: "Завтра", exact: true }).click();
+  await expect(card).toBeHidden();
+  await expect
+    .poll(async () => (await admin.from("tasks").select("snoozed_until").eq("user_id", ownerId).eq("title", title).maybeSingle()).data?.snoozed_until, {
+      timeout: 20_000,
+    })
+    .toBeTruthy();
+  // Отложенное не потерялось: кнопка с числом возвращает его на доску.
+  await page.click("#showSnoozedBtn");
+  await expect(card).toBeVisible();
+});

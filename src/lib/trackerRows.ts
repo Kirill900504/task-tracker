@@ -38,6 +38,7 @@ export type TaskRow = {
   created_at?: string | null;
   // Номер ставит триггер (миграция 0045), taskToRow его не пишет.
   number?: number | null;
+  snoozed_until?: string | null;
 };
 
 export type MeetingRow = {
@@ -118,6 +119,7 @@ export function taskToRow(t: Task): TaskRow {
     section_id: t.sectionId || null,
     manual_order: t.manualOrder != null && (t.manualOrder as unknown as string) !== "" ? Number(t.manualOrder) : null,
     completed_at: t.completedAt || null,
+    snoozed_until: t.snoozedUntil || null,
     // deleted_at is deliberately NOT part of this row — see softDeleteRow()/
     // restoreRow() in useTrackerData.ts for why an ordinary upsert must
     // never touch it.
@@ -150,6 +152,7 @@ export function taskFromRow(r: TaskRow): Task {
     createdBy: r.created_by || "",
     createdAt: r.created_at || "",
     ...(r.number != null ? { number: r.number } : {}),
+    snoozedUntil: r.snoozed_until || "",
   };
 }
 
