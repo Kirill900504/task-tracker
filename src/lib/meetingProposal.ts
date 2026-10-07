@@ -8,6 +8,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 import { sendToPerson } from "@/lib/reach";
 import { mirrorClosed } from "@/lib/botMirror";
 import { uid } from "@/lib/uid";
+import { busyOnServer } from "@/lib/meetingBusyServer";
 
 // Предложение другого времени встречи — в мессенджере, теми же кнопками,
 // что в трекере.
@@ -194,6 +195,28 @@ export async function acceptProposal(
   const nowMsk = new Date(Date.now() + 3 * 3600_000).toISOString();
   if (`${p.date}T${p.time}` <= nowMsk.slice(0, 16)) {
     return { toast: "Это время уже прошло", rewriteTo: `🕐 Предложенное время (${proposalWhen(p)}) уже прошло.` };
+  }
+  // И занятое не назначается (07.10.2026): пока предложение лежало, на это
+  // время могли позвать кого-то из состава. То же правило, что в трекере.
+  let clash: string[];
+  try {
+    clash = await busyOnServer(admin, {
+      spaceId: meeting.user_id,
+      date: p.date,
+      time: p.time,
+      durationMin: meeting.duration_min || 30,
+      people: meeting.participants || [],
+      ignore: [meeting.id],
+    });
+  } catch {
+    return { toast: "Не получилось проверить, свободны ли люди — попробуйте ещё раз" };
+  }
+  if (clash.length) {
+    const names = clash.map(withoutSelfMark).join(", ");
+    return {
+      toast: "Это время уже занято",
+      rewriteTo: `⛔ Предложенное время (${proposalWhen(p)}) уже занято: ${names} на другой встрече. Перенесите встречу на свободное время в трекере.`,
+    };
   }
 
   const who = await actorName(admin, meeting.user_id, meeting.created_by || meeting.user_id);

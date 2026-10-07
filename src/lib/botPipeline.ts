@@ -24,6 +24,7 @@ import { applyReview } from "@/lib/reviewWork";
 import { deliverComment } from "@/lib/commentDelivery";
 import { actorScope, authorFilter, findActorByChat, type BotActor } from "@/lib/botActor";
 import { actorName, withoutSelfMark } from "@/lib/actorName";
+import { busyOnServer } from "@/lib/meetingBusyServer";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
 // мессенджере, а закрывает следующее сообщение владельца.
@@ -224,6 +225,28 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     };
     if (!row.date) {
       await say(ctx, "Не понял дату встречи — уточните, пожалуйста.");
+      return;
+    }
+    // Две встречи на одно время с одним человеком запрещены и отсюда — то
+    // же правило, что в форме трекера (lib/meetingTime.busyPeople).
+    let clash: string[];
+    try {
+      clash = await busyOnServer(ctx.admin, {
+        spaceId: userId,
+        date: row.date,
+        time: row.time,
+        durationMin: 30,
+        people: (row.participants as unknown[]).filter((n): n is string => typeof n === "string"),
+      });
+    } catch (e) {
+      await say(ctx, "Встречу не назначил: " + (e instanceof Error ? e.message : String(e)));
+      return;
+    }
+    if (clash.length) {
+      await say(
+        ctx,
+        `Встречу не назначил: ${fmtDate(row.date)}, ${row.time} уже на другой встрече — ${clash.map(withoutSelfMark).join(", ")}. Назовите другое время.`,
+      );
       return;
     }
     const { error } = await ctx.admin.from("meetings").insert(row);
