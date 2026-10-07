@@ -620,6 +620,7 @@ export default function NewTracker() {
           <CalendarPanel
             tasks={visibleTasks}
             meetings={visibleMeetings}
+            allMeetings={meetings}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             onRequestNewTask={(date) => setOpenTaskRequest({ deadline: date })}

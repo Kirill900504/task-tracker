@@ -3,7 +3,7 @@
 // Port of the meeting modal from trackerMarkup.ts + openMeetingModal()/
 // meetingSaveBtn/deleteMeetingBtn/setMeetingStatus/performReschedule in
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import ItemChat, { mentionPeople } from "./ItemChat";
 import { postProposal } from "@/hooks/useItemComments";
@@ -32,7 +32,7 @@ import ItemFacts from "./ItemFacts";
 import ExpandableText from "./ExpandableText";
 import MeetingAgenda from "./MeetingAgenda";
 import type { AgendaItem } from "@/hooks/useMeetingAgenda";
-import { WORKDAY_SLOTS, busyStarts, defaultMeetingStart, minutesOf, slotOf, startsInPast } from "@/lib/meetingTime";
+import { WORKDAY_SLOTS, busyPeople, defaultMeetingStart, startsInPast } from "@/lib/meetingTime";
 import { SEARCH_FROM, matchesPerson } from "@/lib/personSearch";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel, authorRawName } from "@/lib/authorName";
@@ -225,35 +225,14 @@ export default function MeetingModal({
   // Своя же встреча из расчёта исключается: открыв её, человек видел бы
   // собственное время занятым и не смог бы выбрать то, на котором и так
   // стоит.
-  const busyByTime = useMemo(() => {
-    const out = new Map<number, string[]>();
-    if (!date) return out;
-    for (const m of dayMeetings) {
-      if (m.date !== date || m.status !== "planned" || m.id === meeting?.id) continue;
-      const slot = slotOf(m.time, m.durationMin);
-      if (!slot) continue;
-      for (const start of busyStarts([slot])) {
-        const names = out.get(start) || [];
-        for (const name of m.participants || []) if (!names.includes(name)) names.push(name);
-        out.set(start, names);
-      }
-    }
-    return out;
-  }, [dayMeetings, date, meeting?.id]);
-
+  //
   // Заняты ли ВЫБРАННЫЕ люди в это время. Чужая занятость, никого из
   // приглашённых не касающаяся, — не повод гасить кнопку: в трекере
   // четырнадцать человек, и при таком правиле свободных слотов не
-  // осталось бы вовсе.
-  const busyNamesAt = (slotTime: string): string[] => {
-    const start = minutesOf(slotTime);
-    if (start === null || !participants.length) return [];
-    const taken = new Set<string>();
-    for (let t = start; t < start + durationMin; t += 30) {
-      for (const name of busyByTime.get(t) || []) if (participants.includes(name)) taken.add(name);
-    }
-    return [...taken];
-  };
+  // осталось бы вовсе. Считается весь отрезок встречи, а не её начало:
+  // часовая в 15:30 заходит на чужие 16:00 (lib/meetingTime.busyPeople).
+  const busyNamesAt = (slotTime: string, minutes: number = durationMin): string[] =>
+    busyPeople(dayMeetings, { date, time: slotTime, durationMin: minutes, people: participants, ignore: [meeting?.id] });
 
   // Кто из позванных занят в ВЫБРАННОЕ время — красным прямо на имени.
   //
@@ -317,6 +296,18 @@ export default function MeetingModal({
       await ask.say({
         title: "Это время уже прошло",
         question: `${fmtDate(date)}, ${time} — уже в прошлом. Выберите время впереди.`,
+      });
+      return;
+    }
+    // Пересечение с другой встречей кого-то из позванных — тоже запрет.
+    // Занятые слоты в сетке и так погашены; это ловит то, что сетка не
+    // закрывает: человека добавили ПОСЛЕ выбора времени, или его встречу
+    // назначили, пока форма была открыта. Назначенной встрече проверка не
+    // нужна — её время и состав здесь не меняются.
+    if (!isEditing && busyNow.size > 0) {
+      await ask.say({
+        title: "Это время уже занято",
+        question: `В ${time} уже на другой встрече: ${[...busyNow].map(withoutSelfMark).join(", ")}. Выберите свободное время или уберите ${busyNow.size > 1 ? "их" : "его"} из состава.`,
       });
       return;
     }
@@ -735,20 +726,26 @@ export default function MeetingModal({
                 {TIME_SLOTS.map((slot) => {
                   const busy = busyNamesAt(slot);
                   // Прошедшее сегодня время заперто (07.10.2026, «запрети
-                  // создавать события в прошедшем времени»). Занятое — нет:
-                  // это разные вещи, см. ниже.
+                  // создавать события в прошедшем времени»).
                   const past = startsInPast(date, slot);
                   return (
                   <button
                     key={slot}
                     type="button"
-                    // Занятое время не запрещено, а помечено. Запрет был бы
-                    // неправдой: планёрку иногда и правда ставят поверх
-                    // другой, решив, что та подождёт. Неправдой было бы и
-                    // молчание — именно его Кирилл и просил убрать.
+                    // Занятое время тоже заперто, с тем же 07.10.2026. До
+                    // этого оно было только помечено — с доводом «планёрку
+                    // иногда ставят поверх другой», — и Кирилл получил две
+                    // встречи на одно время с одним человеком: «запрети
+                    // такую возможность». Человек не может быть в двух
+                    // местах, а «та подождёт» решается переносом той.
+                    // Заперт весь отрезок: при часе гаснет и 15:30, если в
+                    // 16:00 уже встреча. Выбранное, ставшее занятым (позвали
+                    // человека после выбора времени), остаётся видно красным,
+                    // и сохранить его нельзя — см. save().
                     className={"time-slot" + (time === slot ? " selected" : "") + (busy.length ? " busy" : "") + (past ? " past" : "")}
-                    title={past ? "Это время сегодня уже прошло" : busy.length ? "Заняты: " + busy.join(", ") : undefined}
-                    disabled={past}
+                    title={past ? "Это время сегодня уже прошло" : busy.length ? "Заняты: " + busy.map(withoutSelfMark).join(", ") : undefined}
+                    aria-label={busy.length ? `${slot} — заняты: ${busy.map(withoutSelfMark).join(", ")}` : undefined}
+                    disabled={past || busy.length > 0}
                     onClick={() => setTime(slot)}
                   >
                     {slot}
@@ -825,8 +822,8 @@ export default function MeetingModal({
               )}
               {busyNow.size > 0 && (
                 <div className="field-hint busy-now-hint">
-                  В {time} уже на другой встрече: {[...busyNow].map(withoutSelfMark).join(", ")}. Можно оставить — или выбрать
-                  время, где все свободны.
+                  В {time} уже на другой встрече: {[...busyNow].map(withoutSelfMark).join(", ")}. Так сохранить нельзя —
+                  выберите свободное время или уберите {busyNow.size > 1 ? "их" : "его"} из состава.
                 </div>
               )}
             </div>
@@ -837,9 +834,18 @@ export default function MeetingModal({
                 id="mDuration"
                 value={durationMin === 60 ? "60" : "30"}
                 onSelect={(v) => setDurationMin(v === "60" ? 60 : 30)}
+                // Час, заходящий на чужую встречу кого-то из позванных, —
+                // то же пересечение, что и занятый слот, и гаснет так же.
+                // Получас не гасится никогда: он начало часа, и если занят
+                // он, погашено само время.
                 options={[
                   { value: "30", label: "30 минут" },
-                  { value: "60", label: "1 час" },
+                  (() => {
+                    const clash = durationMin !== 60 && time ? busyNamesAt(time, 60) : [];
+                    return clash.length
+                      ? { value: "60" as const, label: "1 час", disabled: true, title: `Второй получас занят: ${clash.map(withoutSelfMark).join(", ")}` }
+                      : { value: "60" as const, label: "1 час" };
+                  })(),
                 ]}
               />
               <div className="field-hint">

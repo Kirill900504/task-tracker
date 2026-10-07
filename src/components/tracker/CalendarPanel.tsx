@@ -11,6 +11,7 @@ import PopLayer from "./PopLayer";
 import type { Meeting, Task } from "@/types/tracker";
 import { dateStr, fmtDate, isTaskDueOnDate, todayStr } from "@/lib/taskDisplay";
 import { getMonthGridDates } from "@/lib/calendarLogic";
+import { busyPeople } from "@/lib/meetingTime";
 import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import { useDragState, useDropHandler, type DropTarget } from "./dnd/TrackerDnd";
@@ -47,9 +48,14 @@ export default function CalendarPanel({
   onIdeaDroppedOnDate,
   onTaskDroppedOnDate,
   dateTimeConfirm,
+  allMeetings,
 }: {
   tasks: Task[];
   meetings: Meeting[];
+  // Все встречи пространства — только для проверки занятости при переносе
+  // перетаскиванием: позванный может быть занят встречей, которой мне не
+  // видно (тот же проп и та же причина, что у MeetingsPanel).
+  allMeetings?: Meeting[];
   selectedDate: string | null;
   onSelectDate: (date: string | null) => void;
   onRequestNewTask: (date: string) => void;
@@ -109,7 +115,11 @@ export default function CalendarPanel({
     if (target.kind !== "day") return;
     const meeting = meetings.find((m) => m.id === meetingId);
     if (!meeting) return;
-    const result = await dateTimeConfirm.ask(`Перенести встречу «${meeting.title}» на:`, target.date, meeting.time || "10:00");
+    // Пересечение с другой встречей кого-то из состава запрещено и здесь —
+    // иначе запрет в форме обходится одним перетаскиванием.
+    const result = await dateTimeConfirm.ask(`Перенести встречу «${meeting.title}» на:`, target.date, meeting.time || "10:00", (date, time) =>
+      busyPeople(allMeetings ?? meetings, { date, time, durationMin: meeting.durationMin, people: meeting.participants || [], ignore: [meeting.id] }),
+    );
     if (!result) return;
     onRescheduleMeeting(meeting, result.date, result.time);
   });

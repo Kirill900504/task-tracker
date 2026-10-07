@@ -60,6 +60,45 @@ export function busyStarts(slots: Slot[], step = 30): number[] {
   return [...out].sort((x, y) => x - y);
 }
 
+// Кто из `people` в отрезок [time, time + durationMin) дня `date` уже на
+// другой назначенной встрече.
+//
+// Одно правило на все двери, которыми встреча получает время: форму новой
+// встречи, быстрый перенос ⇢ и перенос перетаскиванием на день календаря.
+// До 07.10.2026 форма только предупреждала, а переносы не спрашивали вовсе,
+// и Кирилл получил две встречи на 16:00 с одним и тем же человеком: «выдаёт
+// предупреждение… но тем не менее даёт создать — запрети». Пересечением
+// считается и частичное: часовая в 15:30 занимает 16:00, получасовая в
+// 16:00 не даёт начать часовую в 15:30.
+//
+// Считается только `planned`: предложение ничьего времени не занимает, пока
+// на него не ответили (lib/meetingConfirm). `ignore` — сама встреча, которую
+// переносят или открыли: своё время не может быть занято собой.
+export type BusyMeeting = {
+  id: string;
+  date: string;
+  time: string;
+  durationMin?: number;
+  status: string;
+  participants?: string[];
+};
+
+export function busyPeople(
+  meetings: BusyMeeting[],
+  at: { date: string; time: string; durationMin: unknown; people: string[]; ignore?: (string | undefined)[] },
+): string[] {
+  const want = slotOf(at.time, at.durationMin);
+  if (!want || !at.date || !at.people.length) return [];
+  const out: string[] = [];
+  for (const m of meetings) {
+    if (m.date !== at.date || m.status !== "planned" || at.ignore?.includes(m.id)) continue;
+    const other = slotOf(m.time, m.durationMin);
+    if (!other || !overlaps(want, other)) continue;
+    for (const name of m.participants || []) if (at.people.includes(name) && !out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
 // Когда предупредить, что время кончается, и когда сказать, что кончилось.
 //
 // Просьба Кирилла: «если встреча была назначена на 1 час, а он уже

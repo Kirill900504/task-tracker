@@ -114,6 +114,23 @@ async function login(page: import("@playwright/test").Page) {
 // separate, unrelated timing quirk in how fast two back-to-back creates
 // interact with the realtime echo, not the bug being tested here. Only the
 // edit-then-sign-out step is immediate, since that immediacy is the point.
+// Первое свободное время в форме встречи, кроме уже выбранного.
+//
+// Тесты ставили «завтра в 10:00» с первым человеком из списка, а занятое
+// время с 07.10.2026 заперто: встреча другого теста того же прогона на то
+// же время делала эту невозможной. Время выбирается ПОСЛЕ людей — только
+// тогда сетка знает, чьё время гасить.
+async function pickFreeSlot(page: import("@playwright/test").Page): Promise<string> {
+  const time = (await page.locator("#mTimeGrid .time-slot:enabled:not(.selected)").first().textContent())?.trim() || "";
+  expect(time).not.toBe("");
+  // По тексту, а не тем же локатором: выбранная кнопка из него выпадает, и
+  // проверка смотрела бы уже на следующую.
+  const slot = page.locator("#mTimeGrid .time-slot", { hasText: time });
+  await slot.click();
+  await expect(slot).toHaveClass(/selected/);
+  return time;
+}
+
 async function waitForSaved(page: import("@playwright/test").Page) {
   await expect(page.locator("#syncStatus")).toHaveText("✓ Сохранено", { timeout: 10_000 });
   // The text alone can still be left over from an earlier save while the one
@@ -289,13 +306,13 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   // Завтра, а не сегодня: прошедшее сегодня время заперто (07.10.2026), и
   // в полдень 10:00 уже не нажать.
   await page.locator("#meetingOverlay .deadline-row .participant-chip", { hasText: "Завтра" }).click();
-  await page.locator("#mTimeGrid .time-slot", { hasText: "10:00" }).click();
 
   const firstChip = page.locator("#mParticipants .participant-chip").first();
   const participant = (await firstChip.textContent())?.trim() || "";
   expect(participant).not.toBe("");
   await firstChip.click();
   await expect(firstChip).toHaveClass(/selected/);
+  const slotTime = await pickFreeSlot(page);
 
   await page.click("#meetingSaveBtn");
   const chip = page.locator(".meeting-chip", { hasText: title });
@@ -311,7 +328,7 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   // встречи должно быть однотипным с окном созданной задачи»): название
   // строкой над ней, дата, время и состав внутри.
   await expect(page.locator(".meeting-fact-title")).toContainText(title);
-  await expect(page.locator("#meetingFacts")).toContainText("10:00");
+  await expect(page.locator("#meetingFacts")).toContainText(slotTime);
   await expect(page.locator("#meetingFacts")).toContainText(participant);
   await expect(page.locator("#mTimeGrid")).toHaveCount(0);
   await expect(page.locator("#mParticipants")).toHaveCount(0);
@@ -1304,10 +1321,10 @@ test("время и состав встречи меняются только п
   // Завтра, а не сегодня: прошедшее сегодня время заперто (07.10.2026), и
   // в полдень 10:00 уже не нажать.
   await page.locator("#meetingOverlay .deadline-row .participant-chip", { hasText: "Завтра" }).click();
-  await page.locator("#mTimeGrid .time-slot", { hasText: "10:00" }).click();
   const firstChip = page.locator("#mParticipants .participant-chip").first();
   const participant = (await firstChip.textContent())?.trim() || "";
   await firstChip.click();
+  const slotTime = await pickFreeSlot(page);
   await page.click("#meetingSaveBtn");
   const chip = page.locator(".meeting-chip", { hasText: title });
   await expect(chip).toBeVisible();
@@ -1323,11 +1340,11 @@ test("время и состав встречи меняются только п
   await page.click("#meetingMoveBtn");
   await expect(page.locator("#meetingModalTitle")).toHaveText("Перенос встречи");
   await expect(page.locator("#mTitle")).toHaveValue(title);
-  await expect(page.locator("#mTimeGrid .time-slot", { hasText: "10:00" })).toHaveClass(/selected/);
+  await expect(page.locator("#mTimeGrid .time-slot", { hasText: slotTime })).toHaveClass(/selected/);
   await expect(page.locator("#mParticipants .participant-chip", { hasText: participant })).toHaveClass(/selected/);
 
   // И тут их уже можно менять — ради чего перенос и затевался.
-  await page.locator("#mTimeGrid .time-slot", { hasText: "15:30" }).click();
+  const movedTime = await pickFreeSlot(page);
   await page.click("#meetingSaveBtn");
   await waitForSaved(page);
 
@@ -1338,7 +1355,7 @@ test("время и состав встречи меняются только п
   // её перенесли.
   const all = page.locator(".meeting-chip", { hasText: title });
   await expect(all).toHaveCount(1);
-  await expect(all.filter({ hasText: "15:30" })).toBeVisible();
+  await expect(all.filter({ hasText: movedTime })).toBeVisible();
   await page.click("#meetingsDoneBtn");
   await expect(page.locator(".done-list-row", { hasText: title })).toHaveCount(1);
 });

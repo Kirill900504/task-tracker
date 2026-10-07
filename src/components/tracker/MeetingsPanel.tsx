@@ -26,6 +26,8 @@ import { answerWithFiles } from "@/lib/answerFiles";
 import { humanError } from "@/lib/humanError";
 import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 import { isMine } from "@/lib/ownership";
+import { busyPeople } from "@/lib/meetingTime";
+import { withoutSelfMark } from "@/lib/actorName";
 import { useDropHandler } from "./dnd/TrackerDnd";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
@@ -514,7 +516,11 @@ export default function MeetingsPanel({
 
   async function quickReschedule(m: Meeting) {
     const suggestedDate = addDaysIso(m.date, 1);
-    const result = await dateTimeConfirm.ask(`Перенести встречу «${m.title}» на:`, suggestedDate, m.time || "10:00");
+    // Состав при быстром переносе тот же, и занятость спрашивается о нём:
+    // пересечение запрещено и здесь, а не только в форме (lib/meetingTime).
+    const result = await dateTimeConfirm.ask(`Перенести встречу «${m.title}» на:`, suggestedDate, m.time || "10:00", (date, time) =>
+      busyPeople(allMeetings ?? meetings, { date, time, durationMin: m.durationMin, people: m.participants || [], ignore: [m.id] }),
+    );
     if (!result) return;
     reschedule(m, result.date, result.time, m.result);
   }
@@ -637,7 +643,12 @@ export default function MeetingsPanel({
           // его встречу, которую мне не видно вовсе. Ни одного лишнего
           // запроса при этом нет — allMeetings уже загружен наверху, тем же
           // useTrackerData, что и meetings.
-          dayMeetings={allMeetings ?? meetings}
+          //
+          // Переносимая встреча из расчёта убрана: она ещё назначена, пока
+          // перенос не сохранён, и без этого её же люди числились бы
+          // занятыми в её прежнее время — сдвинуть встречу на полчаса,
+          // оставив состав, было бы нельзя.
+          dayMeetings={(allMeetings ?? meetings).filter((x) => x.id !== movingFrom?.id)}
           // Своя встреча — та, которую собрал сам. Чужую видно, потому что
           // позвали; закрывать, переносить и удалять её вправе организатор.
           canEdit={isMine(modalMeeting, myUserId)}
@@ -670,6 +681,22 @@ export default function MeetingsPanel({
             if (!modalMeeting) return;
             const from = modalMeeting;
             void (async () => {
+              // Предложенное время могло занять другое дело, пока его
+              // обсуждали: пересечение запрещено и здесь.
+              const clash = busyPeople(allMeetings ?? meetings, {
+                date: p.date,
+                time: p.time,
+                durationMin: from.durationMin,
+                people: from.participants || [],
+                ignore: [from.id],
+              });
+              if (clash.length) {
+                await ask.say({
+                  title: "Это время уже занято",
+                  question: `${p.date.split("-").reverse().join(".")}, ${p.time} уже на другой встрече: ${clash.map(withoutSelfMark).join(", ")}. Перенесите встречу на свободное время кнопкой «Перенос».`,
+                });
+                return;
+              }
               const yes = await ask.confirm({
                 title: "Перенести встречу",
                 question: `Перенести «${from.title}» на ${p.date.split("-").reverse().join(".")}, ${p.time}?`,
