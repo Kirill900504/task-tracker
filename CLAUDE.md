@@ -78,6 +78,15 @@ disagree, the document is right and the code needs fixing.
   moment the checks are green, and never end a task with the change sitting
   in a branch waiting for him to say "merge". The checks are what stands
   between a merge and a broken production, so they are not optional.
+  **Последняя команда перед словом «готово» — `node scripts/unmerged.mjs`.**
+  07.10.2026 одна сессия дважды за сутки оставила закоммиченную и
+  проверенную работу в своей ветке (`qa/full-frontend`, пятнадцать, а потом
+  ещё шесть коммитов вместе с неприменённой миграцией) — правило выше она
+  читала, а на боевом этого не было, пока не заглянула соседняя сессия.
+  Скрипт отвечает одной строкой: всё ли в `main` и что осталось в дереве;
+  пока он отвечает «✗», задача не закончена. Миграцию из своей ветки
+  применяет тот, кто вливает, — сразу ПОСЛЕ пуша кода, если код только
+  сужает права, и ДО него, если код без неё не работает.
 - Every change ends with: `npm test` (unit), `npm run lint`, `npm run build`,
   and the e2e suite where the change is visible. Nothing is "done" while a
   check is failing; say so instead.
