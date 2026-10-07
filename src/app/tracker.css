@@ -1977,6 +1977,10 @@
     border-left:2px solid transparent;
   }
   .search-hit.active{background:var(--paper-soft); border-left-color:var(--accent);}
+  /* «＋ Новая задача» — действие, а не находка: цветом акцента и отдельной
+     чертой сверху, чтобы не читаться ещё одной задачей из списка. */
+  .search-create{border-top:1px solid var(--line-soft); margin-top:4px;}
+  .search-create .search-hit-title{color:var(--accent); font-weight:600;}
   .search-hit-title{color:var(--ink); font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .search-hit-meta{color:var(--ink-soft); font-size:11px; font-family:var(--display); flex:none; max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .search-hit.done .search-hit-title{color:var(--ink-soft); text-decoration:line-through;}

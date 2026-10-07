@@ -42,6 +42,7 @@ import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import { columnOf } from "@/lib/kanban";
 import { defaultMeetingStart } from "@/lib/meetingTime";
+import { useAsk } from "@/components/Ask";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole, MEMBER_ROLE_LABELS } from "@/hooks/useWorkspaceRole";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
@@ -157,6 +158,34 @@ export default function NewTracker() {
   const myReviewTasks = useMemo(() => visibleTasks.filter((t) => isCreatedByMe(t, mineOnlyId)), [visibleTasks, mineOnlyId]);
   const isMobile = useIsMobile();
   const toasts = useToasts();
+  const ask = useAsk();
+
+  // Встречи — в календаре телефона подпиской (lib/calendarFeed). Ссылку
+  // выдаёт сервер по сессии: она сама по себе пароль к расписанию.
+  // «Подписаться» открывает webcal-ссылку — на iPhone и в macOS это одно
+  // нажатие в системном окне; Android и Outlook берут ссылку вставкой.
+  async function subscribeCalendar() {
+    const res = await fetch("/api/calendar/link", { method: "POST" }).catch(() => null);
+    const data = res ? await res.json().catch(() => null) : null;
+    if (!res?.ok || !data?.https) {
+      toasts.showToast("Не получилось", data?.error || "Ссылка на календарь не выдалась — проверьте связь");
+      return;
+    }
+    const choice = await ask.choose({
+      title: "Встречи в календаре телефона",
+      question: "Ваши встречи сами появятся в календаре телефона и напомнят о себе за 15 минут — без сообщений от бота.",
+      note: "iPhone — «Подписаться». Android — «Скопировать ссылку», затем в Google Календаре: «Другие календари» → «Добавить по URL».",
+      options: [
+        { value: "subscribe", label: "Подписаться" },
+        { value: "copy", label: "Скопировать ссылку" },
+      ],
+    });
+    if (choice === "subscribe") window.location.href = data.webcal;
+    if (choice === "copy") {
+      const copied = await navigator.clipboard?.writeText(data.https).then(() => true, () => false);
+      toasts.showToast(copied ? "Ссылка скопирована" : "Ссылка на календарь", copied ? "Вставьте её в календарь как подписку" : data.https);
+    }
+  }
   const dateTimeConfirm = useDateTimeConfirm();
   const notifications = useNotifications({
     tasks: visibleTasks,
@@ -735,6 +764,11 @@ export default function NewTracker() {
           ideas={myIdeas}
           onClose={() => setSearchOpen(false)}
           onOpenResult={openSearchResult}
+          onCreateTask={(title) => {
+            setSearchOpen(false);
+            if (isMobile) setMobileTab("tasks");
+            setOpenTaskRequest({ title });
+          }}
         />
       )}
       {syncStatus.everSaved && (
@@ -798,6 +832,7 @@ export default function NewTracker() {
               // а не в аккаунте (см. MessengerLink и useMyMessenger).
               ...(isOwner && botLink.needs.telegram ? [{ id: "tg", label: "Подключить Telegram", icon: "link" as const, onSelect: () => botLink.link("telegram") }] : []),
               ...(isOwner && botLink.needs.max ? [{ id: "max", label: "Подключить MAX", icon: "link" as const, onSelect: () => botLink.link("max") }] : []),
+              { id: "calendar", label: "Встречи в календаре телефона", icon: "calendar" as const, onSelect: () => void subscribeCalendar() },
               { id: "signout", label: "Выйти", icon: "logout" as const, onSelect: () => actions.signOut() },
             ]}
           />
@@ -1003,7 +1038,10 @@ export default function NewTracker() {
         <ActionMenu
           anchor={accountMenuAnchor}
           title={MEMBER_ROLE_LABELS[identity.memberRole]}
-          items={[{ id: "signout", label: "Выйти", icon: "logout", onSelect: () => actions.signOut() }]}
+          items={[
+            { id: "calendar", label: "Встречи в календаре телефона", icon: "calendar", onSelect: () => void subscribeCalendar() },
+            { id: "signout", label: "Выйти", icon: "logout", onSelect: () => actions.signOut() },
+          ]}
           onClose={() => setAccountMenuAnchor(null)}
         />
       )}

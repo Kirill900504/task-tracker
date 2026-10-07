@@ -19,12 +19,18 @@ export default function SearchOverlay({
   ideas,
   onClose,
   onOpenResult,
+  onCreateTask,
 }: {
   tasks: Task[];
   meetings: Meeting[];
   ideas: Idea[];
   onClose: () => void;
   onOpenResult: (result: SearchResult) => void;
+  // Поиск, который умеет создать — приём командной строки Linear (Ctrl+K)
+  // и быстрого ввода Todoist: не нашли — тут же заводим, не закрывая окно и
+  // не набирая название второй раз. Строка последняя и до неё доходят
+  // стрелками, как до любой находки.
+  onCreateTask?: (title: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -52,7 +58,11 @@ export default function SearchOverlay({
   // A shorter list can leave the stored cursor pointing past the end;
   // clamping it where it is read keeps that from needing its own state
   // update (and the extra render that comes with it).
-  const active = results.length ? Math.min(cursor, results.length - 1) : 0;
+  // Строка «создать» — ещё один пункт после находок, если есть что создавать.
+  const createTitle = onCreateTask && query.trim().length >= 2 ? query.trim() : "";
+  const total = results.length + (createTitle ? 1 : 0);
+  const active = total ? Math.min(cursor, total - 1) : 0;
+  const createActive = !!createTitle && active === results.length;
 
   // Keep the highlighted row in view while arrowing through a long list.
   useEffect(() => {
@@ -62,12 +72,17 @@ export default function SearchOverlay({
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      if (results.length) setCursor((active + 1) % results.length);
+      if (total) setCursor((active + 1) % total);
       return;
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
-      if (results.length) setCursor((active - 1 + results.length) % results.length);
+      if (total) setCursor((active - 1 + total) % total);
+      return;
+    }
+    if (e.key === "Enter" && createActive) {
+      e.preventDefault();
+      onCreateTask?.(createTitle);
       return;
     }
     if (e.key === "Enter" && results[active]) {
@@ -127,6 +142,16 @@ export default function SearchOverlay({
               </div>
             );
           })}
+          {createTitle && (
+            <div
+              className={"search-hit search-create" + (createActive ? " active" : "")}
+              onMouseEnter={() => setCursor(results.length)}
+              onClick={() => onCreateTask?.(createTitle)}
+            >
+              <span className="search-hit-title">＋ Новая задача «{createTitle}»</span>
+              <span className="search-hit-meta">Enter</span>
+            </div>
+          )}
         </div>
       </div>
     </Modal>

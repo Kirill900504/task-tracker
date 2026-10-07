@@ -172,3 +172,54 @@ test("после «Принял» кнопка «Сделал» остаётся
   expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
   await page.keyboard.press("Escape");
 });
+
+// Поиск, который умеет создать (как Ctrl+K в Linear): не нашли — Enter на
+// последней строке открывает форму задачи с уже набранным названием.
+test("из поиска можно сразу завести задачу с набранным названием", async ({ page }) => {
+  const title = `QA из поиска ${Date.now()}`;
+  await login(page);
+  await page.click("#searchBtn");
+  await page.keyboard.type(title);
+  const create = page.locator(".search-create");
+  await expect(create).toContainText(title);
+  // Ничего не нашлось — значит строка «создать» сразу под курсором.
+  await expect(create).toHaveClass(/active/);
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#searchOverlay")).toHaveCount(0);
+  await expect(page.locator("#fTitle")).toHaveValue(title);
+  await page.keyboard.press("Escape");
+});
+
+// Встречи в календаре телефона (подписка ICS, как у Vikunja и Google):
+// пункт меню выдаёт личную ссылку, а по ней — календарь с встречами этого
+// человека и без чужих. Подделанная ссылка не отдаёт ничего.
+test("встречи уходят в календарь телефона по личной ссылке", async ({ page }) => {
+  const mine = `QA календарь ${Date.now()}`;
+  const foreign = `QA чужая ${Date.now()}`;
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: other } = await admin.auth.admin.createUser({ email: `e2e-cal-${Date.now()}@example.invalid`, password: "E2e-" + Math.random().toString(36).slice(2) + "!Aa1", email_confirm: true });
+  try {
+    await admin.from("meetings").insert([
+      { id: `qacal-${Date.now().toString(36)}`, user_id: ownerId, title: mine, date: today, time: "18:00", participants: [], status: "planned" },
+      { id: `qacalf-${Date.now().toString(36)}`, user_id: ownerId, created_by: other!.user!.id, title: foreign, date: today, time: "18:00", participants: [], status: "planned" },
+    ]);
+    await login(page);
+    await page.click("#accountBtn");
+    await page.locator(".export-item", { hasText: "Встречи в календаре телефона" }).click();
+    await expect(page.getByRole("button", { name: "Подписаться" })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    const link = await page.request.post("/api/calendar/link");
+    const { https, webcal } = await link.json();
+    expect(webcal).toMatch(/^webcal:/);
+    const ics = await (await page.request.get(https)).text();
+    expect(ics).toContain("BEGIN:VCALENDAR");
+    expect(ics).toContain(mine);
+    expect(ics).not.toContain(foreign);
+
+    const forged = await page.request.get(https.replace(/\.[^.]+\.ics$/, ".AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.ics"));
+    expect(forged.status()).toBe(404);
+  } finally {
+    await admin.auth.admin.deleteUser(other!.user!.id);
+  }
+});
