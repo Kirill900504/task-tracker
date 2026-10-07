@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 
@@ -38,7 +38,16 @@ export default function PopLayer({ children }: { children: ReactNode }) {
   // жизни было бы нечем — React потерял бы состояние того, что внутри.
   const [host] = useState<HTMLElement | null>(() => (typeof document === "undefined" ? null : layerHost()));
 
-  useEffect(() => {
+  // Слой открывается в useLayoutEffect, а не в useEffect, — и это не
+  // вкусовщина. Пока слой не открыт, `popover` держит его display:none, и
+  // размер всего внутри равен нулю. Меню (календарь, ⋮, мысли, встречи)
+  // ставят себя у края экрана по собственной высоте и делают это в СВОЁМ
+  // useLayoutEffect; с открытием в обычном эффекте они мерили ноль, ни разу
+  // не переворачивались вверх, и у нижнего края экрана открывались за ним
+  // («что на этот день» в календаре внизу правой колонки — 07.10.2026).
+  // Эффекты потомка идут раньше эффектов родителя, так что к замеру слой
+  // уже открыт.
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     // Старый браузер без Popover API просто останется на z-index: меню
