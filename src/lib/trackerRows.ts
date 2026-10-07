@@ -52,6 +52,8 @@ export type MeetingRow = {
   resolved_at: string | null;
   duration_min?: number | null;
   from_task_id?: string | null;
+  // Правило повтора (миграция 0046). Пишет синхронизация, как и дату.
+  recur?: string | null;
   vote_round?: number | null;
   created_by?: string | null;
   created_at?: string | null;
@@ -164,6 +166,7 @@ export function meetingToRow(m: Meeting): MeetingRow {
     resolved_at: m.resolvedAt || null,
     duration_min: normalizeDuration(m.durationMin),
     from_task_id: m.fromTaskId || null,
+    recur: m.recur || "none",
   };
 }
 
@@ -180,6 +183,7 @@ export function meetingFromRow(r: MeetingRow): Meeting {
     resolvedAt: r.resolved_at || "",
     durationMin: normalizeDuration(r.duration_min),
     fromTaskId: r.from_task_id || "",
+    recur: (r.recur as Meeting["recur"]) || "none",
     confirmedBy: r.confirmed_by || [],
     voteRound: r.vote_round ?? 1,
     createdBy: r.created_by || "",

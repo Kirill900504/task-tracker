@@ -9,7 +9,8 @@ import ItemChat, { mentionPeople } from "./ItemChat";
 import { postProposal } from "@/hooks/useItemComments";
 import MeetingAnswer from "./MeetingAnswer";
 import type { MeetingVoteRow } from "@/hooks/useMeetingVotes";
-import type { Meeting, MeetingPrefill, MeetingStatus } from "@/types/tracker";
+import type { Meeting, MeetingPrefill, MeetingRecur, MeetingStatus } from "@/types/tracker";
+import { RECUR_LABELS } from "@/lib/meetingRepeatLabels";
 import { fmtDate } from "@/lib/taskDisplay";
 import { isSelfAssignee, sanitizeAssigneeList } from "@/lib/trackerRows";
 import { withoutSelfMark } from "@/lib/actorName";
@@ -193,6 +194,9 @@ export default function MeetingModal({
   // 30 минут или час» — и это не украшение формы, а то, из чего считается
   // занятость людей: час встречи вынимает из их дня час, а не точку.
   const [durationMin, setDurationMin] = useState<number>(meeting?.durationMin || 30);
+  // Повтор (миграция 0046): каждое повторение — отдельная встреча, следующую
+  // заводит крон в день текущей и зовёт тех же людей (lib/meetingRepeat).
+  const [recur, setRecur] = useState<MeetingRecur>(meeting?.recur ?? prefill?.recur ?? "none");
 
   // Кто занят в этот день и в какие получасовки.
   //
@@ -324,6 +328,9 @@ export default function MeetingModal({
       // о ней уже сказали людям, и час, ставший получасом, развёл бы то,
       // что у них в календаре, и то, что записано. Меняется переносом.
       durationMin: isEditing ? meeting.durationMin || 30 : durationMin,
+      // У назначенной встречи правило меняется только кнопкой «Больше не
+      // повторять» — она пишет сама, мимо формы.
+      recur: isEditing ? meeting.recur ?? "none" : recur,
       title: isEditing ? meeting.title : trimmedTitle,
       participants: isEditing ? meeting.participants : sanitizeAssigneeList(participants),
       // Новая встреча — назначенная, всегда (см. комментарий про «Как
@@ -570,6 +577,23 @@ export default function MeetingModal({
                           {fmtDate(date)}
                           {time ? `, ${time}` : ""}
                           <span className="fact-note"> · {meeting.durationMin === 60 ? "1 час" : "30 минут"}</span>
+                          {meeting.recur && meeting.recur !== "none" && (
+                            <span className="fact-note meeting-recur-note">
+                              {" "}
+                              · {RECUR_LABELS[meeting.recur].toLowerCase()}
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  className="link-btn"
+                                  id="meetingStopRepeat"
+                                  title="Эта встреча останется, следующих не будет"
+                                  onClick={() => onSave({ ...meeting, recur: "none" })}
+                                >
+                                  больше не повторять
+                                </button>
+                              )}
+                            </span>
+                          )}
                         </>
                       ),
                     },
@@ -795,6 +819,21 @@ export default function MeetingModal({
                   ? "Час выпадает из дня у всех, кого зовёте: другие встречи на это время им уже не поставят незаметно."
                   : "Полчаса — обычная планёрка. Занятое время видно остальным при выборе."}
               </div>
+            </div>
+
+            <div className="field">
+              <label>Повторять</label>
+              <ChipChoice
+                id="mRecur"
+                value={recur}
+                onSelect={(v) => setRecur(v as MeetingRecur)}
+                options={(Object.keys(RECUR_LABELS) as MeetingRecur[]).map((value) => ({ value, label: RECUR_LABELS[value] }))}
+              />
+              {recur !== "none" && (
+                <div className="field-hint">
+                  Следующая встреча заведётся сама в день этой — с тем же временем и составом, и людям придёт приглашение.
+                </div>
+              )}
             </div>
 
           </>

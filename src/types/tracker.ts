@@ -75,8 +75,14 @@ export interface Task {
   number?: number;
 }
 
+// Как повторяется встреча (миграция 0046). Каждое повторение — отдельная
+// встреча, правило переходит на следующую (lib/meetingRepeat).
+export type MeetingRecur = "none" | "weekly" | "biweekly" | "monthly";
+
 export interface Meeting {
   id: string;
+  // Необязательное: у встреч до миграции 0046 его нет — значит «один раз».
+  recur?: MeetingRecur;
   date: string; // YYYY-MM-DD
   time: string; // HH:MM or ""
   // Сколько минут занимает: 30 или 60 (миграция 0038). Из этого
@@ -164,6 +170,8 @@ export interface MeetingPrefill {
   // в обсуждение обоих — без новой колонки и сразу человеку видимая.
   fromTaskId?: string;
   fromTaskTitle?: string;
+  // Перенос через форму несёт правило повтора прежней встречи.
+  recur?: MeetingRecur;
 }
 
 export interface PanelLayout {

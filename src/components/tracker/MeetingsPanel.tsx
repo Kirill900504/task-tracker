@@ -497,6 +497,9 @@ export default function MeetingsPanel({
       // начало, и часовая планёрка не должна стать получасовой оттого,
       // что её сдвинули на день.
       durationMin: m.durationMin || 30,
+      // Правило повтора переезжает вместе со встречей: цепочку дальше
+      // продолжает новая, а перенесённую крон не трогает (lib/meetingRepeat).
+      recur: m.recur || "none",
       title: m.title,
       participants: m.participants.slice(),
       status: "planned",
@@ -706,6 +709,7 @@ export default function MeetingsPanel({
                       date: addDaysIso(from.date, 1),
                       time: from.time || "",
                       participants: from.participants.slice(),
+                      recur: from.recur || "none",
                     },
                   });
                 }

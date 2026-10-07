@@ -893,6 +893,9 @@
   /* «Кто поручил → кому» — одной группой, чтобы стрелка не отрывалась от
      имён переносом строки. */
   .task-num{color:var(--ink-soft); font-variant-numeric:tabular-nums; opacity:.8;}
+  /* «больше не повторять» у регулярной встречи — словом рядом с фактом,
+     а не кнопкой в ряду действий: это правка правила, а не исход встречи. */
+  .meeting-recur-note .link-btn{background:none; border:0; padding:0 0 0 6px; font:inherit; color:var(--accent); cursor:pointer; text-decoration:underline dotted;}
   .task-modal-num{font-size:12.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; margin-bottom:2px;}
   .task-who{display:inline-flex; align-items:center; gap:5px; min-width:0; flex-wrap:wrap;}
   .task-assignee{font-weight:700; color:var(--assignee); overflow-wrap:anywhere;}

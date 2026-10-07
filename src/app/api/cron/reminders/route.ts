@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { briefLooksUntil, isBriefDay } from "@/lib/briefDays";
+import { spawnRecurringMeetings } from "@/lib/meetingRepeat";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyAuthor, notifyOwner } from "@/lib/botDelivery";
 import { flushNotices } from "@/lib/noticeQueue";
@@ -172,6 +173,12 @@ export async function GET(req: Request) {
   // Утренние сводки — по понедельникам и средам, и смотрят до следующей.
   const briefDay = isBriefDay(now);
   const briefUntil = briefLooksUntil(now);
+
+  // Регулярные встречи: в день встречи заводится следующая, и людям уходит
+  // приглашение (lib/meetingRepeat). Не раньше восьми — заводить можно и
+  // ночью, а вот звать ночью нельзя. Не зависит от рабочего дня: планёрка
+  // в субботу — тоже планёрка.
+  if (nowMin >= 8 * 60) await spawnRecurringMeetings(admin, today).catch(() => 0);
 
   const [{ data: tgAccounts }, { data: maxAccounts }] = await Promise.all([
     admin.from("telegram_accounts").select("user_id"),
