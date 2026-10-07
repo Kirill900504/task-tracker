@@ -144,11 +144,12 @@ test("«Повторить» у закрытой задачи открывает
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
   await card.locator(".check").click();
-  await expect(card).toHaveClass(/done/);
-  // Закрытая уходит в «Завершённые» — их надо показать.
+  // Закрытая сразу уходит с доски в «Завершённые» — их надо показать.
   const doneBtn = page.locator("#showDoneCheckbox");
   if ((await doneBtn.getAttribute("aria-pressed")) !== "true") await doneBtn.click();
-  await page.locator(".task", { hasText: title }).first().click();
+  const closed = page.locator(".task.done", { hasText: title }).first();
+  await expect(closed).toBeVisible({ timeout: 20_000 });
+  await closed.click();
   await page.click("#repeatTaskBtn");
   await expect(page.locator("#modalTitle")).toHaveText("Новая задача");
   await expect(page.locator("#fTitle")).toHaveValue(title);
