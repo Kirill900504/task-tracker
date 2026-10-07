@@ -86,6 +86,33 @@ export function diffAssignees(current: string[], shadow: string[]): { added: str
 // Immutable list helpers for React state updates (legacy-tracker.js's
 // upsertById()/removeById() mutate a shared array in place — not safe with
 // React state, which must be replaced, not mutated, on every change).
+// Строка, пришедшая подпиской, — сливается с несохранённым, а не заменяет его.
+//
+// Пойман 07.10.2026 на боевом e2e («закрытие встречи из списка спрашивает
+// итог»): встречу завели, запись ушла, человек сразу нажал «Успех» — и в эту
+// секунду пришло эхо ПЕРВОЙ записи, ещё со статусом «запланирована».
+// Подписка писала его и в экран, и в тень: «Успех» исчезал с экрана, а тень
+// считала строку подтверждённой, так что дифф его больше не видел —
+// изменение терялось молча. Правило то же, что у догона и офлайна
+// (applyLocalChanges): тень — всегда то, что сказала база; экран — тоже,
+// КРОМЕ строки, на которой есть неотправленная работа (экран ≠ тень, или
+// строки в тени ещё нет). Её следующий дифф и отправит.
+export function mergeIncoming<T extends WithId, R>(
+  live: T[],
+  shadow: T[],
+  incoming: T,
+  confirmed: T,
+  toRow: (x: T) => R,
+): { live: T[]; shadow: T[] } {
+  const local = live.find((x) => x.id === incoming.id);
+  const known = shadow.find((x) => x.id === incoming.id);
+  const pending = !!local && (!known || !sameJson(toRow(local), toRow(known)));
+  return {
+    live: pending ? live : upsertById(live, incoming),
+    shadow: upsertById(shadow, confirmed),
+  };
+}
+
 export function upsertById<T extends WithId>(list: T[], item: T): T[] {
   const idx = list.findIndex((x) => x.id === item.id);
   if (idx === -1) return [...list, item];

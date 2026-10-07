@@ -22,7 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient, isRoutedThroughProxy } from "@/lib/supabase/client";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import { diffAssignees, diffRows, removeById, sameLists, snapshotList, upsertById } from "@/lib/trackerSync";
+import { diffAssignees, diffRows, mergeIncoming, removeById, sameLists, snapshotList, upsertById } from "@/lib/trackerSync";
 import { describeDbError, syncFailure } from "@/lib/syncError";
 import { refreshRecurringStatuses } from "@/lib/taskDisplay";
 import {
@@ -1082,9 +1082,12 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
             liveRef.current.tasks = removeById(liveRef.current.tasks, id);
             shadowRef.current.tasks = removeById(shadowRef.current.tasks, id);
           } else {
+            // Слияние, а не замена: строка с неотправленной работой на экране
+            // остаётся как есть (см. mergeIncoming — так терялся «Успех»).
             const t = taskFromRow(payload.new as TaskRow);
-            liveRef.current.tasks = upsertById(liveRef.current.tasks, t);
-            shadowRef.current.tasks = upsertById(shadowRef.current.tasks, snapshotList([t])[0]);
+            const merged = mergeIncoming(liveRef.current.tasks, shadowRef.current.tasks, t, snapshotList([t])[0], taskToRow);
+            liveRef.current.tasks = merged.live;
+            shadowRef.current.tasks = merged.shadow;
           }
           setTasks(liveRef.current.tasks);
         })
@@ -1095,8 +1098,9 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
             shadowRef.current.meetings = removeById(shadowRef.current.meetings, id);
           } else {
             const m = meetingFromRow(payload.new as MeetingRow);
-            liveRef.current.meetings = upsertById(liveRef.current.meetings, m);
-            shadowRef.current.meetings = upsertById(shadowRef.current.meetings, snapshotList([m])[0]);
+            const merged = mergeIncoming(liveRef.current.meetings, shadowRef.current.meetings, m, snapshotList([m])[0], meetingToRow);
+            liveRef.current.meetings = merged.live;
+            shadowRef.current.meetings = merged.shadow;
           }
           setMeetings(liveRef.current.meetings);
         })
@@ -1107,8 +1111,9 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
             shadowRef.current.ideas = removeById(shadowRef.current.ideas, id);
           } else {
             const i = ideaFromRow(payload.new as IdeaRow);
-            liveRef.current.ideas = upsertById(liveRef.current.ideas, i);
-            shadowRef.current.ideas = upsertById(shadowRef.current.ideas, snapshotList([i])[0]);
+            const merged = mergeIncoming(liveRef.current.ideas, shadowRef.current.ideas, i, snapshotList([i])[0], ideaToRow);
+            liveRef.current.ideas = merged.live;
+            shadowRef.current.ideas = merged.shadow;
           }
           setIdeas(liveRef.current.ideas);
         })
