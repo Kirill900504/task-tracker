@@ -49,10 +49,7 @@ export async function sendToPerson(
   const targets = await chatsForPerson(admin, ownerId, person);
   if (!targets.length) return 0;
   const chosen = isSelfAssignee(person.name) ? targets : targets.slice(0, 1);
-  let sent = 0;
-  for (const target of chosen) {
-    const result = await sendToColleague(target, text, buttons);
-    if (result.ok) sent++;
-  }
-  return sent;
+  // Во все выбранные чаты — одновременно (у владельца их два: Telegram и MAX).
+  const results = await Promise.all(chosen.map((target) => sendToColleague(target, text, buttons)));
+  return results.filter((r) => r.ok).length;
 }

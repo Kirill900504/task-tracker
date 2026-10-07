@@ -149,11 +149,9 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"));
       const text = to
         ? "📅 Новый срок по задаче «" + task.title + "»: " + fmtDate(to)
         : "📅 С задачи «" + task.title + "» сняли срок";
-      for (const person of ((people || []) as ColleagueRow[])) {
-        // К сведению — без кнопок, по той же причине, что и ответ на просьбу
-        // о переносе ниже.
-        await sendToPerson(admin, task.user_id, person, text);
-      }
+      // К сведению — без кнопок, по той же причине, что и ответ на просьбу
+      // о переносе ниже. Всем сразу, а не по очереди.
+      await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, task.user_id, person, text)));
     }
     return NextResponse.json({ ok: true });
   }

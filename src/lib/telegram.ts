@@ -130,12 +130,17 @@ export function telegramTransport(): BotTransport {
       const result = await sendTelegramMessage(chatId, text, buttons?.length ? { buttons } : undefined);
       return { ok: result.ok, error: result.error, messageId: result.messageId != null ? String(result.messageId) : undefined };
     },
+    // Ответ на нажатие и правка сообщения — два независимых вызова Telegram,
+    // и уходят они одновременно. По очереди это был лишний полёт до серверов
+    // Telegram на каждое нажатие, прямо в том месте, где человек смотрит на
+    // крутилку (замер 07.10.2026, «мессенджеры при нажатии любых кнопок
+    // тупят»).
     async resolveCallback({ callbackId, chatId, messageId, toast, rewriteTo, rewriteButtons }) {
-      await answerCallbackQuery(callbackId, toast);
-      if (rewriteTo && messageId) {
-        const buttons = rewriteButtons?.map((row) => row.map(toInline));
-        await editTelegramMessage(chatId, Number(messageId), rewriteTo, buttons?.length ? { buttons } : undefined);
-      }
+      const buttons = rewriteButtons?.map((row) => row.map(toInline));
+      await Promise.all([
+        answerCallbackQuery(callbackId, toast),
+        rewriteTo && messageId ? editTelegramMessage(chatId, Number(messageId), rewriteTo, buttons?.length ? { buttons } : undefined) : Promise.resolve(),
+      ]);
     },
   };
 }

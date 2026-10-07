@@ -21,6 +21,11 @@ import { MAX_CHANNEL } from "@/lib/botTransport";
 
 export const maxDuration = 60;
 
+// Будильник — см. тот же GET у вебхука Telegram.
+export async function GET() {
+  return NextResponse.json({ ok: true });
+}
+
 function dedupeKey(update: Record<string, unknown>): string | null {
   const type = String(update.update_type || "");
   if (type === "message_callback") {

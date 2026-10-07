@@ -2,6 +2,25 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
+  // Маршруты /api — мимо, и ДО всякого обращения к Supabase.
+  //
+  // `auth.getUser()` ниже — это запрос по сети, и стоял он первой строкой:
+  // его платил каждый вызов из браузера («Принял», «Сделал», отправка в
+  // мессенджер…), хотя маршрут сразу после проверяет пользователя ещё раз
+  // сам, и каждое нажатие кнопки в Telegram и MAX, хотя вебхуку сессия не
+  // нужна вовсе. Перенаправлять /api на страницу входа и так бессмысленно:
+  // браузер получил бы HTML формы вместо ответа. Каждый маршрут /api,
+  // который зовёт браузер, проверяет вход сам (getUser), остальные — своим
+  // секретом или публичны нарочно (проверено 07.10.2026 по всем route.ts).
+  // Токен при этом не протухает: его обновляет клиент в браузере и
+  // прослойка на переходах между страницами.
+  if (request.nextUrl.pathname.startsWith("/api/")) return NextResponse.next({ request });
+  // Публичные страницы — тоже до сетевого запроса: их досрочные выходы ниже
+  // стояли ПОСЛЕ getUser и платили его зря (почему каждая публична —
+  // написано у её проверки ниже).
+  const path = request.nextUrl.pathname;
+  if (["/reset-password", "/join", "/app", "/enter"].some((p) => path.startsWith(p))) return NextResponse.next({ request });
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

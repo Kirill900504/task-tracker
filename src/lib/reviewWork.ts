@@ -205,7 +205,7 @@ async function tellExecutors(
   // Через sendToPerson, а не по чату из строки человека: исполнителем
   // бывает и владелец, а его чат живёт не в этой строке, и рассылка,
   // написанная через chatsFor, для него молчала (см. lib/reach).
-  for (const person of ((people || []) as ColleagueRow[])) {
-    await sendToPerson(admin, task.user_id, person, text, buttons);
-  }
+  // Всем исполнителям сразу, а не по очереди: приёмка задачи на четверых
+  // ждала четыре отправки подряд, прежде чем окно закрывалось (07.10.2026).
+  await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, task.user_id, person, text, buttons)));
 }

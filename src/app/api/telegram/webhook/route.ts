@@ -15,6 +15,13 @@ import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
 // well past the default function timeout — Vercel's default is too short.
 export const maxDuration = 60;
 
+// Будильник: крон напоминаний зовёт это раз в пять минут, чтобы функция не
+// засыпала между редкими нажатиями (см. cron/reminders). Ничего не читает,
+// ничего не пишет и ничего о себе не рассказывает.
+export async function GET() {
+  return NextResponse.json({ ok: true });
+}
+
 export async function POST(req: Request) {
   const secret = req.headers.get("x-telegram-bot-api-secret-token");
   if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {

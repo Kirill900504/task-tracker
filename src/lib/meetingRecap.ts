@@ -40,11 +40,12 @@ export async function deliverRecap(admin: SupabaseClient, meeting: MeetingRef, r
   let sent = 0;
   if (ids.length) {
     const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
-    for (const person of ((people || []) as ColleagueRow[])) {
-      // Кнопка «Ответить» здесь не формальность: с итогом чаще всего и
-      // спорят, и уточнять его будут именно в этот момент.
-      if (await sendToPerson(admin, meeting.user_id, person, text, replyButtons("meeting", meeting.id))) sent++;
-    }
+    // Кнопка «Ответить» здесь не формальность: с итогом чаще всего и спорят,
+    // и уточнять его будут именно в этот момент. Всем сразу, а не по очереди.
+    const delivered = await Promise.all(
+      ((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, meeting.user_id, person, text, replyButtons("meeting", meeting.id))),
+    );
+    sent = delivered.filter(Boolean).length;
   }
 
   await recordEvent(admin, { userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `📝 Итог разослан участникам (${sent})` });

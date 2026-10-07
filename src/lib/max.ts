@@ -175,35 +175,45 @@ export async function editMaxMessage(messageId: string, text: string): Promise<v
 // MAX has no toast of its own: answering a callback either replaces the
 // message or does nothing visible. So the outcome is written into the
 // message where there is one to write, and sent as a plain reply otherwise.
+//
+// Поправка 07.10.2026: подсказка у MAX есть — поле `notification` в том же
+// ответе на нажатие (одноразовое уведомление, наследство TamTam API). До этого
+// подсказка («Отмечено», «Вычеркнул»…) уходила ОТДЕЛЬНЫМ сообщением в чат и
+// оставалась в истории навсегда — «лишние оповещения» из его же слов. Теперь
+// она идёт уведомлением; если MAX её не примет, ответ скажет false, и
+// вызывающий отправит её строкой, как раньше, — нажатие не останется немым.
 export async function answerMaxCallback(
   callbackId: string,
   replacementText?: string,
   buttons?: BotButton[][],
-): Promise<void> {
+  notification?: string,
+): Promise<boolean> {
   const settings = await maxSettings();
-  if (!settings) return;
+  if (!settings) return false;
   try {
-    await russianFetch(`${API}/answers?callback_id=${encodeURIComponent(callbackId)}`, {
+    const res = await russianFetch(`${API}/answers?callback_id=${encodeURIComponent(callbackId)}`, {
       method: "POST",
       headers: headers(settings.token),
-      body: JSON.stringify(
-        replacementText
+      body: JSON.stringify({
+        ...(replacementText
           ? {
               message: {
                 text: clip(replacementText),
                 // Пустой массив снимает кнопки, непустой — заменяет их. В
                 // MAX это единственный способ оставить действие доступным
-                // после нажатия: всплывающих подсказок тут нет, и
-                // переписанное сообщение — весь ответ, который человек
-                // увидит.
+                // после нажатия: переписанное сообщение — весь ответ,
+                // который человек увидит.
                 attachments: buttons?.length ? [keyboardAttachment(buttons)] : [],
               },
             }
-          : {},
-      ),
+          : {}),
+        ...(notification ? { notification: clip(notification) } : {}),
+      }),
     });
+    return res.ok;
   } catch {
     /* the action itself has already happened */
+    return false;
   }
 }
 
@@ -219,11 +229,16 @@ export function maxTransport(): BotTransport {
         await answerMaxCallback(callbackId, rewriteTo, rewriteButtons);
         return;
       }
-      await answerMaxCallback(callbackId);
       // Молчать нельзя — нажатие без ответа читается как сломанная кнопка,
       // — но и повторять «Открываю» перед самим ответом незачем: он уже
-      // едет следом (см. `more` в botTransport).
-      if (toast && !more) await sendMaxMessage(chatId, toast);
+      // едет следом (см. `more` в botTransport). Подсказка — уведомлением,
+      // а строкой в чат только если MAX уведомление не принял.
+      const hint = toast && !more ? toast : undefined;
+      const shown = await answerMaxCallback(callbackId, undefined, undefined, hint);
+      if (hint && !shown) {
+        await answerMaxCallback(callbackId);
+        await sendMaxMessage(chatId, hint);
+      }
     },
   };
 }

@@ -75,14 +75,10 @@ async function deliver(
   text: string,
   buttons: Parameters<typeof sendToColleague>[2],
 ): Promise<{ ok: boolean; error?: string }> {
-  let error = "";
-  let ok = false;
-  for (const target of person.targets) {
-    const result = await sendToColleague(target, text, buttons);
-    if (result.ok) ok = true;
-    else error = result.error || error;
-  }
-  return ok ? { ok: true } : { ok: false, error };
+  // В оба мессенджера человека — одновременно (см. «одновременно» ниже).
+  const results = await Promise.all(person.targets.map((target) => sendToColleague(target, text, buttons)));
+  if (results.some((r) => r.ok)) return { ok: true };
+  return { ok: false, error: results.map((r) => r.error).filter(Boolean).pop() || "" };
 }
 
 // «Никому не дошло» — ответ, а не ошибка запроса, поэтому со статусом 200 и
@@ -151,11 +147,17 @@ export async function POST(req: Request) {
       roleOf.set(r.assignee_id, r.role);
     }
 
-    for (const person of linked) {
-      const result = await deliver(person, taskMessage(task, from), taskButtons(task.id as string, roleOf.get(person.id) || "executor"));
-      if (result.ok) sentTo.push(person.name);
-      else failed.push(`${person.name} (${result.error})`);
-    }
+    // Всем адресатам — одновременно, а не по очереди: каждая отправка — это
+    // полёт до Telegram или (из Франкфурта) до MAX в России, и задача на
+    // шестерых ждала шесть таких полётов подряд, пока кнопка «крутилась»
+    // (07.10.2026). Итог раскладывается в исходном порядке людей.
+    const results = await Promise.all(
+      linked.map((person) => deliver(person, taskMessage(task, from), taskButtons(task.id as string, roleOf.get(person.id) || "executor"))),
+    );
+    results.forEach((result, i) => {
+      if (result.ok) sentTo.push(linked[i].name);
+      else failed.push(`${linked[i].name} (${result.error})`);
+    });
     if (sentTo.length) await admin.from("tasks").update({ sent_at: new Date().toISOString() }).eq("id", id);
   }
 
@@ -168,11 +170,11 @@ export async function POST(req: Request) {
     if (!linked.length) {
       return NextResponse.json({ error: nobodyReachable(unlinked, "Некому отправлять"), unreachable: unlinked });
     }
-    for (const person of linked) {
-      const result = await deliver(person, meetingMessage(meeting, from), meetingButtons(meeting.id as string));
-      if (result.ok) sentTo.push(person.name);
-      else failed.push(`${person.name} (${result.error})`);
-    }
+    const results = await Promise.all(linked.map((person) => deliver(person, meetingMessage(meeting, from), meetingButtons(meeting.id as string))));
+    results.forEach((result, i) => {
+      if (result.ok) sentTo.push(linked[i].name);
+      else failed.push(`${linked[i].name} (${result.error})`);
+    });
     if (sentTo.length) await admin.from("meetings").update({ sent_at: new Date().toISOString() }).eq("id", id);
   }
 
@@ -184,18 +186,26 @@ export async function POST(req: Request) {
     if (!linked.length) {
       return NextResponse.json({ error: nobodyReachable(unlinked, "Выберите, кому отправить"), unreachable: unlinked });
     }
-    for (const person of linked) {
-      const result = await deliver(person, ideaMessage(idea.text as string, from), ideaButtons(idea.id as string));
-      if (result.ok) {
-        sentTo.push(person.name);
-        // Кому мысль ушла — теперь строка, а не только факт отправки:
-        // получатель увидит её у себя на экране, а не только в чате, и
-        // будет видно, во что она превратилась.
-        await admin
-          .from("idea_recipients")
-          .insert({ idea_id: idea.id, assignee_id: person.id, user_id: user.id })
-          .then(() => undefined, () => undefined);
-      } else failed.push(`${person.name} (${result.error})`);
+    const results = await Promise.all(linked.map((person) => deliver(person, ideaMessage(idea.text as string, from), ideaButtons(idea.id as string))));
+    const reached = linked.filter((_, i) => results[i].ok);
+    results.forEach((result, i) => {
+      if (result.ok) sentTo.push(linked[i].name);
+      else failed.push(`${linked[i].name} (${result.error})`);
+    });
+    // Кому мысль ушла — теперь строка, а не только факт отправки:
+    // получатель увидит её у себя на экране, а не только в чате, и будет
+    // видно, во что она превратилась. Одной записью на всех — upsert с
+    // пропуском дублей: у таблицы unique (idea_id, assignee_id), и вставка
+    // пачкой при повторной отправке тому же человеку упала бы ЦЕЛИКОМ,
+    // унеся с собой и новых получателей (правило из CLAUDE.md).
+    if (reached.length) {
+      await admin
+        .from("idea_recipients")
+        .upsert(
+          reached.map((person) => ({ idea_id: idea.id, assignee_id: person.id, user_id: user.id })),
+          { onConflict: "idea_id,assignee_id", ignoreDuplicates: true },
+        )
+        .then(() => undefined, () => undefined);
     }
     if (sentTo.length) await admin.from("ideas").update({ sent_at: new Date().toISOString() }).eq("id", id);
   }

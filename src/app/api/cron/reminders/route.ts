@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyAuthor, notifyOwner } from "@/lib/botDelivery";
 import { flushNotices } from "@/lib/noticeQueue";
@@ -7,7 +7,7 @@ import { isRussianWorkingDay } from "@/lib/workCalendar";
 import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
 import { briefButtons } from "@/lib/ownerQueries";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
-import { dueReminder, minutesUntil, ownerReminder, participantReminder, reasonNudge, recapAsk, recapButtons, recapDue } from "@/lib/meetingReminders";
+import { dueReminder, minutesUntil, organizerNeedsReminder, ownerReminder, participantReminder, reasonNudge, recapAsk, recapButtons, recapDue } from "@/lib/meetingReminders";
 import { awaitingReason, voteTally, type MeetingVote } from "@/lib/meetingVotes";
 import { chatsFor, meetingButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
@@ -21,8 +21,8 @@ import { findSilent, composeSilence } from "@/lib/silence";
 import { setMaxCommands, setTelegramCommands, syncTelegramAppButtons } from "@/lib/botCommands";
 import { alarmText, findStuck, nudgeText } from "@/lib/escalation";
 import { findWaiting, unacceptedText, unreviewedText } from "@/lib/waitingNudges";
-import { endsAt, normalizeDuration, warnBefore } from "@/lib/meetingTime";
-import { endingSoonText, timeIsUpText } from "@/lib/meetingNudges";
+import { normalizeDuration } from "@/lib/meetingTime";
+import { timeIsUpText } from "@/lib/meetingNudges";
 import { buildOwnerWeekly, composeOwnerWeekly, loadOwnerWeekly } from "@/lib/ownerWeekly";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
@@ -131,6 +131,21 @@ export async function GET(req: Request) {
   if (!secret || (!headerAuth && !queryAuth)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
+
+  // Разбудить вебхуки ботов — раз уж крон и так ходит каждые пять минут.
+  //
+  // Замер 07.10.2026 («мессенджеры при нажатии любых кнопок тупят»): тёплый
+  // вебхук отвечает за 0,3–0,5 с, а нажатие, попавшее на уснувший — за
+  // 1,1–1,8 с, и между редкими нажатиями четырнадцати человек он засыпает
+  // постоянно. GET вебхука ничего не делает и ничего не открывает (см.
+  // GET в обоих route.ts) — он только поднимает функцию. После ответа
+  // крону, чтобы не задерживать его самого.
+  after(() =>
+    Promise.allSettled([
+      fetch(new URL("/api/telegram/webhook", url), { method: "GET", cache: "no-store" }),
+      fetch(new URL("/api/max/webhook", url), { method: "GET", cache: "no-store" }),
+    ]).then(() => undefined),
+  );
 
   const admin = createAdminClient();
   const now = moscowNow();
@@ -528,16 +543,18 @@ export async function GET(req: Request) {
       if (m.date === today) {
         const minutes = normalizeDuration((m as { duration_min?: number }).duration_min);
         const finish = startMinutes + minutes;
-        const sinceWarn = nowMin - (finish - warnBefore(minutes));
         const sinceEnd = nowMin - finish;
 
         // Окно в четверть часа, а не точная минута: крон ходит раз в
         // несколько минут и на точное совпадение не попадёт никогда.
-        if (sinceWarn >= 0 && sinceWarn < 15) {
-          await onceOnly(admin, { userId, kind: "meeting_ending", refId: m.id, date: today }, async () => {
-            await tellMeetingPeople(admin, userId, m, endingSoonText(m.title, endsAt(m.time, minutes), m.id));
-          });
-        }
+        //
+        // Предупреждение «осталось десять минут» всем участникам убрано
+        // 07.10.2026 («убери лишние оповещения»): два сигнала об одном конце
+        // — это два сообщения каждому, кто сидит за столом. Остался сам
+        // конец времени — ровно то, о чём он просил 20.09.2026: чтобы после
+        // отведённого времени шли работать. Текст предупреждения остался в
+        // lib/meetingNudges (endingSoonText) — вернуть его значит вернуть
+        // один вызов здесь.
         if (sinceEnd >= 0 && sinceEnd < 15) {
           await onceOnly(admin, { userId, kind: "meeting_over", refId: m.id, date: today }, async () => {
             await tellMeetingPeople(admin, userId, m, timeIsUpText(m.title, m.id));
@@ -574,10 +591,13 @@ export async function GET(req: Request) {
 
       const tally = voteTally(votes, round);
 
-      const { error: ownerDup } = await admin
-        .from("telegram_notifications")
-        .insert({ user_id: userId, kind: window.kind, ref_id: m.id, notif_date: today });
-      if (!ownerDup) await tellOrganizer(admin, userId, m.created_by ?? null, [], false, ownerReminder(window.kind, m.title, when, tally));
+      // Организатору — только когда есть что сказать (organizerNeedsReminder).
+      if (organizerNeedsReminder(window.kind, tally)) {
+        const { error: ownerDup } = await admin
+          .from("telegram_notifications")
+          .insert({ user_id: userId, kind: window.kind, ref_id: m.id, notif_date: today });
+        if (!ownerDup) await tellOrganizer(admin, userId, m.created_by ?? null, [], false, ownerReminder(window.kind, m.title, when, tally));
+      }
 
       // Кому именно писать: молчащим — вопрос, согласившимся — напоминание.
       const wanted = window.audience === "unanswered" ? tally.pending : tally.yes;

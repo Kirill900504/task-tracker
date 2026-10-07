@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueReminder, minutesUntil, ownerReminder, participantReminder, recapAsk, recapDue } from "./meetingReminders";
+import { dueReminder, minutesUntil, organizerNeedsReminder, ownerReminder, participantReminder, recapAsk, recapDue } from "./meetingReminders";
 
 describe("сколько осталось до встречи", () => {
   it("сегодняшняя считается по часам", () => {
@@ -94,5 +94,25 @@ describe("когда спрашивать про итог", () => {
   it("первый вопрос вежливее второго", () => {
     expect(recapAsk("meeting_recap", "Планёрка", "09.09.2026, 10:00")).toContain("Что решили?");
     expect(recapAsk("meeting_recap_day2", "Планёрка", "09.09.2026, 10:00")).toContain("до сих пор нет итога");
+  });
+});
+
+// «Убери лишние оповещения» (07.10.2026): организатор получал сводку в
+// каждом из трёх окон. Теперь — только когда в ней есть что-то для решения.
+describe("organizerNeedsReminder", () => {
+  const quiet = { no: [], pending: [] };
+  const open = { no: [], pending: ["Аня"] };
+  const refused = { no: [{ name: "Борис" }], pending: [] };
+
+  it("за 15 минут — всегда", () => {
+    expect(organizerNeedsReminder("meeting_soon", quiet)).toBe(true);
+  });
+  it("за сутки — только если кто-то молчит или отказался", () => {
+    expect(organizerNeedsReminder("meeting_24h", quiet)).toBe(false);
+    expect(organizerNeedsReminder("meeting_24h", open)).toBe(true);
+    expect(organizerNeedsReminder("meeting_24h", refused)).toBe(true);
+  });
+  it("за два часа — никогда: нового против суточной нет", () => {
+    expect(organizerNeedsReminder("meeting_2h", open)).toBe(false);
   });
 });

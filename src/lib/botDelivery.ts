@@ -29,12 +29,17 @@ export async function activeChannels(): Promise<BotChannelConfig[]> {
 export type OwnerChat = { channel: BotChannelConfig; chatId: number };
 
 export async function ownerChats(admin: SupabaseClient, userId: string): Promise<OwnerChat[]> {
+  // Обе таблицы — одним заходом, а не по очереди (тот же приём, что у
+  // findActorByChat: вопросы, не зависящие друг от друга, задаются разом).
+  const channels = await activeChannels();
+  const rows = await Promise.all(
+    channels.map((channel) => admin.from(channel.accountsTable).select(channel.chatColumn).eq("user_id", userId).limit(1).maybeSingle()),
+  );
   const out: OwnerChat[] = [];
-  for (const channel of await activeChannels()) {
-    const { data } = await admin.from(channel.accountsTable).select(channel.chatColumn).eq("user_id", userId).limit(1).maybeSingle();
-    const chatId = (data as Record<string, number> | null)?.[channel.chatColumn];
-    if (chatId != null) out.push({ channel, chatId });
-  }
+  rows.forEach(({ data }, i) => {
+    const chatId = (data as Record<string, number> | null)?.[channels[i].chatColumn];
+    if (chatId != null) out.push({ channel: channels[i], chatId });
+  });
   return out;
 }
 
@@ -51,9 +56,7 @@ export async function notifyOwner(
   buttons?: BotButton[][],
 ): Promise<number> {
   const chats = await ownerChats(admin, userId);
-  for (const chat of chats) {
-    await transportFor(chat.channel).send(chat.chatId, text, buttons?.length ? { buttons } : undefined);
-  }
+  await Promise.all(chats.map((chat) => transportFor(chat.channel).send(chat.chatId, text, buttons?.length ? { buttons } : undefined)));
   return chats.length;
 }
 

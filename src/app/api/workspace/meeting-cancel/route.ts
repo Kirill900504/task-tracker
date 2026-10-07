@@ -71,11 +71,14 @@ export async function POST(req: Request) {
   let sent = 0;
   if (ids.length) {
     const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
-    for (const person of ((people || []) as ColleagueRow[])) {
-      // Без кнопок: отвечать на отмену нечем, а «Буду» под ней читалось бы
-      // как вопрос.
-      if (await sendToPerson(admin, meeting.user_id, person, `🚫 Встреча «${meeting.title}» (${when}) отменена.\n\n${who}: ${reason}`)) sent++;
-    }
+    // Без кнопок: отвечать на отмену нечем, а «Буду» под ней читалось бы
+    // как вопрос. Всем сразу, а не по очереди.
+    const delivered = await Promise.all(
+      ((people || []) as ColleagueRow[]).map((person) =>
+        sendToPerson(admin, meeting.user_id, person, `🚫 Встреча «${meeting.title}» (${when}) отменена.\n\n${who}: ${reason}`),
+      ),
+    );
+    sent = delivered.filter(Boolean).length;
   }
   return NextResponse.json({ ok: true, sent });
 }
