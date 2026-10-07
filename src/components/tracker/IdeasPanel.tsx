@@ -13,6 +13,35 @@ import type { useToasts } from "@/hooks/useToasts";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { ideasToReview, isReviewDay, reviewWeek } from "@/lib/ideaReview";
+import IdeaReviewModal from "./IdeaReviewModal";
+
+// «Оставить» помнится до конца недели в этом браузере (см. lib/ideaReview).
+// Хранилище может не открыться (приватное окно) — тогда разбор просто
+// забывает оставленное, и это не поломка.
+function readKept(week: string): Set<string> {
+  try {
+    const raw = localStorage.getItem("ideaReviewKept");
+    const saved = raw ? (JSON.parse(raw) as { week: string; ids: string[] }) : null;
+    return new Set(saved && saved.week === week ? saved.ids : []);
+  } catch {
+    return new Set();
+  }
+}
+function writeKept(week: string, ids: Set<string>) {
+  try {
+    localStorage.setItem("ideaReviewKept", JSON.stringify({ week, ids: [...ids] }));
+  } catch {
+    /* см. readKept */
+  }
+}
+
+function plural(n: number): string {
+  const d = n % 10, h = n % 100;
+  if (d === 1 && h !== 11) return "мысль";
+  if (d >= 2 && d <= 4 && (h < 12 || h > 14)) return "мысли";
+  return "мыслей";
+}
 
 export default function IdeasPanel({
   myUserId = "",
@@ -56,6 +85,23 @@ export default function IdeasPanel({
   const visible = sortIdeasForList(ideas, false);
   // Свежевычеркнутые сверху — тем же правилом, что у доски и встреч.
   const done = doneIdeasNewestFirst(ideas);
+
+  // Разбор недели. «Сейчас» берётся один раз на монтирование: панель живёт
+  // день-два, и строка, появившаяся посреди пятницы без перезагрузки, —
+  // не потеря.
+  const [now] = useState(() => new Date());
+  const week = reviewWeek(now);
+  const [kept, setKept] = useState<Set<string>>(() => (typeof window === "undefined" ? new Set() : readKept(week)));
+  const [reviewTotal, setReviewTotal] = useState(0);
+  const queue = ideasToReview(ideas, now, kept, (idea) => isMine(idea, myUserId));
+  const showReview = isReviewDay(now) && queue.length > 0;
+
+  function keep(idea: Idea) {
+    const next = new Set(kept);
+    next.add(idea.id);
+    setKept(next);
+    writeKept(week, next);
+  }
 
   // Фокус — побочное действие над DOM, а не состояние, поэтому эффект
   // здесь на своём месте (правило React-компилятора запрещает setState в
@@ -135,6 +181,11 @@ export default function IdeasPanel({
         </button>
         <MicButton value={text} onChange={setText} onDone={(finalText) => addText(finalText)} title="Надиктовать мысль" />
       </div>
+      {showReview && !reviewTotal && (
+        <button type="button" className="idea-review-strip" id="ideaReviewBtn" onClick={() => setReviewTotal(queue.length)}>
+          {queue.length} {plural(queue.length)} без движения больше недели — разобрать
+        </button>
+      )}
       <div id="ideaList">
         {visible.length === 0 ? (
           <div className="empty">{ideas.length === 0 ? "Пока пусто — запишите первую мысль" : "Нет активных мыслей"}</div>
@@ -157,6 +208,26 @@ export default function IdeasPanel({
           ))
         )}
       </div>
+
+      {/* Превращение закрывает разбор: дальше открывается форма задачи или
+          встречи, и окно разбора под ней было бы вторым уровнем, о котором
+          человек уже забыл. Вернуться к остальным — та же строка. */}
+      {reviewTotal > 0 && (
+        <IdeaReviewModal
+          queue={queue}
+          total={reviewTotal}
+          onTask={(idea) => {
+            setReviewTotal(0);
+            onConvertToTask(idea.id);
+          }}
+          onMeeting={(idea) => {
+            setReviewTotal(0);
+            onConvertToMeeting(idea.id);
+          }}
+          onKeep={keep}
+          onClose={() => setReviewTotal(0)}
+        />
+      )}
 
       {doneOpen && (
         <DoneListModal

@@ -651,6 +651,12 @@
   /* Окно «Загрузка». Уже карточки задачи: в нём одна колонка строк, и
      широкое окно растянуло бы имя от края до края. */
   .load-modal{max-width:520px;}
+  /* Разбор мыслей (lib/ideaReview): строка в панели и окно по одной мысли. */
+  .idea-review-strip{display:block; width:100%; margin:6px 0 8px; padding:9px 12px; text-align:left; border:1px solid var(--accent); border-radius:10px; background:var(--accent-soft); color:inherit; font:inherit; font-size:13px; cursor:pointer;}
+  .idea-review-strip:hover{box-shadow:0 0 0 3px var(--accent-soft);}
+  .idea-review{max-width:480px;}
+  .idea-review-text{margin:10px 0 16px; padding:12px 14px; border-radius:10px; background:var(--accent-soft); font-size:15px; line-height:1.45; overflow-wrap:anywhere; white-space:pre-wrap;}
+  .idea-review-actions{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
   @media (max-width:800px){ .filter-pill{min-height:34px;} }
   @media (max-width:800px){
     .section-tabs{overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; -webkit-overflow-scrolling:touch;}
