@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import MiniCalendar from "@/components/tracker/MiniCalendar";
 import { defaultMeetingStart, startsInPast } from "@/lib/meetingTime";
-import { withoutSelfMark } from "@/lib/actorName";
 import { dateStr } from "@/lib/taskDisplay";
 
 // Тот же рабочий день, что и в карточке встречи: 09:00–18:00 через полчаса.
@@ -19,17 +18,10 @@ const TIME_SLOTS: string[] = (() => {
   return out;
 })();
 
-// Кто из людей встречи занят в это время другой встречей
-// (lib/meetingTime.busyPeople). Переносы — та же дверь, через которую
-// встреча получает время, что и форма, и запрет пересечений обязан стоять
-// и здесь: иначе его обходят одним перетаскиванием на день календаря.
-export type BusyAt = (date: string, time: string) => string[];
-
 interface PendingAsk {
   question: string;
   date: string;
   time: string;
-  busyAt?: BusyAt;
   resolve: (v: { date: string; time: string } | null) => void;
 }
 
@@ -37,9 +29,9 @@ export function useDateTimeConfirm() {
   const [pending, setPending] = useState<PendingAsk | null>(null);
   const pendingRef = useRef<PendingAsk | null>(null);
 
-  const ask = useCallback((question: string, defaultDate: string, defaultTime: string, busyAt?: BusyAt) => {
+  const ask = useCallback((question: string, defaultDate: string, defaultTime: string) => {
     return new Promise<{ date: string; time: string } | null>((resolve) => {
-      const next: PendingAsk = { question, date: defaultDate || "", time: defaultTime || "", busyAt, resolve };
+      const next: PendingAsk = { question, date: defaultDate || "", time: defaultTime || "", resolve };
       pendingRef.current = next;
       setPending(next);
     });
@@ -66,7 +58,6 @@ export function useDateTimeConfirm() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  const busyNow = pending?.busyAt && pending.date && pending.time ? pending.busyAt(pending.date, pending.time) : [];
   const dialog = pending ? (
     <div
       className="overlay open"
@@ -104,14 +95,13 @@ export function useDateTimeConfirm() {
           <div className="time-grid time-grid-compact" id="confirmDateTimeTime">
             {TIME_SLOTS.map((slot) => {
               const past = startsInPast(pending.date, slot);
-              const busy = !past && pending.busyAt && pending.date ? pending.busyAt(pending.date, slot) : [];
               return (
                 <button
                   key={slot}
                   type="button"
-                  className={"time-slot" + (pending.time === slot ? " selected" : "") + (past ? " past" : "") + (busy.length ? " busy" : "")}
-                  disabled={past || busy.length > 0}
-                  title={past ? "Это время уже прошло" : busy.length ? "Заняты: " + busy.map(withoutSelfMark).join(", ") : undefined}
+                  className={"time-slot" + (pending.time === slot ? " selected" : "") + (past ? " past" : "")}
+                  disabled={past}
+                  title={past ? "Это время уже прошло" : undefined}
                   onClick={() => setPending((p) => (p ? { ...p, time: slot } : p))}
                 >
                   {slot}
@@ -124,11 +114,6 @@ export function useDateTimeConfirm() {
               </button>
             )}
           </div>
-          {busyNow.length > 0 && (
-            <div className="field-hint busy-now-hint" id="confirmDateTimeBusy">
-              В {pending.time} уже на другой встрече: {busyNow.map(withoutSelfMark).join(", ")}. Выберите свободное время.
-            </div>
-          )}
         </div>
         <div className="modal-actions">
           <div className="left"></div>
@@ -139,7 +124,7 @@ export function useDateTimeConfirm() {
             <button
               className="btn btn-primary"
               id="confirmDateTimeOkBtn"
-              disabled={!pending.date || startsInPast(pending.date, pending.time || "23:59") || busyNow.length > 0}
+              disabled={!pending.date || startsInPast(pending.date, pending.time || "23:59")}
               onClick={() => finish(pending.date ? { date: pending.date, time: pending.time } : null)}
             >
               ОК

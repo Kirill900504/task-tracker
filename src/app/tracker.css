@@ -1881,24 +1881,15 @@
   }
   .time-slot:hover{border-color:var(--accent); color:var(--accent);}
   .time-slot.selected{background:var(--accent); border-color:var(--accent); color:#F3F8FA; font-weight:700;}
-  /* Время, в которое кто-то из приглашённых уже занят, — заперто
-     (07.10.2026, «более контрастно выделять занятые интервалы и сделать их
-     невозможными для выбора»). Прежняя серая штриховка с прозрачностью на
-     тёмном фоне сливалась с прошедшим временем и с обычной кнопкой: тот же
-     урок, что у корешков ролей, — приглушённость на тёмном стирает. Поэтому
-     красный цвет «занято» (как у имени занятого человека ниже), красная
-     штриховка и перечёркнутая цифра: три признака, ни один не прозрачный.
-     Выбранное и вдруг занятое (позвали человека после выбора времени) —
-     сплошной красный: сохранить его нельзя, и это видно сразу. */
+  /* Время, в которое кто-то из приглашённых уже занят.
+     Приглушённое и с полоской, а НЕ запрещённое: поставить встречу поверх
+     другой иногда и правда решают, а вот не знать об этом — нельзя.
+     Выбранное состояние сильнее занятого: человек уже согласился. */
   .time-slot.busy{
-    color:var(--high); border-color:var(--high); cursor:not-allowed; text-decoration:line-through;
-    background:repeating-linear-gradient(135deg, var(--paper-soft), var(--paper-soft) 5px, color-mix(in srgb, var(--high) 28%, transparent) 5px, color-mix(in srgb, var(--high) 28%, transparent) 7px);
+    color:var(--ink-label); border-style:dashed; opacity:.75;
+    background:repeating-linear-gradient(135deg, var(--paper-soft), var(--paper-soft) 4px, var(--line-soft) 4px, var(--line-soft) 5px);
   }
-  .time-slot.busy:hover{color:var(--high); border-color:var(--high);}
-  .time-slot.busy.selected{color:#F3F8FA; background:var(--high); border-color:var(--high);}
-  /* Вариант выбора кнопками, который сейчас недоступен (ChipChoice). */
-  .participant-chip:disabled{opacity:.45; cursor:not-allowed; box-shadow:none; transform:none; text-decoration:line-through;}
-  .participant-chip:disabled:hover{border-color:var(--line-soft); color:var(--ink);}
+  .time-slot.busy.selected{opacity:1; color:#F3F8FA; background:var(--accent); border-style:solid;}
   /* Сегодняшнее время, которое уже прошло: приглушено, но нажимается —
      задним числом встречу иногда записывают сознательно (см. MeetingModal). */
   .time-slot.past{opacity:.3; cursor:not-allowed; text-decoration:line-through;}

@@ -15,10 +15,7 @@ import type { ReactNode } from "react";
 // остались полями ввода — правило про кнопки касается выбора из нескольких,
 // а не любого ввода вообще.
 
-// disabled — вариант, который сейчас выбрать нельзя (час встречи, заходящий
-// на чужую). Он остаётся на месте, а не пропадает: исчезающая кнопка двигает
-// соседние, и «почему нет часа» без неё не спросить.
-export type Chip<T extends string> = { value: T; label: string; title?: string; disabled?: boolean };
+export type Chip<T extends string> = { value: T; label: string; title?: string };
 
 export default function ChipChoice<T extends string>({
   id,
@@ -47,7 +44,6 @@ export default function ChipChoice<T extends string>({
           data-value={o.value}
           aria-pressed={value === o.value}
           title={o.title}
-          disabled={o.disabled}
           onClick={() => onSelect(o.value)}
         >
           {o.label}
