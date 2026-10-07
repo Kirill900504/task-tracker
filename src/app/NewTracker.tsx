@@ -628,6 +628,8 @@ export default function NewTracker() {
             dateTimeConfirm={dateTimeConfirm}
             onIdeaDroppedOnDate={ideaDroppedOnDate}
             onTaskDroppedOnDate={taskDroppedOnDate}
+            onOpenTask={setOpenExistingTaskId}
+            onOpenMeeting={setOpenExistingMeetingId}
             onRescheduleMeeting={(meeting, date, time) => {
               const moved = { ...meeting, date, time: time || meeting.time };
               actions.saveMeeting(moved);

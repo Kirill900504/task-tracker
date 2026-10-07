@@ -8,6 +8,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import PopLayer from "./PopLayer";
+import DayPeek from "./DayPeek";
 import type { Meeting, Task } from "@/types/tracker";
 import { dateStr, fmtDate, isTaskDueOnDate, todayStr } from "@/lib/taskDisplay";
 import { getMonthGridDates } from "@/lib/calendarLogic";
@@ -47,6 +48,8 @@ export default function CalendarPanel({
   onRescheduleMeeting,
   onIdeaDroppedOnDate,
   onTaskDroppedOnDate,
+  onOpenTask,
+  onOpenMeeting,
   dateTimeConfirm,
   allMeetings,
 }: {
@@ -70,6 +73,9 @@ export default function CalendarPanel({
   // participants and time are chosen in the normal form before saving.
   onIdeaDroppedOnDate: (ideaId: string, date: string) => void;
   onTaskDroppedOnDate: (taskId: string, date: string) => void;
+  // Строка в окне «что на этот день» открывает свою карточку.
+  onOpenTask?: (taskId: string) => void;
+  onOpenMeeting?: (meetingId: string) => void;
   dateTimeConfirm: ReturnType<typeof useDateTimeConfirm>;
 }) {
   const [viewDate, setViewDate] = useState(() => new Date());
@@ -78,7 +84,10 @@ export default function CalendarPanel({
   // cell instead would trap it: .dash-panel sets container-type, which makes it
   // the containing block for position:fixed children, and the panel's own
   // scroll would clip it near the bottom of the list.
-  const [popover, setPopover] = useState<{ date: string; anchor: DOMRect } | null>(null);
+  // peek — правая кнопка: то же место, но вместо двух кнопок «что на этот
+  // день» (DayPeek). Одно состояние на оба, чтобы второй щелчок по клетке
+  // заменял окно, а не ставил второе рядом.
+  const [popover, setPopover] = useState<{ date: string; anchor: DOMRect; peek?: boolean } | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
   // Placed by writing to the DOM once measured (its own size decides whether
@@ -161,6 +170,7 @@ export default function CalendarPanel({
                 (ds === selectedDate ? " selected" : "")
               }
               onClick={(rect) => setPopover({ date: ds, anchor: rect })}
+              onPeek={(rect) => setPopover({ date: ds, anchor: rect, peek: true })}
             >
               {cd.getDate()}
               {dueTasks.length > 0 && <div className="cal-dot" />}
@@ -169,7 +179,51 @@ export default function CalendarPanel({
           );
         })}
       </div>
+      {popover?.peek && (
+        <PopLayer>
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 299 }}
+            onClick={() => setPopover(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setPopover(null);
+            }}
+          />
+          <div ref={popoverRef} style={{ position: "fixed", zIndex: 300, top: -9999, left: -9999 }} onClick={(e) => e.stopPropagation()}>
+            <DayPeek
+              date={popover.date}
+              tasks={(() => {
+                const [y, m, d] = popover.date.split("-").map(Number);
+                const day = new Date(y, m - 1, d);
+                return tasks.filter((t) => onCalendar(t, day, popover.date));
+              })()}
+              // Перенесённая встреча живёт на новой дате — здесь её строка
+              // была бы второй записью одной договорённости.
+              meetings={meetings.filter((m) => m.date === popover.date && !m.movedToDate)}
+              onOpenTask={(id) => {
+                setPopover(null);
+                onOpenTask?.(id);
+              }}
+              onOpenMeeting={(id) => {
+                setPopover(null);
+                onOpenMeeting?.(id);
+              }}
+              onNewTask={() => {
+                const d = popover.date;
+                setPopover(null);
+                onRequestNewTask(d);
+              }}
+              onNewMeeting={() => {
+                const d = popover.date;
+                setPopover(null);
+                onRequestNewMeeting(d);
+              }}
+            />
+          </div>
+        </PopLayer>
+      )}
       {popover &&
+        !popover.peek &&
         (
           <PopLayer>
             <div style={{ position: "fixed", inset: 0, zIndex: 299 }} onClick={() => setPopover(null)} />
@@ -228,11 +282,13 @@ function CalendarDay({
   date,
   className,
   onClick,
+  onPeek,
   children,
 }: {
   date: string;
   className: string;
   onClick: (rect: DOMRect) => void;
+  onPeek: (rect: DOMRect) => void;
   children: ReactNode;
 }) {
   const { active } = useDragState();
@@ -249,6 +305,11 @@ function CalendarDay({
       onClick={(e) => {
         e.stopPropagation();
         onClick(e.currentTarget.getBoundingClientRect());
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onPeek(e.currentTarget.getBoundingClientRect());
       }}
       style={{ position: "relative" }}
     >
