@@ -16,7 +16,9 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { ideasToReview, isReviewDay, reviewWeek } from "@/lib/ideaReview";
 import IdeaReviewModal from "./IdeaReviewModal";
 import IncomingIdeas from "./IncomingIdeas";
-import { prefetchIdeaInbox, useIdeaRecipients } from "@/hooks/useIdeaRecipients";
+import { useIdeaRecipients } from "@/hooks/useIdeaRecipients";
+import { useColleagues } from "@/hooks/useColleagues";
+import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { incomingFor, sentToByIdea } from "@/lib/ideaRecipients";
 
@@ -39,11 +41,6 @@ function writeKept(week: string, ids: Set<string>) {
     /* см. readKept */
   }
 }
-
-// Рассылку мыслей спрашиваем сразу, как только код трекера загружен, —
-// параллельно с задачами, а не после того, как панель нарисована
-// (см. prefetchIdeaInbox).
-prefetchIdeaInbox();
 
 function plural(n: number): string {
   const d = n % 10, h = n % 100;
@@ -106,13 +103,16 @@ export default function IdeasPanel({
   const showReview = isReviewDay(now) && queue.length > 0;
 
   // Рассылка мыслей: автору — кому ушла его мысль, получателю — что
-  // прислали ему (lib/ideaRecipients). Один хук на панель, и всё нужное
-  // он приносит сам — с кэшем прошлого запуска, чтобы блок появлялся
-  // вместе с мыслями, а не через секунду после них.
+  // прислали ему (lib/ideaRecipients). Один хук на панель.
   const recipients = useIdeaRecipients();
-  const sentTo = sentToByIdea(recipients.rows, recipients.names);
-  const incoming = incomingFor(recipients.rows, recipients.myAssigneeId, myUserId);
-  const people = Object.values(recipients.names);
+  const { colleagues } = useColleagues();
+  const authors = useAuthors();
+  const nameById: Record<string, string> = {};
+  for (const c of colleagues) nameById[c.id] = c.name;
+  const sentTo = sentToByIdea(recipients.rows, nameById);
+  const myAssigneeId = colleagues.find((c) => c.isMe)?.id || "";
+  const incoming = incomingFor(recipients.rows, myAssigneeId, myUserId);
+  const people = colleagues.map((c) => c.name);
 
   function keep(idea: Idea) {
     const next = new Set(kept);
@@ -201,7 +201,7 @@ export default function IdeasPanel({
       </div>
       <IncomingIdeas
         rows={incoming}
-        authorOf={(createdBy) => authorLabel(createdBy || undefined, recipients.authors, people)}
+        authorOf={(createdBy) => authorLabel(createdBy || undefined, authors, people)}
         onAnswered={(row, answer) => {
           if (answer === "failed") void recipients.reload();
           else if (answer === "taken") recipients.markLocally(row.id, { convertedTaskId: "pending" });

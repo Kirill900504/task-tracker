@@ -497,6 +497,12 @@
     display:-webkit-box; -webkit-line-clamp:4; line-clamp:4; -webkit-box-orient:vertical; overflow:hidden;
   }
   .idea-meta{font-size:10.5px; color:var(--ink-soft); font-family:var(--display); margin-top:2px; opacity:.85;}
+  /* Нижняя строка мысли: дата слева, кнопки справа (см. IdeaItem — почему
+     кнопки ушли из-под правого края текста). Высота строки постоянная,
+     чтобы короткая и длинная мысль заканчивались одинаково. */
+  .idea-foot{display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:4px; min-height:22px;}
+  .idea-foot .idea-meta{margin-top:0; min-width:0;}
+  .idea-foot .idea-actions{margin-left:auto;}
   .idea-del{cursor:pointer; color:var(--ink-soft); background:none; border:none; font-size:15px; line-height:1; flex:none;}
   .idea-del:hover{color:var(--high);}
   /* No scrollbar of its own: the whole page scrolls instead (see the

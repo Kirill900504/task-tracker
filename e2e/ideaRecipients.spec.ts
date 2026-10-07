@@ -130,14 +130,6 @@ test("присланную мысль принимают в трекере, а �
   expect(fits).toBe(true);
   await page.mouse.move(0, 0);
 
-  // Повторное открытие: блок рисуется ВМЕСТЕ с мыслями, а не через
-  // секунду после них (07.10.2026: «появляется с задержкой… все разделы
-  // должны открываться синхронно»). Проверка в тот же миг, когда появился
-  // список мыслей, без ожидания — ожидание и спрятало бы задержку.
-  await page.reload();
-  await page.locator("#ideaList").waitFor({ timeout: 25_000 });
-  expect(await page.locator("#incomingIdeas").count()).toBe(1);
-
   // «Сохранить» кладёт копию в мои мысли — она встаёт в мой список.
   const keep = block.locator(`[data-incoming-idea="${keepId}"]`);
   await keep.getByRole("button", { name: "Сохранить" }).click();

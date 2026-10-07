@@ -182,92 +182,101 @@ export default function IdeaItem({
             {idea.text}
           </div>
         )}
-        <div className="idea-meta">
-          {idea.createdAt}
-          {sent.length > 0 && (
-            <span
-              className="idea-sent"
-              data-idea-sent={idea.id}
-              onMouseEnter={(e) => setSentAnchor(e.currentTarget.getBoundingClientRect())}
-              onMouseLeave={() => setSentAnchor(null)}
-              onPointerDown={(e) => e.stopPropagation()}
+        {/* Дата и кнопки — ОДНОЙ строкой под текстом, а не колонкой справа
+            от него. Справа ряд из четырёх кнопок отнимал у текста половину
+            узкой панели, и длинная мысль рвалась по слогам в столбик
+            («проконсу-льтировать-ся»), а поле правки сжималось до того же
+            столбика. Слова Кирилла 08.10.2026: «не нравится, как
+            отображаются длинные названия мыслей». Теперь текст идёт во всю
+            ширину карточки. */}
+        <div className="idea-foot">
+          <div className="idea-meta">
+            {idea.createdAt}
+            {sent.length > 0 && (
+              <span
+                className="idea-sent"
+                data-idea-sent={idea.id}
+                onMouseEnter={(e) => setSentAnchor(e.currentTarget.getBoundingClientRect())}
+                onMouseLeave={() => setSentAnchor(null)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setSentAnchor((cur) => (cur ? null : r));
+                }}
+              >
+                <Icon name="send" size={11} /> {answered ? `${answered}/${sent.length}` : sent.length}
+              </span>
+            )}
+          </div>
+          <div className="idea-actions">
+            <button
+              className="idea-flag idea-convert"
+              title="Сделать задачей или встречей"
+              data-convert-idea={idea.id}
               onClick={(e) => {
                 e.stopPropagation();
-                const r = e.currentTarget.getBoundingClientRect();
-                setSentAnchor((cur) => (cur ? null : r));
+                setConvertAt(e.currentTarget.getBoundingClientRect());
               }}
             >
-              <Icon name="send" size={11} /> {answered ? `${answered}/${sent.length}` : sent.length}
-            </span>
-          )}
+              <Icon name="arrow-right" size={15} />
+            </button>
+            {linked.length > 0 && (
+              <button
+                className="idea-flag"
+                title="Отправить в Telegram"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPickerAt(e.currentTarget.getBoundingClientRect());
+                }}
+              >
+                <Icon name="send" size={15} />
+              </button>
+            )}
+            <button
+              className={"idea-flag" + (idea.important ? " active" : "")}
+              title={idea.important ? "Снять пометку «Важно»" : "Отметить «Важно»"}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleImportant();
+              }}
+            >
+              <Icon name="flag" size={15} />
+            </button>
+            {/* Чужая мысль, присланная мне: единственное, что с ней можно
+                сделать, — взять в работу. Заводить себе задачу из браузера
+                нельзя (в свою задачу исполнителем себя не впишешь — писать в
+                task_participants вправе владелец пространства), поэтому идёт
+                это тем же серверным маршрутом, что и кнопка под сообщением
+                бота. Раньше кнопка была только там и на экране «Что от вас
+                ждут», которого больше нет. */}
+            {!canEdit && !idea.done && (
+              <button
+                className="idea-take"
+                title="Завести себе задачу из этой мысли"
+                disabled={taking}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void takeIntoWork();
+                }}
+              >
+                {taking ? "…" : "＋ В работу"}
+              </button>
+            )}
+            {canEdit && (
+              <button
+                className="idea-del"
+                title="Удалить"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              >
+                <Icon name="close" size={15} />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
-      <div className="idea-actions">
-        <button
-          className="idea-flag idea-convert"
-          title="Сделать задачей или встречей"
-          data-convert-idea={idea.id}
-          onClick={(e) => {
-            e.stopPropagation();
-            setConvertAt(e.currentTarget.getBoundingClientRect());
-          }}
-        >
-          <Icon name="arrow-right" size={15} />
-        </button>
-        {linked.length > 0 && (
-          <button
-            className="idea-flag"
-            title="Отправить в Telegram"
-            onClick={(e) => {
-              e.stopPropagation();
-              setPickerAt(e.currentTarget.getBoundingClientRect());
-            }}
-          >
-            <Icon name="send" size={15} />
-          </button>
-        )}
-        <button
-          className={"idea-flag" + (idea.important ? " active" : "")}
-          title={idea.important ? "Снять пометку «Важно»" : "Отметить «Важно»"}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleImportant();
-          }}
-        >
-          <Icon name="flag" size={15} />
-        </button>
-        {/* Чужая мысль, присланная мне: единственное, что с ней можно
-            сделать, — взять в работу. Заводить себе задачу из браузера
-            нельзя (в свою задачу исполнителем себя не впишешь — писать в
-            task_participants вправе владелец пространства), поэтому идёт
-            это тем же серверным маршрутом, что и кнопка под сообщением
-            бота. Раньше кнопка была только там и на экране «Что от вас
-            ждут», которого больше нет. */}
-        {!canEdit && !idea.done && (
-          <button
-            className="idea-take"
-            title="Завести себе задачу из этой мысли"
-            disabled={taking}
-            onClick={(e) => {
-              e.stopPropagation();
-              void takeIntoWork();
-            }}
-          >
-            {taking ? "…" : "＋ В работу"}
-          </button>
-        )}
-        {canEdit && (
-          <button
-            className="idea-del"
-            title="Удалить"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-          >
-            <Icon name="close" size={15} />
-          </button>
-        )}
       </div>
       {sendNote && <div className="send-result">{sendNote}</div>}
       {convertAt && (
