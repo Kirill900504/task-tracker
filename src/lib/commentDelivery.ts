@@ -4,6 +4,7 @@ import { notifyAuthor, notifyOwner } from "@/lib/botDelivery";
 import { sendToPerson } from "@/lib/reach";
 import { queueNotice } from "@/lib/noticeQueue";
 import { actorName, withoutSelfMark } from "@/lib/actorName";
+import { organizerRowId, proposalAcceptButtons, proposalVoteButtons, proposalWhen, type Proposal } from "@/lib/meetingProposal";
 
 // Кто должен услышать про сообщение в обсуждении.
 //
@@ -156,6 +157,35 @@ export async function deliverComment(admin: SupabaseClient, commentId: string): 
   const authorName =
     withoutSelfMark((comment.author_assignee_id && byId.get(comment.author_assignee_id)?.name) || "") ||
     (comment.author_user_id ? await actorName(admin, comment.user_id, comment.author_user_id, "Участник") : "Участник");
+
+  // Предложение другого времени — отдельной дорогой: у участников под ним
+  // «👍 Подходит / 👎 Не подходит», у организатора — «📅 Перенести на это
+  // время» (lib/meetingProposal). Организатору — сразу, а не строкой в
+  // сводку: решать ему, и до сводки встреча может уже начаться.
+  const proposal = comment.proposal as Proposal | null | undefined;
+  if (comment.item_kind === "meeting" && proposal?.date) {
+    const organizer = await organizerRowId(admin, { user_id: comment.user_id, created_by: createdBy });
+    const reason = (comment.body.split(" — ")[1] || "").split(".\n")[0].trim();
+    const head = `🕐 ${authorName} предлагает перенести встречу «${title}» на ${proposalWhen(proposal)}${reason ? `\n\n${reason}` : ""}`;
+    const sends: Promise<number>[] = [];
+    for (const assigneeId of wanted) {
+      const person = byId.get(assigneeId);
+      if (!person || assigneeId === organizer) continue;
+      sends.push(sendToPerson(admin, comment.user_id, person, head + "\n\nПодходит вам?", proposalVoteButtons(comment.id)));
+    }
+    const org = organizer && organizer !== comment.author_assignee_id ? byId.get(organizer) : undefined;
+    if (org) {
+      sends.push(
+        sendToPerson(admin, comment.user_id, org, head + "\n\nУчастники ответят 👍 / 👎 — решаете вы.", [
+          ...proposalAcceptButtons(comment.id),
+          ...replyButtons("meeting", comment.item_id),
+        ]),
+      );
+    }
+    const counts = await Promise.all(sends);
+    const total = counts.reduce((a, b) => a + b, 0);
+    return { delivered: total, skipped: total ? null : "no-audience" };
+  }
 
   const fileCount = (comment.attachments || []).length;
   const text = commentText(authorName, comment.item_kind, title, comment.body, fileCount);

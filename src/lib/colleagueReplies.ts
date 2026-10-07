@@ -16,6 +16,7 @@ import type { ColleagueQuery } from "@/lib/colleagueQueries";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import type { Notice } from "@/lib/noticeQueue";
 import { mirrorAnswer, type MirrorRef } from "@/lib/botMirror";
+import { acceptProposal, voteOnProposal } from "@/lib/meetingProposal";
 
 // What happens when a colleague presses a button under a task or a meeting.
 //
@@ -166,7 +167,7 @@ export async function handleColleagueCallback(
   // же элементе — в другом мессенджере в первую очередь (lib/botMirror).
   // Сделает это вебхук, когда переписано нажатое: он знает, какое
   // сообщение пропустить.
-  if ((action.kind === "task" || action.kind === "meeting") && !["msg", "list", "show", "who"].includes(action.action)) {
+  if ((action.kind === "task" || action.kind === "meeting") && !["msg", "list", "show", "who", "pyes", "pno", "pacc"].includes(action.action)) {
     outcome.mirror = { kind: action.kind, itemId: action.id, assigneeId: colleague.id };
   }
   return outcome;
@@ -434,6 +435,15 @@ async function colleagueCallback(
         say: `📅 Прошу перенести «${task.title}» на ${fmtDate(date)}.\nНапишите одним сообщением, что мешает успеть — это увидит постановщик, и решение за ним.`,
       };
     }
+  }
+
+  // Предложение другого времени: голос участника и перенос организатором
+  // (lib/meetingProposal). Id в кнопке — реплики, а не встречи.
+  if (action.kind === "meeting" && (action.action === "pyes" || action.action === "pno")) {
+    return voteOnProposal(admin, colleague, action.id, action.action === "pyes");
+  }
+  if (action.kind === "meeting" && action.action === "pacc") {
+    return acceptProposal(admin, colleague, action.id);
   }
 
   if (action.kind === "meeting" && (action.action === "yes" || action.action === "no" || action.action === "late")) {
