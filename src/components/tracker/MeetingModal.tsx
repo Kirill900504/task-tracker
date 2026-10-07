@@ -604,10 +604,18 @@ export default function MeetingModal({
               />
               {/* Путь к изменению — здесь же, а не «где-то в списке». Кнопка
                   открывает форму новой встречи с тем же составом: перенести и
-                  заодно поправить, кого зовём, — одно действие. */}
-              {onReschedule && !resolved && (
-                <button type="button" className="btn btn-small meeting-move-btn" id="meetingMoveBtn" onClick={onReschedule}>
-                  <Icon name="calendar" size={15} /> Перенести — и поправить время или состав
+                  заодно поправить, кого зовём, — одно действие. Только у
+                  организатора (canEdit): панель и так не передаёт
+                  onReschedule участнику, а проверка здесь — чтобы новый
+                  вход в окно не вернул кнопку молча. Это главное действие
+                  организатора над назначенной встречей, поэтому кнопка —
+                  заливкой во всю ширину, а не серой строкой под сводкой:
+                  07.10.2026 «она не заметна визуально». */}
+              {onReschedule && canEdit && !resolved && (
+                <button type="button" className="btn btn-primary meeting-move-btn" id="meetingMoveBtn" onClick={onReschedule}>
+                  <Icon name="calendar" size={17} />
+                  <span>Перенести встречу</span>
+                  <span className="meeting-move-sub">время или состав</span>
                 </button>
               )}
 

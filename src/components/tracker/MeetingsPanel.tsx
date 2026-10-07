@@ -684,8 +684,13 @@ export default function MeetingsPanel({
           onClose={closeModal}
           onSetStatus={setStatus}
           isMove={!!movingFrom && !modalMeeting}
+          // Перенос — право организатора, как удаление и итог: о встрече уже
+          // сказали всем, и сдвинуть её время или состав может только тот,
+          // кто её назначил. Участник просит перенос в обсуждении (кнопка
+          // «Предложить другое время»). 07.10.2026: кнопка стояла у каждого
+          // приглашённого — «перенести… может только организатор».
           onReschedule={
-            modalMeeting
+            modalMeeting && isMine(modalMeeting, myUserId)
               ? () => {
                   const from = modalMeeting;
                   setMovingFrom(from);
