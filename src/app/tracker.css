@@ -3498,3 +3498,22 @@
     animation:skel-pulse 1.4s ease-in-out infinite;
   }
   @media (prefers-reduced-motion: reduce){ .chat-skel-line{animation:none;} }
+
+  /* Крупнее на телефоне (07.10.2026, п.6 предложений — «согласен»).
+     Масштаб пальцами выключен (layout.tsx), значит приблизить мелкое
+     нельзя, и подписи в 10–11px на телефоне попросту не читаются: даты
+     мыслей, подписи вкладок, «Записано», время в обсуждении. Одним блоком
+     в конце файла, а не правкой каждого правила: здесь видно сразу, какой
+     нижний кегль у телефона, и он не расползётся по двадцати местам.
+     Нижняя граница — 12.5px для служебных подписей и 13px для того, что
+     читают (даты, люди, метки фактов). */
+  @media (max-width:800px){
+    .mobile-tab{font-size:11.5px;}
+    .idea-meta, .mobile-date, .chat-time, .cal-wd{font-size:12.5px;}
+    .today-heading, .fact-label, .mobile-main .panel-title{font-size:12.5px;}
+    .task-meta, .meeting-chip .mdate, .meeting-chip .mtime, .meeting-chip .mpeople,
+    .result-when, .results-note, .done-list-note, .search-hit-meta, .search-group,
+    .people-num, .tp-stage, .chat-event-time, .chat-mini, .pill, .team-status{font-size:13px;}
+    .field-hint, .tp-hint, .team-hint, .subtitle{font-size:13.5px;}
+    .idea-text{font-size:15px;}
+  }
