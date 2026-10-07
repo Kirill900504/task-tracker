@@ -21,6 +21,16 @@ export type AgendaItem = {
 
 type Row = { id: string; text: string; note: string; position: number; author_id: string };
 
+// Пункт, ещё не доехавший до базы, живёт под временным номером. Нажать
+// «Итог» или «Убрать» у него можно сразу — и тогда запись обязана
+// дождаться настоящего номера, иначе база отвергает «tmp-…» как не-uuid.
+// Поймано e2e 07.10.2026: итог, записанный сразу после пункта, не
+// сохранялся вовсе.
+const realIds = new Map<string, Promise<string | null>>();
+async function realId(id: string): Promise<string | null> {
+  return id.startsWith("tmp-") ? ((await realIds.get(id)) ?? null) : id;
+}
+
 async function load(meetingId: string): Promise<AgendaItem[] | null> {
   const { data, error } = await createClient()
     .from("meeting_agenda")
@@ -82,14 +92,25 @@ export function useMeetingAgenda(meetingId: string) {
       const position = items.length ? Math.max(...items.map((i) => i.position)) + 1 : 0;
       const temp: AgendaItem = { id: "tmp-" + Math.random().toString(36).slice(2), text: clean, note: "", position, authorId: "" };
       setItems((list) => [...list, temp]);
-      const { data, error: err } = await createClient()
+      const request = createClient()
         .from("meeting_agenda")
         .insert({ meeting_id: meetingId, text: clean, position })
         .select("id, text, note, position, author_id")
         .maybeSingle();
+      realIds.set(
+        temp.id,
+        Promise.resolve(request).then(
+          ({ data }) => (data as Row | null)?.id ?? null,
+          () => null,
+        ),
+      );
+      const { data, error: err } = await request;
       if (err || !data) return fail("Пункт не сохранился: " + (err ? describeDbError(err) : "нет ответа"));
       const r = data as Row;
-      setItems((list) => list.map((i) => (i.id === temp.id ? { id: r.id, text: r.text, note: r.note || "", position: r.position, authorId: r.author_id } : i)));
+      // Итог, записанный, пока пункт ехал, не теряется при подмене номера.
+      setItems((list) =>
+        list.map((i) => (i.id === temp.id ? { id: r.id, text: r.text, note: i.note || r.note || "", position: r.position, authorId: r.author_id } : i)),
+      );
     },
     [items, meetingId, fail],
   );
@@ -98,7 +119,9 @@ export function useMeetingAgenda(meetingId: string) {
     async (id: string, note: string) => {
       setError("");
       setItems((list) => list.map((i) => (i.id === id ? { ...i, note } : i)));
-      const { error: err } = await createClient().from("meeting_agenda").update({ note: note.trim() }).eq("id", id);
+      const real = await realId(id);
+      if (!real) return fail("Пункт ещё не сохранился — итог не записан");
+      const { error: err } = await createClient().from("meeting_agenda").update({ note: note.trim() }).eq("id", real);
       if (err) await fail("Итог по пункту не сохранился: " + describeDbError(err));
     },
     [fail],
@@ -108,7 +131,9 @@ export function useMeetingAgenda(meetingId: string) {
     async (id: string) => {
       setError("");
       setItems((list) => list.filter((i) => i.id !== id));
-      const { error: err } = await createClient().from("meeting_agenda").delete().eq("id", id);
+      const real = await realId(id);
+      if (!real) return;
+      const { error: err } = await createClient().from("meeting_agenda").delete().eq("id", real);
       if (err) await fail("Пункт не убрался: " + describeDbError(err));
     },
     [fail],
