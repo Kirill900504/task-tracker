@@ -3,7 +3,8 @@ import { meetingButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
 import { fmtDate } from "@/lib/taskDisplay";
-import { voteTally, type MeetingVote } from "@/lib/meetingVotes";
+import { voteTally, withOrganizer, type MeetingVote } from "@/lib/meetingVotes";
+import { organizerName } from "@/lib/meetingOrganizer";
 
 // Предложение, на которое согласились все, становится встречей само.
 //
@@ -34,12 +35,22 @@ export type ConfirmResult = { confirmed: boolean; title?: string };
 export async function confirmIfEveryoneAgreed(admin: SupabaseClient, meetingId: string): Promise<ConfirmResult> {
   const { data: row } = await admin
     .from("meetings")
-    .select("id, title, date, time, user_id, status, vote_round")
+    .select("id, title, date, time, user_id, status, vote_round, created_by, participants")
     .eq("id", meetingId)
     .is("deleted_at", null)
     .maybeSingle();
   const meeting = row as
-    | { id: string; title: string; date: string; time: string | null; user_id: string; status: string; vote_round: number | null }
+    | {
+        id: string;
+        title: string;
+        date: string;
+        time: string | null;
+        user_id: string;
+        status: string;
+        vote_round: number | null;
+        created_by: string | null;
+        participants: string[] | null;
+      }
     | null;
   // Только предложенная: назначенную подтверждать нечем, а закрытую —
   // незачем.
@@ -59,7 +70,7 @@ export async function confirmIfEveryoneAgreed(admin: SupabaseClient, meetingId: 
     role?: string | null;
     assignees: { name: string } | { name: string }[] | null;
   };
-  const votes: MeetingVote[] = ((rows || []) as Row[]).map((r) => ({
+  const rawVotes: MeetingVote[] = ((rows || []) as Row[]).map((r) => ({
     assigneeId: r.assignee_id,
     name: (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "",
     response: r.response,
@@ -69,10 +80,18 @@ export async function confirmIfEveryoneAgreed(admin: SupabaseClient, meetingId: 
     role: (r.role as MeetingVote["role"]) || undefined,
   }));
 
-  const tally = voteTally(votes, Number(meeting.vote_round ?? 1) || 1);
+  // Организатор своего согласия не ждёт: строку, которую триггер 0024
+  // заводит собравшему встречу руководителю, он «молча» держал бы вечно, и
+  // предложение не становилось бы встречей никогда.
+  const round = Number(meeting.vote_round ?? 1) || 1;
+  const names = meeting.participants || [];
+  const votes = withOrganizer(rawVotes, names, await organizerName(admin, meeting.user_id, meeting.created_by, names), round);
+  const tally = voteTally(votes, round);
   // Никого не позвали — подтверждать нечего: встреча с одним человеком не
   // ждёт ничьего согласия и назначается сразу при создании.
-  if (!tally.expected) return { confirmed: false };
+  // Считается без организатора: он «буду» по определению и сам по себе
+  // согласия не означает.
+  if (!voteTally(rawVotes, round).expected) return { confirmed: false };
   // Хоть один молчит или отказался — это ещё не согласие. Опоздание
   // согласием считается: человек придёт, просто позже (см. voteTally).
   if (tally.pending.length || tally.no.length) return { confirmed: false };

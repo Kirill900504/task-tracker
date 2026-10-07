@@ -9,7 +9,8 @@ import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
 import { briefButtons } from "@/lib/ownerQueries";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
 import { dueReminder, minutesUntil, organizerNeedsReminder, ownerReminder, participantReminder, reasonNudge, recapAsk, recapButtons, recapDue } from "@/lib/meetingReminders";
-import { awaitingReason, voteTally, type MeetingVote } from "@/lib/meetingVotes";
+import { awaitingReason, voteTally, withOrganizer, type MeetingVote } from "@/lib/meetingVotes";
+import { organizerName } from "@/lib/meetingOrganizer";
 import { chatsFor, meetingButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { chatsForPerson, sendToPerson } from "@/lib/reach";
@@ -609,7 +610,7 @@ export async function GET(req: Request) {
         .select("assignee_id, response, reason, round, assignees(name)")
         .eq("meeting_id", m.id);
 
-      const votes: MeetingVote[] = ((voteRows || []) as VoteRow[]).map((v) => ({
+      const rawVotes: MeetingVote[] = ((voteRows || []) as VoteRow[]).map((v) => ({
         assigneeId: v.assignee_id,
         name: Array.isArray(v.assignees) ? v.assignees[0]?.name || "" : v.assignees?.name || "",
         role: "participant",
@@ -617,10 +618,15 @@ export async function GET(req: Request) {
         reason: v.reason,
         round: v.round,
       }));
-      const named = new Set(votes.map((v) => v.name));
+      const named = new Set(rawVotes.map((v) => v.name));
       for (const name of m.participants || []) {
-        if (!named.has(name)) votes.push({ assigneeId: "", name, role: "participant", response: "none", reason: null, round });
+        if (!named.has(name)) rawVotes.push({ assigneeId: "", name, role: "participant", response: "none", reason: null, round });
       }
+      // Организатор в составе — «буду» без нажатия: до этого строка «(я)»
+      // попадала сюда молчащей, и Кирилл получал «вы не ответили» по
+      // встрече, которую сам и собрал (07.10.2026).
+      const organizer = await organizerName(admin, userId, m.created_by ?? null, m.participants || []);
+      const votes = withOrganizer(rawVotes, m.participants || [], organizer, round);
 
       const tally = voteTally(votes, round);
 
@@ -639,7 +645,9 @@ export async function GET(req: Request) {
       // позже она уже ничего не меняет, а до тех пор организатор может и
       // перенести встречу, если причина того стоит.
       const silentRefusals = window.audience === "unanswered" ? awaitingReason(votes, round) : [];
-      const everyone = [...new Set([...wanted, ...silentRefusals])];
+      // Организатору о его встрече говорит ownerReminder выше; второе
+      // сообщение «как участнику» было бы тем же самым ещё раз.
+      const everyone = [...new Set([...wanted, ...silentRefusals])].filter((name) => name !== organizer);
       if (!everyone.length) continue;
 
       const { data: people } = await admin

@@ -12,7 +12,10 @@ import DoneListModal from "./DoneListModal";
 import Icon from "./Icon";
 import { useMeetingVotes } from "@/hooks/useMeetingVotes";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
-import { voteTally } from "@/lib/meetingVotes";
+import { voteTally, withOrganizer } from "@/lib/meetingVotes";
+import { sanitizeAssigneeList } from "@/lib/trackerRows";
+import { authorRawName } from "@/lib/authorName";
+import { useAuthors } from "@/hooks/useAuthors";
 import { currentVote } from "@/lib/answerRules";
 import { isQuietHour } from "@/lib/quietHours";
 import { linkTaskAndMeeting } from "@/lib/itemLink";
@@ -98,6 +101,7 @@ export default function MeetingsPanel({
   // Голосование по встречам — один слой на всю панель, как участники у
   // задач: и карточки, и форма читают отсюда.
   const votes = useMeetingVotes();
+  const authors = useAuthors();
   const ask = useAsk();
   const isMobile = useIsMobile();
   const [modalState, setModalState] = useState<{ open: boolean; meeting: Meeting | null; prefill?: MeetingPrefill }>({ open: false, meeting: null });
@@ -306,6 +310,14 @@ export default function MeetingsPanel({
       actions.restoreMeeting(m);
     });
     return true;
+  }
+
+  // Голоса для показа и подсчёта: организатор в составе — «буду» без
+  // нажатия (lib/meetingVotes, withOrganizer). Свой ответ (myVoteOf) берётся
+  // из настоящих строк — отвечать за организатора здесь нечего.
+  function shownVotes(m: Meeting) {
+    const names = sanitizeAssigneeList(m.participants);
+    return withOrganizer(votes.forMeeting(m.id), names, authorRawName(m.createdBy, authors, names), m.voteRound || 1);
   }
 
   // Мой голос по встрече — с учётом переноса: ответ о прежнем времени
@@ -555,8 +567,8 @@ export default function MeetingsPanel({
               onDelete={() => void deleteMeeting(m)}
               onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
-              votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
-              voteRows={votes.forMeeting(m.id)}
+              votes={voteTally(shownVotes(m), m.voteRound || 1)}
+              voteRows={shownVotes(m)}
               myVote={myVoteOf(m)}
               onVote={(choice) => void voteFromList(m, choice)}
               unreadCount={unread[m.id]}
@@ -579,8 +591,8 @@ export default function MeetingsPanel({
               onDelete={() => void deleteMeeting(m)}
               onQuickStatus={(status) => void quickStatus(m, status)}
               onQuickReschedule={() => quickReschedule(m)}
-              votes={voteTally(votes.forMeeting(m.id), m.voteRound || 1)}
-              voteRows={votes.forMeeting(m.id)}
+              votes={voteTally(shownVotes(m), m.voteRound || 1)}
+              voteRows={shownVotes(m)}
               myVote={myVoteOf(m)}
               onVote={(choice) => void voteFromList(m, choice)}
               unreadCount={unread[m.id]}

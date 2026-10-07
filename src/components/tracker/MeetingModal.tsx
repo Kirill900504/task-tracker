@@ -30,8 +30,8 @@ import ExpandableText from "./ExpandableText";
 import { WORKDAY_SLOTS, busyStarts, defaultMeetingStart, minutesOf, slotOf, startsInPast } from "@/lib/meetingTime";
 import { SEARCH_FROM, matchesPerson } from "@/lib/personSearch";
 import { useAuthors } from "@/hooks/useAuthors";
-import { authorLabel } from "@/lib/authorName";
-import { isCurrent, voteTally } from "@/lib/meetingVotes";
+import { authorLabel, authorRawName } from "@/lib/authorName";
+import { isCurrent, voteTally, withOrganizer } from "@/lib/meetingVotes";
 import { awaitsRecap } from "@/lib/calendarLogic";
 import { markTaskCommentsRead } from "@/hooks/useUnreadTaskComments";
 
@@ -374,8 +374,11 @@ export default function MeetingModal({
   // Ответ, данный до переноса, ответом не считается (isCurrent): человек,
   // который мог во вторник, о четверге не сказал ничего.
   const round = meeting?.voteRound || 1;
+  // Организатор в составе — «буду» без нажатия (lib/meetingVotes,
+  // withOrganizer): он её и собрал.
+  const counted = withOrganizer(votes, participants, authorRawName(meeting?.createdBy, authors, participants), round);
   function voteOf(name: string): { state: string; mark: string; title: string } {
-    const row = votes.find((v) => v.name === name);
+    const row = counted.find((v) => v.name === name);
     if (!row || row.response === "none" || !isCurrent(row, round)) {
       // «Видел, но молчит» — со вторым договариваются, первому напоминают
       // (миграция 0042, отзыв Витовского 25.09.2026).
@@ -394,8 +397,9 @@ export default function MeetingModal({
   }
 
   // «3 из 5» — короткий ответ на «собралась ли встреча». Считается по тем,
-  // кого спрашивают (организатор и наблюдатели не в счёт, см. mustVote).
-  const tally = voteTally(votes, round);
+  // кого спрашивают (наблюдатели не в счёт, см. mustVote; организатор — в
+  // счёт и всегда «буду», см. withOrganizer).
+  const tally = voteTally(counted, round);
   const answeredLabel = tally.expected
     ? `${tally.answered} из ${tally.expected}` + (tally.no.length ? ` · не смогут: ${tally.no.length}` : "")
     : "ответов не ждём";

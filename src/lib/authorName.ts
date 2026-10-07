@@ -32,3 +32,17 @@ export function authorLabel(
   const owner = people.find((p) => isSelfAssignee(p)) || "";
   return owner ? withoutSelfMark(owner) : "владелец";
 }
+
+// То же правило, но имя — ровно как оно записано в составе, с «(я)»: по нему
+// ищут человека в списке участников (withOrganizer), а не показывают его.
+// Не нашлось — пусто, а не подпись-заглушка: сравнивать «бывшего участника»
+// с составом незачем.
+export function authorRawName(
+  createdBy: string | undefined,
+  authorsByUserId: Record<string, string>,
+  people: string[],
+): string {
+  const id = (createdBy || "").trim();
+  if (id) return authorsByUserId[id] || "";
+  return people.find((p) => isSelfAssignee(p)) || "";
+}

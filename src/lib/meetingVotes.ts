@@ -45,6 +45,40 @@ export function isCurrent(v: MeetingVote, round: number): boolean {
   return v.round >= round;
 }
 
+// Организатор, стоящий в составе, — «буду», и спрашивать его не о чем.
+//
+// 07.10.2026, его словами: «когда я постановщик, готовность к встрече
+// должна ставиться по умолчанию». Строки голоса у организатора нет нарочно
+// (useMeetingVotes.sync её не заводит, триггер 0024 пропускает «(я)»), но
+// всё, что считало ответы, шло по списку ИМЁН — и находило его там
+// молчащим: «2 из 3» у собранной встречи, точка вместо галочки у его имени,
+// а крон дописывал его к не ответившим и спрашивал, придёт ли он на
+// собственную встречу. Строка, если она всё-таки есть (триггер заводит её
+// руководителю, собравшему встречу), уступает тому же правилу: своё
+// «опоздаю» организатор сохраняет, «молчит» у него не бывает.
+//
+// `organizer` — имя ровно так, как оно стоит в составе (с «(я)», если это
+// владелец); не в составе — ничего не меняется.
+export function withOrganizer(votes: MeetingVote[], participants: string[], organizer: string, round = 1): MeetingVote[] {
+  if (!organizer) return votes;
+  const row = votes.find((v) => v.name === organizer);
+  if (!row && !participants.includes(organizer)) return votes;
+  const late = !!row && row.response === "yes" && isCurrent(row, round) && !!row.late;
+  return [
+    ...votes.filter((v) => v.name !== organizer),
+    {
+      assigneeId: row?.assigneeId || "",
+      name: organizer,
+      role: "participant",
+      response: "yes",
+      reason: null,
+      round: Math.max(row?.round || 0, round),
+      late,
+      seenAt: row?.seenAt,
+    },
+  ];
+}
+
 export type VoteTally = {
   yes: string[];
   no: { name: string; reason: string }[];

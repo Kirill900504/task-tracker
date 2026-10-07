@@ -6,6 +6,7 @@ import {
   voteLabel,
   voteTally,
   votingOpen,
+  withOrganizer,
   type MeetingVote,
 } from "./meetingVotes";
 
@@ -136,5 +137,44 @@ describe("кого переспросить про причину отказа",
       vote("Зоя", { role: "watcher", response: "no" }),
     ];
     expect(awaitingReason(votes)).toEqual([]);
+  });
+});
+
+// 07.10.2026: «когда я постановщик, готовность к встрече должна ставиться
+// по умолчанию». У собранной встречи было «2 из 3» и точка у его имени.
+describe("организатор — «буду» по умолчанию", () => {
+  const team = ["Кирилл Кучеренко (я)", "Юрий Нодберг", "Игорь Витковский"];
+
+  it("без строки голоса считается пришедшим: все сказали «буду» — 3 из 3", () => {
+    const votes = [vote("Юрий Нодберг", { response: "yes" }), vote("Игорь Витковский", { response: "yes" })];
+    const t = voteTally(withOrganizer(votes, team, "Кирилл Кучеренко (я)"));
+    expect(t.yes).toHaveLength(3);
+    expect(t.pending).toEqual([]);
+    expect(t.everyoneAnswered).toBe(true);
+  });
+
+  it("строка, заведённая триггером руководителю-организатору, не держит его молчащим", () => {
+    const votes = [vote("Игорь Витковский"), vote("Юрий Нодберг", { response: "yes" })];
+    const t = voteTally(withOrganizer(votes, ["Игорь Витковский", "Юрий Нодберг"], "Игорь Витковский"));
+    expect(t.pending).toEqual([]);
+    expect(t.yes).toContain("Игорь Витковский");
+  });
+
+  it("своё «опоздаю» организатор сохраняет", () => {
+    const votes = [vote("Игорь Витковский", { response: "yes", late: true })];
+    expect(voteTally(withOrganizer(votes, ["Игорь Витковский"], "Игорь Витковский")).yes).toEqual(["Игорь Витковский (опоздает)"]);
+  });
+
+  it("после переноса организатора заново не спрашивают", () => {
+    const votes = [vote("Юрий Нодберг", { response: "yes", round: 1 })];
+    const t = voteTally(withOrganizer(votes, team.slice(0, 2), "Кирилл Кучеренко (я)", 2), 2);
+    expect(t.pending).toEqual(["Юрий Нодберг"]);
+    expect(t.yes).toEqual(["Кирилл Кучеренко (я)"]);
+  });
+
+  it("не в составе или неизвестен — ничего не меняется", () => {
+    const votes = [vote("Юрий Нодберг")];
+    expect(withOrganizer(votes, ["Юрий Нодберг"], "Игорь Витковский")).toBe(votes);
+    expect(withOrganizer(votes, ["Юрий Нодберг"], "")).toBe(votes);
   });
 });
