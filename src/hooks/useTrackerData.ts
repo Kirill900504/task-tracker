@@ -125,6 +125,12 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
+  // True only once the lists on screen came from the database in this
+  // session, not from the IndexedDB copy. `loading` alone cannot say that:
+  // the fast start drops it on the cached frame. Anything that WRITES on
+  // its own, without a person pressing a button, must wait for this —
+  // see the comment where `ready` is computed in NewTracker.
+  const [fresh, setFresh] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -855,6 +861,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
 
       setOffline(false);
       offlineRef.current = false;
+      setFresh(true);
       setLoadError(null);
       setLoading(false);
       subscribeRealtime(uid);
@@ -1219,6 +1226,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
 
   return {
     loading,
+    fresh,
     loadError,
     userId,
     tasks,

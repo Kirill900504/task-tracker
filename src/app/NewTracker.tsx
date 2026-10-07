@@ -102,7 +102,7 @@ export default function NewTracker() {
     () => ({ ownerId: identity.ownerId, userId: identity.userId, isManager: identity.role === "manager" }),
     [identity.ownerId, identity.userId, identity.role],
   );
-  const { loading, loadError, tasks, meetings, ideas, sections, assignees, syncStatus, offline, actions } =
+  const { loading, fresh, loadError, tasks, meetings, ideas, sections, assignees, syncStatus, offline, actions } =
     useTrackerData({ enabled: ready, workspace });
   // Мысль — личная заметка, а не общий поток: 23.09.2026 Кирилл сказал
   // прямо, что видеть чужие задачи и встречи никто не должен, «чтобы не
@@ -192,7 +192,15 @@ export default function NewTracker() {
     meetings: visibleMeetings,
     saveTask: actions.saveTask,
     showToast: toasts.showToast,
-    ready: !loading,
+    // Not `!loading`: the fast start drops `loading` on the IndexedDB copy,
+    // and the recurring-task refresh inside this hook SAVES what it changes.
+    // On 07.10.2026 a device holding a copy from before 06.10 (the task
+    // «done» for 18.09) opened in the morning, the refresh reopened that
+    // stale row, and the merge on the network's reply took it as local work
+    // — the whole old row won over Кирилл's force-close of the day before,
+    // and the task stood in «Новые» again. A write nobody asked for has to
+    // be computed from what the database says now, never from a copy.
+    ready: fresh && !offline,
   });
   const installPrompt = useInstallPrompt();
   const botLink = useBotLink();
