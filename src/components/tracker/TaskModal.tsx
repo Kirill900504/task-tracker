@@ -30,6 +30,7 @@ import { authorLabel } from "@/lib/authorName";
 import { withoutSelfMark } from "@/lib/actorName";
 import { fmtDate } from "@/lib/taskDisplay";
 import { answerWithFiles } from "@/lib/answerFiles";
+import { isSelfTask } from "@/lib/selfTask";
 
 // Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
 // «Понедельник…Воскресенье» подряд не помещаются никуда, а «Пн Вт Ср» читают
@@ -226,6 +227,19 @@ export default function TaskModal({
   // теле компонента, позванный выше своей строки, убивает весь экран (см.
   // правило в CLAUDE.md — это стоило половины дня).
   const myPart = myAssigneeId ? participants.find((p) => p.assigneeId === myAssigneeId) || null : null;
+  // Задача самому себе (lib/selfTask): ни «Принял / Сделал / Не могу», ни
+  // приёмки, ни волевого закрытия — разговаривать в ней не с кем. Остаётся
+  // срок, который двигается прямо здесь (слова Кирилла 07.10.2026: «для
+  // самого себя должна быть только функция переноса дедлайна»).
+  const selfTask = !!task && canEdit && isSelfTask(participants, myAssigneeId);
+  // Срок своей задачи помнится здесь: `task` у открытого окна — снимок на
+  // момент открытия, и без своей копии второй перенос показывал бы первый.
+  const [selfDeadline, setSelfDeadline] = useState(() => task?.deadline || "");
+  function moveOwnDeadline(iso: string) {
+    if (!task || iso === selfDeadline) return;
+    setSelfDeadline(iso);
+    onSave({ ...task, deadline: iso }, []);
+  }
 
   // Состав по ролям — для сводки. Имена без пометки «(я)»: она написана
   // для одного человека, а карточку читают все.
@@ -585,7 +599,7 @@ export default function TaskModal({
                   под фактами, результатом и составом, то есть в середине
                   окна, а на телефоне — в самом низу (24.09.2026). Состав —
                   второй половиной того же компонента, ниже. */}
-              {canEdit && (
+              {canEdit && !selfTask && (
                 <TeamCompact
                   taskId={task.id}
                   part="decisions"
@@ -609,7 +623,7 @@ export default function TaskModal({
               {/* Первым — то, чего ждут ОТ ВАС: ради этого карточку и
                   открывают, когда задачу поручили вам. Ниже идёт всё
                   остальное, что о ней известно. */}
-              {myPart && (
+              {myPart && !selfTask && (
                 <TaskAnswer
                   me={myPart}
                   closed={task.status === "done" || task.approvalState === "accepted"}
@@ -627,6 +641,28 @@ export default function TaskModal({
                 />
               )}
 
+              {/* Своя задача: вместо ответов — срок, и только он. Двигается
+                  сразу, без просьбы и решения: просить и решать здесь один и
+                  тот же человек. Закрывают её галочкой на карточке. */}
+              {selfTask && (
+                <div className="field self-deadline" id="selfDeadline">
+                  <label>Срок</label>
+                  <div className="deadline-row">
+                    <MiniCalendar popover id="selfDeadlineCal" value={selfDeadline} onChange={moveOwnDeadline} clearable minDate={isoInDays(0)} />
+                    {QUICK_DEADLINES.map((q) => (
+                      <button
+                        key={q.label}
+                        type="button"
+                        className={"participant-chip" + (selfDeadline && selfDeadline === isoInDays(q.days) ? " selected" : "")}
+                        onClick={() => moveOwnDeadline(isoInDays(q.days))}
+                      >
+                        {q.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Главное о задаче — одной короткой таблицей, сразу под
                   названием. Слова Кирилла 21.09.2026: «требуется компактное
                   окно с основной информацией о задаче, в которое входит:
@@ -638,7 +674,7 @@ export default function TaskModal({
                   строкой над списком «Кто на задаче». */}
               <ItemFacts
                 id="taskFacts"
-                badge={stage && <span className={"tp-stage tp-stage-" + stage}>{STAGE_LABEL[stage]}</span>}
+                badge={stage && !selfTask && <span className={"tp-stage tp-stage-" + stage}>{STAGE_LABEL[stage]}</span>}
                 rows={[
                   {
                     left: { label: "Постановщик", value: authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name)) },
@@ -652,8 +688,8 @@ export default function TaskModal({
                     },
                     right: {
                       label: "Крайний срок",
-                      value: task.deadline ? fmtDate(task.deadline) : "без срока",
-                      muted: !task.deadline,
+                      value: selfDeadline ? fmtDate(selfDeadline) : "без срока",
+                      muted: !selfDeadline,
                     },
                   },
                   ...(coexecutorNames.length
@@ -712,6 +748,7 @@ export default function TaskModal({
                 <TeamCompact
                   taskId={task.id}
                   part="team"
+                  selfTask={selfTask}
                   participants={participants}
                   availablePeople={availablePeople}
                   approvalState={task.approvalState || "open"}

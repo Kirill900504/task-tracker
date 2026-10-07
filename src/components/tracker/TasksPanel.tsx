@@ -42,6 +42,7 @@ import { noteParticipantChange } from "@/lib/participantNote";
 import { humanError } from "@/lib/humanError";
 import { answerWithFiles } from "@/lib/answerFiles";
 import { openTaskChoices } from "@/lib/answerRules";
+import { isSelfTask } from "@/lib/selfTask";
 
 export default function TasksPanel({
   tasks,
@@ -59,6 +60,7 @@ export default function TasksPanel({
   openExistingTaskId,
   onOpenExistingHandled,
   onIdeaDropped,
+  onIdeaConverted,
   onTaskToMeeting,
   onScheduleMeetingFor,
   isAdmin = true,
@@ -120,10 +122,12 @@ export default function TasksPanel({
   // from openTaskRequest, which prefills a NEW task.
   openExistingTaskId?: string | null;
   onOpenExistingHandled?: () => void;
-  // A dropped idea becomes a task in whichever column it landed on — the
+  // A dropped idea opens the new-task form with its text as the title — the
   // idea's own removal/undo is handled by the parent (NewTracker), which
-  // owns both tasks and ideas state.
+  // owns both tasks and ideas state, and only once the form is SAVED
+  // (onIdeaConverted; the prefill carries fromIdeaId).
   onIdeaDropped: (ideaId: string) => void;
+  onIdeaConverted?: (ideaId: string, task: Task) => void;
   // «Назначить встречу» from a card's menu — the phone's version of
   // dragging the task onto a calendar day.
   onTaskToMeeting?: (taskId: string) => void;
@@ -260,6 +264,8 @@ export default function TasksPanel({
   // администратора пространства, и для владельца это разные вещи ровно в
   // тех местах, где он сам оказывается исполнителем чужого поручения.
   const authored = (t: Task | null) => isCreatedByMe(t, myUserId);
+  // Задача самому себе — своя доска без «На приёмке» (см. lib/selfTask).
+  const selfOf = (t: Task) => authored(t) && isSelfTask(participants.forTask(t.id), myMemberAssigneeId);
 
   // Моя роль в задаче — один ответ, которым пользуются и цвет карточки, и
   // фильтр, и подсветка просрочки (см. lib/myRole).
@@ -336,7 +342,7 @@ export default function TasksPanel({
   // columnOf читает строки участия, и звать его по разу на столбец значило
   // бы пройти список четырежды.
   const byColumn: Record<KanbanColumn, Task[]> = { new: [], work: [], review: [], done: [] };
-  for (const t of filtered) byColumn[columnOf(t, participants.forTask(t.id))].push(t);
+  for (const t of filtered) byColumn[columnOf(t, participants.forTask(t.id), selfOf(t))].push(t);
   for (const id of Object.keys(byColumn) as KanbanColumn[]) byColumn[id].sort(taskSortFn);
   // Завершённые — свежими вперёд: этот столбец открывают, чтобы вернуть то,
   // что только что закрыли, и порядок закрытия важнее порядка сроков.
@@ -535,7 +541,7 @@ export default function TasksPanel({
     const dragged = tasks.find((t) => t.id === taskId);
     if (!dragged) return;
 
-    const from = columnOf(dragged, participants.forTask(dragged.id));
+    const from = columnOf(dragged, participants.forTask(dragged.id), selfOf(dragged));
     const to = spot.column;
 
     // Внутри столбца — обычная перестановка: порядок принадлежит задаче, и
@@ -555,7 +561,7 @@ export default function TasksPanel({
     }
 
     const myRole = roleOn(dragged);
-    const move = moveBetween(from, to, { isAuthor: authored(dragged), isExecutor: myRole === "executor" });
+    const move = moveBetween(from, to, { isAuthor: authored(dragged), isExecutor: myRole === "executor", isSelf: selfOf(dragged) });
     if (!move) return;
     if ("refused" in move) {
       toasts.showToast("Так нельзя", move.refused);
@@ -563,6 +569,13 @@ export default function TasksPanel({
     }
 
     const myRow = participants.forTask(dragged.id).find((p) => p.assigneeId === myMemberAssigneeId);
+
+    // Своя задача: «сделал» без слов — то же, что галочка на карточке.
+    if (move.action === "close") {
+      toggleDone(dragged);
+      toasts.showToast("Задача закрыта", dragged.title, () => toggleDone({ ...dragged, status: "done" }));
+      return;
+    }
 
     if (move.action === "accept") {
       if (!myRow) return;
@@ -598,7 +611,7 @@ export default function TasksPanel({
   // Ручной порядок — та же перестановка, что мышью, но кнопкой: на телефоне
   // перетаскивание есть, а точности в нём нет.
   function moveWithinColumn(t: Task, to: "top" | "bottom") {
-    const column = columnOf(t, participants.forTask(t.id));
+    const column = columnOf(t, participants.forTask(t.id), selfOf(t));
     const others = byColumn[column].filter((x) => x.id !== t.id).map((x) => x.id);
     const ids = to === "top" ? [t.id, ...others] : [...others, t.id];
     ids.forEach((id, i) => {
@@ -1004,7 +1017,9 @@ export default function TasksPanel({
           onRepeat={(prefill) => setModalState({ open: true, task: null, prefill })}
           sections={sections}
           onSave={(t, pending) => {
-            const wasDeadline = modalTask?.deadline || "";
+            // Срок — из текущего списка, а не из снимка окна: у своей задачи его
+            // двигают прямо в открытой карточке, и не раз (см. TaskModal.selfTask).
+            const wasDeadline = (modalTask && tasks.find((x) => x.id === modalTask.id)?.deadline) || modalTask?.deadline || "";
             actions.saveTask(t);
             // Срок двинули — об этом надо сказать тем, кто под него
             // планировал, и оставить след в хронике задачи. Раньше старая
@@ -1036,6 +1051,9 @@ export default function TasksPanel({
               if (isMobile) return;
               for (const notice of notices || []) toasts.showToast(notice);
             });
+            // Задача заведена из мысли — теперь, а не при открытии формы,
+            // мысль уходит из списка (см. TaskPrefill.fromIdeaId).
+            if (!modalTask && modalPrefill?.fromIdeaId) onIdeaConverted?.(modalPrefill.fromIdeaId, t);
           }}
           onDelete={() => modalTask && deleteTask(modalTask)}
           onClose={closeModal}

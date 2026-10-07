@@ -191,3 +191,33 @@ describe("columnOf — повторяющаяся задача после при
     expect(columnOf(t, [person({ acceptedAt: "2026-09-24T10:00:00Z" })])).toBe("done");
   });
 });
+
+// Облегчённая модель своей задачи (07.10.2026, lib/selfTask): «На приёмке»
+// у неё нет, а перенос дальше «В работе» — это просто «сделал».
+describe("задача самому себе — без приёмки", () => {
+  it("начинается в «Новых», после «Принял» — в работе", () => {
+    expect(columnOf(task(), [person()], true)).toBe("new");
+    expect(columnOf(task(), [person({ acceptedAt: "2026-10-07" })], true)).toBe("work");
+  });
+
+  it("отчёт по своей задаче не уводит её на приёмку", () => {
+    expect(columnOf(task(), [person({ doneAt: "2026-10-07" })], true)).toBe("work");
+    expect(columnOf(task({ approvalState: "awaiting_review" }), [person({ doneAt: "2026-10-07" })], true)).toBe("work");
+  });
+
+  it("галочка закрывает", () => {
+    expect(columnOf(task({ status: "done" }), [person()], true)).toBe("done");
+  });
+
+  it("перенос в «На приёмке» или «Завершённые» закрывает сразу, назад — нельзя", () => {
+    const self = { isAuthor: true, isExecutor: true, isSelf: true };
+    expect(moveBetween("new", "work", self)).toEqual({ action: "accept" });
+    expect(moveBetween("work", "review", self)).toEqual({ action: "close" });
+    expect(moveBetween("new", "done", self)).toEqual({ action: "close" });
+    expect(moveBetween("work", "new", self)).toHaveProperty("refused");
+  });
+
+  it("без флага — прежняя доска с приёмкой", () => {
+    expect(columnOf(task(), [person({ doneAt: "2026-10-07" })])).toBe("review");
+  });
+});

@@ -8,6 +8,7 @@ import { recordEvent } from "@/lib/itemHistory";
 import { applyReview, type ReviewAction } from "@/lib/reviewWork";
 import { actorName, withoutSelfMark } from "@/lib/actorName";
 import { fmtDate } from "@/lib/taskDisplay";
+import { isSelfAssignee } from "@/lib/trackerRows";
 
 // Решение постановщика по отчёту: принять, вернуть, закрыть волевым.
 //
@@ -145,15 +146,26 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
       .select("assignee_id")
       .eq("task_id", task.id)
       .in("role", ["executor", "coexecutor"]);
-    const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
+    // Тот, кто двинул срок, о нём уже знает — и у задачи самому себе это
+    // единственный исполнитель: сообщение «новый срок» самому себе — шум.
+    // Его строка — по членству, у владельца — по метке «(я)».
+    const { data: memberRow } = await admin
+      .from("workspace_members")
+      .select("assignee_id")
+      .eq("member_id", user.id)
+      .eq("owner_id", task.user_id)
+      .maybeSingle();
+    const actorAssignee = (memberRow as { assignee_id: string | null } | null)?.assignee_id || "";
+    const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id).filter((id) => id !== actorAssignee);
     if (ids.length) {
-      const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+      const { data: found } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+      const people = ((found || []) as ColleagueRow[]).filter((p) => !(user.id === task.user_id && isSelfAssignee(p.name || "")));
       const text = to
         ? "📅 Новый срок по задаче «" + task.title + "»: " + fmtDate(to)
         : "📅 С задачи «" + task.title + "» сняли срок";
       // К сведению — без кнопок, по той же причине, что и ответ на просьбу
       // о переносе ниже. Всем сразу, а не по очереди.
-      await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, task.user_id, person, text)));
+      await Promise.all(people.map((person) => sendToPerson(admin, task.user_id, person, text)));
     }
     return NextResponse.json({ ok: true });
   }

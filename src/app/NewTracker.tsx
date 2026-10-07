@@ -45,6 +45,7 @@ import HeaderQuote from "@/components/tracker/HeaderQuote";
 import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import { columnOf } from "@/lib/kanban";
+import { isSelfTask } from "@/lib/selfTask";
 import { defaultMeetingStart } from "@/lib/meetingTime";
 import { useAsk } from "@/components/Ask";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -159,7 +160,10 @@ export default function NewTracker() {
   // тоже не годится по той же причине, что и выше: владельцу она сказала
   // бы «моё поручение» о вообще любой видимой задаче, включая ту, где он
   // сам просто наблюдатель.
-  const myReviewTasks = useMemo(() => visibleTasks.filter((t) => isCreatedByMe(t, mineOnlyId)), [visibleTasks, mineOnlyId]);
+  // Своя задача (lib/selfTask) приёмки не знает вовсе: принимать её у
+  // самого себя некому, и в разделе «Приёмка» ей не место.
+  const selfOf = (t: Task) => isCreatedByMe(t, mineOnlyId) && isSelfTask(participants.forTask(t.id), identity.assigneeId);
+  const myReviewTasks = visibleTasks.filter((t) => isCreatedByMe(t, mineOnlyId) && !selfOf(t));
   const isMobile = useIsMobile();
   const toasts = useToasts();
   const ask = useAsk();
@@ -351,38 +355,29 @@ export default function NewTracker() {
     setTimeout(() => setJustCreatedMeetingId((cur) => (cur === id ? null : cur)), 1200);
   }
 
-  // Port of convertIdeaToTask()/convertIdeaToMeeting() — the idea's removal
-  // and the new item's creation share ONE undo toast, matching legacy
-  // exactly (undoing puts the idea back and removes the created item).
+  // Мысль становится задачей через ОБЫЧНУЮ форму новой задачи: название
+  // подставлено из мысли, остальное — исполнитель, срок, раздел — автор
+  // заполняет сам. Слова Кирилла 07.10.2026: «должно открываться
+  // стандартное окно создания… остальное автор заполняет руками». До этого
+  // задача заводилась молча и сразу — без исполнителя, то есть в обход
+  // правила «задача без исполнителя не заводится», и висела на доске
+  // ничьей, пока её не откроют.
+  // Мысль уходит только после «Сохранить» (ideaConvertedToTask ниже):
+  // «Отмена» оставляет её, где была.
   function convertIdeaToTask(ideaId: string) {
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
-    actions.deleteIdea(idea.id);
-    const task: Task = {
-      id: uid(),
-      title: idea.text,
-      desc: "",
-      assignee: "",
-      sectionId: "",
-      priority: idea.important ? "high" : "med",
-      // Колонка `term` в базе осталась, но смысла у неё больше нет:
-      // столбец задачи выводится из её состояния (lib/kanban). Пишем
-      // «short», чтобы не оставлять поле пустым в строке.
-      term: "short",
-      status: "in_progress",
-      deadline: "",
-      recur: "none",
-      recurWeekday: "1",
-      recurMonthday: "",
-      recurYearDay: "",
-      recurYearMonth: "1",
-      lastCompletedOn: "",
-      manualOrder: null,
-      completedAt: "",
-    };
-    actions.saveTask(task);
+    setOpenTaskRequest({ title: idea.text, fromIdeaId: idea.id });
+  }
+
+  // Удаление мысли и заведение задачи — одна отмена на двоих: отмена
+  // возвращает мысль и убирает задачу.
+  function ideaConvertedToTask(ideaId: string, task: Task) {
+    const idea = ideas.find((i) => i.id === ideaId);
     flashTask(task.id);
-    toasts.showToast("Идея превращена в задачу", task.title, () => {
+    if (!idea) return;
+    actions.deleteIdea(idea.id);
+    toasts.showToast("Мысль превращена в задачу", task.title, () => {
       actions.deleteTask(task.id);
       actions.restoreIdea(idea);
     });
@@ -618,6 +613,7 @@ export default function NewTracker() {
     onOpenExistingHandled: () => setOpenExistingTaskId(null),
     onOpenTaskHandled: () => setOpenTaskRequest(null),
     onIdeaDropped: convertIdeaToTask,
+    onIdeaConverted: ideaConvertedToTask,
     onTaskToMeeting: (id: string) => taskDroppedOnDate(id, selectedDate ?? todayStr()),
     onScheduleMeetingFor: (task: Task, people: string[]) =>
       setOpenMeetingRequest({
@@ -886,8 +882,8 @@ export default function NewTracker() {
             onTabChange={(tab) => withViewTransition(() => setMobileTab(tab))}
             badges={{
               today: todayCount(buildToday(visibleTasks, visibleMeetings)),
-              tasks: visibleTasks.filter((t) => columnOf(t, participants.forTask(t.id)) === "new").length,
-              work: visibleTasks.filter((t) => columnOf(t, participants.forTask(t.id)) === "work").length,
+              tasks: visibleTasks.filter((t) => columnOf(t, participants.forTask(t.id), selfOf(t)) === "new").length,
+              work: visibleTasks.filter((t) => columnOf(t, participants.forTask(t.id), selfOf(t)) === "work").length,
               meetings: visibleMeetings.filter((m) => !m.status || m.status === "planned").length,
               ideas: myIdeas.filter((i) => !i.done).length,
               review: awaitingReview(myReviewTasks).length,

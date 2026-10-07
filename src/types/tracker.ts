@@ -157,6 +157,10 @@ export interface TaskPrefill {
   // записано в привязке.
   sectionId?: string;
   people?: { name: string; role: "executor" | "coexecutor" | "watcher" }[];
+  // Мысль, из которой заводится задача. Мысль уходит только когда задачу
+  // СОХРАНИЛИ: «Отмена» в форме оставляет её на месте — так же, как мысль,
+  // брошенная на день календаря, ждёт сохранения встречи.
+  fromIdeaId?: string;
 }
 
 export interface MeetingPrefill {

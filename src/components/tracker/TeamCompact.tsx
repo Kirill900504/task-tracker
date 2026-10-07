@@ -86,6 +86,7 @@ export default function TeamCompact({
   onRejectReschedule,
   onAddPerson,
   part,
+  selfTask = false,
 }: {
   // Нужен документам к решению: они ложатся в обсуждение задачи
   // (lib/answerFiles).
@@ -120,6 +121,9 @@ export default function TeamCompact({
   // блок приёмки рядом: копия таких правил в этом проекте расходилась с
   // первой трижды.
   part?: "decisions" | "team";
+  // Задача самому себе (lib/selfTask): ни «ждём ответа», ни волевого
+  // закрытия — ждать и закрывать «волей» тут некого и нечего.
+  selfTask?: boolean;
 }) {
   const ask = useAsk();
   const identity = useWorkspaceRole();
@@ -358,7 +362,7 @@ export default function TeamCompact({
     <div className="field team-compact">
       <label>Кто на задаче</label>
 
-      {label && <div className="tp-progress">{label}</div>}
+      {label && !selfTask && <div className="tp-progress">{label}</div>}
 
       {approvalState === "returned" && approvalComment && (
         <div className="tp-returned">Возвращено на доработку: {approvalComment}</div>
@@ -374,7 +378,7 @@ export default function TeamCompact({
 
       <div className="participant-grid">
         {participants.map((p) => {
-          const status = statusOf(p);
+          const status = selfTask ? null : statusOf(p);
           return (
             <button
               key={p.id}
@@ -462,7 +466,7 @@ export default function TeamCompact({
           них (сбой синхронизации), и именно тогда эта кнопка — единственный
           выход. Волевое закрытие не должно зависеть от того, сошлась ли
           локальная копия участников с тем, что знает сервер. */}
-      {stage !== "done" && stage !== "awaiting_review" && (
+      {!selfTask && stage !== "done" && stage !== "awaiting_review" && (
         <button className="btn btn-small tp-force" type="button" disabled={busy} onClick={() => void handleForceClose()}>
           Закрыть волевым решением
         </button>

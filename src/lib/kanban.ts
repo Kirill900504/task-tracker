@@ -34,8 +34,17 @@ export const KANBAN_COLUMNS: { id: KanbanColumn; title: string; empty: string }[
   { id: "done", title: "Завершённые", empty: "Завершённых задач нет." },
 ];
 
-export function columnOf(task: Task, participants: TaskParticipant[]): KanbanColumn {
+// `self` — задача самому себе (lib/selfTask): у неё нет «На приёмке».
+// Принимать работу у самого себя некому, поэтому столбцов три — «Новые»,
+// «В работе», «Завершённые», — и следы прежнего пути (отчёт, приёмка,
+// возврат), если задача ими уже обросла, читаются как «в работе».
+export function columnOf(task: Task, participants: TaskParticipant[], self = false): KanbanColumn {
   if (task.status === "done") return "done";
+  if (self) {
+    if (task.approvalState === "accepted" && task.recur === "none") return "done";
+    if (task.approvalState === "awaiting_review" || task.approvalState === "returned") return "work";
+    return participants.some((p) => p.acceptedAt || p.doneAt || hasDeclined(p)) ? "work" : "new";
+  }
   // «Принято» закрывает задачу навсегда только у разовой. У повторяющейся
   // закрыт ровно круг (status done до конца дня, см. reviewWork), а
   // «accepted» у неё остался от прежнего правила и висел вечно — задача
@@ -97,6 +106,9 @@ export type KanbanMove =
   | { action: "accept" }
   | { action: "report" }
   | { action: "approve" }
+  // Своя задача, брошенная в «На приёмке» или «Завершённые», — это просто
+  // «сделал»: закрывается сразу, без слов, как галочкой.
+  | { action: "close" }
   | { refused: string };
 
 // Порядок столбцов — он же путь задачи. Сравнением по нему и отличается
@@ -107,9 +119,15 @@ const ORDER: KanbanColumn[] = ["new", "work", "review", "done"];
 export function moveBetween(
   from: KanbanColumn,
   to: KanbanColumn,
-  who: { isAuthor: boolean; isExecutor: boolean },
+  who: { isAuthor: boolean; isExecutor: boolean; isSelf?: boolean },
 ): KanbanMove | null {
   if (from === to) return null;
+
+  // Своя задача ходит без приёмки: в работу — «взялся», дальше — «сделал».
+  // Назад по-прежнему нельзя: закрытую открывают в карточке.
+  if (who.isSelf && ORDER.indexOf(to) > ORDER.indexOf(from)) {
+    return to === "work" ? { action: "accept" } : { action: "close" };
+  }
 
   // Назад — только словами и только из карточки.
   if (ORDER.indexOf(to) < ORDER.indexOf(from)) {

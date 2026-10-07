@@ -280,7 +280,15 @@ test("a thought becomes a task from its own menu — the drag a finger cannot do
   await expect(page.locator(".action-sheet")).toBeVisible();
   await page.click(".action-sheet .export-item:has-text('Сделать задачей')");
 
-  // The thought is consumed by the conversion, exactly as it is when it is
+  // The ordinary new-task form opens with the thought as its title; the
+  // thought stays until the form is saved — executor and the rest are the
+  // author's to fill in (07.10.2026).
+  await expect(page.locator("#fTitle")).toHaveValue(text);
+  await expect(item).toHaveCount(1);
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+
+  // Saved — now the thought is consumed, exactly as it is when it is
   // dragged into a column with a mouse.
   await expect(item).toHaveCount(0);
   await page.click('[data-tab="tasks"]');
