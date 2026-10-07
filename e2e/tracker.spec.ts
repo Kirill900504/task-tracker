@@ -286,6 +286,9 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   await login(page);
   await page.click("#addMeetingBtn");
   await page.fill("#mTitle", title);
+  // Завтра, а не сегодня: прошедшее сегодня время заперто (07.10.2026), и
+  // в полдень 10:00 уже не нажать.
+  await page.locator("#meetingOverlay .deadline-row .participant-chip", { hasText: "Завтра" }).click();
   await page.locator("#mTimeGrid .time-slot", { hasText: "10:00" }).click();
 
   const firstChip = page.locator("#mParticipants .participant-chip").first();
@@ -313,6 +316,9 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   await expect(page.locator("#mTimeGrid")).toHaveCount(0);
   await expect(page.locator("#mParticipants")).toHaveCount(0);
   await expect(page.locator("#mTitle")).toHaveCount(0);
+  // Лента обсуждения стоит на месте сразу, а не появляется следом
+  // (07.10.2026, «на долю секунды появляется пустой чат»).
+  await expect(page.locator("#meetingOverlay .chat-feed")).toBeVisible();
 
   await page.fill("#mResult", "Договорились по срокам");
   // «Успешно» writes the outcome and closes the modal on its own — there is
@@ -1295,6 +1301,9 @@ test("время и состав встречи меняются только п
 
   await page.click("#addMeetingBtn");
   await page.fill("#mTitle", title);
+  // Завтра, а не сегодня: прошедшее сегодня время заперто (07.10.2026), и
+  // в полдень 10:00 уже не нажать.
+  await page.locator("#meetingOverlay .deadline-row .participant-chip", { hasText: "Завтра" }).click();
   await page.locator("#mTimeGrid .time-slot", { hasText: "10:00" }).click();
   const firstChip = page.locator("#mParticipants .participant-chip").first();
   const participant = (await firstChip.textContent())?.trim() || "";
@@ -1544,4 +1553,22 @@ test("вычеркнутые мысли идут свежими сверху", a
   const iSecond = titles.findIndex((t) => t.includes(second));
   expect(iSecond).toBeGreaterThanOrEqual(0);
   expect(iSecond, "вычеркнутая последней должна стоять выше").toBeLessThan(iFirst);
+});
+
+// Событий в прошедшем времени не бывает (07.10.2026: «запрети возможность
+// создавать любые события в прошедшем времени»). Вчерашний день в календаре
+// и прошедшее сегодня время в сетке не нажимаются, а лента обсуждения
+// у открытой встречи занимает своё место сразу, даже пустой.
+test("прошлое в форме встречи не выбирается", async ({ page }) => {
+  await login(page);
+  await page.click("#addMeetingBtn");
+  await page.locator("#meetingOverlay .deadline-row .participant-chip", { hasText: "Сегодня" }).click();
+  const past = page.locator("#mTimeGrid .time-slot.past");
+  const n = await past.count();
+  for (let i = 0; i < n; i++) await expect(past.nth(i)).toBeDisabled();
+  await page.locator("#mDate .mini-cal-trigger").click();
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  await expect(page.locator(`.cal-sheet [data-date="${iso}"]`)).toBeDisabled();
 });

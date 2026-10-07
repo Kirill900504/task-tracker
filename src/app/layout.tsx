@@ -4,6 +4,7 @@ import "./globals.css";
 import "./tracker.css";
 import RegisterSW from "./registerSW";
 import CrashWatch from "./CrashWatch";
+import VersionWatch from "./VersionWatch";
 import MiniAppChrome from "./MiniAppChrome";
 import AskProvider from "@/components/Ask";
 
@@ -60,6 +61,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Поломка, о которой знает только пострадавший, — это отсутствующий
             орган чувств: см. lib/crashReport.ts. */}
         <CrashWatch />
+        {/* Открытое окно не должно жить на вчерашнем коде: см. VersionWatch. */}
+        <VersionWatch />
         {/* Окно мессенджера: во весь экран, своего цвета и не
             закрывающееся от прокрутки. Ничего не рисует и вне
             мини-приложения не делает ничего. */}
