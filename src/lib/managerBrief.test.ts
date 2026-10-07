@@ -6,6 +6,7 @@ function facts(patch: Partial<ManagerBriefFacts> = {}): ManagerBriefFacts {
     name: "Игорь",
     overdue: [],
     today: [],
+    soon: [],
     unanswered: [],
     meetings: [],
     returned: [],
@@ -68,5 +69,18 @@ describe("утренняя сводка руководителю", () => {
     // человек не увидит.
     expect(managerBriefIsEmpty(facts({ discussed: [{ title: "Смета" }] }))).toBe(false);
     expect(managerBriefIsEmpty(facts())).toBe(true);
+  });
+});
+
+// Сводка выходит дважды в неделю (07.10.2026) и предупреждает о сроках до
+// следующей — иначе срок во вторник не попал бы ни в одну.
+describe("ближайшие сроки в сводке", () => {
+  it("идут блоком «Скоро срок» по возрастанию даты", () => {
+    const text = composeManagerBrief(facts({ soon: [{ title: "Б", deadline: "2026-10-09" }, { title: "А", deadline: "2026-10-08" }] }));
+    expect(text).toContain("⏳ Скоро срок:");
+    expect(text.indexOf("А — до 08.10.2026")).toBeLessThan(text.indexOf("Б — до 09.10.2026"));
+  });
+  it("одних ближайших сроков достаточно, чтобы сводка ушла", () => {
+    expect(managerBriefIsEmpty(facts({ soon: [{ title: "А", deadline: "2026-10-08" }] }))).toBe(false);
   });
 });

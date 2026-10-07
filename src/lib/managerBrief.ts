@@ -15,6 +15,11 @@ export type ManagerBriefFacts = {
   name: string;
   overdue: { title: string; deadline: string }[];
   today: { title: string; deadline: string }[];
+  // Сроки ДО следующей сводки (lib/briefDays): сводка выходит по
+  // понедельникам и средам, и предупредить о сроке во вторник или в
+  // пятницу можно только заранее. Это вместо отдельного «завтра срок»
+  // каждый день — строкой в письме, которое и так приходит (07.10.2026).
+  soon: { title: string; deadline: string }[];
   unanswered: { title: string }[];
   meetings: { title: string; time: string }[];
   returned: { title: string; comment: string }[];
@@ -40,6 +45,7 @@ export function managerBriefIsEmpty(f: ManagerBriefFacts): boolean {
   return (
     !f.overdue.length &&
     !f.today.length &&
+    !f.soon.length &&
     !f.unanswered.length &&
     !f.meetings.length &&
     !f.returned.length &&
@@ -53,11 +59,15 @@ export async function buildManagerBrief(
   ownerId: string,
   assignee: { id: string; name: string },
   today: string,
+  // До какого дня включительно показывать ближайшие сроки. Пусто — блока
+  // нет (так сводка и строилась до 07.10.2026).
+  soonUntil = "",
 ): Promise<ManagerBriefFacts> {
   const facts: ManagerBriefFacts = {
     name: assignee.name,
     overdue: [],
     today: [],
+    soon: [],
     unanswered: [],
     meetings: [],
     returned: [],
@@ -102,6 +112,7 @@ export async function buildManagerBrief(
     if (t.approval_state === "returned") facts.returned.push({ title: t.title, comment: t.approval_comment || "" });
     if (!recurring && deadline && deadline < today) facts.overdue.push({ title: t.title, deadline });
     else if (!recurring && deadline === today) facts.today.push({ title: t.title, deadline });
+    else if (!recurring && deadline && soonUntil && deadline > today && deadline <= soonUntil) facts.soon.push({ title: t.title, deadline });
     if (!r.accepted_at && !r.declined_at) facts.unanswered.push({ title: t.title });
   }
 
@@ -198,6 +209,10 @@ export function composeManagerBrief(f: ManagerBriefFacts): string {
   if (f.today.length) {
     lines.push("", "Сегодня:");
     for (const t of f.today) lines.push(`• ${t.title}`);
+  }
+  if (f.soon.length) {
+    lines.push("", "⏳ Скоро срок:");
+    for (const t of [...f.soon].sort((a, b) => a.deadline.localeCompare(b.deadline))) lines.push(`• ${t.title} — до ${fmtDate(t.deadline)}`);
   }
   if (f.returned.length) {
     lines.push("", "Вернули на доработку:");

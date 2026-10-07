@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server";
+import { briefLooksUntil, isBriefDay } from "@/lib/briefDays";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyAuthor, notifyOwner } from "@/lib/botDelivery";
 import { flushNotices } from "@/lib/noticeQueue";
@@ -167,6 +168,9 @@ export async function GET(req: Request) {
   // gated by this — a meeting deliberately scheduled on a day off still
   // needs its 15-minute warning.
   const workingDay = await isRussianWorkingDay(now);
+  // Утренние сводки — по понедельникам и средам, и смотрят до следующей.
+  const briefDay = isBriefDay(now);
+  const briefUntil = briefLooksUntil(now);
 
   const [{ data: tgAccounts }, { data: maxAccounts }] = await Promise.all([
     admin.from("telegram_accounts").select("user_id"),
@@ -233,7 +237,9 @@ export async function GET(req: Request) {
     // on a working day, and not before BRIEF_FROM_MINUTES — a list of tasks
     // arriving at 00:05 (whenever the pinger first ran after midnight) was
     // no use to anybody.
-    if (workingDay && nowMin >= BRIEF_FROM_MINUTES) {
+    // Только по понедельникам и средам (lib/briefDays, 07.10.2026: «чтобы не
+    // засорял эфир и не бесил каждый день»).
+    if (workingDay && briefDay && nowMin >= BRIEF_FROM_MINUTES) {
       await onceOnly(admin, { userId, kind: "daily_brief", refId: today, date: today }, async () => {
         const facts = await buildBriefFacts(admin, userId);
         let text = briefIsEmpty(facts) ? "" : await composeBrief(facts);
@@ -265,6 +271,31 @@ export async function GET(req: Request) {
         // имена и сроки модели не отдаются.
         const silent = await findSilent(admin, userId, now);
         if (silent.length) text = (text ? text + "\n\n" : "") + composeSilence(silent);
+
+        // Сроки его поручений до следующей сводки: раз она выходит дважды в
+        // неделю, срок во вторник или в пятницу иначе прошёл бы мимо неё.
+        // Своё — где автор не записан (равные права: чужие поручения
+        // сообщают их постановщикам).
+        if (briefUntil) {
+          const { data: soonRows } = await admin
+            .from("tasks")
+            .select("title, deadline, recur")
+            .eq("user_id", userId)
+            .is("created_by", null)
+            .is("deleted_at", null)
+            .neq("status", "done")
+            .gt("deadline", today)
+            .lte("deadline", briefUntil)
+            .order("deadline")
+            .limit(10);
+          const soon = ((soonRows || []) as { title: string; deadline: string; recur: string | null }[]).filter((t) => (t.recur || "none") === "none");
+          if (soon.length) {
+            text =
+              (text ? text + "\n\n" : "") +
+              `⏳ Скоро срок по вашим поручениям (${soon.length}):\n` +
+              soon.map((t) => `• ${t.title} — до ${t.deadline.split("-").reverse().join(".")}`).join("\n");
+          }
+        }
 
         // Обсуждения, в которых со вчера что-то писали. Каждое сообщение
         // отдельным уведомлением превратило бы мессенджер в ленту, а
@@ -378,7 +409,7 @@ export async function GET(req: Request) {
     // только про его собственные дела. Идёт всем, кто подключён к
     // мессенджеру: человек, который в трекер не заходит, узнаёт о
     // просроченном там же, где отвечает на задачи.
-    if (workingDay && nowMin >= BRIEF_FROM_MINUTES) {
+    if (workingDay && briefDay && nowMin >= BRIEF_FROM_MINUTES) {
       const { data: colleagues } = await admin
         .from("assignees")
         .select("id, name, telegram_chat_id, max_user_id")
@@ -393,7 +424,7 @@ export async function GET(req: Request) {
         const targets = await chatsForPerson(admin, userId, person);
         if (!targets.length) continue;
         await onceOnly(admin, { userId, kind: "manager_brief", refId: `${today}:${person.id}`, date: today }, async () => {
-          const facts = await buildManagerBrief(admin, userId, person, today);
+          const facts = await buildManagerBrief(admin, userId, person, today, briefUntil);
           if (!managerBriefIsEmpty(facts)) await sendToPerson(admin, userId, person, composeManagerBrief(facts));
         });
       }

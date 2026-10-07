@@ -1,5 +1,6 @@
 {
   "regions": ["fra1"],
+  "fluid": true,
   "crons": [
     { "path": "/api/cron/backup", "schedule": "0 6 * * 1" }
   ]
