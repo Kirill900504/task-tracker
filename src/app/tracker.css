@@ -1941,6 +1941,10 @@
   /* Роль видно на самой кнопке: исполнитель — просто выбранный, остальные
      подписаны, потому что их меньшинство и их легко перепутать с главным. */
   .participant-chip .chip-role{opacity:.8; font-weight:500;}
+  /* Отсутствие (миграция 0047): тёплый цвет, а не красный — это не ошибка,
+     а то, что надо знать, выбирая человека. */
+  .participant-chip .chip-away, .team-away{color:var(--today); font-weight:500;}
+  .away-hint{color:var(--today);}
   .participant-chip.role-coexecutor{background:var(--accent-soft); color:var(--accent); border-color:var(--accent);}
   .participant-chip.role-watcher{background:var(--paper-soft); color:var(--ink-soft); border-color:var(--ink-soft); font-weight:500;}
   .participant-chip.chip-add{border-style:dashed; color:var(--ink-soft);}

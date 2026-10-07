@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { briefLooksUntil, isBriefDay } from "@/lib/briefDays";
 import { spawnRecurringMeetings } from "@/lib/meetingRepeat";
+import { isAwayOn } from "@/lib/away";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyAuthor, notifyOwner } from "@/lib/botDelivery";
 import { flushNotices } from "@/lib/noticeQueue";
@@ -361,16 +362,23 @@ export async function GET(req: Request) {
       for (const { task, step } of stuck) {
         await onceOnly(admin, { userId, kind: "overdue_step", refId: task.taskId + ":" + step, date: today }, async () => {
           const names = task.waiting.map((w) => w.name).filter(Boolean);
+          // Кто в отпуске или на больничном (миграция 0047), того ступень не
+          // будит, а если нет ВСЕХ, кого ждут, молчит и постановщику:
+          // «ответа нет» про человека в отпуске — неправда, и он о ней знает.
+          const { data: waitingRows } = await admin
+            .from("assignees")
+            .select("id, name, telegram_chat_id, max_user_id, away_until")
+            .in("id", task.waiting.map((w) => w.assigneeId));
+          const present = ((waitingRows || []) as (ColleagueRow & { away_until: string | null })[]).filter(
+            (p) => !isAwayOn(p.away_until, today),
+          );
+          if (waitingRows?.length && !present.length) return;
 
           // Человеку — на третий и на четырнадцатый. На седьмой его не
           // трогают: он уже слышал, и повторять то же самое через четыре
           // дня значит приучить пролистывать.
           if (step === 3 || step === 14) {
-            const { data: people } = await admin
-              .from("assignees")
-              .select("id, name, telegram_chat_id, max_user_id")
-              .in("id", task.waiting.map((w) => w.assigneeId));
-            for (const person of ((people || []) as ColleagueRow[])) {
+            for (const person of present) {
               await sendToPerson(admin, userId, person, nudgeText(task, step), taskButtons(task.taskId, "executor"), { kind: "task", itemId: task.taskId });
             }
           }
@@ -398,10 +406,11 @@ export async function GET(req: Request) {
         await onceOnly(admin, { userId, kind: "unaccepted_nudge", refId: w.participantId, date: today }, async () => {
           const { data: person } = await admin
             .from("assignees")
-            .select("id, name, telegram_chat_id, max_user_id")
+            .select("id, name, telegram_chat_id, max_user_id, away_until")
             .eq("id", w.assigneeId)
             .maybeSingle();
-          if (person) {
+          // В отпуске — не теребим: задача дождётся его возвращения.
+          if (person && !isAwayOn(person.away_until as string | null, today)) {
             await sendToPerson(admin, userId, person as ColleagueRow, unacceptedText(w.title), taskButtons(w.taskId, "executor"), { kind: "task", itemId: w.taskId });
           }
         });

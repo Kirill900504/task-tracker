@@ -102,6 +102,13 @@ export const renamePersonInput = z.object({
   name: z.string().trim().min(1, "имя не может быть пустым").max(120),
 });
 
+// Отсутствие (миграция 0047). Пустой `until` — «я на месте».
+export const awayInput = z.object({
+  assigneeId: UUID,
+  until: z.union([ISO_DATE, z.literal("")]),
+  kind: z.enum(["vacation", "sick", "trip", "other"]).optional(),
+});
+
 export const inviteInput = z.object({
   assigneeId: UUID,
   email: EMAIL.optional(),

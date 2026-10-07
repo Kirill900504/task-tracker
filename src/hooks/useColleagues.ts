@@ -43,6 +43,10 @@ export type Colleague = {
   // с оглядкой на этот флаг; в «Команде» своя строка видна — иначе узнать,
   // под каким именем тебя видят остальные, негде.
   isMe: boolean;
+  // Отсутствие (миграция 0047): последний день, когда человека нет, и
+  // почему. Пусто — на месте. Прошедшая дата тоже значит «на месте».
+  awayUntil: string;
+  awayKind: string;
 };
 
 // Есть ли бот MAX — теперь вопрос к базе, а не к сборке: см. useMaxBot.
@@ -51,7 +55,7 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
   const db = createClient();
   const { data, error } = await db
     .from("assignees")
-    .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username")
+    .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username, away_until, away_kind")
     .order("created_at");
   if (error || !data) return null;
 
@@ -106,6 +110,8 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
       member: memberOf.get(r.id as string) || "none",
       direction: directionOf.get(r.id as string) || "",
       role: roleOf.get(r.id as string) || "manager",
+      awayUntil: (r.away_until as string) || "",
+      awayKind: (r.away_kind as string) || "",
     }));
 }
 

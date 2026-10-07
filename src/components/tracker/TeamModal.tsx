@@ -8,6 +8,9 @@ import { useAsk } from "@/components/Ask";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
 import Modal from "./Modal";
 import { withoutSelfMark } from "@/lib/actorName";
+import { useAwayEditor } from "./AwayMenu";
+import { awayPhrase, isAwayOn } from "@/lib/away";
+import { todayStr } from "@/lib/taskDisplay";
 
 // «Команда»: who can be written to, and how to connect the rest.
 //
@@ -68,6 +71,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     useColleagues();
   const maxBot = useMaxBot();
   const ask = useAsk();
+  const editAway = useAwayEditor();
   const [inviteFor, setInviteFor] = useState<{
     id: string;
     name: string;
@@ -244,6 +248,10 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     // фамилия оставались навсегда. А имя видят все: по нему выбирают,
     // кому поручить, и им же подписаны карточки и сообщения бота.
     items.push({ id: "rename", label: "Имя", onSelect: () => void handleRename(person) });
+    // Отпуск, больничный, командировка (миграция 0047). Человек отмечает
+    // себя сам из меню аккаунта, а здесь — тот случай, когда он слёг и до
+    // трекера не добрался, а владелец уже знает.
+    items.push({ id: "away", label: "Нет на месте…", onSelect: () => void editAway(person) });
 
     // Своя строка на этом и заканчивается: приглашать себя некуда, вход у
     // владельца есть, а мессенджер он подключает кнопкой в шапке — та
@@ -342,6 +350,12 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                             ? where + (person.username ? ` · @${person.username}` : "")
                             : "не подключён"}
                       </span>
+                      {isAwayOn(person.awayUntil, todayStr()) && (
+                        <>
+                          {" · "}
+                          <span className="team-away">{awayPhrase(person.awayKind, person.awayUntil)}</span>
+                        </>
+                      )}
                       {person.member !== "none" && (
                         <>
                           {" · "}

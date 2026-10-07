@@ -11,6 +11,8 @@ import MeetingAnswer from "./MeetingAnswer";
 import type { MeetingVoteRow } from "@/hooks/useMeetingVotes";
 import type { Meeting, MeetingPrefill, MeetingRecur, MeetingStatus } from "@/types/tracker";
 import { RECUR_LABELS } from "@/lib/meetingRepeatLabels";
+import { useColleagues } from "@/hooks/useColleagues";
+import { awayMark, awayPhrase, isAwayOn } from "@/lib/away";
 import { fmtDate } from "@/lib/taskDisplay";
 import { isSelfAssignee, sanitizeAssigneeList } from "@/lib/trackerRows";
 import { withoutSelfMark } from "@/lib/actorName";
@@ -197,6 +199,13 @@ export default function MeetingModal({
   // Повтор (миграция 0046): каждое повторение — отдельная встреча, следующую
   // заводит крон в день текущей и зовёт тех же людей (lib/meetingRepeat).
   const [recur, setRecur] = useState<MeetingRecur>(meeting?.recur ?? prefill?.recur ?? "none");
+  // Кого в день встречи не будет (миграция 0047) — по самой дате встречи,
+  // а не по сегодняшней: отпуск до пятницы встрече в понедельник не мешает.
+  const { colleagues: team } = useColleagues();
+  const awayOnDay = (name: string) => {
+    const c = team.find((p) => p.name === name);
+    return c && isAwayOn(c.awayUntil, date) ? c : null;
+  };
 
   // Кто занят в этот день и в какие получасовки.
   //
@@ -792,9 +801,19 @@ export default function MeetingModal({
                         список все: в базу уходит полное имя строки, на
                         экран — имя. */}
                     {withoutSelfMark(name)}
+                    {awayOnDay(name) && <span className="chip-away"> · {awayMark(awayOnDay(name)!.awayUntil)}</span>}
                   </button>
                 ))}
               </div>
+              {participants.some((n) => awayOnDay(n)) && (
+                <div className="field-hint away-hint">
+                  {participants
+                    .filter((n) => awayOnDay(n))
+                    .map((n) => `${withoutSelfMark(n)} ${awayPhrase(awayOnDay(n)!.awayKind, awayOnDay(n)!.awayUntil)}`)
+                    .join("; ")}
+                  {participants.filter((n) => awayOnDay(n)).length > 1 ? " — в день встречи их не будет." : " — в день встречи его не будет."}
+                </div>
+              )}
               {busyNow.size > 0 && (
                 <div className="field-hint busy-now-hint">
                   В {time} уже на другой встрече: {[...busyNow].map(withoutSelfMark).join(", ")}. Можно оставить — или выбрать

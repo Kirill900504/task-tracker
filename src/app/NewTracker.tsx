@@ -12,7 +12,9 @@ import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 import { useBotLink } from "@/hooks/useBotLink";
-import { prefetchTeam } from "@/hooks/useColleagues";
+import { prefetchTeam, useColleagues } from "@/hooks/useColleagues";
+import { useAwayEditor } from "@/components/tracker/AwayMenu";
+import { awayPhrase, isAwayOn } from "@/lib/away";
 import ConnectionStatus from "@/components/tracker/ConnectionStatus";
 import SyncStatusPill from "@/components/tracker/SyncStatusPill";
 import TasksPanel from "@/components/tracker/TasksPanel";
@@ -159,6 +161,20 @@ export default function NewTracker() {
   const isMobile = useIsMobile();
   const toasts = useToasts();
   const ask = useAsk();
+  // «Меня нет до…» — в меню аккаунта, у каждого про себя (миграция 0047).
+  const { colleagues: team } = useColleagues();
+  const meInTeam = team.find((c) => c.isMe);
+  const editAway = useAwayEditor();
+  const awayItem = meInTeam
+    ? [
+        {
+          id: "away",
+          label: isAwayOn(meInTeam.awayUntil, todayStr()) ? "Меня нет: " + awayPhrase(meInTeam.awayKind, meInTeam.awayUntil) : "Меня не будет…",
+          icon: "clock" as const,
+          onSelect: () => void editAway(meInTeam),
+        },
+      ]
+    : [];
 
   // Встречи — в календаре телефона подпиской (lib/calendarFeed). Ссылку
   // выдаёт сервер по сессии: она сама по себе пароль к расписанию.
@@ -840,6 +856,7 @@ export default function NewTracker() {
               // а не в аккаунте (см. MessengerLink и useMyMessenger).
               ...(isOwner && botLink.needs.telegram ? [{ id: "tg", label: "Подключить Telegram", icon: "link" as const, onSelect: () => botLink.link("telegram") }] : []),
               ...(isOwner && botLink.needs.max ? [{ id: "max", label: "Подключить MAX", icon: "link" as const, onSelect: () => botLink.link("max") }] : []),
+              ...awayItem,
               { id: "calendar", label: "Встречи в календаре телефона", icon: "calendar" as const, onSelect: () => void subscribeCalendar() },
               { id: "signout", label: "Выйти", icon: "logout" as const, onSelect: () => actions.signOut() },
             ]}
@@ -1047,6 +1064,7 @@ export default function NewTracker() {
           anchor={accountMenuAnchor}
           title={MEMBER_ROLE_LABELS[identity.memberRole]}
           items={[
+            ...awayItem,
             { id: "calendar", label: "Встречи в календаре телефона", icon: "calendar", onSelect: () => void subscribeCalendar() },
             { id: "signout", label: "Выйти", icon: "logout", onSelect: () => actions.signOut() },
           ]}

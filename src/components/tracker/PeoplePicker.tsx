@@ -8,6 +8,9 @@ import { withoutSelfMark } from "@/lib/actorName";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { SEARCH_FROM, matchesPerson } from "@/lib/personSearch";
+import { useColleagues } from "@/hooks/useColleagues";
+import { awayMark, awayPhrase, isAwayOn } from "@/lib/away";
+import { todayStr } from "@/lib/taskDisplay";
 
 // Кто на задаче — одним полем.
 //
@@ -95,6 +98,17 @@ export default function PeoplePicker({
   // оно должно совпадать с базой буква в букву.
   const shown = (name: string) => withoutSelfMark(name);
 
+  // Кого сейчас нет (миграция 0047): пометка на кнопке и строка под полем,
+  // если такого человека выбрали. Не запрет — поручить можно и уходящему в
+  // отпуск, — а знание, без которого через три дня кажется, что он молчит.
+  const { colleagues } = useColleagues();
+  const today = todayStr();
+  const awayOf = (id: string) => {
+    const c = colleagues.find((p) => p.id === id);
+    return c && isAwayOn(c.awayUntil, today) ? c : null;
+  };
+  const pickedAway = picked.map((p) => ({ p, away: awayOf(p.id) })).filter((x) => x.away);
+
   // На телефоне список свёрнут, пока его не раскроют.
   //
   // Осмотр 21.09.2026: четырнадцать имён — это семь рядов кнопок, то есть
@@ -180,6 +194,7 @@ export default function PeoplePicker({
             >
               {shown(person.name)}
               {role && role !== "executor" && <span className="chip-role"> · {ROLE_LABEL[role]}</span>}
+              {awayOf(person.id) && <span className="chip-away"> · {awayMark(awayOf(person.id)!.awayUntil)}</span>}
             </button>
           );
         })}
@@ -202,6 +217,12 @@ export default function PeoplePicker({
           и в форме, где до срока и так надо долистать, они читаются один
           раз в жизни, а место занимают всегда. Смысл при этом не теряется:
           что делает второе нажатие, сказано и здесь. */}
+      {pickedAway.length > 0 && (
+        <div className="field-hint away-hint">
+          {pickedAway.map(({ p, away }) => `${shown(p.name)} ${awayPhrase(away!.awayKind, away!.awayUntil)}`).join("; ")} — поручить
+          можно, но ответа до возвращения не ждите.
+        </div>
+      )}
       <div className="tp-hint">
         {hint ||
           (isMobile
