@@ -132,3 +132,50 @@ test("«Готово, проверить» отвечает — и когда п
   await expect(page.locator(".ms-link")).toHaveCount(0, { timeout: 20_000 });
   await expect(page.locator("#newTaskBtn")).toBeVisible();
 });
+
+// Перенос встречи — право того, кто её назначил. 07.10.2026 Кирилл увидел
+// «Перенести — и поправить время или состав» во встрече, куда его только
+// позвали: кнопка стояла у каждого приглашённого. Участник отвечает
+// голосом и предлагает другое время в обсуждении, а двигает встречу
+// организатор. Положительная половина — у организатора кнопка есть —
+// проверяется в tracker.spec.ts («время и состав встречи меняются только
+// переносом»); здесь вторая, которую одним аккаунтом не проверить.
+test("приглашённый на чужую встречу не видит кнопки переноса", async ({ page }) => {
+  const tomorrow = new Date(Date.now() + 24 * 3600_000);
+  const date = [
+    tomorrow.getFullYear(),
+    String(tomorrow.getMonth() + 1).padStart(2, "0"),
+    String(tomorrow.getDate()).padStart(2, "0"),
+  ].join("-");
+  const title = `Чужая встреча ${Date.now()}`;
+  // Встреча владельца (created_by пуст), руководитель в составе по имени —
+  // строку участия заведёт триггер 0024, руками её не вставляем.
+  const { error } = await admin.from("meetings").insert({
+    id: randomUUID(),
+    user_id: owner.id,
+    date,
+    time: "10:00",
+    title,
+    participants: ["Тест Руководитель"],
+    status: "planned",
+    duration_min: 30,
+  });
+  expect(error).toBeNull();
+
+  await page.goto("/login");
+  await page.fill("#email", manager.email);
+  await page.fill("#password", manager.password);
+  await page.click('button[type="submit"]');
+
+  const chip = page.locator(".meeting-chip", { hasText: title });
+  await expect(chip).toBeVisible({ timeout: 20_000 });
+  // По названию, а не в середину карточки: у чужой встречи там ряд
+  // «Буду / Опоздаю / Не смогу». И с force: чужую встречу нельзя тащить,
+  // dnd-kit ставит выключенному перетаскиванию aria-disabled, и Playwright
+  // ждёт «включения» карточки вечно, хотя нажатие мышью она принимает.
+  await chip.getByText(title).click({ force: true });
+  // Окно открылось — сводка встречи на месте…
+  await expect(page.locator(".meeting-fact-title", { hasText: title })).toBeVisible();
+  // …а переноса в ней нет.
+  await expect(page.locator("#meetingMoveBtn")).toHaveCount(0);
+});
