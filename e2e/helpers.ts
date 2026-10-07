@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Общие шаги для обоих наборов — настольного и телефонного.
 //
@@ -129,4 +130,64 @@ export async function settled(locator: Locator, tries = 20): Promise<{ x: number
 export async function signOut(page: Page) {
   await page.click("#accountBtn");
   await page.locator(".export-item", { hasText: "Выйти" }).click();
+}
+
+// Сделать задачу ЧУЖИМ поручением тестовому аккаунту.
+//
+// У задачи самому себе нет «Принял / Сделал / Не могу» и приёмки (решение
+// Кирилла 07.10.2026, lib/selfTask), поэтому тест, который отвечает на
+// задачу, должен отвечать на поручение ДРУГОГО человека. Задача заводится
+// формой на себя (так проще всего получить строку исполнителя), а потом
+// её постановщиком записывается временный вход — он же удаляется в `done`.
+//
+// Открывать задачу после этого — в НОВОМ окне браузера
+// (`browser.newContext()`): трекер рисует первый кадр из своей копии, а
+// смену постановщика в обход интерфейса она не знает (в жизни постановщик
+// у задачи не меняется).
+export async function handOverAuthorship(
+  admin: SupabaseClient,
+  ownerId: string,
+  title: string,
+): Promise<{ id: string; done: () => Promise<void> }> {
+  let id = "";
+  await expect
+    .poll(
+      async () => {
+        const { data } = await admin.from("tasks").select("id").eq("user_id", ownerId).eq("title", title).maybeSingle();
+        id = (data?.id as string) || "";
+        return !!id;
+      },
+      { timeout: 20_000, message: "задача так и не доехала до базы" },
+    )
+    .toBe(true);
+  // Сначала строка исполнителя: у чужой задачи база по праву не даст
+  // владельцу ставить людей.
+  await expect
+    .poll(async () => (await admin.from("task_participants").select("id").eq("task_id", id)).data?.length || 0, { timeout: 20_000 })
+    .toBeGreaterThan(0);
+  const { data: helper, error } = await admin.auth.admin.createUser({
+    email: `e2e-author-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.invalid`,
+    password: crypto.randomUUID(),
+    email_confirm: true,
+  });
+  if (error || !helper.user) throw new Error("не получилось завести временного постановщика: " + error?.message);
+  const upd = await admin.from("tasks").update({ created_by: helper.user.id }).eq("id", id);
+  if (upd.error) throw new Error("не получилось сменить постановщика: " + upd.error.message);
+  return { id, done: async () => void (await admin.auth.admin.deleteUser(helper.user!.id)) };
+}
+
+// Поставить рядом НАБЛЮДАТЕЛЯ — кого-то, кроме себя.
+//
+// Задача, на которой только я, — «своя» (lib/selfTask, 07.10.2026): у неё
+// нет «Сделал / Не могу», приёмки и «Открыть заново». Тесту, которому
+// нужен этот путь, но нужен один вход, хватает одного наблюдателя: он
+// делает задачу обычной, а отвечать по ней по-прежнему мне.
+export async function pickWatcher(page: Page) {
+  const chip = page.locator('#fPeople .participant-chip:not(.chip-add):not([data-self="true"])').first();
+  await expect(chip).toBeVisible({ timeout: 20_000 });
+  await chip.click();
+  const menu = page.locator(".export-menu, .action-sheet").first();
+  await expect(menu).toBeVisible();
+  await menu.locator(".export-item").filter({ hasText: /^Наблюдатель/ }).click();
+  await expect(chip).toHaveClass(/role-watcher/);
 }

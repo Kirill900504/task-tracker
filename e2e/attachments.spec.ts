@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { pickSelfExecutor } from "./helpers";
+import { handOverAuthorship, pickSelfExecutor } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // Картинка во вложении: миниатюра, которая ДЕЙСТВИТЕЛЬНО загрузилась, и окно
@@ -30,10 +30,11 @@ async function login(page: Page) {
   if ((await btn.getAttribute("aria-pressed")) !== "true") await btn.click();
 }
 
+const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
+
 async function waitForPeople(): Promise<void> {
-  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
   for (let i = 0; i < 40; i++) {
     const { data } = await admin.from("assignees").select("id").eq("user_id", userId).limit(1);
     if ((data || []).length) return;
@@ -42,7 +43,7 @@ async function waitForPeople(): Promise<void> {
   throw new Error("Список людей у тестового аккаунта так и не появился за 20 секунд");
 }
 
-test("фото в отчёте — миниатюра, по нажатию окно, Esc закрывает только его", async ({ page }) => {
+test("фото в отчёте — миниатюра, по нажатию окно, Esc закрывает только его", async ({ page, browser }) => {
   const title = `E2E вложение ${Date.now()}`;
   await login(page);
   await waitForPeople();
@@ -55,36 +56,49 @@ test("фото в отчёте — миниатюра, по нажатию ок�
   await expect(card).toBeVisible();
   await expect(page.locator("#syncStatus")).toHaveText("✓ Сохранено", { timeout: 10_000 });
 
-  await card.click();
-  const report = page.locator(".my-work .btn", { hasText: "Сделал" });
-  await expect(report).toBeVisible({ timeout: 20_000 });
-  await report.click();
-  await page.fill("#myWorkDone", "Фото установки");
-  await page.locator(".ms-answer-files input[type=file]").setInputFiles({
-    name: "foto.png",
-    mimeType: "image/png",
-    buffer: readFileSync("public/favicon.png"),
-  });
-  await page.locator(".ms-answer-actions .btn", { hasText: "Отправить отчёт" }).click();
-  await expect(page.locator("#overlay")).toHaveCount(0, { timeout: 15_000 });
+  // Отчитываются по ЧУЖОМУ поручению: у задачи самому себе кнопки
+  // «Сделал» нет (07.10.2026, lib/selfTask). Отчёт уводит такую задачу
+  // на приёмку постановщику, и смотрим её там.
+  const handed = await handOverAuthorship(admin, userId, title);
+  try {
+    page = await (await browser.newContext()).newPage();
+    await login(page);
+    const theirs = page.locator(`.task[data-id="${handed.id}"]`);
+    await expect(theirs).toBeVisible({ timeout: 30_000 });
+    await theirs.click();
+    const report = page.locator(".my-work .btn", { hasText: "Сделал" });
+    await expect(report).toBeVisible({ timeout: 20_000 });
+    await report.click();
+    await page.fill("#myWorkDone", "Фото установки");
+    await page.locator(".ms-answer-files input[type=file]").setInputFiles({
+      name: "foto.png",
+      mimeType: "image/png",
+      buffer: readFileSync("public/favicon.png"),
+    });
+    await page.locator(".ms-answer-actions .btn", { hasText: "Отправить отчёт" }).click();
+    await expect(page.locator("#overlay")).toHaveCount(0, { timeout: 15_000 });
 
-  const done = page.locator("#col-done .task", { hasText: title });
-  await expect(done).toBeVisible({ timeout: 15_000 });
-  await done.click();
+    const done = page.locator("#col-review .task", { hasText: title });
+    await expect(done).toBeVisible({ timeout: 15_000 });
+    await done.click();
 
-  const thumb = page.locator(".result-files .file-item.image img");
-  await expect(thumb).toBeVisible({ timeout: 15_000 });
-  // Нарисована, а не просто стоит в разметке: битая картинка тоже <img>.
-  await expect.poll(() => thumb.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
+    const thumb = page.locator(".result-files .file-item.image img");
+    await expect(thumb).toBeVisible({ timeout: 15_000 });
+    // Нарисована, а не просто стоит в разметке: битая картинка тоже <img>.
+    await expect.poll(() => thumb.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
 
-  await thumb.click();
-  const viewer = page.locator("dialog.viewer");
-  await expect(viewer).toBeVisible();
-  await expect(viewer.locator(".viewer-image")).toBeVisible();
-  await expect(viewer.locator(".viewer-name")).toContainText("foto.png");
+    await thumb.click();
+    const viewer = page.locator("dialog.viewer");
+    await expect(viewer).toBeVisible();
+    await expect(viewer.locator(".viewer-image")).toBeVisible();
+    await expect(viewer.locator(".viewer-name")).toContainText("foto.png");
 
-  // Escape закрывает окно просмотра, а карточка задачи под ним остаётся.
-  await page.keyboard.press("Escape");
-  await expect(viewer).toHaveCount(0);
-  await expect(page.locator(".result-files .file-item.image img")).toBeVisible();
+    // Escape закрывает окно просмотра, а карточка задачи под ним остаётся.
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
+    await expect(page.locator(".result-files .file-item.image img")).toBeVisible();
+    await page.context().close();
+  } finally {
+    await handed.done();
+  }
 });

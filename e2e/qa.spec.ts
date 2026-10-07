@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
-import { pickSelfExecutor } from "./helpers";
+import { handOverAuthorship, pickSelfExecutor, settled } from "./helpers";
 
 // Сторожа к тому, что нашёл полный QA-проход 06.10.2026 руками в браузере.
 //
@@ -151,26 +151,43 @@ test("владелец не распоряжается задачей, кото�
 
 // «Сделал» не уезжает из-под руки. После «Принял» кнопка исчезала, ряд
 // перестраивался, и второе нажатие приходилось мимо (QA 06.10.2026).
-test("после «Принял» кнопка «Сделал» остаётся на месте", async ({ page }) => {
+test("после «Принял» кнопка «Сделал» остаётся на месте", async ({ page, browser }) => {
   const title = `QA ряд ${Date.now()}`;
   await login(page);
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
   await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
-  await page.locator(".task", { hasText: title }).locator(".task-title").click();
-  const modal = page.locator("dialog[open]");
-  const done = modal.getByRole("button", { name: "Сделал" });
-  await expect(done).toBeVisible({ timeout: 20_000 });
   // Дата постановки — сразу, а не после эха из базы («Дата постановки —»).
-  await expect(modal.locator("#taskFacts")).toContainText(/\d{2}\.\d{2}\.\d{4}/);
-  const before = await done.boundingBox();
-  await modal.getByRole("button", { name: "Принял" }).click();
-  await expect(modal.locator(".my-work-accepted")).toBeVisible({ timeout: 15_000 });
-  const after = await done.boundingBox();
-  expect(Math.abs(after!.x - before!.x)).toBeLessThan(2);
-  expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
+  await page.locator(".task", { hasText: title }).locator(".task-title").click();
+  await expect(page.locator("dialog[open] #taskFacts")).toContainText(/\d{2}\.\d{2}\.\d{4}/);
   await page.keyboard.press("Escape");
+
+  // «Принял / Сделал» есть только у ЧУЖОГО поручения: у задачи самому
+  // себе их нет (07.10.2026, lib/selfTask).
+  const handed = await handOverAuthorship(admin, ownerId, title);
+  try {
+    const fresh = await (await browser.newContext()).newPage();
+    await login(fresh);
+    const card = fresh.locator(`.task[data-id="${handed.id}"]`);
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await card.locator(".task-title").click();
+    const modal = fresh.locator("dialog[open]");
+    const done = modal.getByRole("button", { name: "Сделал" });
+    await expect(done).toBeVisible({ timeout: 20_000 });
+    // Окно открывается с анимацией (масштаб около 98% в первые доли
+    // секунды): замер до её конца даёт «сдвиг» в несколько пикселей,
+    // которого на экране нет. Сначала ждём, пока кнопка остановится.
+    const before = await settled(done);
+    await modal.getByRole("button", { name: "Принял" }).click();
+    await expect(modal.locator(".my-work-accepted")).toBeVisible({ timeout: 15_000 });
+    const after = await done.boundingBox();
+    expect(Math.abs(after!.x - before!.x)).toBeLessThan(2);
+    expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
+    await fresh.context().close();
+  } finally {
+    await handed.done();
+  }
 });
 
 // Поиск, который умеет создать (как Ctrl+K в Linear): не нашли — Enter на

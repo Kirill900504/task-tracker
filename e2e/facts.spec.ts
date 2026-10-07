@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
-import { pickSelfExecutor } from "./helpers";
+import { pickSelfExecutor, pickWatcher } from "./helpers";
 
 // Сводка задачи, блок «Результат» и переписка — то, что Кирилл просил
 // 21.09.2026 первыми двумя пунктами и чего не проверял ни один тест.
@@ -38,6 +38,10 @@ test("карточка задачи говорит, кто поручил, ко�
   // Задача самому себе: тесту важна сводка, а не путь работы между двумя
   // людьми, и отчитаться по своей задаче можно тут же.
   await pickSelfExecutor(page);
+  // Наблюдатель рядом обязателен: задача, где только я, — «своя»
+  // (07.10.2026, lib/selfTask), и у неё нет ни «Сделал», ни отметки
+  // «видел», ни решения постановщика, которые здесь проверяются.
+  await pickWatcher(page);
   // Срок — кнопкой «Завтра», ею же проверяется, что быстрые кнопки живы.
   await page.locator(".deadline-row .participant-chip", { hasText: "Завтра" }).first().click();
   await page.click("#saveTaskBtn");
