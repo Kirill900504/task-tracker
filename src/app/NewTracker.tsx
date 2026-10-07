@@ -820,6 +820,7 @@ export default function NewTracker() {
                 them are portalled to <body>, so they show over the shell. */}
             <div hidden={mobileTab !== "today"}>
               <TodayScreen
+                participants={participants}
                 tasks={visibleTasks}
                 meetings={visibleMeetings}
                 sections={sections}

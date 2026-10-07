@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { coalescer } from "@/lib/coalesce";
+import { answerPatch, type AnswerPayload } from "@/lib/answerPatch";
 import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
@@ -218,17 +220,18 @@ export function useTaskParticipants() {
 
   useEffect(() => {
     let cancelled = false;
-    // Перечитать всё — и по подписке, и по поводам из lib/revive.
-    function reload() {
-      fetchAll().then(({ grouped, people: list }) => {
-        if (cancelled) return;
-        setByTask(grouped);
-        setPeople(list);
-        writeCache(grouped, list);
-        setLoading(false);
-      });
-    }
-    reload();
+    // Перечитать всё — и по подписке, и по поводам из lib/revive, склеивая
+    // всплески (lib/coalesce: за одно открытие участие грузилось трижды).
+    const reader = coalescer(async () => {
+      const { grouped, people: list } = await fetchAll();
+      if (cancelled) return;
+      setByTask(grouped);
+      setPeople(list);
+      writeCache(grouped, list);
+      setLoading(false);
+    });
+    const reload = reader.soon;
+    void reader.now();
 
     // Somebody pressing «Сделал» in Telegram has to move the card here
     // without a reload — the same reason every other table the UI watches is
@@ -264,7 +267,7 @@ export function useTaskParticipants() {
       // лежал), события просто не приходили, а догонять пропущенное
       // realtime не умеет.
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") reload();
+        if (status === "SUBSCRIBED" && !reader.startedWithin(2000)) reload();
       });
 
     // Столбец задачи выводится ИЗ ЭТИХ строк, а не хранится в ней, — то
@@ -275,6 +278,7 @@ export function useTaskParticipants() {
 
     return () => {
       cancelled = true;
+      reader.stop();
       stopRevive();
       void db.removeChannel(channel);
     };
@@ -447,7 +451,9 @@ export function useTaskParticipants() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.error) throw new Error(data?.error || "Не получилось");
-      await load();
+      // Сверка фоном, а не ожиданием: решение сервер уже принял, окно можно
+      // закрывать сразу — подписка принесёт новые строки следом.
+      void load();
     },
     [load],
   );
@@ -464,8 +470,26 @@ export function useTaskParticipants() {
   // кода: обязательный комментарий, обязательная причина, переход на
   // приёмку и сообщение постановщику — правила, и вторая их копия разошлась
   // бы с первой (так уже было, см. комментарий в самом маршруте).
+  //
+  // Экран меняется сразу (lib/answerPatch), а подтверждение — следом.
+  // Отказ сервера перечитывает участие, то есть откатывает экран к правде,
+  // и бросает причину наверх, где её покажут. Успех НЕ ждёт перечитывания:
+  // его догонит подписка, а сверка уходит фоном.
   const answer = useCallback(
     async (payload: Record<string, unknown>) => {
+      const participantId = String(payload.participantId || "");
+      const patch = answerPatch(payload as AnswerPayload, new Date().toISOString());
+      if (participantId && patch) {
+        setByTask((prev) => {
+          const next: Record<string, Participant[]> = {};
+          for (const [taskId, list] of Object.entries(prev)) {
+            next[taskId] = list.some((p) => p.id === participantId)
+              ? list.map((p) => (p.id === participantId ? { ...p, ...patch } : p))
+              : list;
+          }
+          return next;
+        });
+      }
       const res = await fetch("/api/workspace/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -476,7 +500,7 @@ export function useTaskParticipants() {
         await load();
         throw new Error(data?.error || "Не получилось отправить ответ");
       }
-      await load();
+      void load();
     },
     [load],
   );

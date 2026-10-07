@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { coalescer } from "@/lib/coalesce";
 import { createClient } from "@/lib/supabase/client";
 import { onRevive } from "@/lib/revive";
 import { isSelfAssignee } from "@/lib/trackerRows";
@@ -81,7 +82,10 @@ export function useMeetingVotes() {
       setByMeeting(grouped);
       setPeopleByName(names);
     };
-    fetchAll().then(apply);
+    // Всплески склеиваются в одно чтение (lib/coalesce): голоса за одно
+    // открытие трекера грузились дважды, а каждый «Буду» соседа — ещё раз.
+    const reader = coalescer(async () => apply(await fetchAll()));
+    void reader.now();
 
     const db = createClient();
     const channel = db
@@ -98,24 +102,22 @@ export function useMeetingVotes() {
       // между «лишняя подписка» и «белый экран» такая, что выбор
       // очевиден.
       .channel("meeting-votes:" + Math.random().toString(36).slice(2))
-      .on("postgres_changes", { event: "*", schema: "public", table: "meeting_participants" }, () => {
-        fetchAll().then(apply);
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "meeting_participants" }, reader.soon)
       // Каждый подъём канала — повод перечитать: пока он поднимался, события
-      // не приходили, а догонять пропущенное realtime не умеет.
+      // не приходили, а догонять пропущенное realtime не умеет. Кроме
+      // подъёма сразу после чтения — всё, что он догнал бы, уже в нём.
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") fetchAll().then(apply);
+        if (status === "SUBSCRIBED" && !reader.startedWithin(2000)) reader.soon();
       });
 
     // И те же поводы, что у всего остального (см. lib/revive.ts): подписка
     // умирает молча, а «Буду / Опоздаю / Не смогу» соседа после этого не
     // появляется до перезагрузки страницы.
-    const stopRevive = onRevive(() => {
-      fetchAll().then(apply);
-    });
+    const stopRevive = onRevive(reader.soon);
 
     return () => {
       cancelled = true;
+      reader.stop();
       stopRevive();
       void db.removeChannel(channel);
     };

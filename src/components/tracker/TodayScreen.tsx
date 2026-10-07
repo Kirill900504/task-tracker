@@ -6,7 +6,7 @@ import TaskCard from "./TaskCard";
 import SendMenu from "./SendMenu";
 import { buildToday } from "@/lib/todayScreen";
 import { fmtDate } from "@/lib/taskDisplay";
-import { useTaskParticipants } from "@/hooks/useTaskParticipants";
+import type { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { myRoleOn } from "@/lib/myRole";
@@ -27,6 +27,7 @@ export default function TodayScreen({
   onGoToTasks,
   myAssigneeId = "",
   showToast,
+  participants,
 }: {
   tasks: Task[];
   meetings: Meeting[];
@@ -47,6 +48,12 @@ export default function TodayScreen({
   // How the outcome of a send is said out loud here — the same toast stack
   // the rest of the tracker answers with.
   showToast: (message: string) => void;
+  // Участие — то же, что держит корень (NewTracker), а не своё. Свой
+  // экземпляр хука означал второй набор запросов и вторую подписку на ту же
+  // таблицу: каждое «Принял» любого человека перечитывало всё участие
+  // дважды (замер 07.10.2026 — участники задач грузились трижды за одно
+  // открытие). На телефоне этот экран смонтирован всегда.
+  participants: ReturnType<typeof useTaskParticipants>;
 }) {
   // Sending straight from the first screen: what you are about to miss is
   // exactly what you most often want to hand to someone.
@@ -57,13 +64,6 @@ export default function TodayScreen({
   // Тон карточки здесь тот же, что на доске, и по той же причине: этот
   // экран показывает ВСЁ, у чего срок сегодня или раньше, — и своё, и
   // чужое, — а без цвета «где моя работа» приходится открывать каждую.
-  //
-  // Участники спрашиваются своим хуком, а не приходят пропсом: держит их
-  // панель задач, и подниматься за ними в NewTracker значило бы тащить
-  // список участия через весь корень ради цвета на втором экране. Цена
-  // известна и мала — вторая подписка на ту же таблицу (имя канала у хука
-  // своё на каждый вызов ровно для этого, см. useTaskParticipants).
-  const participants = useTaskParticipants();
   const roleOf = (t: Task) => myRoleOn(participants.forTask(t.id), myAssigneeId);
   // «Кто поручил → кому» — здесь то же, что на доске: одно правило на все
   // места, где показывается кубик задачи (см. TaskCard).
