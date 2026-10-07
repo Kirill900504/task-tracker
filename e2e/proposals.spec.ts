@@ -115,23 +115,54 @@ test("«Ссылки всем» в «Команде» выдаёт ссылку 
   await expect(block.getByRole("button", { name: "Скопировать всё" })).toBeVisible();
 });
 
-test("готовый ответ вставляется в отчёт одним нажатием, но не отправляет его сам", async ({ page }) => {
-  await login(page);
-  const title = "Готовый ответ " + Date.now();
-  await page.click("#newTaskBtn");
-  await page.fill("#fTitle", title);
-  await pickSelfExecutor(page);
-  await page.click("#saveTaskBtn");
-  const card = page.locator(".task", { hasText: title });
-  await expect(card).toBeVisible();
-  await card.click();
-  const modal = page.locator("dialog[open]").filter({ has: page.locator("#modalTitle") });
-  await modal.getByRole("button", { name: "Сделал" }).click({ timeout: 20_000 });
-  await modal.locator(".ms-answer-quick").getByRole("button", { name: "Готово, проверьте" }).click();
-  await expect(modal.locator("#myWorkDone")).toHaveValue("Готово, проверьте");
-  // Не отправилось само: форма на месте, кнопка отправки ждёт.
-  await expect(modal.getByRole("button", { name: "Отправить отчёт" })).toBeVisible();
-  await page.keyboard.press("Escape");
+test("готовый ответ вставляется в отчёт одним нажатием, но не отправляет его сам", async ({ page, browser }) => {
+  // Отвечают на ЧУЖОЕ поручение: у задачи самому себе кнопок «Сделал» нет
+  // (так решил Кирилл 07.10.2026 — отчитываться перед собой незачем).
+  // Поэтому задача заводится формой на себя, а потом её «поручает» другой
+  // человек — временный, и он же убирается в конце.
+  const stamp = Date.now();
+  const { data: helper } = await admin.auth.admin.createUser({ email: `qa-helper-${stamp}@example.invalid`, password: crypto.randomUUID(), email_confirm: true });
+  try {
+    await login(page);
+    const title = "Готовый ответ " + stamp;
+    await page.click("#newTaskBtn");
+    await page.fill("#fTitle", title);
+    await pickSelfExecutor(page);
+    await page.click("#saveTaskBtn");
+    await expect(page.locator(".task", { hasText: title })).toBeVisible();
+    let id = "";
+    await expect
+      .poll(async () => {
+        const { data } = await admin.from("tasks").select("id").eq("user_id", ownerId).eq("title", title).maybeSingle();
+        id = (data?.id as string) || "";
+        return !!id;
+      }, { timeout: 20_000 })
+      .toBe(true);
+    // Сначала должна доехать строка исполнителя: после смены постановщика
+    // база по праву не даст владельцу ставить людей в чужую задачу.
+    await expect
+      .poll(async () => (await admin.from("task_participants").select("id").eq("task_id", id)).data?.length || 0, { timeout: 20_000 })
+      .toBeGreaterThan(0);
+    expect((await admin.from("tasks").update({ created_by: helper.user!.id }).eq("id", id)).error).toBeNull();
+
+    // Чистое окно браузера: после перезагрузки трекер рисует первый кадр
+    // из своей копии, а смену постановщика в обход интерфейса она не знает
+    // (в жизни постановщик у задачи не меняется).
+    const fresh = await (await browser.newContext()).newPage();
+    await login(fresh);
+    const card = fresh.locator(`.task[data-id="${id}"]`);
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await card.click();
+    const modal = fresh.locator("dialog[open]").filter({ has: fresh.locator("#modalTitle") });
+    await modal.getByRole("button", { name: "Сделал" }).click({ timeout: 20_000 });
+    await modal.locator(".ms-answer-quick").getByRole("button", { name: "Готово, проверьте" }).click();
+    await expect(modal.locator("#myWorkDone")).toHaveValue("Готово, проверьте");
+    // Не отправилось само: форма на месте, кнопка отправки ждёт.
+    await expect(modal.getByRole("button", { name: "Отправить отчёт" })).toBeVisible();
+    await fresh.context().close();
+  } finally {
+    if (helper?.user) await admin.auth.admin.deleteUser(helper.user.id);
+  }
 });
 
 test("«Повторить» у закрытой задачи открывает новую с тем же названием и без срока", async ({ page }) => {
