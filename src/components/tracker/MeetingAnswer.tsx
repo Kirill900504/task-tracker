@@ -118,6 +118,7 @@ export default function MeetingAnswer({
           placeholder="Что мешает прийти"
           emptyHint="Причина обязательна: без неё организатор не знает, переносить встречу или нет."
           submitLabel="Отправить"
+          quick={["В это время другая встреча", "Буду в отъезде", "Заболел"]}
           busy={busy}
           onSubmit={(text, _when, files) => void run("no", text, files)}
           onCancel={() => setAsking(false)}

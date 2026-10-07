@@ -110,6 +110,7 @@ export default function TaskModal({
   onReturnOne,
   onForceCloseWork,
   onReopenWork,
+  onRepeat,
   onAcceptReschedule,
   onRejectReschedule,
   onPersonAdded,
@@ -140,6 +141,11 @@ export default function TaskModal({
   onReturnOne?: (participantId: string, comment: string) => void | Promise<void>;
   onForceCloseWork: (reason: string) => void;
   onReopenWork: (comment: string) => void;
+  // «Повторить» у закрытой задачи (п.2.7 предложений, 07.10.2026): форма
+  // новой задачи с тем же названием, описанием, разделом и людьми, но без
+  // срока — срок у повторения всегда новый. Шаблонов отдельной сущностью
+  // нет нарочно: типовая задача и есть прошлая такая же.
+  onRepeat?: (prefill: TaskPrefill) => void;
   onAcceptReschedule: (participantId: string, date: string) => void;
   onRejectReschedule: (participantId: string) => void;
   // Дождаться, пока только что заведённый человек доедет до базы, и
@@ -981,6 +987,26 @@ export default function TaskModal({
             )}
           </div>
           <div className="left">
+            {isEditing && task.status === "done" && onRepeat && (
+              <button
+                className="btn"
+                id="repeatTaskBtn"
+                title="Завести такую же задачу с новым сроком"
+                onClick={() =>
+                  onRepeat({
+                    title: task.title,
+                    desc: task.desc,
+                    sectionId: task.sectionId,
+                    people: participants.map((p) => ({ name: p.name, role: p.role })),
+                    // У старых задач строк участия может не быть — тогда
+                    // исполнитель берётся из поля самой задачи.
+                    assignee: participants.length ? undefined : task.assignee,
+                  })
+                }
+              >
+                Повторить
+              </button>
+            )}
             <button className="btn" id="cancelBtn" onClick={onClose}>
               {canEdit ? "Отмена" : "Закрыть"}
             </button>

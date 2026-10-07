@@ -114,3 +114,44 @@ test("«Ссылки всем» в «Команде» выдаёт ссылку 
   await expect(block).toContainText("https://");
   await expect(block.getByRole("button", { name: "Скопировать всё" })).toBeVisible();
 });
+
+test("готовый ответ вставляется в отчёт одним нажатием, но не отправляет его сам", async ({ page }) => {
+  await login(page);
+  const title = "Готовый ответ " + Date.now();
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator(".task", { hasText: title });
+  await expect(card).toBeVisible();
+  await card.click();
+  const modal = page.locator("dialog[open]").filter({ has: page.locator("#modalTitle") });
+  await modal.getByRole("button", { name: "Сделал" }).click({ timeout: 20_000 });
+  await modal.locator(".ms-answer-quick").getByRole("button", { name: "Готово, проверьте" }).click();
+  await expect(modal.locator("#myWorkDone")).toHaveValue("Готово, проверьте");
+  // Не отправилось само: форма на месте, кнопка отправки ждёт.
+  await expect(modal.getByRole("button", { name: "Отправить отчёт" })).toBeVisible();
+  await page.keyboard.press("Escape");
+});
+
+test("«Повторить» у закрытой задачи открывает новую с тем же названием и без срока", async ({ page }) => {
+  await login(page);
+  const title = "Повтор " + Date.now();
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator(".task", { hasText: title });
+  await expect(card).toBeVisible();
+  await card.locator(".check").click();
+  await expect(card).toHaveClass(/done/);
+  // Закрытая уходит в «Завершённые» — их надо показать.
+  const doneBtn = page.locator("#showDoneCheckbox");
+  if ((await doneBtn.getAttribute("aria-pressed")) !== "true") await doneBtn.click();
+  await page.locator(".task", { hasText: title }).first().click();
+  await page.click("#repeatTaskBtn");
+  await expect(page.locator("#modalTitle")).toHaveText("Новая задача");
+  await expect(page.locator("#fTitle")).toHaveValue(title);
+  await expect(page.locator('#fPeople .participant-chip[data-self="true"]')).toHaveClass(/role-executor/);
+  await page.keyboard.press("Escape");
+});

@@ -3211,6 +3211,9 @@
     background:var(--paper-soft); border:1px solid var(--line);
   }
   .ms-answer-q{font-size:12.5px; line-height:1.45; color:var(--ink-soft);}
+  /* Готовые ответы (AnswerForm.quick): переносятся строками, а не
+     прокручиваются вбок — на телефоне полоса прокрутки прячет половину. */
+  .ms-answer-quick{display:flex; flex-wrap:wrap; gap:6px;}
   .ms-answer-text{
     width:100%; resize:vertical; min-height:70px;
     padding:9px 10px; border-radius:var(--radius-sm);

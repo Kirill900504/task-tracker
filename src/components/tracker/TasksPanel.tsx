@@ -1000,6 +1000,7 @@ export default function TasksPanel({
           isAdmin={isAdmin}
           task={modalTask}
           prefill={modalPrefill}
+          onRepeat={(prefill) => setModalState({ open: true, task: null, prefill })}
           sections={sections}
           onSave={(t, pending) => {
             const wasDeadline = modalTask?.deadline || "";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import AttachFiles from "./AttachFiles";
 
 // Ответ исполнителя — формой в карточке, а не системным окном браузера.
@@ -24,6 +24,7 @@ export default function AnswerForm({
   submitLabel,
   date,
   withFiles = true,
+  quick,
   busy,
   onSubmit,
   onCancel,
@@ -48,6 +49,12 @@ export default function AnswerForm({
   // переносу и есть причина. Куда кладутся файлы — решает тот, кто
   // получает onSubmit (отчёт — в done_files, остальное — lib/answerFiles).
   withFiles?: boolean;
+  // Готовые ответы кнопками над полем (п.7.1 предложений, 07.10.2026):
+  // на телефоне набирать «готово, проверьте» — это то, из-за чего
+  // отвечают в мессенджере словами, мимо трекера. Нажатие ВСТАВЛЯЕТ фразу
+  // в поле, а не отправляет: комментарий остаётся обязательным и своим —
+  // его можно дописать, а случайное касание ничего не отправит.
+  quick?: string[];
   busy?: boolean;
   onSubmit: (text: string, date: string, files: File[]) => void;
   onCancel: () => void;
@@ -56,6 +63,7 @@ export default function AnswerForm({
   const [when, setWhen] = useState(date?.initial || "");
   const [error, setError] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const field = useRef<HTMLTextAreaElement | null>(null);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -76,7 +84,27 @@ export default function AnswerForm({
       <label className="ms-answer-q" htmlFor={id}>
         {question}
       </label>
+      {quick && quick.length > 0 && (
+        <div className="ms-answer-quick">
+          {quick.map((q) => (
+            <button
+              key={q}
+              type="button"
+              className="participant-chip"
+              disabled={busy}
+              onClick={() => {
+                setText(q);
+                setError("");
+                field.current?.focus();
+              }}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
       <textarea
+        ref={field}
         id={id}
         className="ms-answer-text"
         rows={3}
