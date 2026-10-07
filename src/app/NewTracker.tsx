@@ -616,6 +616,7 @@ export default function NewTracker() {
   };
 
   const panels = {
+            allMeetings={meetings}
         calPanel: (
           <CalendarPanel
             tasks={visibleTasks}

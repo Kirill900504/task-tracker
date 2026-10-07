@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { busyStarts, defaultMeetingStart, endsAt, minutesOf, normalizeDuration, overlaps, slotOf, startsInPast, timeOf, warnBefore } from "./meetingTime";
+import { busyPeople, busyStarts, defaultMeetingStart, endsAt, minutesOf, normalizeDuration, overlaps, slotOf, startsInPast, timeOf, warnBefore } from "./meetingTime";
 
 // Занятость человека считается здесь, и ошибка тут стоит дороже обычной:
 // слот, показанный свободным, — это два приглашения на одно время, а
@@ -63,6 +63,52 @@ describe("какие получасовки гасить", () => {
   it("несколько встреч не дублируют один и тот же слот", () => {
     const slots = [slotOf("12:00", 60)!, slotOf("12:30", 30)!];
     expect(busyStarts(slots)).toEqual([720, 750]);
+  });
+});
+
+describe("кто уже занят (busyPeople)", () => {
+  const day = "2026-10-14";
+  const m = (id: string, time: string, durationMin: number, participants: string[], status = "planned") => ({
+    id,
+    date: day,
+    time,
+    durationMin,
+    status,
+    participants,
+  });
+  const meetings = [m("a", "16:00", 30, ["Кирилл (тест)", "Есина"]), m("b", "11:00", 60, ["Макаров"])];
+  const ask = (time: string, durationMin: number, people: string[], ignore: string[] = []) =>
+    busyPeople(meetings, { date: day, time, durationMin, people, ignore });
+
+  it("то же время с тем же человеком — занято (случай со снимка Кирилла)", () => {
+    expect(ask("16:00", 30, ["Кирилл (тест)"])).toEqual(["Кирилл (тест)"]);
+  });
+
+  it("часовая, заходящая на чужую получасовую краем, — тоже занято", () => {
+    expect(ask("15:30", 60, ["Есина"])).toEqual(["Есина"]);
+    expect(ask("15:30", 30, ["Есина"])).toEqual([]);
+  });
+
+  it("начало внутри чужого часа — занято, сразу после конца — свободно", () => {
+    expect(ask("11:30", 30, ["Макаров"])).toEqual(["Макаров"]);
+    expect(ask("12:00", 30, ["Макаров"])).toEqual([]);
+  });
+
+  it("чужая занятость тех, кого не зовут, слот не гасит", () => {
+    expect(ask("16:00", 30, ["Макаров"])).toEqual([]);
+  });
+
+  it("переносимая встреча сама себе время не занимает", () => {
+    expect(ask("16:00", 30, ["Есина"], ["a"])).toEqual([]);
+  });
+
+  it("предложение и закрытая встреча времени не занимают", () => {
+    const list = [m("p", "10:00", 30, ["Есина"], "proposed"), m("d", "10:00", 30, ["Есина"], "success")];
+    expect(busyPeople(list, { date: day, time: "10:00", durationMin: 30, people: ["Есина"] })).toEqual([]);
+  });
+
+  it("другой день — не занято", () => {
+    expect(busyPeople(meetings, { date: "2026-10-15", time: "16:00", durationMin: 30, people: ["Есина"] })).toEqual([]);
   });
 });
 
