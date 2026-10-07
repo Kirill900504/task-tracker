@@ -63,8 +63,17 @@ describe("меню бота", () => {
     // получателя — `list`. Перепутанное здесь означает кнопку, которая
     // ничего не делает у того, кому её показали.
     for (const b of menuButtons("assigner").flat()) {
-      const action = decodeCallback(b.data)!.action;
-      expect(["olist", "omenu", "new"]).toContain(action);
+      const decoded = decodeCallback(b.data)!;
+      // Одно исключение, и оно нарочное: «📥 Мне поручено» — список
+      // получателя. Постановщик тоже получатель (равные права, 06.10.2026),
+      // и в его чате нажатие, не узнанное постановщицкой половиной,
+      // разбирается половиной получателя (lib/botCallback) — проверено на
+      // живой базе в чате владельца 07.10.2026.
+      if (decoded.action === "list") {
+        expect(decoded.id).toBe("my");
+        continue;
+      }
+      expect(["olist", "omenu", "new"]).toContain(decoded.action);
     }
     for (const b of menuButtons("recipient").flat()) {
       expect(decodeCallback(b.data)!.action).toBe("list");
