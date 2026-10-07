@@ -277,7 +277,17 @@ try {
   );
   check("отказ и его причина записаны", lines.some((l) => l.includes("не может") && l.includes("1С")), lines);
   check("приёмка записана", lines.some((l) => l.includes("принял работу")), lines);
-  check("у хроники нет автора — её никто не писал", (history || []).every((h) => !h.author_user_id), history);
+  // Хроника подписана тем, кто совершил действие (recordEvent actorUserId,
+  // 07.10.2026): по этому всплывающее уведомление не сообщает человеку о его
+  // же действии. Подпись — только кем-то из тех, кто действовал в этом
+  // прогоне, и никогда не превращает строку в реплику (system остаётся).
+  const actors = new Set([owner.id, mgrA.id, mgrB.id]);
+  check(
+    "хроника подписана тем, кто действовал, и остаётся хроникой",
+    (history || []).every((h) => h.system && (!h.author_user_id || actors.has(h.author_user_id))) &&
+      (history || []).some((h) => h.author_user_id),
+    history,
+  );
 
   const { data: forged } = await mgrA.db
     .from("item_comments")
