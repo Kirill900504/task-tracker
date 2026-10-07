@@ -35,7 +35,7 @@ export const EMAIL = z
   .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/u, "похоже, это не почта");
 
 export const reportInput = z.object({
-  action: z.enum(["accept", "done", "decline", "reschedule", "vote", "take_idea", "seen"]),
+  action: z.enum(["accept", "done", "decline", "reschedule", "vote", "take_idea", "ack_idea", "seen"]),
   // Для «seen»: чья это строка участия — задачи или встречи.
   kind: z.enum(["task", "meeting"]).optional(),
   participantId: UUID.optional(),

@@ -427,6 +427,27 @@ async function main() {
     check("мысль не отмечается мимо маршрута", rowCount === 0);
   });
 
+  // 0050: автор мысли видит, кому её отправил, — а получатель видит только
+  // свою строку, не весь список тех, кому она ушла.
+  const authoredIdea = "idea_test_by_b";
+  await db.query(`insert into public.ideas (id, user_id, text, created_by) values ($1,$2,'Обзвонить точки',$3)`, [
+    authoredIdea,
+    OWNER,
+    MANAGER_B,
+  ]);
+  await db.query(
+    `insert into public.idea_recipients (user_id, idea_id, assignee_id) values ($1,$2,$3), ($1,$2,$4)`,
+    [OWNER, authoredIdea, byName["Аня"], byName["Вера"]],
+  );
+  await as(db, MANAGER_B, async () => {
+    const { rows } = await db.query("select id from public.idea_recipients where idea_id = $1", [authoredIdea]);
+    check("автор мысли видит, кому её отправил", rows.length === 2);
+  });
+  await as(db, MANAGER_A, async () => {
+    const { rows } = await db.query("select id from public.idea_recipients where idea_id = $1", [authoredIdea]);
+    check("получатель видит только свою строку рассылки", rows.length === 1);
+  });
+
   console.log("\n«Взять в работу» руками руководителя:");
   await as(db, MANAGER_A, async () => {
     const { rowCount } = await db.query(

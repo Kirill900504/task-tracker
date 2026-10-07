@@ -149,6 +149,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, taskId });
   }
 
+  // «Принял»: присланную мысль прочитали, задачей она не станет. Это ответ,
+  // а не «видел» — после него мысль уходит из блока «Прислали вам», а автор
+  // видит отметку в списке получателей. Ни хроники, ни сообщения: мысль не
+  // работа, и строка «принял к сведению» в чужом мессенджере — тот самый
+  // лишний сигнал, по которому ничего не делают.
+  if (body.action === "ack_idea") {
+    if (!body.recipientId && !body.ideaId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+    const query = admin.from("idea_recipients").update({ seen_at: now }).eq("assignee_id", m.assignee_id);
+    const { data: done, error } = await (body.recipientId
+      ? query.eq("id", body.recipientId)
+      : query.eq("idea_id", body.ideaId as string)
+    ).select("id");
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!done?.length) return NextResponse.json({ error: "Эта мысль не ваша" }, { status: 403 });
+    return NextResponse.json({ ok: true });
+  }
+
   if (body.action === "vote") {
     const { data: row } = await admin
       .from("meeting_participants")

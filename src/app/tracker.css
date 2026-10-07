@@ -3582,3 +3582,28 @@
     .field-hint, .tp-hint, .team-hint, .subtitle{font-size:13.5px;}
     .idea-text{font-size:15px;}
   }
+
+  /* Мысли: кому отправлена и «Прислали вам» (07.10.2026). Всплывашка —
+     та же .people-tooltip, что у участников встречи; здесь только то, чего
+     у неё не было: заголовок и слово-ответ справа от имени. */
+  .idea-sent{
+    display:inline-flex; align-items:center; gap:3px; margin-left:8px; padding:0 5px;
+    border-radius:999px; background:var(--accent-soft); color:var(--ink); cursor:default;
+    font-variant-numeric:tabular-nums;
+  }
+  .people-tooltip .ptitle{font-size:var(--label-size); font-weight:var(--label-weight); color:var(--ink-label); margin-bottom:4px;}
+  .people-tooltip .prow-note{margin-left:auto; padding-left:10px; color:var(--ink-soft); font-size:11px;}
+  .incoming-ideas{margin:0 0 8px; padding:8px; border:1px solid var(--accent); border-radius:var(--radius-md); background:var(--accent-soft);}
+  .incoming-ideas-head{
+    display:flex; align-items:center; gap:6px; margin-bottom:6px;
+    font-size:var(--label-size); font-weight:var(--label-weight); color:var(--ink-label);
+  }
+  .incoming-idea{padding:8px 10px; border-radius:var(--radius-md); background:var(--paper-soft); box-shadow:var(--edge);}
+  .incoming-idea + .incoming-idea{margin-top:6px;}
+  .incoming-idea-text{white-space:pre-wrap; overflow-wrap:anywhere;}
+  .incoming-idea-meta{font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
+  /* Две равные кнопки одной строкой: сетка, а не flex-wrap, — ряд не
+     должен рваться по-разному у длинных и коротких мыслей. */
+  .incoming-idea-actions{display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px;}
+  .incoming-idea-actions .btn{min-height:36px; justify-content:center;}
+  @media (max-width:800px){ .incoming-idea-meta{font-size:12.5px;} }

@@ -2,6 +2,7 @@
 
 import type { Task } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // Очередь приёмки — отдельным экраном.
 //
@@ -46,7 +47,7 @@ export default function ReviewScreen({ tasks, onOpen }: { tasks: Task[]; onOpen:
         <button key={t.id} type="button" className="review-row" onClick={() => onOpen(t)}>
           <span className="review-row-title">{t.title}</span>
           <span className="review-row-meta">
-            {t.assignee && <span className="pill">{t.assignee}</span>}
+            {t.assignee && <span className="pill">{withoutSelfMark(t.assignee)}</span>}
             {t.deadline && <span className="pill pill-date">до {fmtDate(t.deadline)}</span>}
           </span>
         </button>

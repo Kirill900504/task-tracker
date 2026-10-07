@@ -15,6 +15,12 @@ import MicButton from "./MicButton";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { ideasToReview, isReviewDay, reviewWeek } from "@/lib/ideaReview";
 import IdeaReviewModal from "./IdeaReviewModal";
+import IncomingIdeas from "./IncomingIdeas";
+import { useIdeaRecipients } from "@/hooks/useIdeaRecipients";
+import { useColleagues } from "@/hooks/useColleagues";
+import { useAuthors } from "@/hooks/useAuthors";
+import { authorLabel } from "@/lib/authorName";
+import { incomingFor, sentToByIdea } from "@/lib/ideaRecipients";
 
 // «Оставить» помнится до конца недели в этом браузере (см. lib/ideaReview).
 // Хранилище может не открыться (приватное окно) — тогда разбор просто
@@ -95,6 +101,18 @@ export default function IdeasPanel({
   const [reviewTotal, setReviewTotal] = useState(0);
   const queue = ideasToReview(ideas, now, kept, (idea) => isMine(idea, myUserId));
   const showReview = isReviewDay(now) && queue.length > 0;
+
+  // Рассылка мыслей: автору — кому ушла его мысль, получателю — что
+  // прислали ему (lib/ideaRecipients). Один хук на панель.
+  const recipients = useIdeaRecipients();
+  const { colleagues } = useColleagues();
+  const authors = useAuthors();
+  const nameById: Record<string, string> = {};
+  for (const c of colleagues) nameById[c.id] = c.name;
+  const sentTo = sentToByIdea(recipients.rows, nameById);
+  const myAssigneeId = colleagues.find((c) => c.isMe)?.id || "";
+  const incoming = incomingFor(recipients.rows, myAssigneeId, myUserId);
+  const people = colleagues.map((c) => c.name);
 
   function keep(idea: Idea) {
     const next = new Set(kept);
@@ -181,6 +199,15 @@ export default function IdeasPanel({
         </button>
         <MicButton value={text} onChange={setText} onDone={(finalText) => addText(finalText)} title="Надиктовать мысль" />
       </div>
+      <IncomingIdeas
+        rows={incoming}
+        authorOf={(createdBy) => authorLabel(createdBy || undefined, authors, people)}
+        onAnswered={(row, answer) => {
+          if (answer === "failed") void recipients.reload();
+          else if (answer === "taken") recipients.markLocally(row.id, { convertedTaskId: "pending" });
+          else recipients.markLocally(row.id, { seenAt: new Date().toISOString() });
+        }}
+      />
       {showReview && !reviewTotal && (
         <button type="button" className="idea-review-strip" id="ideaReviewBtn" onClick={() => setReviewTotal(queue.length)}>
           {queue.length} {plural(queue.length)} без движения больше недели — разобрать
@@ -204,6 +231,7 @@ export default function IdeasPanel({
               onConvertToTask={() => onConvertToTask(idea.id)}
               onConvertToMeeting={() => onConvertToMeeting(idea.id)}
               highlighted={highlightId === idea.id}
+              sentTo={sentTo[idea.id]}
             />
           ))
         )}

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { Task } from "@/types/tracker";
 import { peopleLoad } from "@/lib/peoplePanel";
+import { withoutSelfMark } from "@/lib/actorName";
 import Modal from "./Modal";
 import Icon from "./Icon";
 
@@ -93,10 +94,10 @@ export default function LoadModal({
             key={p.name}
             type="button"
             className={"people-row" + (selected === p.name ? " selected" : "")}
-            title={selected === p.name ? "Показать снова все задачи" : `Показать только задачи: ${p.name}`}
+            title={selected === p.name ? "Показать снова все задачи" : `Показать только задачи: ${withoutSelfMark(p.name)}`}
             onClick={() => pick(p.name)}
           >
-            <span className="people-name">{p.name}</span>
+            <span className="people-name">{withoutSelfMark(p.name)}</span>
             <span className="people-nums">
               {/* Цифра со словом, а не под значком: «⚠ 2» читается только
                   тем, кто уже знает, что значит ⚠. Ноль не рисуется вовсе —

@@ -36,6 +36,7 @@ import Icon from "./Icon";
 import { isCreatedByMe, isMine } from "@/lib/ownership";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
+import { withoutSelfMark } from "@/lib/actorName";
 import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 import { noteParticipantChange } from "@/lib/participantNote";
 import { humanError } from "@/lib/humanError";
@@ -778,10 +779,10 @@ export default function TasksPanel({
                   type="button"
                   className="load-pill-main"
                   id="loadBtn"
-                  title={filterAssignee === "all" ? "Кто чем занят" : `Показана только загрузка: ${filterAssignee}`}
+                  title={filterAssignee === "all" ? "Кто чем занят" : `Показана только загрузка: ${withoutSelfMark(filterAssignee)}`}
                   onClick={() => setLoadOpen(true)}
                 >
-                  <Icon name="users" size={14} /> {filterAssignee === "all" ? "Загрузка" : filterAssignee}
+                  <Icon name="users" size={14} /> {filterAssignee === "all" ? "Загрузка" : withoutSelfMark(filterAssignee)}
                   {filterAssignee === "all" && hotPeople > 0 && <span className="filter-pill-count">{hotPeople}</span>}
                 </button>
                 {/* Снять фильтр — там же, где он виден. Иначе единственный

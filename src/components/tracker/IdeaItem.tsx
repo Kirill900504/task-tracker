@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { useColleagues } from "@/hooks/useColleagues";
 import type { Idea } from "@/types/tracker";
@@ -9,6 +9,8 @@ import SendMenu from "./SendMenu";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
 import Icon from "./Icon";
+import PopLayer from "./PopLayer";
+import type { SentTo } from "@/lib/ideaRecipients";
 
 export default function IdeaItem({
   idea,
@@ -20,6 +22,7 @@ export default function IdeaItem({
   onConvertToTask,
   onConvertToMeeting,
   highlighted,
+  sentTo,
 }: {
   idea: Idea;
   onToggleDone: () => void;
@@ -36,6 +39,8 @@ export default function IdeaItem({
   // Set when the global search sent you here — flashes the item the same
   // way a freshly created task flashes.
   highlighted?: boolean;
+  // Кому мысль уже отправлена и что каждый ответил (lib/ideaRecipients).
+  sentTo?: SentTo[];
 }) {
   const { colleagues } = useColleagues();
   // Who to send this thought to is asked at the moment of sending: unlike a
@@ -55,6 +60,23 @@ export default function IdeaItem({
   });
 
   const savedRef = useRef(false);
+
+  // «Кому отправлена» — та же всплывашка, что у участников встречи
+  // (MeetingChip, .people-tooltip): по наведению на ПК, по нажатию на
+  // телефоне, где наведения нет. В верхнем слое — список мыслей
+  // прокручивается и обрезал бы подсказку у нижних строк.
+  const [sentAnchor, setSentAnchor] = useState<DOMRect | null>(null);
+  const sentRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const el = sentRef.current;
+    if (!sentAnchor || !el) return;
+    let top = sentAnchor.bottom + 4;
+    if (top + el.offsetHeight > window.innerHeight - 8) top = sentAnchor.top - el.offsetHeight - 4;
+    el.style.top = top + "px";
+    el.style.left = Math.max(8, Math.min(sentAnchor.left, window.innerWidth - el.offsetWidth - 8)) + "px";
+  }, [sentAnchor]);
+  const sent = sentTo || [];
+  const answered = sent.filter((s) => s.state !== "none").length;
 
   const linked = colleagues.filter((c) => c.linked && !c.isMe);
 
@@ -160,7 +182,25 @@ export default function IdeaItem({
             {idea.text}
           </div>
         )}
-        <div className="idea-meta">{idea.createdAt}</div>
+        <div className="idea-meta">
+          {idea.createdAt}
+          {sent.length > 0 && (
+            <span
+              className="idea-sent"
+              data-idea-sent={idea.id}
+              onMouseEnter={(e) => setSentAnchor(e.currentTarget.getBoundingClientRect())}
+              onMouseLeave={() => setSentAnchor(null)}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                const r = e.currentTarget.getBoundingClientRect();
+                setSentAnchor((cur) => (cur ? null : r));
+              }}
+            >
+              <Icon name="send" size={11} /> {answered ? `${answered}/${sent.length}` : sent.length}
+            </span>
+          )}
+        </div>
       </div>
       <div className="idea-actions">
         <button
@@ -240,6 +280,22 @@ export default function IdeaItem({
             { id: "meeting", label: "Назначить встречу", icon: "calendar", onSelect: () => onConvertToMeeting() },
           ]}
         />
+      )}
+      {sentAnchor && sent.length > 0 && (
+        <PopLayer>
+          <div ref={sentRef} className="people-tooltip" id="ideaSentTooltip" style={{ display: "block", top: -9999, left: -9999 }}>
+            <div className="ptitle">Отправлено</div>
+            {sent.map((s) => (
+              <div className={"prow " + (s.state === "none" ? "vote-none" : "vote-yes")} key={s.name}>
+                <span className="prow-mark" aria-hidden>
+                  {s.state === "none" ? "•" : <Icon name={s.state === "taken" ? "arrow-right" : "check"} size={13} />}
+                </span>
+                {s.name}
+                <span className="prow-note">{s.state === "taken" ? "взял в работу" : s.state === "seen" ? "принял" : "не ответил"}</span>
+              </div>
+            ))}
+          </div>
+        </PopLayer>
       )}
       {pickerAt && <SendMenu kind="idea" id={idea.id} anchor={pickerAt} onClose={() => setPickerAt(null)} onResult={noteResult} />}
     </div>

@@ -65,7 +65,7 @@ export default function SendMenu({
       });
       if (!yes) return;
     }
-    onResult(names.length > 1 ? "Отправляю…" : `Отправляю ${names[0]}…`);
+    onResult(names.length > 1 ? "Отправляю…" : `Отправляю ${shown(names[0])}…`);
     const result = await sendToTelegram(kind, id, names);
     onResult("error" in result ? result.error : sendResultText(result));
   }
@@ -91,7 +91,7 @@ export default function SendMenu({
   } else if (missing.length) {
     // Not an error — you can still send it to someone else — but the reason
     // the obvious name is missing from this list should not be a mystery.
-    items.push({ id: "__missing", label: `⚠ Не в мессенджере: ${missing.join(", ")}`, onSelect: () => {} });
+    items.push({ id: "__missing", label: `⚠ Не в мессенджере: ${missing.map(shown).join(", ")}`, onSelect: () => {} });
   }
 
   return <ActionMenu anchor={anchor} title="Кому отправить" items={items} onClose={onClose} />;

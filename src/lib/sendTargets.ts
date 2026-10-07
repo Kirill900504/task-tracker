@@ -1,4 +1,5 @@
 import { sortNames } from "@/lib/peopleOrder";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // Who an item can be sent to, and how the answer reads afterwards.
 //
@@ -37,8 +38,12 @@ export function unreachableNames(linked: string[], concerns?: string[]): string[
 }
 
 export function sendResultText(result: { sentTo: string[]; failed: string[] }): string {
-  const sent = result.sentTo.join(", ");
-  const failed = result.failed.join(", ");
+  // Сервер отвечает полными именами строк — у владельца это «… (я)». На
+  // экран пометка не выходит нигде (07.10.2026: «я просил ВЕЗДЕ убрать»):
+  // строка «Отправлено: Кирилл Кучеренко (я)» под мыслью была последним
+  // местом, где она осталась.
+  const sent = result.sentTo.map(withoutSelfMark).join(", ");
+  const failed = result.failed.map(withoutSelfMark).join(", ");
   if (sent && failed) return `Отправлено: ${sent}; не дошло: ${failed}`;
   if (sent) return `Отправлено: ${sent}`;
   if (failed) return `Не дошло: ${failed}`;

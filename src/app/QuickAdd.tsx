@@ -5,6 +5,7 @@ import { speechErrorText, useSpeechInput } from "@/hooks/useSpeechInput";
 import { useAsk } from "@/components/Ask";
 import { createPortal } from "react-dom";
 import Icon from "@/components/tracker/Icon";
+import { withoutSelfMark } from "@/lib/actorName";
 
 export type TaskFields = {
   title: string;
@@ -440,7 +441,7 @@ export default function QuickAdd({
               <span style={{ color: "var(--ink)" }}>{taskPreview.title}</span>
             </div>
             <div className="qap-row">
-              {taskPreview.assignee && <span className="task-assignee">{taskPreview.assignee}</span>}
+              {taskPreview.assignee && <span className="task-assignee">{withoutSelfMark(taskPreview.assignee)}</span>}
               {taskPreview.deadline && <span className="pill pill-date">{taskPreview.deadline}</span>}
             </div>
             <div className="qap-actions">
@@ -458,7 +459,7 @@ export default function QuickAdd({
             </div>
             <div className="qap-row">
               {meetingPreview.date && <span className="pill pill-date">{meetingPreview.date}{meetingPreview.time ? ", " + meetingPreview.time : ""}</span>}
-              {meetingPreview.participants.length > 0 && <span style={{ color: "var(--ink-soft)" }}>{meetingPreview.participants.join(", ")}</span>}
+              {meetingPreview.participants.length > 0 && <span style={{ color: "var(--ink-soft)" }}>{meetingPreview.participants.map(withoutSelfMark).join(", ")}</span>}
             </div>
             <div className="qap-actions">
               <button className="btn btn-primary btn-small" onClick={confirmMeeting}>Сохранить</button>
@@ -485,7 +486,7 @@ export default function QuickAdd({
             {notes.tasks.map((t, i) => (
               <div className="qap-row" key={i}>
                 <span style={{ color: "var(--ink)" }}>{t.title}</span>
-                {t.assignee && <span className="task-assignee">{t.assignee}</span>}
+                {t.assignee && <span className="task-assignee">{withoutSelfMark(t.assignee)}</span>}
                 {t.deadline && <span className="pill pill-date">{t.deadline}</span>}
               </div>
             ))}
