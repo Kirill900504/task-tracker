@@ -22,6 +22,7 @@ import { findAssignmentDrift } from "@/lib/assignmentDrift";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { onceOnly } from "@/lib/onceOnly";
 import { findSilent, composeSilence } from "@/lib/silence";
+import { composePending, findPendingInvites } from "@/lib/pendingInvites";
 import { setMaxCommands, setTelegramCommands, syncTelegramAppButtons } from "@/lib/botCommands";
 import { alarmText, findStuck, nudgeText } from "@/lib/escalation";
 import { findWaiting, unacceptedText, unreviewedText } from "@/lib/waitingNudges";
@@ -280,6 +281,10 @@ export async function GET(req: Request) {
         // имена и сроки модели не отдаются.
         const silent = await findSilent(admin, userId, now);
         if (silent.length) text = (text ? text + "\n\n" : "") + composeSilence(silent);
+
+        // Ссылку на бота выдали, а человек не подключился (lib/pendingInvites).
+        const pending = composePending(await findPendingInvites(admin, userId));
+        if (pending) text = (text ? text + "\n\n" : "") + pending;
 
         // Сроки его поручений до следующей сводки: раз она выходит дважды в
         // неделю, срок во вторник или в пятницу иначе прошёл бы мимо неё.

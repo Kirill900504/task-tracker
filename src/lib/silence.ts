@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { isAwayOn } from "@/lib/away";
+import { dateStr } from "@/lib/taskLogic";
 
 // Кто молчит.
 //
@@ -95,7 +97,7 @@ export async function findSilent(admin: SupabaseClient, userId: string, now: Dat
   const cutoff = new Date(now.getTime() - SILENT_AFTER_HOURS * 60 * 60 * 1000).toISOString();
   const { data } = await admin
     .from("task_participants")
-    .select("created_at, assignee_id, assignees(name, telegram_chat_id, max_user_id), tasks(title, status, deleted_at)")
+    .select("created_at, assignee_id, assignees(name, telegram_chat_id, max_user_id, away_until), tasks(title, status, deleted_at)")
     .eq("user_id", userId)
     .eq("role", "executor")
     .is("accepted_at", null)
@@ -103,7 +105,7 @@ export async function findSilent(admin: SupabaseClient, userId: string, now: Dat
     .is("declined_at", null)
     .lt("created_at", cutoff);
 
-  type Person = { name: string; telegram_chat_id: number | null; max_user_id: number | null };
+  type Person = { name: string; telegram_chat_id: number | null; max_user_id: number | null; away_until: string | null };
   type Raw = {
     created_at: string;
     assignee_id: string;
@@ -111,8 +113,12 @@ export async function findSilent(admin: SupabaseClient, userId: string, now: Dat
     tasks: { title: string; status: string | null; deleted_at: string | null } | null;
   };
 
+  // Кто в отпуске или на больничном (миграция 0047), тот не «молчит»:
+  // он ответит, когда вернётся, и строка про него в сводке была бы неправдой.
+  const today = dateStr(now);
+  const personOf = (r: Raw) => (Array.isArray(r.assignees) ? r.assignees[0] : r.assignees);
   const raw = ((data || []) as unknown as Raw[]).filter(
-    (r) => r.tasks && !r.tasks.deleted_at && r.tasks.status !== "done",
+    (r) => r.tasks && !r.tasks.deleted_at && r.tasks.status !== "done" && !isAwayOn(personOf(r)?.away_until, today),
   );
 
   // Вход в трекер — второй способ ответить: человек без мессенджера, но с

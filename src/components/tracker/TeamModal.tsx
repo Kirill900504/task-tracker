@@ -149,6 +149,56 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     setInviteFor({ id, name, link: result.link, kind: "access", email: result.email });
   }
 
+  // Ссылки всем неподключённым — одним нажатием (п.1.1 предложений,
+  // 07.10.2026). Из пятнадцати человек мессенджер был у четырёх, а ссылку
+  // выдавали по одной: одиннадцать раз «Пригласить → Скопировать → вставить
+  // в чат», и до конца списка не доходили. Разослать за Кирилла трекер не
+  // может — у неподключённого нет чата, в этом и дело, — поэтому он отдаёт
+  // ВСЕ ссылки одним блоком с именами, и его вставляют туда, где люди
+  // уже есть (общий чат, почта). Неподключённый — без мессенджера и без
+  // входа: у кого вход есть, тот получает работу в трекере.
+  const unreached = colleagues.filter((p) => !p.isMe && !p.linked && p.member !== "active");
+  const [bulk, setBulk] = useState<{ lines: { name: string; link?: string; error?: string }[]; copied: boolean; busy: boolean } | null>(null);
+
+  async function inviteAllUnreached() {
+    let channel: ColleagueChannel = "telegram";
+    if (maxBot.available) {
+      const picked = await ask.choose({
+        title: "Ссылки всем неподключённым",
+        question: "Куда подключать?",
+        note: "Человек откроет ссылку, нажмёт «Старт» — и задачи начнут приходить ему туда.",
+        options: [
+          { value: "telegram", label: "Telegram" },
+          { value: "max", label: "MAX" },
+        ],
+      });
+      if (!picked) return;
+      channel = picked as ColleagueChannel;
+    }
+    setBulk({ lines: [], copied: false, busy: true });
+    const lines: { name: string; link?: string; error?: string }[] = [];
+    // По одному, а не разом: у маршрута предел на частоту, и десять
+    // одновременных запросов получили бы отказ все сразу.
+    for (const person of unreached) {
+      const result = await invite(person.id, channel);
+      lines.push("error" in result ? { name: withoutSelfMark(person.name), error: result.error } : { name: withoutSelfMark(person.name), link: result.link });
+      setBulk({ lines: [...lines], copied: false, busy: true });
+    }
+    setBulk({ lines, copied: false, busy: false });
+  }
+
+  async function copyBulk() {
+    if (!bulk) return;
+    const text = bulk.lines.filter((l) => l.link).map((l) => `${l.name}: ${l.link}`).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setBulk({ ...bulk, copied: true });
+    } catch {
+      setBulk({ ...bulk, copied: false });
+      setError({ id: "bulk", text: "Браузер не дал доступ к буферу обмена — выделите ссылки и скопируйте вручную" });
+    }
+  }
+
   async function copyLink() {
     if (!inviteFor) return;
     try {
@@ -302,6 +352,49 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     <Modal id="teamOverlay" onClose={onClose} dismissOnBackdrop={false}>
       <div className="modal">
         <h2>Команда</h2>
+
+        {/* Ответ — здесь же, под кнопкой (правило «ответ там, где кнопка»). */}
+        {!loading && unreached.length > 0 && (
+          <div className="team-bulk">
+            <div className="team-bulk-row">
+              <span>
+                Не подключены: <b>{unreached.length}</b> — задачи до них не доходят.
+              </span>
+              <button className="btn btn-small btn-primary" id="inviteAllBtn" disabled={bulk?.busy} onClick={() => void inviteAllUnreached()}>
+                {bulk?.busy ? "Готовлю ссылки…" : "Ссылки всем"}
+              </button>
+            </div>
+            {bulk && bulk.lines.length > 0 && (
+              <div className="team-invite" id="bulkInviteBlock" ref={revealInvite}>
+                <div className="team-bulk-links">
+                  {bulk.lines.map((l) => (
+                    <div key={l.name} className={l.error ? "team-error" : "invite-link"}>
+                      {l.name}: {l.link || l.error}
+                    </div>
+                  ))}
+                </div>
+                {!bulk.busy && (
+                  <div className="outcome-actions">
+                    <button className="btn btn-small btn-primary" onClick={() => void copyBulk()}>
+                      {bulk.copied ? "Скопировано" : "Скопировать всё"}
+                    </button>
+                    <button className="btn btn-small" onClick={() => void reload()}>
+                      Проверить, кто подключился
+                    </button>
+                    <button className="btn btn-small" onClick={() => setBulk(null)}>
+                      Скрыть
+                    </button>
+                  </div>
+                )}
+                {error?.id === "bulk" && <div className="team-error">{error.text}</div>}
+                <div className="team-hint">
+                  Вставьте это в общий чат или разошлите каждому его строку. Ссылки работают три дня; кто не подключится, тот
+                  попадёт в утреннюю сводку.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {loading && <div className="empty">Загрузка…</div>}
 

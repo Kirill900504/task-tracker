@@ -98,3 +98,19 @@ test("«Меня не будет…» отмечает отпуск, и его �
     }, { timeout: 20_000 })
     .toBeNull();
 });
+
+test("«Ссылки всем» в «Команде» выдаёт ссылку каждому неподключённому одним блоком", async ({ page }) => {
+  const name = "Неподключённый " + Date.now();
+  await admin.from("assignees").insert({ user_id: ownerId, name });
+  await login(page);
+  await page.click("#teamBtn");
+  await page.click("#inviteAllBtn");
+  // Если в трекере есть и бот MAX, сначала спросят, куда подключать.
+  const ask = page.locator(".ask-modal");
+  const block = page.locator("#bulkInviteBlock");
+  await expect(ask.or(block)).toBeVisible({ timeout: 20_000 });
+  if (await ask.isVisible()) await ask.getByRole("button", { name: "Telegram", exact: true }).click();
+  await expect(block).toContainText(name, { timeout: 20_000 });
+  await expect(block).toContainText("https://");
+  await expect(block.getByRole("button", { name: "Скопировать всё" })).toBeVisible();
+});
