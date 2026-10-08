@@ -3,10 +3,8 @@ import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
 import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, rescheduleButtons, RESCHEDULE_OPTIONS, taskButtons } from "@/lib/colleagues";
 import { choiceOf, lockedTaskText, lockedVoteText, openTaskChoices, openVoteChoices, voteVerdict, type VoteChoice } from "@/lib/answerRules";
-import { uid } from "@/lib/uid";
 import { withoutSelfMark } from "@/lib/actorName";
 import { recordEvent } from "@/lib/itemHistory";
-import { newTaskRow } from "@/lib/newTask";
 import { applyReview } from "@/lib/reviewWork";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { deliverComment } from "@/lib/commentDelivery";
@@ -39,6 +37,10 @@ export type CallbackOutcome = {
   // Чем заменить кнопки. Пусто — снять совсем; для ответа на встречу они,
   // наоборот, обязаны остаться: передумать можно до начала.
   rewriteButtons?: BotButton[][];
+  // Убрать нажатое сообщение из чата совсем («Прочитать» под мыслью). Не
+  // вышло — мессенджер удаляет не всегда, — тогда сообщение переписывается
+  // в `rewriteTo`, как обычно.
+  remove?: boolean;
   // Отдельным сообщением вслед, не вместо. Нужно там, где нажатие ничего в
   // задаче не изменило и переписывать сообщение не за что, а сказать надо —
   // «Ответить», список задач, открытая карточка. В MAX это ещё и
@@ -586,58 +588,8 @@ async function colleagueCallback(
     return { toast: "Показываю", say: roster, sayButtons: meetingButtons(action.id, choices) };
   }
 
-  if (action.kind === "idea" && action.action === "task") {
-    const { data: idea } = await admin
-      .from("ideas")
-      .select("id, text, user_id, created_by")
-      .eq("id", action.id)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (!idea || idea.user_id !== colleague.user_id) return { toast: "Эта мысль уже не ваша" };
-
-    // Мысль, взятая в работу, перестаёт быть мыслью. Задача заводится в
-    // том же пространстве, с этим человеком исполнителем и без срока:
-    // срок ставит тот, кто спросит, а не тот, кто взялся.
-    //
-    // Постановщик — автор мысли: он её прислал, значит он и поручил. До
-    // 06.10.2026 created_by оставался пустым, а пустой значит «владелец», и
-    // мысль Игоря Витковского, взятая Станиславом Синецким, легла задачей
-    // «Кирилл Кучеренко → Станислав Синецкий» («мысль пришла от Игорька, а
-    // внутри задачи — ты постановщик»). Тот же выбор в /api/workspace/report.
-    const title = String(idea.text || "").trim().slice(0, 200) || "Из мысли";
-    const taskId = uid();
-    const { error: taskError } = await admin
-      .from("tasks")
-      .insert(newTaskRow({ id: taskId, userId: idea.user_id, title, assignee: colleague.name, createdBy: idea.created_by }));
-    if (taskError) return { toast: "Не получилось завести задачу" };
-
-    // upsert, а не insert: имя исполнителя стоит в самой задаче, и строку
-    // по нему успевает завести триггер (миграция 0024) — простая вставка
-    // тут же упёрлась бы в уникальность и оставила задачу без отметки
-    // «принял», хотя человек её именно что взял.
-    await admin.from("task_participants").upsert(
-      {
-        task_id: taskId,
-        assignee_id: colleague.id,
-        role: "executor",
-        accepted_at: new Date().toISOString(),
-      },
-      { onConflict: "task_id,assignee_id" },
-    );
-    await admin
-      .from("idea_recipients")
-      .update({ converted_task_id: taskId, seen_at: new Date().toISOString() })
-      .eq("idea_id", idea.id)
-      .eq("assignee_id", colleague.id);
-
-    return {
-      toast: "Завёл задачу",
-      rewriteTo: `💡 ${title}\n\n➕ Взято в работу — теперь это ваша задача`,
-      notifyTo: idea.created_by,
-      notifyOwner: `➕ ${withoutSelfMark(colleague.name)} взял мысль в работу: «${title}»`,
-      notice: { kind: "idea_taken", item: title, who: withoutSelfMark(colleague.name) },
-    };
-  }
+  // Кнопки под присланной мыслью разбирает lib/ideaInbox — раньше, чем
+  // нажатие доходит сюда (см. lib/botCallback).
 
   return { toast: "Это действие больше не доступно" };
 }

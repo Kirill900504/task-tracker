@@ -215,7 +215,24 @@ export async function POST(req: Request) {
     if (!linked.length) {
       return NextResponse.json({ error: nobodyReachable(unlinked, "Выберите, кому отправить"), unreachable: unlinked });
     }
-    const results = await Promise.all(linked.map((person) => deliver(person, ideaMessage(idea.text as string, from), ideaButtons(idea.id as string))));
+    // «Сохранить мысль» — только тем, у кого есть свой список мыслей, то
+    // есть вход в трекер (членство или своя строка владельца «(я)»).
+    const { data: members } = await admin
+      .from("workspace_members")
+      .select("assignee_id")
+      .in("assignee_id", linked.map((p) => p.id))
+      .eq("status", "active")
+      .not("member_id", "is", null);
+    const withLogin = new Set(((members || []) as { assignee_id: string }[]).map((m) => m.assignee_id));
+    const results = await Promise.all(
+      linked.map((person) =>
+        deliver(
+          person,
+          ideaMessage(idea.text as string, from),
+          ideaButtons(idea.id as string, { canKeep: withLogin.has(person.id) || isSelfAssignee(person.name) }),
+        ),
+      ),
+    );
     const reached = linked.filter((_, i) => results[i].ok);
     results.forEach((result, i) => {
       if (result.ok) sentTo.push(linked[i].name);

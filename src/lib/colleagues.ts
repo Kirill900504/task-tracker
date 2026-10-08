@@ -227,8 +227,29 @@ export function meetingButtons(meetingId: string, choices: VoteChoice[] = ["yes"
 // сделать, это взять её в работу: тогда она перестаёт быть мыслью и
 // становится задачей с исполнителем и сроком. Раньше кнопок не было вовсе,
 // и мысль оставалась сообщением, которое некуда деть.
-export function ideaButtons(ideaId: string): BotButton[][] {
-  return [[{ text: "➕ Взять в работу", data: encodeCallback("idea", "task", ideaId) }]];
+//
+// 08.10.2026 — четыре ответа вместо одного, его словами: «у получателя
+// должны быть варианты действий „прочитать“, в этом случае мысль просто
+// исчезает, „сохранить мысль“ — сохраняется в список мыслей получателя,
+// „взять в работу“ — создать на себя или коллегу конкретную задачу,
+// „назначить встречу“ — создать на основании мысли встречу». Разбирает их
+// lib/ideaInbox.
+//
+// «Сохранить» — только тому, у кого есть вход в трекер: мысль держится за
+// `created_by`, а у получателя без входа нет auth-id, то есть «своего
+// списка мыслей» нет вовсе. Кнопка, ведущая к отказу, хуже отсутствующей.
+export function ideaButtons(ideaId: string, opts: { canKeep?: boolean } = {}): BotButton[][] {
+  const canKeep = opts.canKeep !== false;
+  return [
+    [
+      { text: "👁 Прочитать", data: encodeCallback("idea", "read", ideaId) },
+      ...(canKeep ? [{ text: "💾 Сохранить мысль", data: encodeCallback("idea", "keep", ideaId) }] : []),
+    ],
+    [
+      { text: "➕ Взять в работу", data: encodeCallback("idea", "task", ideaId) },
+      { text: "📅 Назначить встречу", data: encodeCallback("idea", "meet", ideaId) },
+    ],
+  ];
 }
 
 export async function findColleagueByChat(

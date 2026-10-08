@@ -59,6 +59,7 @@ export async function POST(req: Request) {
       toast: outcome.toast,
       rewriteTo: outcome.rewriteTo,
       rewriteButtons: outcome.rewriteButtons,
+      remove: outcome.remove,
       more: Boolean(outcome.say),
     });
     // Отдельным сообщением — и только там, где переписать нажатое нельзя:

@@ -10,6 +10,7 @@ import { findActorByChat, type BotActor } from "@/lib/botActor";
 import { createTaskFromBot, resolveWhen } from "@/lib/ownerNewTask";
 import { ownerNav } from "@/lib/ownerQueries";
 import type { CallbackOutcome } from "@/lib/colleagueReplies";
+import { handleIdeaInbox, isIdeaInboxAction } from "@/lib/ideaInbox";
 
 // Нажатая кнопка — один разбор на оба мессенджера.
 //
@@ -85,6 +86,12 @@ async function routeBotCallback(
   action: CallbackAction,
   channel: BotChannelConfig,
 ): Promise<CallbackOutcome> {
+  // Кнопки под присланной мыслью адресованы ПОЛУЧАТЕЛЮ, кем бы он ни был в
+  // остальном: владельцем, руководителем или человеком без входа. До
+  // развилки ниже, иначе владельцу «Взять в работу» отвечала бы его
+  // постановщицкая половина, где таких кнопок нет (lib/ideaInbox).
+  if (isIdeaInboxAction(action)) return handleIdeaInbox(admin, chatId, action, channel);
+
   const actor = await findActorByChat(admin, chatId, channel);
   if (actor) {
     const today = new Date().toISOString().slice(0, 10);

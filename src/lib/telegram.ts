@@ -54,6 +54,23 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
   }
 }
 
+// Убрать сообщение бота из чата. Telegram разрешает это только в первые 48
+// часов после отправки, поэтому ответ — удалось или нет: вызывающий решает,
+// чем заменить удаление.
+export async function deleteTelegramMessage(chatId: number, messageId: number): Promise<boolean> {
+  try {
+    const res = await fetch(`${API}/deleteMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+    });
+    const data = (await res.json().catch(() => null)) as { ok?: boolean } | null;
+    return !!data?.ok;
+  } catch {
+    return false;
+  }
+}
+
 // After a button is used, the message is rewritten to say what happened —
 // so the chat shows the outcome instead of buttons that now do nothing.
 export async function editTelegramMessage(
@@ -139,11 +156,15 @@ export function telegramTransport(): BotTransport {
     // Telegram на каждое нажатие, прямо в том месте, где человек смотрит на
     // крутилку (замер 07.10.2026, «мессенджеры при нажатии любых кнопок
     // тупят»).
-    async resolveCallback({ callbackId, chatId, messageId, toast, rewriteTo, rewriteButtons }) {
+    async resolveCallback({ callbackId, chatId, messageId, toast, rewriteTo, rewriteButtons, remove }) {
       const buttons = rewriteButtons?.map((row) => row.map(toInline));
+      const rewrite = () =>
+        rewriteTo && messageId ? editTelegramMessage(chatId, Number(messageId), rewriteTo, buttons?.length ? { buttons } : undefined) : Promise.resolve();
       await Promise.all([
         answerCallbackQuery(callbackId, toast),
-        rewriteTo && messageId ? editTelegramMessage(chatId, Number(messageId), rewriteTo, buttons?.length ? { buttons } : undefined) : Promise.resolve(),
+        remove && messageId
+          ? deleteTelegramMessage(chatId, Number(messageId)).then((gone) => (gone ? undefined : rewrite()))
+          : rewrite(),
       ]);
     },
   };

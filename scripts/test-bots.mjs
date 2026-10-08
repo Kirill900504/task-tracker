@@ -717,6 +717,79 @@ try {
   check("и следующее сообщение записано мыслью", !!ideaRow && ideaRow.user_id === userId, ideaRow);
   if (ideaRow?.id) await admin.from("ideas").delete().eq("id", ideaRow.id);
 
+  // ---- Присланная мысль: четыре ответа получателя (lib/ideaInbox) ----
+  //
+  // 08.10.2026: «прочитать» (мысль исчезает), «сохранить мысль» (в мой
+  // список), «взять в работу» (себе или коллеге), «назначить встречу».
+  // Мысль шлёт владелец, отвечает руководитель из своего чата; каждая
+  // кнопка проверяется по базе, а не по ответу маршрута.
+  console.log(String.fromCharCode(10) + "Присланная мысль:");
+  const sentIdea = async (text) => {
+    const id = crypto.randomUUID();
+    await admin.from("ideas").insert({ id, user_id: userId, text });
+    await admin.from("idea_recipients").insert({ idea_id: id, assignee_id: assignee.id, user_id: userId });
+    return id;
+  };
+  const recOf = async (ideaId) =>
+    (await admin.from("idea_recipients").select("seen_at, converted_task_id").eq("idea_id", ideaId).eq("assignee_id", assignee.id).maybeSingle()).data;
+  const ideaPress = (n, data) => mgrPress("idea" + n, data);
+
+  const readIdea = await sentIdea("Мысль, которую прочтут");
+  const readPress = await ideaPress(1, "i:read:" + readIdea);
+  check("«Прочитать» отмечает мысль прочитанной", readPress.status === 200 && !!(await recOf(readIdea))?.seen_at, await recOf(readIdea));
+
+  const keepText = "Мысль, которую сохранят " + Date.now();
+  const keepIdea = await sentIdea(keepText);
+  await ideaPress(2, "i:keep:" + keepIdea);
+  const { data: keptCopy } = await admin.from("ideas").select("id, created_by").eq("text", keepText).neq("id", keepIdea).maybeSingle();
+  check("«Сохранить мысль» кладёт копию в мысли получателя", keptCopy?.created_by === memberUser.user.id, keptCopy);
+
+  const selfIdea = await sentIdea("Мысль себе в работу");
+  await ideaPress(3, "i:task:" + selfIdea);
+  await ideaPress(4, "i:tw:" + selfIdea + ".me");
+  const selfRec = await recOf(selfIdea);
+  const { data: selfTask } = selfRec?.converted_task_id
+    ? await admin.from("tasks").select("assignee").eq("id", selfRec.converted_task_id).maybeSingle()
+    : { data: null };
+  check("«Взять в работу → Себе» заводит задачу на нажавшего", selfTask?.assignee === "Проверочный Коллега", { selfRec, selfTask });
+
+  const { data: third } = await admin.from("assignees").insert({ user_id: userId, name: "Проверочный Третий" }).select("id").single();
+  const otherIdea = await sentIdea("Мысль коллеге в работу");
+  const ref = third.id.slice(0, 8);
+  await ideaPress(5, "i:tw:" + otherIdea + "." + ref);
+  await ideaPress(6, "i:tg:" + otherIdea + "." + ref + ".no");
+  const otherRec = await recOf(otherIdea);
+  const { data: otherTask } = otherRec?.converted_task_id
+    ? await admin.from("tasks").select("assignee, created_by").eq("id", otherRec.converted_task_id).maybeSingle()
+    : { data: null };
+  check(
+    "«Взять в работу → коллеге» поручает ему от имени нажавшего",
+    otherTask?.assignee === "Проверочный Третий" && otherTask?.created_by === memberUser.user.id,
+    { otherRec, otherTask },
+  );
+
+  const meetIdea = await sentIdea("Мысль для встречи");
+  await ideaPress(7, "i:meet:" + meetIdea);
+  await ideaPress(8, "i:md:" + meetIdea + ".3");
+  await ideaPress(9, "i:mt:" + meetIdea + ".3.1730");
+  const { data: ideaMeeting } = await admin
+    .from("meetings")
+    .select("id, time, created_by, participants")
+    .eq("user_id", userId)
+    .eq("title", "Мысль для встречи")
+    .maybeSingle();
+  check(
+    "«Назначить встречу» заводит встречу от имени нажавшего",
+    ideaMeeting?.time === "17:30" && ideaMeeting?.created_by === memberUser.user.id,
+    ideaMeeting,
+  );
+
+  for (const t of [selfRec?.converted_task_id, otherRec?.converted_task_id]) if (t) await admin.from("tasks").delete().eq("id", t);
+  if (ideaMeeting?.id) await admin.from("meetings").delete().eq("id", ideaMeeting.id);
+  if (keptCopy?.id) await admin.from("ideas").delete().eq("id", keptCopy.id);
+  await admin.from("ideas").delete().in("id", [readIdea, keepIdea, selfIdea, otherIdea, meetIdea]);
+  await admin.from("assignees").delete().eq("id", third.id);
+
   await admin.from("tasks").delete().eq("id", ownerTask);
   if (created?.id) await admin.from("tasks").delete().eq("id", created.id);
   await admin.from("meetings").delete().eq("id", ownMeeting);

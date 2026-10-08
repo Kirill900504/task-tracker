@@ -121,12 +121,17 @@ describe("buttons", () => {
     }
   });
 
-  it("даёт мысли единственное осмысленное действие", () => {
-    // Мысль ничего не требует; взять её в работу — это всё, что с ней
-    // можно сделать, и до сих пор нельзя было ничего.
-    const rows = ideaButtons("i9");
-    expect(rows[0][0].data).toBe("i:task:i9");
-    expect(rows[0][0].text).toContain("работу");
+  it("даёт мысли четыре ответа: прочитать, сохранить, в работу, встреча", () => {
+    // 08.10.2026: «прочитать», «сохранить мысль», «взять в работу»,
+    // «назначить встречу» — всё, что получатель может с мыслью сделать.
+    const data = ideaButtons("i9").flat().map((b) => b.data);
+    expect(data).toEqual(["i:read:i9", "i:keep:i9", "i:task:i9", "i:meet:i9"]);
+  });
+
+  it("не предлагает «Сохранить» тому, у кого нет своего списка мыслей", () => {
+    const data = ideaButtons("i9", { canKeep: false }).flat().map((b) => b.data);
+    expect(data).not.toContain("i:keep:i9");
+    expect(data).toContain("i:task:i9");
   });
 
   it("gives a третью дверь: не могу", () => {

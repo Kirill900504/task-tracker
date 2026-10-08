@@ -174,6 +174,24 @@ export async function editMaxMessage(messageId: string, text: string, buttons?: 
   }
 }
 
+// Убрать сообщение бота из чата («Прочитать» под мыслью). Ответ — удалось
+// ли: если нет, вызывающий переписывает сообщение вместо удаления.
+export async function deleteMaxMessage(messageId: string): Promise<boolean> {
+  const settings = await maxSettings();
+  if (!settings) return false;
+  try {
+    const res = await russianFetch(`${API}/messages?message_id=${encodeURIComponent(messageId)}`, {
+      method: "DELETE",
+      headers: headers(settings.token),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json().catch(() => null)) as { success?: boolean } | null;
+    return data?.success !== false;
+  } catch {
+    return false;
+  }
+}
+
 // MAX has no toast of its own: answering a callback either replaces the
 // message or does nothing visible. So the outcome is written into the
 // message where there is one to write, and sent as a plain reply otherwise.
@@ -226,7 +244,13 @@ export function maxTransport(): BotTransport {
     send: (chatId, text, options) => sendMaxMessage(chatId, text, options),
     // В MAX сообщение адресуется одним своим id, без чата.
     edit: (_chatId, messageId, text, buttons) => editMaxMessage(messageId, text, buttons),
-    async resolveCallback({ callbackId, chatId, toast, rewriteTo, rewriteButtons, more }) {
+    async resolveCallback({ callbackId, chatId, messageId, toast, rewriteTo, rewriteButtons, more, remove }) {
+      // Сообщение убирается совсем — подсказка тогда только уведомлением:
+      // переписывать уже нечего. Не удалилось — обычная правка ниже.
+      if (remove && messageId && (await deleteMaxMessage(messageId))) {
+        await answerMaxCallback(callbackId, undefined, undefined, toast || undefined);
+        return;
+      }
       // One call where the message can carry the outcome; a separate line in
       // the chat where it cannot, so a press is never silent.
       if (rewriteTo) {

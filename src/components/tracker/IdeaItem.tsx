@@ -224,7 +224,7 @@ export default function IdeaItem({
             {linked.length > 0 && (
               <button
                 className="idea-flag"
-                title="Отправить в Telegram"
+                title="Отправить"
                 onClick={(e) => {
                   e.stopPropagation();
                   setPickerAt(e.currentTarget.getBoundingClientRect());

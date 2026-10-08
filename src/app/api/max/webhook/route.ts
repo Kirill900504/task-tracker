@@ -114,6 +114,7 @@ export async function POST(req: Request) {
       toast: outcome.toast,
       rewriteTo: outcome.rewriteTo,
       rewriteButtons: outcome.rewriteButtons,
+      remove: outcome.remove,
       more: Boolean(outcome.say),
     });
     // В MAX это тем более обязательно: всплывающих подсказок там нет, и без
