@@ -425,6 +425,50 @@ try {
   const { data: revoted } = await admin.from("meeting_participants").select("round").eq("id", mpA.id).maybeSingle();
   check("переголосование пишется во второй круг", revote.status === 200 && revoted?.round === 2, revoted);
 
+  // ── Напоминание об итоге ───────────────────────────────────────────────
+  //
+  // Итог — право организатора, и участнику с плашкой «нужен итог» до
+  // 07.10.2026 оставалось только ждать. Кнопка «Напомнить» шлёт
+  // организатору шутку (/api/workspace/recap-nudge) и оставляет строку в
+  // обсуждении, по которой же отказывает в повторе.
+  section("Встреча: напомнить организатору об итоге");
+  const futureNudge = await post(mgrA, "/api/workspace/recap-nudge", { meetingId });
+  check("о будущей встрече напомнить нельзя", futureNudge.status === 409, futureNudge);
+
+  const pastId = randomUUID();
+  const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
+  await owner.db.from("meetings").insert({
+    id: pastId,
+    user_id: owner.id,
+    title: "Прошедший разбор",
+    date: yesterday,
+    time: "10:00",
+    status: "planned",
+    created_by: owner.id,
+  });
+  await owner.db
+    .from("meeting_participants")
+    .insert({ user_id: owner.id, meeting_id: pastId, assignee_id: personA.id, role: "participant", response: "yes", round: 1 });
+
+  const nudged = await post(mgrA, "/api/workspace/recap-nudge", { meetingId: pastId });
+  check("участник напоминает об итоге прошедшей встречи", nudged.status === 200 && nudged.body?.ok && !nudged.body?.already, nudged);
+  const { data: nudgeLine } = await admin
+    .from("item_comments")
+    .select("body")
+    .eq("item_kind", "meeting")
+    .eq("item_id", pastId)
+    .eq("system", true);
+  check("в обсуждении встречи остаётся строка о напоминании", (nudgeLine || []).some((c) => c.body.startsWith("🔔")), nudgeLine);
+
+  const nudgedAgain = await post(mgrA, "/api/workspace/recap-nudge", { meetingId: pastId });
+  check("повтор раньше трёх часов не отправляется", nudgedAgain.status === 200 && nudgedAgain.body?.already === true, nudgedAgain);
+
+  const selfNudge = await post(owner, "/api/workspace/recap-nudge", { meetingId: pastId });
+  check("организатор не напоминает сам себе", selfNudge.status === 400, selfNudge);
+
+  const outsider = await post(mgrB, "/api/workspace/recap-nudge", { meetingId: pastId });
+  check("тот, кого не звали, напомнить не может", outsider.status === 404 || outsider.status === 403, outsider);
+
   // ── Мысль в работу ─────────────────────────────────────────────────────
   section("Мысль → задача");
   const ideaId = randomUUID();

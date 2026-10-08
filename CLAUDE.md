@@ -124,7 +124,8 @@ npm run test:workspace  # owner + two throwaway managers against production:
                       # владелец как ПОЛУЧАТЕЛЬ работы (задача от
                       # руководителя, приёмка, встреча с ним, реплика,
                       # доходящая до постановщика), переименование
-                      # человека сразу во всех трёх местах. 123 проверки.
+                      # человека сразу во всех трёх местах, напоминание
+                      # организатору об итоге встречи. 141 проверка.
                       # Written 15.09.2026 because nothing covered any of this.
 node --env-file=.env.local scripts/check-assignments.mjs [--fix]
                       # tasks and meetings that LOOK assigned and are not.
