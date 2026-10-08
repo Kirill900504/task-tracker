@@ -1052,6 +1052,20 @@ Windows подписывает окно «electron.app…») и `backgroundThrot
 `pan-y`). Если «свайп не работает», первым делом спросите, какие события
 он слушает.
 
+**Запрос Supabase уходит в сеть на КАЖДЫЙ `.then`** — построитель ленив,
+это не обещание. Ждать его дважды (`Promise.resolve(q)` в одном месте и
+`await q` в другом) значит послать его дважды: 08.10.2026 одно нажатие
+Enter в повестке писало пункт двумя строками через 10 мс. Если результат
+нужен двоим, сначала `const p = Promise.resolve(q)`, и оба ждут `p`. И
+проверяйте в тестах «ровно одна строка», а не `limit(1)` — второе отвечает
+«хотя бы одна» и дубль не видит.
+
+**Меню меряет себя только в открытом слое.** `PopLayer` открывает слой в
+`useLayoutEffect`: пока слой не открыт, `popover` держит его
+`display:none`, и меню, которое ставит себя у края экрана по своей высоте,
+меряет ноль и не переворачивается вверх (окно дня в календаре открывалось
+за нижним краем). Не возвращайте туда `useEffect`.
+
 **PostgREST batch inserts do not fall back to column defaults.** Insert an
 array where one object omits a key another object has, and that row gets
 NULL rather than the default — so a `not null default false` column blows up
