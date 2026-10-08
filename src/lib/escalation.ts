@@ -59,6 +59,13 @@ export function nudgeText(task: { title: string; deadline: string }, days: numbe
   );
 }
 
+// Своя задача (lib/selfTaskServer): напоминание, а не вопрос. Кнопок
+// «Сделал / Не могу» под ним нет — отвечать самому себе незачем, а закрыть
+// её — галочкой в трекере.
+export function selfOverdueText(task: { title: string; deadline: string }, days: number): string {
+  return `⏰ Ваша задача «${task.title}» просрочена на ${days} ${plural(days)}.\n\nСделали — отметьте галочкой в трекере; нет — перенесите срок там же.`;
+}
+
 export function alarmText(task: { title: string; deadline: string }, days: number, names: string[]): string {
   const who = names.length ? names.join(", ") : "исполнитель";
   return `⏰ «${task.title}» просрочена на ${days} ${plural(days)}, и ответа нет. Ждём: ${who}.`;

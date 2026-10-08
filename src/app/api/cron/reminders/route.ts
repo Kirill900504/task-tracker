@@ -24,7 +24,8 @@ import { onceOnly } from "@/lib/onceOnly";
 import { findSilent, composeSilence } from "@/lib/silence";
 import { composePending, findPendingInvites } from "@/lib/pendingInvites";
 import { setMaxCommands, setTelegramCommands, syncTelegramAppButtons } from "@/lib/botCommands";
-import { alarmText, findStuck, nudgeText } from "@/lib/escalation";
+import { alarmText, findStuck, nudgeText, selfOverdueText } from "@/lib/escalation";
+import { selfTaskIds } from "@/lib/selfTaskServer";
 import { findWaiting, unacceptedText, unreviewedText } from "@/lib/waitingNudges";
 import { normalizeDuration } from "@/lib/meetingTime";
 import { timeIsUpText } from "@/lib/meetingNudges";
@@ -383,6 +384,9 @@ export async function GET(req: Request) {
     // задачи и ступени, а не из даты.
     if (workingDay && nowMin >= BRIEF_FROM_MINUTES) {
       const stuck = await findStuck(admin, userId, today);
+      // Своя задача (на ней только постановщик) — напоминание без кнопок
+      // ответа и без «ответа нет, ждём: <он сам>» (lib/selfTaskServer).
+      const ownStuck = await selfTaskIds(admin, userId, stuck.map((s) => s.task.taskId));
       for (const { task, step } of stuck) {
         await onceOnly(admin, { userId, kind: "overdue_step", refId: task.taskId + ":" + step, date: today }, async () => {
           const names = task.waiting.map((w) => w.name).filter(Boolean);
@@ -403,9 +407,11 @@ export async function GET(req: Request) {
           // дня значит приучить пролистывать.
           if (step === 3 || step === 14) {
             for (const person of present) {
-              await sendToPerson(admin, userId, person, nudgeText(task, step), taskButtons(task.taskId, "executor"), { kind: "task", itemId: task.taskId });
+              if (ownStuck.has(task.taskId)) await sendToPerson(admin, userId, person, selfOverdueText(task, step));
+              else await sendToPerson(admin, userId, person, nudgeText(task, step), taskButtons(task.taskId, "executor"), { kind: "task", itemId: task.taskId });
             }
           }
+          if (ownStuck.has(task.taskId)) return;
 
           // Постановщику — на седьмой и четырнадцатый, строкой в сводке, а
           // не отдельным сообщением: это не срочно, это накопительно.
@@ -426,7 +432,11 @@ export async function GET(req: Request) {
     // ответа», пришедшее в субботу, учит отключать уведомления.
     if (workingDay && !quiet) {
       const waiting = await findWaiting(admin, userId, Date.now());
+      // «Ждёт вашего ответа — Принял / Не могу» по задаче, поставленной
+      // себе, — вопрос самому себе: у своей задачи ответов нет вовсе.
+      const ownWaiting = await selfTaskIds(admin, userId, waiting.unaccepted.map((w) => w.taskId));
       for (const w of waiting.unaccepted) {
+        if (ownWaiting.has(w.taskId)) continue;
         await onceOnly(admin, { userId, kind: "unaccepted_nudge", refId: w.participantId, date: today }, async () => {
           const { data: person } = await admin
             .from("assignees")
