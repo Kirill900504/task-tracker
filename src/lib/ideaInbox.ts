@@ -144,6 +144,12 @@ function back(ideaId: string): BotButton[] {
   return [{ text: "← Назад", data: encodeCallback("idea", "back", ideaId) }];
 }
 
+// Ответ, данный здесь, переписывает и остальные сообщения с этой мыслью у
+// того же человека — в другом мессенджере тоже (lib/botMirror, миграция
+// 0052). Итог узнаётся по форме ответа: текст без кнопок — это конец
+// разговора о мысли («Прочитано», «Сохранено», «Поручено», «Встреча
+// назначена»); шаг мастера всегда несёт кнопки следующего шага, и его
+// зеркалить незачем — второй чат должен остаться с исходными кнопками.
 export async function handleIdeaInbox(
   admin: SupabaseClient,
   chatId: number,
@@ -151,6 +157,15 @@ export async function handleIdeaInbox(
   channel: BotChannelConfig,
 ): Promise<CallbackOutcome> {
   const me = await receiverByChat(admin, chatId, channel);
+  const outcome = await answerIdea(admin, me, action);
+  const [ideaId] = splitRef(action.id);
+  if (me && ideaId && outcome.rewriteTo && !outcome.rewriteButtons) {
+    outcome.mirror = { kind: "idea", itemId: ideaId, assigneeId: me.assigneeId, text: outcome.rewriteTo };
+  }
+  return outcome;
+}
+
+async function answerIdea(admin: SupabaseClient, me: Receiver | null, action: CallbackAction): Promise<CallbackOutcome> {
   if (!me) return { toast: "Этот чат не подключён" };
 
   const [ideaId, a = "", b = ""] = splitRef(action.id);

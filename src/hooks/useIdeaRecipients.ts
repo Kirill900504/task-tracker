@@ -52,6 +52,7 @@ type Raw = {
   seen_at: string | null;
   converted_task_id: string | null;
   created_at: string;
+  kind: "send" | "share" | null;
   ideas: IdeaJoin | IdeaJoin[] | null;
 };
 
@@ -60,6 +61,7 @@ function toRow(raw: Raw): IdeaRecipientRow {
   return {
     id: raw.id,
     ideaId: raw.idea_id,
+    kind: raw.kind === "share" ? "share" : "send",
     assigneeId: raw.assignee_id,
     seenAt: raw.seen_at,
     convertedTaskId: raw.converted_task_id,
@@ -116,7 +118,7 @@ async function fetchInbox(): Promise<IdeaInbox | null> {
   const [recipients, people, members, who] = await Promise.all([
     db
       .from("idea_recipients")
-      .select("id, idea_id, assignee_id, seen_at, converted_task_id, created_at, ideas(text, created_by, created_at, done, deleted_at)"),
+      .select("id, idea_id, assignee_id, seen_at, converted_task_id, created_at, kind, ideas(text, created_by, created_at, done, deleted_at)"),
     db.from("assignees").select("id, name"),
     db.from("workspace_members").select("member_id, assignees(name)").not("member_id", "is", null),
     me(),

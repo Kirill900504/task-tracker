@@ -332,11 +332,18 @@ export type SendResult = { sentTo: string[]; failed: string[] } | { error: strin
 // Sending is by id: the server reads the item back itself, so nothing about
 // what gets written to a colleague comes from the browser. Which messenger
 // it travels through is decided there too, from how the person is connected.
-export async function sendToTelegram(kind: "task" | "meeting" | "idea", id: string, to?: string[]): Promise<SendResult> {
+// `mode` — только у мысли: «отправить» отдаёт её, «поделиться» оставляет у
+// автора (миграция 0051). Без него — «отправить», как было всегда.
+export async function sendToTelegram(
+  kind: "task" | "meeting" | "idea",
+  id: string,
+  to?: string[],
+  mode?: "send" | "share",
+): Promise<SendResult> {
   const res = await fetch("/api/telegram/send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind, id, ...(to ? { to } : {}) }),
+    body: JSON.stringify({ kind, id, ...(to ? { to } : {}), ...(mode ? { mode } : {}) }),
   });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.error) return { error: data?.error || "Не получилось отправить" };

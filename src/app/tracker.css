@@ -3669,3 +3669,24 @@
   .incoming-idea-actions{display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-top:8px;}
   .incoming-idea-actions .btn{min-height:36px; justify-content:center; padding-left:4px; padding-right:4px; white-space:nowrap;}
   @media (max-width:800px){ .incoming-idea-meta{font-size:12.5px;} }
+
+  /* Поделённая со мной мысль (0051): строка как своя, только подпись «от
+     кого» и два действия справа. Тот же корешок, что у роли на карточке
+     задачи, — левый край говорит «это пришло ко мне», не перекрашивая фон. */
+  .idea-shared{box-shadow:inset 3px 0 0 var(--accent), var(--edge); flex-wrap:nowrap;}
+  .idea-shared-body{flex:1; min-width:0;}
+  .idea-shared .idea-text{cursor:default; overflow-wrap:anywhere;}
+  .idea-shared .idea-text:hover{text-decoration:none;}
+  .idea-shared-actions{display:flex; align-items:center; gap:4px; flex:none;}
+  .idea-shared-actions .idea-take{min-height:30px; padding:0 10px;}
+  .idea-shared-actions .idea-del{min-width:30px; min-height:30px;}
+  .idea-shared .send-result{flex-basis:100%;}
+  /* Окно «Отправленные»: под мыслью — кто и что ответил, по человеку в
+     строке, иначе у пяти получателей ответы сливаются в абзац. */
+  .sent-idea-text{cursor:default;}
+  .sent-idea-people{display:flex; flex-direction:column; gap:2px; margin-top:4px; font-size:12px; color:var(--ink-soft);}
+  .sent-idea-person.state-taken, .sent-idea-person.state-seen{color:#5BD08A;}
+  /* Значок «Отправленные» рядом с галочкой вычеркнутых: та же кнопка, но не
+     зелёная — отправленное не завершено, его ещё решает получатель. */
+  .panel-sent-btn{color:var(--accent);}
+  .panel-sent-btn:hover{border-color:var(--accent);}

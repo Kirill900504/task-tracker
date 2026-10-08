@@ -50,7 +50,7 @@ export async function sendToPerson(
   // запоминается, и ответ, данный в другом мессенджере или в трекере,
   // перепишет и его (lib/botMirror). Без этого приглашение в MAX так и
   // предлагало «Буду», когда человек уже ответил в Telegram.
-  memo?: { kind: "task" | "meeting"; itemId: string },
+  memo?: { kind: "task" | "meeting" | "idea"; itemId: string },
 ): Promise<number> {
   const targets = await chatsForPerson(admin, ownerId, person);
   if (!targets.length) return 0;

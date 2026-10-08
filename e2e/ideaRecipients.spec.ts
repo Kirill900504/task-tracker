@@ -30,6 +30,8 @@ let annaId = "";
 const incomingId = "idea_e2e_in_" + randomUUID().slice(0, 8);
 const sentId = "idea_e2e_out_" + randomUUID().slice(0, 8);
 const keepId = "idea_e2e_keep_" + randomUUID().slice(0, 8);
+const awayId = "idea_e2e_away_" + randomUUID().slice(0, 8);
+const sharedInId = "idea_e2e_shin_" + randomUUID().slice(0, 8);
 
 test.beforeAll(async () => {
   const { data: ownerUser, error: ownerError } = await admin.auth.admin.createUser({
@@ -72,20 +74,25 @@ test.beforeAll(async () => {
   });
   if (memberError) throw memberError;
 
-  // Мысль владельца, присланная руководителю, и мысль руководителя,
-  // отправленная двоим — владельцу и Анне. Анна уже ответила.
+  // Владелец ОТПРАВИЛ руководителю две мысли и ПОДЕЛИЛСЯ третьей.
+  // Руководитель поделился своей с владельцем и Анной (Анна уже убрала её
+  // у себя) и отправил ещё одну владельцу — та ушла из его списка.
   const { error: ideasError } = await admin.from("ideas").insert([
     { id: incomingId, user_id: owner.id, text: "Позвонить в налоговую до пятницы", created_by: null },
     { id: sentId, user_id: owner.id, text: "Обновить прайс на кассы", created_by: manager.id },
     { id: keepId, user_id: owner.id, text: "Книга про переговоры — прочитать", created_by: null },
+    { id: awayId, user_id: owner.id, text: "Договор аренды — продлить", created_by: manager.id },
+    { id: sharedInId, user_id: owner.id, text: "Идея акции к Новому году", created_by: null },
   ]);
   if (ideasError) throw ideasError;
   const { error: recError } = await admin.from("idea_recipients").insert([
     { user_id: owner.id, idea_id: incomingId, assignee_id: manager.assigneeId },
     { user_id: owner.id, idea_id: keepId, assignee_id: manager.assigneeId },
-    { user_id: owner.id, idea_id: sentId, assignee_id: owner.assigneeId },
-    { user_id: owner.id, idea_id: sentId, assignee_id: annaId, seen_at: new Date().toISOString() },
-  ]);
+    { user_id: owner.id, idea_id: sentId, assignee_id: owner.assigneeId, kind: "share", seen_at: null },
+    { user_id: owner.id, idea_id: sentId, assignee_id: annaId, kind: "share", seen_at: new Date().toISOString() },
+    { user_id: owner.id, idea_id: awayId, assignee_id: owner.assigneeId, kind: "send", seen_at: null },
+    { user_id: owner.id, idea_id: sharedInId, assignee_id: manager.assigneeId, kind: "share", seen_at: null },
+  ].map((r) => ({ kind: "send", seen_at: null, ...r })));
   if (recError) throw recError;
 });
 
@@ -108,17 +115,35 @@ test("присланную мысль принимают в трекере, а �
   await expect(incoming).toContainText("от Кирилл Тестов");
   await expect(incoming).not.toContainText("(я)");
 
-  // Своя мысль с получателями: число ответивших из отправленных, а по
-  // наведению — список, тоже без «(я)».
+  // Поделённая со мной — в списке мыслей, с подписью, от кого, а не в
+  // блоке, где ждут ответа.
+  const sharedIn = page.locator(`#ideaList [data-shared-idea="${sharedInId}"]`);
+  await expect(sharedIn).toContainText("Идея акции к Новому году");
+  await expect(sharedIn).toContainText("от Кирилл Тестов");
+  await expect(block.locator(`[data-incoming-idea="${sharedInId}"]`)).toHaveCount(0);
+
+  // Отправленная своя ушла из списка — в окно «Отправленные», где видно,
+  // кто что ответил.
+  await expect(page.locator(`#ideaList [data-idea-id="${awayId}"]`)).toHaveCount(0);
+  await page.locator("#ideasSentBtn").click();
+  const sentRow = page.locator(`#sentIdeasModal [data-sent-idea="${awayId}"]`);
+  await expect(sentRow).toContainText("Договор аренды — продлить");
+  await expect(sentRow).toContainText("Кирилл Тестов — не ответил");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#sentIdeasModal")).toHaveCount(0);
+
+  // Поделённая своя осталась в списке: число ответивших из тех, с кем
+  // поделился, а по наведению — список, тоже без «(я)».
   const chip = page.locator(`[data-idea-sent="${sentId}"]`);
-  await expect(chip).toHaveText(/1\/2/);
+  // У поделённой ответа не ждут — просто число людей, без «1/2».
+  await expect(chip).toHaveText(/^\s*2\s*$/);
   await chip.hover();
   const tip = page.locator("#ideaSentTooltip");
   await expect(tip).toBeVisible();
   await expect(tip).toContainText("Кирилл Тестов");
   await expect(tip).toContainText("Анна Проверкина");
-  await expect(tip).toContainText("принял");
-  await expect(tip).toContainText("не ответил");
+  await expect(tip).toContainText("убрал у себя");
+  await expect(tip).toContainText("видит");
   await expect(tip).not.toContainText("(я)");
   // Целиком в окне, и строки не торчат за её край — «не ответил» вылезал
   // наружу (его снимок 07.10.2026).

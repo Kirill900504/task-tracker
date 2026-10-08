@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { incomingFor, recipientState, sentToByIdea, type IdeaRecipientRow } from "./ideaRecipients";
+import { incomingFor, recipientState, sentAwayIds, sentToByIdea, sharedWithMe, stateLabel, type IdeaRecipientRow } from "./ideaRecipients";
 
 function row(over: Partial<IdeaRecipientRow> = {}): IdeaRecipientRow {
   return {
@@ -25,7 +25,7 @@ describe("recipientState", () => {
 describe("sentToByIdea — кому ушла мысль", () => {
   it("снимает пометку «(я)» с имени владельца", () => {
     const out = sentToByIdea([row({ assigneeId: "a-owner" })], { "a-owner": "Кирилл Кучеренко (я)" });
-    expect(out.i1).toEqual([{ name: "Кирилл Кучеренко", state: "none" }]);
+    expect(out.i1).toEqual([{ name: "Кирилл Кучеренко", state: "none", kind: "send" }]);
   });
 
   it("идёт в порядке отправки и пропускает убранных из списка людей", () => {
@@ -75,5 +75,35 @@ describe("incomingFor — что ждёт ответа у получателя",
     const rows = [row({ id: "old" }), row({ id: "new", createdAt: "2026-10-07T15:00:00Z" })];
     expect(incomingFor(rows, "a-igor", "u-igor").map((r) => r.id)).toEqual(["new", "old"]);
     expect(incomingFor(rows, "", "u-igor")).toEqual([]);
+  });
+});
+
+describe("отправить и поделиться (0051)", () => {
+  it("строка без поля kind — это «отправить»: так шло всё до 0051", () => {
+    expect(sentAwayIds([row()])).toEqual(new Set(["i1"]));
+  });
+
+  it("отправленная уходит из списка автора, поделённая остаётся", () => {
+    const rows = [row({ ideaId: "sent" }), row({ ideaId: "shared", kind: "share" }), row({ ideaId: "both" }), row({ ideaId: "both", kind: "share" })];
+    expect([...sentAwayIds(rows)].sort()).toEqual(["both", "sent"]);
+  });
+
+  it("поделённая не просит ответа, а лежит в списке получателя", () => {
+    const rows = [row({ id: "s", kind: "share" }), row({ id: "o" })];
+    expect(incomingFor(rows, "a-igor", "u-igor").map((r) => r.id)).toEqual(["o"]);
+    expect(sharedWithMe(rows, "a-igor", "u-igor").map((r) => r.id)).toEqual(["s"]);
+  });
+
+  it("убранная у себя и взятая в работу из поделённых уходят", () => {
+    const rows = [row({ id: "gone", kind: "share", seenAt: "x" }), row({ id: "took", kind: "share", convertedTaskId: "t" })];
+    expect(sharedWithMe(rows, "a-igor", "u-igor")).toEqual([]);
+  });
+
+  it("у поделённой молчание — не «не ответил», а «видит»", () => {
+    expect(stateLabel("share", "none")).toBe("видит");
+    expect(stateLabel("share", "seen")).toBe("убрал у себя");
+    expect(stateLabel("send", "none")).toBe("не ответил");
+    expect(stateLabel("send", "seen")).toBe("принял");
+    expect(stateLabel("share", "taken")).toBe("взял в работу");
   });
 });

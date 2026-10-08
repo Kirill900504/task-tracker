@@ -42,7 +42,8 @@ export default function IncomingIdeas({
 
   if (!rows.length) return null;
 
-  async function answer(row: IdeaRecipientRow, action: "take_idea" | "ack_idea", keep = false) {
+  async function answer(row: IdeaRecipientRow, action: "take_idea" | "ack_idea" | "keep_idea") {
+    const keep = action === "keep_idea";
     setBusy(row.id);
     setError(null);
     // Экран отвечает раньше облака — строка уходит сразу, а не после ответа.
@@ -90,7 +91,7 @@ export default function IncomingIdeas({
               className="btn"
               disabled={busy === row.id}
               title="Сохранить в свои мысли"
-              onClick={() => void answer(row, "ack_idea", true)}
+              onClick={() => void answer(row, "keep_idea")}
             >
               Сохранить
             </button>

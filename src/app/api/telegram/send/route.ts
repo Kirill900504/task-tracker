@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rateLimit";
-import { ideaButtons, ideaMessage, meetingButtons, meetingMessage, taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
+import { ideaButtons, ideaMessage, ideaShareMessage, meetingButtons, meetingMessage, taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
 import { sendToColleague } from "@/lib/botDelivery";
 import { chatsForPerson } from "@/lib/reach";
 import { actorName } from "@/lib/actorName";
@@ -76,9 +76,9 @@ async function deliver(
   text: string,
   buttons: Parameters<typeof sendToColleague>[2],
   // Что это за сообщение — чтобы ответ, данный под ним или в другом
-  // мессенджере, переписал и его (lib/botMirror). Мысль не запоминается:
-  // ответа «буду / сделал» у неё нет.
-  memo?: { admin: ReturnType<typeof createAdminClient>; spaceId: string; kind: "task" | "meeting"; itemId: string },
+  // мессенджере, переписал и его (lib/botMirror). Мысль тоже (миграция
+  // 0052): «Принял» в трекере обязан снять кнопки и в чате.
+  memo?: { admin: ReturnType<typeof createAdminClient>; spaceId: string; kind: "task" | "meeting" | "idea"; itemId: string },
 ): Promise<{ ok: boolean; error?: string }> {
   // В оба мессенджера человека — одновременно (см. «одновременно» ниже).
   const results = await Promise.all(person.targets.map((target) => sendToColleague(target, text, buttons)));
@@ -208,6 +208,9 @@ export async function POST(req: Request) {
   }
 
   if (kind === "idea") {
+    // Отправить или поделиться (миграция 0051, решение Кирилла 23.09.2026).
+    // Всё, что не «share», — «send», как было до этого всегда.
+    const mode: "send" | "share" = body?.mode === "share" ? "share" : "send";
     const { data: idea } = await supabase.from("ideas").select("id, text").eq("id", id).maybeSingle();
     if (!idea) return NextResponse.json({ error: "Мысль не найдена" }, { status: 404 });
     const { linked, unlinked, self } = await recipientsByName(supabase, admin, to, user.id);
@@ -228,8 +231,9 @@ export async function POST(req: Request) {
       linked.map((person) =>
         deliver(
           person,
-          ideaMessage(idea.text as string, from),
+          mode === "share" ? ideaShareMessage(idea.text as string, from) : ideaMessage(idea.text as string, from),
           ideaButtons(idea.id as string, { canKeep: withLogin.has(person.id) || isSelfAssignee(person.name) }),
+          { admin, spaceId: ownerId, kind: "idea", itemId: idea.id as string },
         ),
       ),
     );
@@ -248,7 +252,7 @@ export async function POST(req: Request) {
       await admin
         .from("idea_recipients")
         .upsert(
-          reached.map((person) => ({ idea_id: idea.id, assignee_id: person.id, user_id: user.id })),
+          reached.map((person) => ({ idea_id: idea.id, assignee_id: person.id, user_id: user.id, kind: mode })),
           { onConflict: "idea_id,assignee_id", ignoreDuplicates: true },
         )
         .then(() => undefined, () => undefined);

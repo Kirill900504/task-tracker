@@ -16,9 +16,11 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { ideasToReview, isReviewDay, reviewWeek } from "@/lib/ideaReview";
 import IdeaReviewModal from "./IdeaReviewModal";
 import IncomingIdeas from "./IncomingIdeas";
+import SharedIdeaItem from "./SharedIdeaItem";
+import SentIdeasModal from "./SentIdeasModal";
 import { prefetchIdeaInbox, useIdeaRecipients } from "@/hooks/useIdeaRecipients";
 import { authorLabel } from "@/lib/authorName";
-import { incomingFor, sentToByIdea } from "@/lib/ideaRecipients";
+import { incomingFor, sentAwayIds, sentToByIdea, sharedWithMe, type IdeaRecipientRow } from "@/lib/ideaRecipients";
 
 // «Оставить» помнится до конца недели в этом браузере (см. lib/ideaReview).
 // Хранилище может не открыться (приватное окно) — тогда разбор просто
@@ -88,10 +90,40 @@ export default function IdeasPanel({
   const [text, setText] = useState("");
   // Окно с вычеркнутыми мыслями.
   const [doneOpen, setDoneOpen] = useState(false);
+  // Окно с отправленными мыслями.
+  const [sentOpen, setSentOpen] = useState(false);
+
+  // Рассылка мыслей: автору — кому ушла его мысль, получателю — что
+  // прислали ему (lib/ideaRecipients). Один хук на панель, и всё нужное
+  // он приносит сам — с кэшем прошлого запуска, чтобы блок появлялся
+  // вместе с мыслями, а не через секунду после них.
+  const recipients = useIdeaRecipients();
+  const sentTo = sentToByIdea(recipients.rows, recipients.names);
+  const incoming = incomingFor(recipients.rows, recipients.myAssigneeId, myUserId);
+  const shared = sharedWithMe(recipients.rows, recipients.myAssigneeId, myUserId);
+  const people = Object.values(recipients.names);
+  // «Отправить» отдаёт мысль: из рабочего списка она уходит в окно
+  // «Отправленные» (решение Кирилла 23.09.2026, миграция 0051). Поделённая
+  // остаётся на месте.
+  const sentAway = sentAwayIds(recipients.rows);
+  const own = ideas.filter((i) => !sentAway.has(i.id));
+  // Свежеотправленные сверху — по времени последней отправки.
+  const lastSent: Record<string, string> = {};
+  for (const r of recipients.rows) if (sentAway.has(r.ideaId) && (lastSent[r.ideaId] || "") < r.createdAt) lastSent[r.ideaId] = r.createdAt;
+  const sentList = ideas
+    .filter((i) => sentAway.has(i.id) && !i.done)
+    .sort((a, b) => (lastSent[b.id] || "").localeCompare(lastSent[a.id] || ""));
+
+  function answered(row: IdeaRecipientRow, answer: "taken" | "seen" | "failed") {
+    if (answer === "failed") void recipients.reload();
+    else if (answer === "taken") recipients.markLocally(row.id, { convertedTaskId: "pending" });
+    else recipients.markLocally(row.id, { seenAt: new Date().toISOString() });
+  }
+
   // В панели — только живые мысли. Вычеркнутые смотрят в отдельном окне
   // по иконке с галочкой: перечёркнутые строки посреди списка мыслей —
   // это шум там, где ищут, что записать дальше.
-  const visible = sortIdeasForList(ideas, false);
+  const visible = sortIdeasForList(own, false);
   // Свежевычеркнутые сверху — тем же правилом, что у доски и встреч.
   const done = doneIdeasNewestFirst(ideas);
 
@@ -102,17 +134,10 @@ export default function IdeasPanel({
   const week = reviewWeek(now);
   const [kept, setKept] = useState<Set<string>>(() => (typeof window === "undefined" ? new Set() : readKept(week)));
   const [reviewTotal, setReviewTotal] = useState(0);
-  const queue = ideasToReview(ideas, now, kept, (idea) => isMine(idea, myUserId));
+  // Отправленную не разбирают: её отдали, решение теперь за получателем.
+  const queue = ideasToReview(own, now, kept, (idea) => isMine(idea, myUserId));
   const showReview = isReviewDay(now) && queue.length > 0;
 
-  // Рассылка мыслей: автору — кому ушла его мысль, получателю — что
-  // прислали ему (lib/ideaRecipients). Один хук на панель, и всё нужное
-  // он приносит сам — с кэшем прошлого запуска, чтобы блок появлялся
-  // вместе с мыслями, а не через секунду после них.
-  const recipients = useIdeaRecipients();
-  const sentTo = sentToByIdea(recipients.rows, recipients.names);
-  const incoming = incomingFor(recipients.rows, recipients.myAssigneeId, myUserId);
-  const people = Object.values(recipients.names);
 
   function keep(idea: Idea) {
     const next = new Set(kept);
@@ -155,8 +180,20 @@ export default function IdeasPanel({
       {!isMobile && (
         <div className="dash-panel-head">
           <div className="panel-title">
-            Идеи и мысли <span className="count">{visible.length}</span>
+            Идеи и мысли <span className="count">{visible.length + shared.length}</span>
           </div>
+          {sentList.length > 0 && (
+            <button
+              type="button"
+              className="panel-done-btn panel-sent-btn"
+              id="ideasSentBtn"
+              title="Отправленные мысли — кому ушли и что ответили"
+              onClick={() => setSentOpen(true)}
+            >
+              <Icon name="send" size={14} />
+              <span className="panel-done-count">{sentList.length}</span>
+            </button>
+          )}
           {done.length > 0 && (
             <button
               type="button"
@@ -202,11 +239,7 @@ export default function IdeasPanel({
       <IncomingIdeas
         rows={incoming}
         authorOf={(createdBy) => authorLabel(createdBy || undefined, recipients.authors, people)}
-        onAnswered={(row, answer) => {
-          if (answer === "failed") void recipients.reload();
-          else if (answer === "taken") recipients.markLocally(row.id, { convertedTaskId: "pending" });
-          else recipients.markLocally(row.id, { seenAt: new Date().toISOString() });
-        }}
+        onAnswered={answered}
         // Не через addText: тот очищает поле ввода, а в нём может лежать
         // недописанная своя мысль.
         onKeep={(row) =>
@@ -219,8 +252,20 @@ export default function IdeasPanel({
         </button>
       )}
       <div id="ideaList">
+        {/* Поделённые со мной — сверху своих: они новые для меня, и ответа
+            не требуют, поэтому стоят в списке, а не в блоке «Прислали вам». */}
+        {shared.map((row) => (
+          <SharedIdeaItem
+            key={row.id}
+            row={row}
+            from={authorLabel(row.idea?.createdBy || undefined, recipients.authors, people)}
+            onAnswered={answered}
+          />
+        ))}
         {visible.length === 0 ? (
-          <div className="empty">{ideas.length === 0 ? "Пока пусто — запишите первую мысль" : "Нет активных мыслей"}</div>
+          shared.length === 0 && (
+            <div className="empty">{own.length === 0 ? "Пока пусто — запишите первую мысль" : "Нет активных мыслей"}</div>
+          )
         ) : (
           visible.map((idea) => (
             <IdeaItem
@@ -261,6 +306,8 @@ export default function IdeasPanel({
           onClose={() => setReviewTotal(0)}
         />
       )}
+
+      {sentOpen && <SentIdeasModal ideas={sentList} sentTo={sentTo} onClose={() => setSentOpen(false)} />}
 
       {doneOpen && (
         <DoneListModal

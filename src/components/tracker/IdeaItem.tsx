@@ -10,7 +10,7 @@ import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
 import Icon from "./Icon";
 import PopLayer from "./PopLayer";
-import type { SentTo } from "@/lib/ideaRecipients";
+import { stateLabel, type SentTo } from "@/lib/ideaRecipients";
 
 export default function IdeaItem({
   idea,
@@ -76,7 +76,12 @@ export default function IdeaItem({
     el.style.left = Math.max(8, Math.min(sentAnchor.left, window.innerWidth - el.offsetWidth - 8)) + "px";
   }, [sentAnchor]);
   const sent = sentTo || [];
-  const answered = sent.filter((s) => s.state !== "none").length;
+  // В списке автора с 0051 остаются только ПОДЕЛЁННЫЕ мысли (отправленные
+  // уходят в окно «Отправленные»), а у поделённой ответа никто не ждёт —
+  // «1/2» там читалось бы как недостача. Число ответивших показывается,
+  // только если мысль кому-то ещё и отправлена.
+  const sharedOnly = sent.length > 0 && sent.every((s) => s.kind === "share");
+  const answered = sharedOnly ? 0 : sent.filter((s) => s.kind === "send" && s.state !== "none").length;
 
   const linked = colleagues.filter((c) => c.linked && !c.isMe);
 
@@ -293,14 +298,14 @@ export default function IdeaItem({
       {sentAnchor && sent.length > 0 && (
         <PopLayer>
           <div ref={sentRef} className="people-tooltip idea-sent-tooltip" id="ideaSentTooltip" style={{ display: "block", top: -9999, left: -9999 }}>
-            <div className="ptitle">Отправлено</div>
+            <div className="ptitle">{sharedOnly ? "Поделились" : "Отправлено"}</div>
             {sent.map((s) => (
               <div className={"prow " + (s.state === "none" ? "vote-none" : "vote-yes")} key={s.name}>
                 <span className="prow-mark" aria-hidden>
                   {s.state === "none" ? "•" : <Icon name={s.state === "taken" ? "arrow-right" : "check"} size={13} />}
                 </span>
                 <span className="prow-name">{s.name}</span>
-                <span className="prow-note">{s.state === "taken" ? "взял в работу" : s.state === "seen" ? "принял" : "не ответил"}</span>
+                <span className="prow-note">{stateLabel(s.kind, s.state)}</span>
               </div>
             ))}
           </div>

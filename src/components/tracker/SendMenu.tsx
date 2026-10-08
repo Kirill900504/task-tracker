@@ -56,17 +56,28 @@ export default function SendMenu({
     // Друкера… повторно изучить») пришла Игорю Витковскому, и тот спросил,
     // ему ли она. Одно нажатие на имя в меню отправляло её сразу и без
     // отмены — меню открывается под рукой, и случайного нажатия хватало.
+    //
+    // И передать её можно двумя способами (решение Кирилла 23.09.2026,
+    // миграция 0051): «Отправить» — мысль уходит из моего списка, человек
+    // обязан ответить; «Поделиться» — остаётся у меня, а у него просто
+    // появляется в списке. Спрашивается здесь же, вместо прежнего «да/нет»:
+    // один вопрос, а не два окна подряд.
+    let mode: "send" | "share" | undefined;
     if (kind === "idea") {
-      const yes = await ask.confirm({
-        title: "Отправить мысль?",
-        question: `Отправить эту мысль: ${names.map(shown).join(", ")}?`,
-        note: "Получатель увидит её в мессенджере и сможет взять в работу.",
-        okText: "Отправить",
+      const picked = await ask.choose({
+        title: "Передать мысль",
+        question: `Кому: ${names.map(shown).join(", ")}`,
+        note: "«Отправить» — мысль уйдёт из вашего списка в «Отправленные», получатель решит, что с ней делать. «Поделиться» — останется у вас, а у него появится в списке мыслей.",
+        options: [
+          { value: "send", label: "Отправить" },
+          { value: "share", label: "Поделиться" },
+        ],
       });
-      if (!yes) return;
+      if (picked !== "send" && picked !== "share") return;
+      mode = picked;
     }
     onResult(names.length > 1 ? "Отправляю…" : `Отправляю ${shown(names[0])}…`);
-    const result = await sendToTelegram(kind, id, names);
+    const result = await sendToTelegram(kind, id, names, mode);
     onResult("error" in result ? result.error : sendResultText(result));
   }
 

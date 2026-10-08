@@ -146,6 +146,9 @@ export async function POST(req: Request) {
     await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: taskId, text: `➕ ${myName} взял мысль в работу` });
     // Мысль тоже кто-то отправил — ему и знать, что её взяли.
     await notifyAuthor(admin, m.owner_id, idea?.created_by || null, `➕ ${myName} взял мысль в работу: «${title}»`);
+    // Сообщение с этой мыслью в мессенджере теряет кнопки — ответ дан.
+    const assigneeId = m.assignee_id;
+    after(() => mirrorAnswer(admin, { kind: "idea", itemId: recipient.idea_id, assigneeId, text: `💡 ${text}\n\n➕ Взято в работу — теперь это ваша задача` }));
     return NextResponse.json({ ok: true, taskId });
   }
 
@@ -154,15 +157,27 @@ export async function POST(req: Request) {
   // видит отметку в списке получателей. Ни хроники, ни сообщения: мысль не
   // работа, и строка «принял к сведению» в чужом мессенджере — тот самый
   // лишний сигнал, по которому ничего не делают.
-  if (body.action === "ack_idea") {
+  //
+  // «keep_idea» — то же самое для базы (копию в свои мысли кладёт браузер,
+  // через движок синхронизации), и отличается только словами, которыми
+  // переписывается сообщение в мессенджере.
+  if (body.action === "ack_idea" || body.action === "keep_idea") {
     if (!body.recipientId && !body.ideaId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
     const query = admin.from("idea_recipients").update({ seen_at: now }).eq("assignee_id", m.assignee_id);
     const { data: done, error } = await (body.recipientId
       ? query.eq("id", body.recipientId)
       : query.eq("idea_id", body.ideaId as string)
-    ).select("id");
+    ).select("idea_id, ideas(text)");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!done?.length) return NextResponse.json({ error: "Эта мысль не ваша" }, { status: 403 });
+    // Ответ дан в трекере — значит, кнопки «Прочитать / Сохранить / В
+    // работу» под этой мыслью в мессенджере больше не правда (0052).
+    type Done = { idea_id: string; ideas: { text: string } | { text: string }[] | null };
+    const row = done[0] as unknown as Done;
+    const ideaText = (Array.isArray(row.ideas) ? row.ideas[0]?.text : row.ideas?.text) || "";
+    const verdict = body.action === "keep_idea" ? "📌 Сохранено в ваши мысли" : "👁 Прочитано";
+    const assigneeId = m.assignee_id;
+    after(() => mirrorAnswer(admin, { kind: "idea", itemId: row.idea_id, assigneeId, text: `💡 ${ideaText}\n\n${verdict}` }));
     return NextResponse.json({ ok: true });
   }
 

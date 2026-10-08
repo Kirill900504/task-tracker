@@ -23,7 +23,10 @@ import { meetingCard, taskCard } from "@/lib/colleagueQueries";
 // (colleagueQueries): второй способ описать состояние задачи разошёлся бы
 // с первым.
 
-export type MirrorRef = { kind: "task" | "meeting"; itemId: string; assigneeId: string };
+// У мысли (миграция 0052) карточки состояния нет — ответ на неё один и
+// окончательный, поэтому переписывается она готовым текстом итога (`text`),
+// тем же, каким уже переписано нажатое сообщение, и без кнопок.
+export type MirrorRef = { kind: "task" | "meeting" | "idea"; itemId: string; assigneeId: string; text?: string };
 type Sent = { channel: BotChannelConfig; chatId: number; messageId?: string };
 
 // Сообщения старше месяца не трогаем: они давно уехали вверх, и править их
@@ -101,7 +104,11 @@ export async function mirrorAnswer(
 
     const today = new Date().toISOString().slice(0, 10);
     const card =
-      ref.kind === "meeting"
+      ref.kind === "idea"
+        ? ref.text
+          ? { text: ref.text, buttons: [] }
+          : null
+        : ref.kind === "meeting"
         ? await meetingCard(admin, colleague, ref.itemId, false)
         : await taskCard(admin, colleague, ref.itemId, today, false);
     // Элемента больше нет (удалён, отменён) — переписывать нечем; о
