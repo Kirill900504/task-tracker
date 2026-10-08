@@ -12,6 +12,7 @@ import { withoutSelfMark } from "@/lib/actorName";
 import { isCurrent, type MeetingVote } from "@/lib/meetingVotes";
 import { openVoteChoices, type VoteChoice } from "@/lib/answerRules";
 import { prefetchComments } from "@/hooks/useItemComments";
+import { useAsk } from "@/components/Ask";
 
 // Карточка встречи в списке — устроена как карточка задачи.
 //
@@ -114,6 +115,38 @@ export default function MeetingChip({
   const canVote = !!onVote && !!myVote && myVote.role !== "watcher" && live && !waitingRecap && !showQuickActions;
   const choices: VoteChoice[] = canVote ? openVoteChoices(myVote, round) : [];
   const mySaid = canVote && myVote && myVote.response !== "none" && isCurrent(myVote, round) ? myVote : null;
+
+  // Прошла, итога нет, а встреча чужая: закрыть её участник не может, и
+  // плашка «нужен итог» висит у него до тех пор, пока не вспомнит
+  // организатор. Кнопка отдаёт вопрос тому, кто может ответить, — шуткой в
+  // мессенджер (/api/workspace/recap-nudge, 07.10.2026: «это для
+  // участников встречи, так как сами то они прошедшие встречи скрыть не
+  // могут»). Ответ — рядом с кнопкой, в её же подписи: «Напомнили».
+  const ask = useAsk();
+  const canNudge = waitingRecap && !canManage;
+  const [nudge, setNudge] = useState<"idle" | "sending" | "sent">("idle");
+  async function nudgeOrganizer() {
+    setNudge("sending");
+    try {
+      const res = await fetch("/api/workspace/recap-nudge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meetingId: meeting.id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; already?: boolean; minutes?: number };
+      if (!res.ok) throw new Error(data.error || "Не получилось напомнить");
+      setNudge("sent");
+      if (data.already) {
+        await ask.say({
+          title: "Уже напомнили",
+          question: `Организатору уже напоминали ${data.minutes} мин назад — это видно в обсуждении встречи. Следующее напоминание можно отправить через три часа после прошлого.`,
+        });
+      }
+    } catch (err) {
+      setNudge("idle");
+      await ask.say({ title: "Не получилось", question: err instanceof Error ? err.message : String(err) });
+    }
+  }
 
   // Знак у имени в подсказке — по строке голоса, а не по подсчёту.
   function stateOf(name: string): "yes" | "late" | "no" | "none" | "unknown" {
@@ -272,6 +305,22 @@ export default function MeetingChip({
                 Не смогу
               </button>
             )}
+          </div>
+        )}
+
+        {canNudge && (
+          <div className="meeting-actions">
+            <button
+              className="meeting-act"
+              title="Организатору придёт шуточное напоминание подвести итог"
+              disabled={nudge !== "idle"}
+              onClick={(e) => {
+                e.stopPropagation();
+                void nudgeOrganizer();
+              }}
+            >
+              {nudge === "sent" ? "Напомнили" : "Напомнить"}
+            </button>
           </div>
         )}
 
