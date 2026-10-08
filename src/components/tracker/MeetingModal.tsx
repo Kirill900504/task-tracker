@@ -683,7 +683,14 @@ export default function MeetingModal({
             <div className="field">
               <label>Название встречи</label>
               <div className="input-with-mic">
-                <AutoGrowTextarea id="mTitle" placeholder="Например: Совещание по опту" value={title} onChange={setTitle} singleLine />
+                <AutoGrowTextarea
+                  id="mTitle"
+                  placeholder="Например: Совещание по опту"
+                  value={title}
+                  onChange={setTitle}
+                  singleLine
+                  focusAtEnd={!isEditing && !!prefill?.fromIdeaId}
+                />
                 <MicButton value={title} onChange={setTitle} title="Надиктовать название" />
               </div>
             </div>

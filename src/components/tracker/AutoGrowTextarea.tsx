@@ -8,7 +8,7 @@
 // `singleLine` keeps the value on one logical line (Enter is not a newline —
 // it is passed to onEnter instead, e.g. "save this idea") while still
 // wrapping and growing visually.
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { FocusEvent, KeyboardEvent } from "react";
 
 export default function AutoGrowTextarea({
@@ -22,6 +22,7 @@ export default function AutoGrowTextarea({
   onKeyDown,
   onBlur,
   autoFocus,
+  focusAtEnd,
   className,
 }: {
   value: string;
@@ -34,6 +35,12 @@ export default function AutoGrowTextarea({
   onKeyDown?: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
   onBlur?: (e: FocusEvent<HTMLTextAreaElement>) => void;
   autoFocus?: boolean;
+  // Focus once on mount with the caret AFTER the text, not before it — for a
+  // field that arrives pre-filled (a thought becoming a task or a meeting)
+  // and is there to be finished, not retyped. Deferred a frame because the
+  // field usually lives in a <dialog> whose showModal() runs in the parent's
+  // effect, after this one, and moves focus on its own.
+  focusAtEnd?: boolean;
   className?: string;
 }) {
   const ownRef = useRef<HTMLTextAreaElement | null>(null);
@@ -52,6 +59,19 @@ export default function AutoGrowTextarea({
     const borders = parseFloat(style.borderTopWidth || "0") + parseFloat(style.borderBottomWidth || "0");
     el.style.height = el.scrollHeight + borders + "px";
   }, [value]);
+
+  // Mount only: refocusing on a later prop change would steal the caret.
+  useEffect(() => {
+    if (!focusAtEnd) return;
+    const frame = requestAnimationFrame(() => {
+      const el = ownRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <textarea

@@ -794,6 +794,10 @@ export default function TaskModal({
                   value={form.title}
                   onChange={(text) => setForm((f) => ({ ...f, title: text }))}
                   singleLine
+                  // Название из мысли — черновик, его дописывают: курсор
+                  // сразу в конце текста (07.10.2026, «с возможностью
+                  // дополнения или редактирования»).
+                  focusAtEnd={!task && !!prefill?.fromIdeaId}
                 />
                 <MicButton value={form.title} onChange={(text) => setForm((f) => ({ ...f, title: text }))} title="Надиктовать название" />
               </div>

@@ -46,7 +46,6 @@ import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import { columnOf } from "@/lib/kanban";
 import { isSelfTask } from "@/lib/selfTask";
-import { defaultMeetingStart } from "@/lib/meetingTime";
 import { useAsk } from "@/components/Ask";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole, MEMBER_ROLE_LABELS } from "@/hooks/useWorkspaceRole";
@@ -398,7 +397,7 @@ export default function NewTracker() {
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
     setPendingIdeaConversion(idea.id);
-    setOpenMeetingRequest({ title: idea.text, date });
+    setOpenMeetingRequest({ title: idea.text, date, fromIdeaId: idea.id });
   }
 
   function taskDroppedOnDate(taskId: string, date: string) {
@@ -427,34 +426,19 @@ export default function NewTracker() {
     });
   }
 
-  async function convertIdeaToMeeting(ideaId: string) {
+  // Встреча из мысли — та же полная форма новой встречи, что и задача из
+  // мысли: переносится только название (его можно дописать), а дату,
+  // время, участников и длительность автор выбирает сам. Слова Кирилла
+  // 08.10.2026: «должно создаваться полноценное окно создания встречи с
+  // выбором всех участников и параметров, только название перемещается».
+  // До этого спрашивались одни дата и время, и встреча заводилась без
+  // единого участника — то есть звать на неё было некого. Мысль уходит
+  // только после «Сохранить» (requestedMeetingSaved), «Отмена» её оставляет.
+  function convertIdeaToMeeting(ideaId: string) {
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
-    // Тот же выбор, что у формы встречи: не «сегодня, 10:00» вслепую.
-    const start = defaultMeetingStart(todayStr());
-    const result = await dateTimeConfirm.ask(`Встреча «${idea.text}» на:`, start.date, start.time);
-    if (!result) return;
-    actions.deleteIdea(idea.id);
-    const meeting: Meeting = {
-      id: uid(),
-      date: result.date,
-      time: result.time || "",
-      title: idea.text,
-      // Получас по умолчанию: мысль, ставшая встречей, не несёт с собой
-      // длительности, а сетка времени идёт получасом.
-      durationMin: 30,
-      participants: [],
-      status: "planned",
-      result: "",
-      movedToDate: "",
-      resolvedAt: "",
-    };
-    actions.saveMeeting(meeting);
-    flashMeeting(meeting.id);
-    toasts.showToast("Идея превращена во встречу", meeting.title, () => {
-      actions.deleteMeeting(meeting.id);
-      actions.restoreIdea(idea);
-    });
+    setPendingIdeaConversion(idea.id);
+    setOpenMeetingRequest({ title: idea.text, fromIdeaId: idea.id });
   }
 
   function openSearchResult(result: SearchResult) {

@@ -223,6 +223,71 @@ test("dragging an idea onto a calendar day converts it into a meeting", async ({
   await expect(page.locator(".meeting-chip", { hasText: ideaText })).toHaveCount(0);
 });
 
+// 08.10.2026: «при создании из мысли встречи должно создаваться
+// полноценное окно создания встречи с выбором всех участников и
+// параметров, только название перемещается». Пункт меню мысли спрашивал
+// одни дату и время и заводил встречу без единого участника. Теперь — та
+// же форма, что у новой встречи: название из мысли, курсор в его конце
+// (дописывают сразу, без щелчка), участники на выбор, «Отмена» мысль не
+// трогает, а «Сохранить» забирает её.
+test("a thought becomes a meeting through the full new-meeting form", async ({ page }) => {
+  const text = `E2E мысль-встреча ${Date.now()}`;
+
+  await login(page);
+  await page.fill("#ideaInput", text);
+  await page.locator("#ideaInput").press("Enter");
+  const item = page.locator(".idea-item", { hasText: text });
+  await expect(item).toBeVisible();
+
+  await item.locator("[data-convert-idea]").click();
+  await page.click(".action-menu .export-item:has-text('Назначить встречу')");
+  await expect(page.locator("#meetingOverlay")).toBeVisible();
+  await expect(page.locator("#mTitle")).toHaveValue(text);
+  await expect(page.locator("#mTitle")).toBeFocused();
+  await expect(page.locator("#mParticipants")).toBeVisible();
+
+  // «Отмена» — мысль на месте, встречи нет.
+  await page.click("#meetingCancelBtn");
+  await expect(page.locator("#meetingOverlay")).toBeHidden();
+  await expect(item).toHaveCount(1);
+
+  await item.locator("[data-convert-idea]").click();
+  await page.click(".action-menu .export-item:has-text('Назначить встречу')");
+  await expect(page.locator("#mTitle")).toBeFocused();
+  // Курсор в конце: набранное дописывается к мысли, а не встаёт перед ней.
+  await page.keyboard.type(" — дополнено");
+  await expect(page.locator("#mTitle")).toHaveValue(`${text} — дополнено`);
+  await page.click("#meetingSaveBtn");
+
+  await expect(page.locator(".meeting-chip", { hasText: `${text} — дополнено` })).toBeVisible();
+  await expect(item).toHaveCount(0);
+  await waitForSaved(page);
+});
+
+// Задача из мысли — то же правило про название: форма открывается с
+// курсором в конце, и мысль дописывается, а не перепечатывается.
+test("a thought's title can be extended in the new-task form", async ({ page }) => {
+  const text = `E2E мысль-задача ${Date.now()}`;
+
+  await login(page);
+  await page.fill("#ideaInput", text);
+  await page.locator("#ideaInput").press("Enter");
+  const item = page.locator(".idea-item", { hasText: text });
+  await expect(item).toBeVisible();
+
+  await item.locator("[data-convert-idea]").click();
+  await page.click(".action-menu .export-item:has-text('Сделать задачей')");
+  await expect(page.locator("#fTitle")).toBeFocused();
+  await page.keyboard.type(" к пятнице");
+  await expect(page.locator("#fTitle")).toHaveValue(`${text} к пятнице`);
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+
+  await expect(page.locator(".task", { hasText: `${text} к пятнице` })).toBeVisible();
+  await expect(item).toHaveCount(0);
+  await waitForSaved(page);
+});
+
 // 21.09.2026: «при переносе задачи во встречу встреча не создаётся». Блок
 // встреч принимал только мысль — задача поднималась под курсором и падала
 // в никуда, потому что своего обработчика на "task" в MeetingsPanel не
