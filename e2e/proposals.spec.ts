@@ -205,9 +205,17 @@ test("повестка: пункт дописывается, получает и
   await page.fill("#agendaInput", point);
   await page.locator("#agendaInput").press("Enter");
   await expect(page.locator(".agenda-item", { hasText: point })).toBeVisible();
+  // Ровно ОДНА строка у этой встречи, а не «хотя бы одна»: прежняя проверка
+  // с limit(1) не видела, что одно нажатие Enter писало пункт дважды
+  // (ленивый запрос, ждали дважды — см. useMeetingAgenda.add). Пауза — чтобы
+  // вторая вставка, если бы она была, успела доехать.
+  const meetingId = (await admin.from("meetings").select("id").eq("user_id", ownerId).eq("title", title).maybeSingle()).data?.id;
   await expect
-    .poll(async () => (await admin.from("meeting_agenda").select("text").eq("text", point).limit(1)).data?.length || 0, { timeout: 20_000 })
+    .poll(async () => (await admin.from("meeting_agenda").select("id").eq("meeting_id", meetingId)).data?.length || 0, { timeout: 20_000 })
     .toBe(1);
+  await page.waitForTimeout(1500);
+  expect((await admin.from("meeting_agenda").select("id").eq("meeting_id", meetingId)).data?.length).toBe(1);
+  await expect(page.locator(".agenda-item")).toHaveCount(1);
 
   await page.locator(".agenda-item", { hasText: point }).getByRole("button", { name: "Итог" }).click();
   const ask = page.locator(".ask-modal");

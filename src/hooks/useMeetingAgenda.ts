@@ -92,14 +92,22 @@ export function useMeetingAgenda(meetingId: string) {
       const position = items.length ? Math.max(...items.map((i) => i.position)) + 1 : 0;
       const temp: AgendaItem = { id: "tmp-" + Math.random().toString(36).slice(2), text: clean, note: "", position, authorId: "" };
       setItems((list) => [...list, temp]);
-      const request = createClient()
-        .from("meeting_agenda")
-        .insert({ meeting_id: meetingId, text: clean, position })
-        .select("id, text, note, position, author_id")
-        .maybeSingle();
+      // Запрос Supabase ленив: он уходит в сеть на КАЖДЫЙ вызов `.then`.
+      // Здесь его ждут двое — временный номер ниже и сама эта функция, — и
+      // пока каждый ждал построитель напрямую, одно нажатие Enter писало
+      // пункт ДВАЖДЫ (две строки через 10 мс; e2e 08.10.2026 нашёл вторую
+      // кнопку «В задачу»). Поэтому построитель превращается в обещание
+      // ровно один раз, и оба ждут уже его.
+      const request = Promise.resolve(
+        createClient()
+          .from("meeting_agenda")
+          .insert({ meeting_id: meetingId, text: clean, position })
+          .select("id, text, note, position, author_id")
+          .maybeSingle(),
+      );
       realIds.set(
         temp.id,
-        Promise.resolve(request).then(
+        request.then(
           ({ data }) => (data as Row | null)?.id ?? null,
           () => null,
         ),
