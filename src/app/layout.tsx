@@ -2,6 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { Manrope } from "next/font/google";
 import "./globals.css";
 import "./tracker.css";
+// Кубик и окно задачи/встречи — после tracker.css нарочно: правила там
+// переопределяют прежний вид (см. шапку task-ui.css).
+import "./task-ui.css";
 import RegisterSW from "./registerSW";
 import CrashWatch from "./CrashWatch";
 import VersionWatch from "./VersionWatch";

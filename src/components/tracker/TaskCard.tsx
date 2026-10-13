@@ -1,51 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { CSSProperties, HTMLAttributes } from "react";
 import type { Section, Task } from "@/types/tracker";
-import { fmtDate, isDueSoon, isDueTodayHighlight, isOverdue, recurLabel } from "@/lib/taskDisplay";
+import { isDueSoon, isDueTodayHighlight, isOverdue, recurLabel, todayStr } from "@/lib/taskDisplay";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSwipeComplete } from "@/hooks/useSwipeComplete";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
 import Icon from "./Icon";
+import PopLayer from "./PopLayer";
+import PersonBadge from "./PersonBadge";
 import type { MyRole } from "@/lib/myRole";
-import type { TaskStage } from "@/lib/taskProgress";
+import type { TaskParticipant, TaskStage } from "@/lib/taskProgress";
+import { CARD_KIND_HINT, type CardKind } from "@/lib/taskCardKind";
+import { dueInfo } from "@/lib/dueLabel";
+import { personState } from "@/lib/personBadge";
 import { prefetchComments } from "@/hooks/useItemComments";
 
 // Кубик на доске.
 //
-// Переписан 19.09.2026 по разбору Кирилла: «вместо прямоугольников сделать
-// квадраты, убрать лишнюю бесполезную инфу из кубиков задач гуляющих по
-// канбану, подобрать размер шрифтов, маркеры важных пометок, чтоб
-// гармонично смотрелось, УБРАТЬ НЕНУЖНОЕ!»
+// Переделан 13.10.2026 по разбору Кирилла: «убери лишние значки (это
+// поручили вы — ждём ответа и все отчитались — ждём приёмки), далее выдели
+// название задачи, возможно даже рамкой, и если оно длинное, при наведении
+// должно высвечиваться поверх трекера окном с полным описанием… квадратик
+// принудительного закрытия должен быть в правом верхнем углу, а номер
+// задачи в левом верхнем, посередине в этой же строке должно вмещаться
+// название (читабельно!). Отражение постановщика и исполнителей должно быть
+// улучшено… с выделением, кто финишировал, кто взял в работу, а кто ещё
+// вообще не приступал… лишние 0/6 можно убрать. Дедлайн тоже более
+// выразителен должен быть».
 //
-// Что ушло и почему:
-//   Приоритет — целиком. Сначала со слова «Высокий» он ужался до точки в
-//     углу, а 20.09.2026 ушёл совсем: «удали везде приоритетности, они не
-//     нужны». Точку он же и не смог опознать («это что?»), и это
-//     справедливо: важность выставлялась один раз при заведении и дальше
-//     ничего о задаче не говорила. Что горит — говорит срок.
-//   «0 из 2 · ждём: Кирилл, Юра» — на доске осталось «0/2». Имена
-//     помещались через раз, а нужны они в тот момент, когда карточку уже
-//     открыли.
-//   Раздел пилюлей — теперь цветная полоска слева. Раздел важен как
-//     принадлежность, а не как текст: глазом он ищется по цвету.
-//   «на приёмке» пилюлей — столбец доски и так называется «На приёмке».
+// Отсюда три строки, и у каждой одна работа:
+//   верх   — номер, название в рамке, галочка;
+//   люди   — кто поручил и кому, каждый со значком этапа (PersonBadge);
+//   низ    — срок пилюлей словами («до 19 окт · 6 дн.») и то, что ждёт решения.
 //
-// Что добавилось:
-//   роль цветом (см. lib/myRole): исполнителю — фирменный, соисполнителю
-//     обычный тон, наблюдателю приглушённый;
-//   «!» в правом верхнем углу за три рабочих дня до срока;
-//   стрелка ↗ там, где поручение исходящее — моё, отданное другому.
+// А весь кубик красит ОТНОШЕНИЕ задачи ко мне (lib/taskCardKind): моё
+// поручение другим — фирменным, своя личная — спокойной тёплой отметкой,
+// поручение мне — своим тоном, помогаю и смотрю — тише всех.
+//
+// Что ушло и почему — прежде, чем возвращать:
+//   «0/6» — вместо цифры каждый исполнитель виден сам, со своим этапом;
+//   стрелка ↗ «поручили вы» — это теперь цвет всего кубика;
+//   значок «ждёт приёмки» — об этом говорит столбец «На приёмке»;
+//   «!» за три дня до срока — его работу делает тон пилюли срока.
 
 export default function TaskCard({
   task,
   section,
-  progress,
   stage,
   role = "none",
-  outgoing,
+  kind = "none",
   dimOverdue,
   onToggleDone,
   canComplete = true,
@@ -55,22 +61,19 @@ export default function TaskCard({
   justCreated,
   menuItems,
   authorName,
-  executors,
+  people,
   refused,
   awaitingReschedule,
   unreadCount,
 }: {
   task: Task;
   section: Section | null;
-  // «1/3» — и только когда исполнителей больше одного (progressShort).
-  progress?: string;
   // Где задача стоит: отсюда берутся «не может» и «на доработке».
   stage?: TaskStage;
-  // Моя роль в этой задаче: она решает, каким тоном нарисован кубик.
+  // Моя роль в задаче: решает, кричать ли мне о просрочке.
   role?: MyRole;
-  // Это я поручил кому-то. Не цвет, а маленькая стрелка: цвет уже занят
-  // ролью и сроком, и третий смысл превратил бы доску в светофор.
-  outgoing?: boolean;
+  // Чем задача является для меня — весь вид кубика (lib/taskCardKind).
+  kind?: CardKind;
   // Просрочка есть, но кричать о ней этому человеку не о чем: он
   // наблюдатель, или это его собственное поручение другому.
   dimOverdue?: boolean;
@@ -95,16 +98,13 @@ export default function TaskCard({
   // Всё, что мышь делает перетаскиванием: поднять карточку выше, собрать по
   // ней встречу, отправить коллеге. Показывается только на телефоне.
   menuItems?: ActionMenuItem[];
-  // Кто поставил задачу. Показывается ВСЕГДА, а не только когда поручение
-  // чужое: слова Кирилла 21.09.2026 — «в коротких блоках задач тоже должен
-  // быть выделен постановщик задачи и все исполнители». При четырнадцати
-  // постановщиках «чья это задача» — первый вопрос к кубику, и до сих пор
-  // он оставался без ответа у всего, что человек завёл сам.
+  // Кто поставил задачу. Показывается всегда: при четырнадцати
+  // постановщиках «чья это задача» — первый вопрос к кубику (21.09.2026).
   authorName?: string;
-  // Все исполнители, а не только имя из поля «Исполнитель». Соисполнители
-  // и наблюдатели сюда не идут — по его же словам: «соисполнителей и
-  // наблюдателей выводить не надо».
-  executors?: string[];
+  // Строки участия задачи. На кубик идут только исполнители — со своим
+  // этапом; соисполнителей и наблюдателей «выводить не надо» (21.09.2026).
+  // Пока строки не доехали, ответ даёт поле `assignee`.
+  people?: TaskParticipant[];
   // Кто-то из исполнителей отказался. Отдельно от stage: отказ уводит
   // задачу на приёмку (см. taskProgress.allAnswered), и без этого признака
   // «не смогли» стало бы неотличимо от «сдали работу».
@@ -135,71 +135,76 @@ export default function TaskCard({
     enabled: isMobile && (canComplete || hasMenu),
   });
 
+  // Полное название поверх доски — по наведению на название, если оно не
+  // поместилось или у задачи есть описание. Своё окно, а не `title`:
+  // системная подсказка рисуется чужим шрифтом с секундной задержкой и
+  // обрезает длинный текст — ровно то, что Кирилл называет «как в
+  // программе 1995 года». На телефоне наведения нет — там карточку
+  // открывают.
+  const titleRef = useRef<HTMLDivElement>(null);
+  const peekTimer = useRef<number | null>(null);
+  const [peek, setPeek] = useState<DOMRect | null>(null);
+  function startPeek() {
+    if (isMobile) return;
+    if (peekTimer.current) window.clearTimeout(peekTimer.current);
+    peekTimer.current = window.setTimeout(() => {
+      const el = titleRef.current;
+      if (!el) return;
+      const cut = el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+      if (cut || task.desc) setPeek(el.getBoundingClientRect());
+    }, 450);
+  }
+  function stopPeek() {
+    if (peekTimer.current) window.clearTimeout(peekTimer.current);
+    peekTimer.current = null;
+    setPeek(null);
+  }
+
   // Просрочка есть или нет — вопрос к задаче; кричать о ней этому
-  // человеку или нет — вопрос к его роли (см. lib/myRole). Поэтому две
-  // величины, а не одна: заливку получает тот, кого срок касается, а
-  // красную дату — все, потому что иначе «горит» ничем не отличается от
-  // «идёт».
-  //
-  // «Кого касается» — это исполнитель и соисполнитель, и только они.
-  // Раньше сюда попадал ещё и постановщик во вкладке «Я поручил», и один
-  // и тот же красный означал там две разные вещи: «не успел я» и «не
-  // успел он». Теперь чужое просроченное горит КОРЕШКОМ (см. ниже), а
-  // заливка осталась значить ровно одно — работа на мне.
+  // человеку или нет — вопрос к его роли (см. lib/myRole). Заливку
+  // получает тот, кого срок касается, а красную пилюлю срока — все,
+  // потому что иначе «горит» ничем не отличается от «идёт».
   const mineToDo = role === "executor" || role === "coexecutor";
   const late = isOverdue(task);
   const overdue = late && !dimOverdue && mineToDo;
   const dueToday = !late && isDueTodayHighlight(task) && !dimOverdue && mineToDo;
-  const soon = !late && !dueToday && isDueSoon(task) && !dimOverdue;
+  const due = task.deadline ? dueInfo(task.deadline, { today: todayStr(), soon: isDueSoon(task) && !dimOverdue }) : null;
 
-  // Корешок слева — это моя роль, одной полосой: фирменный у исполнителя,
-  // фирменный вполсилы у соисполнителя, серый у наблюдателя, едва заметный
-  // там, где я ни при чём.
-  //
-  // Выбор Кирилла 21.09.2026 из четырёх показанных вариантов: роль ушла с
-  // фона в полоску именно затем, чтобы фон целиком достался сроку — три
-  // близких оттенка на фоне приходилось СРАВНИВАТЬ, а полоска узнаётся.
-  // Оттуда же красный корешок: просроченное, которое я поручил другому,
-  // отмечено, но доску не красит — при четырнадцати людях сплошной
-  // красный перестаёт что-либо значить.
-  const roleBar = late && !mineToDo && role === "none" ? "late" : role;
+  // Корешок слева — тон того же отношения ко мне, что и весь кубик.
+  // Просроченное, которое я поручил другому, отмечено красным корешком, но
+  // доску не красит: при четырнадцати людях сплошной красный перестаёт
+  // что-либо значить.
+  const bar = late && kind === "outgoing" ? "late" : kind;
 
-  // Что означает тон карточки — словами, наведением. Цвет отвечает «эта
-  // задача моя» быстрее любой подписи, но не отвечает, КЕМ я в ней
-  // числюсь, а подпись на каждом кубике заняла бы строку у всех
-  // четырнадцати. Подсказка не занимает ничего и появляется ровно тогда,
-  // когда вопрос возник.
-  // Кому поручено: все исполнители, а не одно имя из поля. Строки участия
-  // приезжают отдельным запросом, и пока их нет, ответ даёт `assignee` —
-  // короткая запись того же самого.
-  const who = (executors?.length ? executors : task.assignee ? [task.assignee] : [])
-    .map((name) => withoutSelfMark(name))
-    .filter(Boolean)
-    .join(", ");
+  // Кому поручено: исполнители со своим этапом. Пока строки участия едут
+  // отдельным запросом, ответ даёт поле `assignee`.
+  const executors = (people || []).filter((p) => p.role === "executor");
+  const fallbackName = !executors.length && task.assignee ? withoutSelfMark(task.assignee) : "";
+  // Имена — пока помещаются: два читаются, шесть превращаются в абзац.
+  // Дальше только кружки, а имя — в подсказке каждого.
+  const namesShown = executors.length <= 2;
+  const MAX_BADGES = 6;
+  const shownPeople = executors.slice(0, MAX_BADGES);
+  const hidden = executors.slice(MAX_BADGES);
 
-  const roleHint =
-    role === "executor"
-      ? "Вы исполнитель"
-      : role === "coexecutor"
-        ? "Вы соисполнитель"
-        : role === "watcher"
-          ? "Вы наблюдатель"
-          : undefined;
+  const hint = CARD_KIND_HINT[kind];
 
   const card = (
     <div
       className={
-        "task" +
+        "task kind-" +
+        kind +
         (task.status === "done" ? " done" : "") +
         (overdue ? " overdue" : "") +
         (dueToday ? " due-today" : "") +
         (isDragging ? " dragging" : "") +
         (justCreated ? " just-created" : "") +
-        " role-" + role
+        " role-" +
+        role
       }
       data-id={task.id}
       data-role={role}
-      title={roleHint}
+      data-kind={kind}
       ref={dragProps?.ref}
       // Свайп «сделано» на телефоне побеждает сдвиг перетаскивания: пока
       // палец ведёт карточку вбок, она и должна ехать за пальцем, а не
@@ -212,20 +217,23 @@ export default function TaskCard({
       // задачи открывается уже с перепиской, а не с пустой лентой
       // (07.10.2026). pointerenter приходит и от пальца — перед касанием.
       onPointerEnter={() => prefetchComments("task", task.id)}
+      onPointerDownCapture={stopPeek}
       onClick={onOpen}
     >
-      {/* Корешок роли — у левого края, во всю высоту. Первое, что видно в
-          столбце: моя это работа, помогаю я или просто смотрю. */}
-      <span className={"task-role-bar rb-" + roleBar} title={roleHint || (roleBar === "late" ? "Просрочено у того, кому поручено" : undefined)} />
+      <span className={"task-role-bar rb-" + bar} title={hint || (bar === "late" ? "Просрочено у того, кому поручено" : undefined)} />
 
-      {/* Раздел — полоской у правого края, своим цветом. Левый край занят
-          ролью, а раздел — принадлежность, и ищется он глазом по цвету
-          одинаково с любой стороны. Текстом он повторялся на каждом
-          кубике и съедал строку. */}
+      {/* Раздел — полоской у правого края, своим цветом. */}
       {section && <span className={"task-section-bar" + (section.kind === "personal" ? " personal" : "")} title={section.name} />}
 
       <div className="task-body">
-        <div className="task-head">
+        <div className="task-top">
+          {/* Номер — чтобы задачу можно было назвать по телефону и в
+              переписке одним словом (миграция 0045). Левый верхний угол —
+              его место по словам Кирилла. */}
+          <span className="task-num">{task.number != null ? `#${task.number}` : ""}</span>
+          <div className="task-title" ref={titleRef} onPointerEnter={startPeek} onPointerLeave={stopPeek}>
+            {task.title}
+          </div>
           {canComplete && (
             <div
               className={"check" + (task.status === "done" ? " checked" : "")}
@@ -238,95 +246,112 @@ export default function TaskCard({
               {task.status === "done" ? "✓" : ""}
             </div>
           )}
-          <div className="task-title">{task.title}</div>
-          {/* Маркеры угла. Их осталось два, и подписаны они целыми
-              фразами: 20.09.2026 Кирилл спросил про них прямо — «это
-              что?», — а значок, который надо расшифровывать, не работает.
-              Точка приоритета отсюда ушла вместе с самим приоритетом.
-              23.09.2026 добавились ещё два, оба значком с подсказкой:
-              просьба о переносе и «ждёт приёмки» — то, что не видно ни по
-              столбцу, ни по тексту рядом, а решать иногда нужно раньше,
-              чем открыли карточку. */}
-          <span className="task-marks">
-            {outgoing && (
-              <span className="task-mark outgoing" title="Это поручили вы — ждём ответа исполнителя">
-                ↗
-              </span>
-            )}
-            {soon && (
-              <span className="task-mark soon" title="Срок через три рабочих дня или меньше">
-                !
-              </span>
-            )}
-            {awaitingReschedule && (
-              <span className="task-mark reschedule" title="Просят перенести срок — ждёт вашего решения">
-                <Icon name="calendar" size={12} />
-              </span>
-            )}
-            {!awaitingReschedule && stage === "awaiting_review" && (
-              <span className="task-mark review" title="Отчитались все — ждёт вашей приёмки">
-                <Icon name="inbox" size={12} />
-              </span>
-            )}
-            {!!unreadCount && (
-              <span className="task-mark unread" title={`${unreadCount} новых сообщений в обсуждении`}>
-                {unreadCount > 9 ? "9+" : unreadCount}
-              </span>
-            )}
-          </span>
+          {isMobile && !!menuItems?.length && (
+            <button
+              className="task-menu-btn"
+              title="Действия"
+              data-task-menu={task.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenu({ anchor: e.currentTarget.getBoundingClientRect() });
+              }}
+            >
+              ⋮
+            </button>
+          )}
         </div>
 
-        <div className="task-meta">
-          {/* Номер — чтобы задачу можно было назвать по телефону и в
-              переписке одним словом (миграция 0045). */}
-          {task.number != null && <span className="task-num">#{task.number}</span>}
-          {/* «Кто поручил → кому» одной строкой.
-              Стрелка вместо двух подписей: «от Кирилла» и «Игорю» рядом
-              занимали половину кубика словами, а направление читается
-              само. Имена без пометки «(я)»: она написана для одного
-              человека, а доску смотрят все. В базе имя остаётся полным —
-              по нему задачу находят бот и сводки. */}
-          {(authorName || who) && (
-            <span className="task-who" title={authorName ? `${authorName} → ${who || "не назначен"}` : undefined}>
+        {/* Кто поручил → кому. Своя задача говорит о себе одним словом:
+            постановщик и исполнитель там один и тот же человек, и стрелка
+            от себя к себе читалась бы опечаткой. */}
+        {kind === "self" ? (
+          <div className="task-people">
+            <span className="task-self-tag">
+              <Icon name="user" size={12} /> Личная задача
+            </span>
+          </div>
+        ) : (
+          (authorName || executors.length > 0 || fallbackName) && (
+            <div className="task-people" title={authorName ? `${authorName} → ${executors.map((p) => withoutSelfMark(p.name)).join(", ") || fallbackName || "не назначен"}` : undefined}>
               {authorName && <span className="task-from">{authorName}</span>}
-              {authorName && who && <span className="task-arrow">→</span>}
-              {who && <span className="task-assignee">{who}</span>}
+              {authorName && (executors.length > 0 || fallbackName) && <span className="task-arrow">→</span>}
+              {shownPeople.map((p) => (
+                <PersonBadge key={p.assigneeId} name={p.name} state={personState(p)} showName={namesShown} />
+              ))}
+              {hidden.length > 0 && (
+                <span className="pbadge-more" title={hidden.map((p) => withoutSelfMark(p.name)).join(", ")}>
+                  +{hidden.length}
+                </span>
+              )}
+              {fallbackName && <span className="task-assignee">{fallbackName}</span>}
+            </div>
+          )
+        )}
+
+        {(due || recurLabel(task) || stage === "blocked" || refused || stage === "returned" || awaitingReschedule || !!unreadCount || kind === "watch" || kind === "co") && (
+          <div className="task-foot">
+            {due && (
+              <span className={"task-due-pill tone-" + (dimOverdue && due.tone !== "late" ? "normal" : due.tone)} title={due.title}>
+                <Icon name="calendar" size={12} />
+                {due.text}
+              </span>
+            )}
+            {!task.deadline && task.recur !== "none" && isDueTodayHighlight(task) && (
+              <span className="task-due-pill tone-today">
+                <Icon name="calendar" size={12} />
+                сегодня
+              </span>
+            )}
+            {recurLabel(task) && <span className="task-recur">{recurLabel(task)}</span>}
+            {/* Два состояния, которых не видно по столбцу: «В работе» стоит
+                и тот, кто взялся, и тот, кто отказался, и тот, кому вернули. */}
+            {(stage === "blocked" || refused) && <span className="task-state blocked">не может</span>}
+            {stage === "returned" && <span className="task-state returned">на доработке</span>}
+            <span className="task-marks">
+              {awaitingReschedule && (
+                <span className="task-mark reschedule" title="Просят перенести срок — ждёт решения постановщика">
+                  <Icon name="calendar" size={12} />
+                </span>
+              )}
+              {!!unreadCount && (
+                <span className="task-mark unread" title={`${unreadCount} новых сообщений в обсуждении`}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+              {/* Помогаю и смотрю — значком, а не цветом: «менее выражено,
+                  с отличительным маркером внешним, например лёгкий
+                  красивый значок глаза». */}
+              {kind === "watch" && (
+                <span className="task-mark kind-mark" title="Вы наблюдатель">
+                  <Icon name="eye" size={13} />
+                </span>
+              )}
+              {kind === "co" && (
+                <span className="task-mark kind-mark" title="Вы соисполнитель">
+                  <Icon name="users" size={13} />
+                </span>
+              )}
             </span>
-          )}
-          {/* Срок — со словом «до»: голая дата на кубике читается как
-              «дата чего?», и Кирилл попросил показывать дедлайн «в удобной
-              форме». Просроченное и сегодняшнее говорят о себе сами. */}
-          {task.deadline && (
-            <span className={"task-due" + (late ? " overdue-text" : dueToday ? " due-today-text" : "")}>
-              {late ? "просрочено " : dueToday ? "сегодня" : "до "}
-              {dueToday ? "" : fmtDate(task.deadline)}
-            </span>
-          )}
-          {!task.deadline && task.recur !== "none" && isDueTodayHighlight(task) && <span className="task-due due-today-text">сегодня</span>}
-          {recurLabel(task) && <span className="task-recur">{recurLabel(task)}</span>}
-          {progress && <span className="task-progress-short">{progress}</span>}
-          {/* Два состояния, которых не видно по столбцу: «В работе» стоит и
-              тот, кто взялся, и тот, кто отказался, и тот, кому вернули.
-              Разница между ними — это разница между «идёт» и «стоит». */}
-          {(stage === "blocked" || refused) && <span className="task-state blocked">не может</span>}
-          {stage === "returned" && <span className="task-state returned">на доработке</span>}
-        </div>
+          </div>
+        )}
       </div>
 
-      {isMobile && !!menuItems?.length && (
-        <button
-          className="task-menu-btn"
-          title="Действия"
-          data-task-menu={task.id}
-          onClick={(e) => {
-            e.stopPropagation();
-            setMenu({ anchor: e.currentTarget.getBoundingClientRect() });
-          }}
-        >
-          ⋮
-        </button>
-      )}
       {menu && !!menuItems?.length && <ActionMenu anchor={menu.anchor} title={task.title} items={menuItems} onClose={() => setMenu(null)} />}
+
+      {peek && (
+        <PopLayer>
+          <div
+            className="task-peek"
+            style={{
+              top: Math.min(peek.bottom + 6, window.innerHeight - 40),
+              left: Math.max(8, Math.min(peek.left - 8, window.innerWidth - 380)),
+            }}
+          >
+            <div className="task-peek-title">{task.title}</div>
+            {task.desc && <div className="task-peek-desc">{task.desc}</div>}
+          </div>
+        </PopLayer>
+      )}
     </div>
   );
 

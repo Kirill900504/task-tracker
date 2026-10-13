@@ -17,6 +17,7 @@ export default function AutoGrowTextarea({
   id,
   placeholder,
   minRows = 1,
+  maxRows,
   singleLine = false,
   onEnter,
   onKeyDown,
@@ -30,6 +31,10 @@ export default function AutoGrowTextarea({
   id?: string;
   placeholder?: string;
   minRows?: number;
+  // Потолок роста в строках. Дальше поле не растёт, а прокручивается
+  // внутри: поле, выросшее выше окна, закрывает то, ради чего окно открыто
+  // (13.10.2026 — поле сообщения, растянутое на весь чат).
+  maxRows?: number;
   singleLine?: boolean;
   onEnter?: () => void;
   onKeyDown?: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -57,8 +62,16 @@ export default function AutoGrowTextarea({
     // clipped behind a scrollbar that never appears.
     const style = getComputedStyle(el);
     const borders = parseFloat(style.borderTopWidth || "0") + parseFloat(style.borderBottomWidth || "0");
-    el.style.height = el.scrollHeight + borders + "px";
-  }, [value]);
+    let height = el.scrollHeight + borders;
+    if (maxRows) {
+      const line = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5 || 20;
+      const pad = parseFloat(style.paddingTop || "0") + parseFloat(style.paddingBottom || "0");
+      const cap = Math.ceil(line * maxRows + pad + borders);
+      el.style.overflowY = height > cap ? "auto" : "hidden";
+      height = Math.min(height, cap);
+    }
+    el.style.height = height + "px";
+  }, [value, maxRows]);
 
   // Mount only: refocusing on a later prop change would steal the caret.
   useEffect(() => {

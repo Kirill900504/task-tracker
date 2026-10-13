@@ -176,10 +176,20 @@ export function progressLabel(participants: TaskParticipant[]): string {
   if (!p.total) return "";
   // Имена — без пометки «(я)»: строку читают ВСЕ участники, и коллега видел
   // «сделали: Кирилл (я)», то есть чужое «я» как своё (QA 06.10.2026).
+  //
+  // «Ждём» делится на два: взялся и трудится — и ещё не приступал. До
+  // 13.10.2026 оба лежали в одном «ждём», а цифра впереди считала только
+  // отчёты, и задача, которую приняли пятеро из шести, читалась «0 из 6 ·
+  // ждём: все шестеро» — Кирилл принял это за поломку («у тебя пишет 0 из
+  // 6, исправь!»). Цифра теперь названа тем, что считает.
   const shown = (names: string[]) => names.map(withoutSelfMark).join(", ");
-  const parts = [`${p.doneCount} из ${p.total}`];
-  if (p.doneNames.length) parts.push("сделали: " + shown(p.doneNames));
-  if (p.pendingNames.length) parts.push("ждём: " + shown(p.pendingNames));
+  const list = executors(participants);
+  const working = list.filter((x) => x.acceptedAt && !x.doneAt && !hasDeclined(x)).map((x) => x.name);
+  const notStarted = list.filter((x) => !x.acceptedAt && !x.doneAt && !hasDeclined(x)).map((x) => x.name);
+  const parts = [`сделали ${p.doneCount} из ${p.total}`];
+  if (p.doneNames.length) parts.push("готово: " + shown(p.doneNames));
+  if (working.length) parts.push("в работе: " + shown(working));
+  if (notStarted.length) parts.push("не приступили: " + shown(notStarted));
   if (p.declined.length) parts.push("не может: " + shown(p.declined.map((d) => d.name)));
   return parts.join(" · ");
 }

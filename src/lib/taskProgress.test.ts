@@ -150,19 +150,26 @@ describe("the line on the card", () => {
       person("Вера", { acceptedAt: t }),
       person("Глеб"),
     ];
-    expect(progressLabel(list)).toBe("2 из 4 · сделали: Аня, Борис · ждём: Вера, Глеб");
+    expect(progressLabel(list)).toBe("сделали 2 из 4 · готово: Аня, Борис · в работе: Вера · не приступили: Глеб");
+  });
+
+  // Задача №111, 13.10.2026: пятеро из шести нажали «Принял», а строка
+  // говорила «0 из 6 · ждём: все шестеро» — и читалась как поломка.
+  it("tells those who took the task from those who have not started", () => {
+    const list = [person("Аня", { acceptedAt: t }), person("Борис", { acceptedAt: t }), person("Вера")];
+    expect(progressLabel(list)).toBe("сделали 0 из 3 · в работе: Аня, Борис · не приступили: Вера");
   });
 
   // Строку читают все участники: коллега видел «сделали: Кирилл (я)» —
   // чужое «я» как своё (QA 06.10.2026).
   it("never shows the owner's «(я)» mark", () => {
     const list = [person("Кирилл Кучеренко (я)", { doneAt: t, doneComment: "ок" }), person("Аня (я)")];
-    expect(progressLabel(list)).toBe("1 из 2 · сделали: Кирилл Кучеренко · ждём: Аня");
+    expect(progressLabel(list)).toBe("сделали 1 из 2 · готово: Кирилл Кучеренко · не приступили: Аня");
   });
 
   it("names whoever refused", () => {
     const list = [person("Аня", { declinedAt: t, declineReason: "болен" })];
-    expect(progressLabel(list)).toBe("0 из 1 · не может: Аня");
+    expect(progressLabel(list)).toBe("сделали 0 из 1 · не может: Аня");
   });
 
   it("says nothing when nobody is assigned", () => {

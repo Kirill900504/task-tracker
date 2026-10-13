@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
-import { dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, signOut, settled as settledBox } from "./helpers";
+import { centerOnScreen, dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, signOut, settled as settledBox } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // The one smoke test covering the actual "Definition of Done" checklist
@@ -392,7 +392,7 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   // Сводка встречи — тот же блок, что у задачи (ItemFacts, «окно созданной
   // встречи должно быть однотипным с окном созданной задачи»): название
   // строкой над ней, дата, время и состав внутри.
-  await expect(page.locator(".meeting-fact-title")).toContainText(title);
+  await expect(page.locator("#meetingModalTitle")).toContainText(title);
   await expect(page.locator("#meetingFacts")).toContainText(slotTime);
   await expect(page.locator("#meetingFacts")).toContainText(participant);
   await expect(page.locator("#mTimeGrid")).toHaveCount(0);
@@ -470,6 +470,16 @@ test("a weekly recurring task keeps its rule across a reload", async ({ page }) 
 test("задача переносится в соседний столбец и остаётся там после перезагрузки", async ({ page }) => {
   const title = `E2E перенос ${Date.now()}`;
 
+  // Тест про геометрию: карточку несут из «Новых» в соседний столбец, и
+  // обе цели должны быть на экране одновременно. Задачи прошлых тестов
+  // копятся на том же аккаунте, «Новые» вырастают ниже сгиба, и пустой
+  // «В работе» уезжает за верх экрана — тогда мышь ведут в пустоту
+  // (13.10.2026, когда кубики стали выше). Поэтому доска перед ним чистая.
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  await admin.from("tasks").delete().eq("user_id", userId);
+
   await login(page);
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.click("#newTaskBtn");
@@ -489,7 +499,7 @@ test("задача переносится в соседний столбец и 
   // глазами. Подсветки столбца здесь больше нет намеренно: 20.09.2026 он
   // попросил убрать «контуры и зонирование», и ответ на «куда встанет»
   // дают расступившиеся соседи, а не рамка вокруг половины экрана.
-  await card.scrollIntoViewIfNeeded();
+  await centerOnScreen(card);
   const from = (await card.boundingBox())!;
   await page.mouse.move(from.x + 60, from.y + 20);
   await page.mouse.down();

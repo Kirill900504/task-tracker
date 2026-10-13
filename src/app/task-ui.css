@@ -1,0 +1,322 @@
+/* ======================================================================
+   Кубик задачи, окно задачи и встречи — вид 13.10.2026.
+
+   Отдельным файлом, а не в tracker.css, по двум причинам. Первая — в
+   tracker.css одновременно работают несколько сессий, и общий файл в
+   четыре тысячи строк собирает конфликты. Вторая — содержательная: этот
+   файл подключается ПОСЛЕ tracker.css (layout.tsx), и всё, что здесь
+   переопределено, переопределено нарочно и в одном месте. Если правило
+   здесь спорит с правилом там — побеждает это, и так задумано.
+   ====================================================================== */
+
+/* ---------- Кубик: вид = отношение задачи ко мне ----------------------
+   Слова Кирилла 13.10.2026: поручения другим — «основным фирменным
+   стилем»; свои личные — «выразительная, но спокойная» отметка; поручение
+   мне — «свой отличительный приятный дизайн»; соисполнитель и наблюдатель —
+   «менее выраженно… лёгкий красивый значок глаза, а на соисполнении более
+   мягкий тон». И отдельно: «чтоб не раздражало и каши/светофора не было».
+
+   Поэтому свой тон получают ТРИ вида — мои поручения (фирменный), мои
+   личные (тёплый песочный) и поручение мне (лавандовый: тем же цветом
+   трекер давно пишет имена исполнителей, то есть «лаванда = исполнитель»
+   уже выучена глазом). Каждый — корешком, рамкой и лёгким тоном фона,
+   чтобы узнавался, а не сравнивался.
+   Помогаю и смотрю — без заливки, тише всех, со значком в углу.
+   Срок по-прежнему сильнее всего (правила ниже повторяют tracker.css,
+   потому что этот файл подключён позже и иначе перебил бы их). */
+:root{
+  --kind-out:#3E8AA8;
+  --kind-out-bg:#24404B;
+  --kind-in:#A58BD6;
+  --kind-in-bg:#2D2B3A;
+  --kind-self:#C9B48A;
+  --kind-self-bg:#322F28;
+  --kind-co:#7D6BA3;
+  --kind-watch:#5C6B73;
+  --fin:#E3BE52;
+}
+/* Прежняя заливка «я исполнитель» снята: её получали прежде всего задачи
+   самому себе, а поручения другим стояли серыми — ровно наоборот тому, что
+   нужно постановщику. */
+.task.role-executor{border-color:var(--line-soft); background:var(--paper);}
+.task.kind-outgoing{border-color:rgba(62,138,168,.7); background:var(--kind-out-bg);}
+.task.kind-incoming{border-color:rgba(165,139,214,.42); background:var(--kind-in-bg);}
+.task.kind-self{border-color:rgba(201,180,138,.34); background:var(--kind-self-bg);}
+.task.kind-co{border-color:rgba(165,139,214,.2);}
+.task.kind-watch .task-title{color:var(--ink-soft);}
+.task.overdue{border-color:var(--high); background:var(--overdue-bg);}
+.task.due-today{border-color:var(--today); background:var(--today-bg);}
+.task:hover:not(.dragging){border-color:var(--accent);}
+
+.rb-outgoing{background:var(--kind-out);}
+.rb-incoming{background:var(--kind-in);}
+.rb-self{background:var(--kind-self);}
+.rb-co{background:var(--kind-co);}
+.rb-watch{background:var(--kind-watch);}
+
+/* ---------- Кубик: три строки ------------------------------------------
+   «Квадратик принудительного закрытия должен быть в правом верхнем углу, а
+   номер задачи в левом верхнем, посередине в этой же строке должно
+   вмещаться название (читабельно!)». */
+.task-top{display:flex; gap:7px; align-items:flex-start; min-width:0;}
+.task-top .task-title{flex:1; min-width:0;}
+.task-top .task-num, .task-top .check, .task-top .task-menu-btn{flex:none;}
+.task-top .task-num{
+  padding-top:5px; font-size:11.5px; font-weight:700; color:var(--ink-soft);
+  font-variant-numeric:tabular-nums; opacity:1; white-space:nowrap;
+}
+.task-top .task-num:empty{display:none;}
+/* Название — в рамке: «выдели название задачи, возможно даже рамкой».
+   Рамка тихая (полупрозрачный край и чуть темнее фона), чтобы на доске из
+   тридцати кубиков рамки не сложились в сетку. До трёх строк: длинное
+   целиком — во всплывающем окне по наведению (.task-peek). */
+.task-top .task-title{
+  padding:4px 9px; border-radius:8px;
+  background:rgba(0,0,0,.16); border:1px solid rgba(255,255,255,.07);
+  font-size:13.5px; font-weight:700; line-height:1.38; letter-spacing:-.005em;
+  -webkit-line-clamp:3; line-clamp:3;
+}
+.task.kind-outgoing .task-top .task-title{border-color:rgba(62,138,168,.35);}
+.task.kind-incoming .task-top .task-title{border-color:rgba(165,139,214,.3);}
+.task.kind-self .task-top .task-title{border-color:rgba(201,180,138,.28);}
+.task-top .check{margin-top:3px;}
+@media (max-width:800px){
+  .task-top .task-title{font-size:15px;}
+  .task-top .check{margin-top:2px;}
+  .task-top .task-menu-btn{margin:-6px -8px 0 -4px;}
+}
+
+/* Люди: кто поручил → кому, каждый со своим этапом. */
+.task-people{display:flex; flex-wrap:wrap; align-items:center; gap:5px 6px; margin-top:8px; font-size:11.5px; min-width:0;}
+.task-people .task-from{color:var(--ink-soft); font-weight:600;}
+.task-people .task-arrow{color:var(--ink-soft); opacity:.7;}
+.task-self-tag{display:inline-flex; align-items:center; gap:5px; color:var(--kind-self); font-weight:700; letter-spacing:.01em;}
+
+/* Человек — кружок с буквами; этап — значком в его углу (PersonBadge).
+   «Ещё не приступал» — пунктирное кольцо и приглушённый кружок, без
+   значка: это состояние по умолчанию, и громким его делать незачем.
+   Приглушение — своим цветом (filter), а не прозрачностью: на тёмном
+   прозрачность смешивает с подложкой (см. правило про роли в CLAUDE.md). */
+.pbadge{display:inline-flex; align-items:center; gap:5px; min-width:0; max-width:100%;}
+.pbadge-dot{
+  position:relative; flex:none; width:21px; height:21px; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:8.5px; font-weight:800; letter-spacing:.02em; color:#13191B;
+  box-shadow:0 0 0 2px rgba(0,0,0,.25);
+}
+.pbadge.ps-waiting .pbadge-dot{filter:saturate(.35) brightness(.72); box-shadow:0 0 0 1.5px var(--paper), 0 0 0 2.5px rgba(255,255,255,.28);}
+.pbadge.ps-unreachable .pbadge-dot{filter:saturate(.2) brightness(.6);}
+.pbadge.ps-declined .pbadge-dot{box-shadow:0 0 0 2px var(--high);}
+/* «Взял в работу» — зелёная галочка, «закончил» — флаг финиша (его
+   слова 13.10.2026). Флаг — золотом: финиш отличается от «работает» с
+   первого взгляда, а два зелёных пришлось бы сравнивать. */
+.pbadge.ps-done .pbadge-dot{box-shadow:0 0 0 2px var(--fin);}
+.pbadge.ps-working .pbadge-dot{box-shadow:0 0 0 2px var(--success);}
+.pbadge-state{
+  position:absolute; right:-5px; bottom:-5px; width:15px; height:15px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; border:1.5px solid var(--paper);
+}
+.pbadge-state .icon{stroke-width:2.6;}
+.ps-done .pbadge-state{background:var(--fin); color:#2B2207;}
+.ps-working .pbadge-state{background:var(--success); color:#0D2416;}
+.ps-declined .pbadge-state{background:var(--high); color:#2A130D;}
+.ps-unreachable .pbadge-state{background:var(--paper-soft); color:var(--ink-soft);}
+.pbadge-name{font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.pbadge.ps-waiting .pbadge-name, .pbadge.ps-unreachable .pbadge-name{color:var(--ink-soft);}
+.pbadge-word{font-size:11.5px; font-weight:600; color:var(--ink-soft); white-space:nowrap;}
+.ps-working .pbadge-word{color:#7FD3A0;}
+.ps-done .pbadge-word{color:var(--fin);}
+.ps-declined .pbadge-word{color:var(--high);}
+.pbadge-more{
+  display:inline-flex; align-items:center; justify-content:center; min-width:21px; height:21px; padding:0 5px;
+  border-radius:999px; background:var(--paper-soft); color:var(--ink-soft); font-weight:800; font-size:10.5px;
+}
+
+/* Низ: срок пилюлей, повтор, состояние, значки. */
+.task-foot{display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-top:8px; font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
+.task-foot .task-marks{margin-left:auto;}
+.task-due-pill{
+  display:inline-flex; align-items:center; gap:5px; padding:2px 9px 2px 7px; border-radius:999px;
+  font-weight:700; white-space:nowrap; color:var(--ink);
+  background:rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.1);
+}
+.task-due-pill .icon{opacity:.8;}
+.task-due-pill.tone-soon{color:var(--med); background:var(--med-bg); border-color:rgba(224,184,77,.45);}
+.task-due-pill.tone-today{color:#0B2833; background:var(--today); border-color:var(--today);}
+.task-due-pill.tone-late{color:#2A130D; background:var(--high); border-color:var(--high);}
+.task-due-pill.tone-today .icon, .task-due-pill.tone-late .icon{opacity:1;}
+.task-mark.kind-mark{color:var(--ink-soft); width:18px; height:18px;}
+
+/* Полное название поверх доски — по наведению на длинное. */
+.task-peek{
+  position:fixed; z-index:5; width:max-content; max-width:min(380px, calc(100vw - 16px));
+  padding:10px 13px; border-radius:12px; pointer-events:none !important;
+  background:#1B2225; border:1px solid var(--line); box-shadow:var(--shadow-2);
+  animation:task-peek-in .12s ease-out;
+}
+@keyframes task-peek-in{from{opacity:0; transform:translateY(-3px);} to{opacity:1; transform:none;}}
+.task-peek-title{font-weight:700; font-size:13.5px; line-height:1.45; color:var(--ink); overflow-wrap:anywhere; white-space:pre-wrap;}
+.task-peek-desc{
+  margin-top:6px; padding-top:6px; border-top:1px solid var(--line-soft);
+  font-size:12.5px; line-height:1.5; color:var(--ink-soft); white-space:pre-wrap; overflow-wrap:anywhere;
+  display:-webkit-box; -webkit-line-clamp:8; line-clamp:8; -webkit-box-orient:vertical; overflow:hidden;
+}
+@media (prefers-reduced-motion: reduce){ .task-peek{animation:none;} }
+
+/* ---------- Шапка окна задачи и встречи (ItemModalHead) ----------------
+   Название в рамке, справа — действия и ×. */
+.item-head{display:flex; align-items:flex-start; gap:12px; margin:0 0 14px;}
+.item-head-main{flex:1; min-width:0;}
+.item-head-kicker{font-size:12.5px; font-weight:700; color:var(--ink-soft); font-variant-numeric:tabular-nums; margin-bottom:6px; letter-spacing:.01em;}
+.modal .item-head-title{
+  margin:0; padding:10px 14px; border-radius:12px;
+  font-size:19px; line-height:1.35; font-weight:800; letter-spacing:-.015em; color:var(--ink);
+  background:linear-gradient(180deg, rgba(62,138,168,.16), rgba(62,138,168,.07));
+  border:1px solid rgba(62,138,168,.45); box-shadow:inset 3px 0 0 var(--accent);
+  overflow-wrap:anywhere; word-break:break-word;
+}
+.modal .item-head-title.plain{padding:0; background:none; border:0; box-shadow:none;}
+.item-head-actions{display:flex; align-items:center; gap:8px; flex:none; flex-wrap:wrap; justify-content:flex-end;}
+.item-head-close, .item-head-icon{
+  width:38px; height:38px; border-radius:10px; flex:none;
+  display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
+  background:var(--paper-soft); border:1px solid var(--line-soft); color:var(--ink-soft);
+  transition:color .12s ease, border-color .12s ease, background .12s ease;
+}
+.item-head-close:hover, .item-head-icon:hover{color:var(--ink); border-color:var(--accent);}
+.item-head-icon.on{color:var(--accent); border-color:var(--accent); background:var(--accent-soft);}
+.item-head-icon.danger:hover{color:var(--high); border-color:var(--high); background:var(--high-bg);}
+.item-head-btn{
+  height:38px; padding:0 14px; border-radius:10px; cursor:pointer; white-space:nowrap;
+  font-family:var(--display); font-size:13px; font-weight:700; color:var(--ink);
+  background:var(--paper-soft); border:1px solid var(--line-soft);
+}
+.item-head-btn:hover{border-color:var(--accent);}
+.item-head-btn:disabled{opacity:.6; cursor:default;}
+/* «Принудительное закрытие» — лёгкой зелёной рамкой, как он и просил. */
+.item-head-btn.force-close{border-color:rgba(63,169,104,.6); color:#9AD9B2; background:rgba(63,169,104,.08);}
+.item-head-btn.force-close:hover{border-color:var(--success); background:rgba(63,169,104,.16); color:#C4ECD2;}
+/* На телефоне окно во весь экран, и стрелка «назад» Modal уже стоит в
+   углу; шапка остаётся, кнопки переносятся под название. */
+@media (max-width:800px){
+  .item-head{flex-wrap:wrap;}
+  .item-head-actions{width:100%; justify-content:flex-start;}
+  .item-head-actions .item-head-close{display:none;}
+  .modal .item-head-title{font-size:17px;}
+}
+/* Заведённой задаче нижняя полоса кнопок не нужна — правая колонка
+   (обсуждение) получает её высоту. */
+.modal.has-chat .item-head{flex:none;}
+
+/* ---------- Сводка: люди по ролям внутри блока (TaskPeople) ---------- */
+.facts-footer{border-top:1px solid rgba(255,255,255,.06); margin-top:4px; padding:8px 12px 6px;}
+.tpeople-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;}
+.tpeople-add{
+  width:30px; height:30px; border-radius:50%; flex:none; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:var(--accent-soft); color:var(--accent); border:1px solid rgba(62,138,168,.6);
+  transition:background .12s ease, color .12s ease;
+}
+.tpeople-add:hover{background:var(--accent); color:#EAF6FA;}
+.tpeople-empty{font-size:12.5px; color:var(--high); margin-bottom:6px;}
+.tpeople-group{margin-bottom:8px;}
+.tpeople-label{font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:5px;}
+.tpeople-list{display:flex; flex-wrap:wrap; gap:6px;}
+/* Человек — фишкой целиком: имя не рвётся посередине, переносится фишка
+   («без переносов из строки в строку»). */
+.tperson{
+  display:inline-flex; align-items:center; padding:4px 10px 4px 5px; border-radius:999px;
+  background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.08);
+  font:inherit; font-size:12.5px; color:var(--ink); max-width:100%;
+}
+button.tperson{cursor:pointer; transition:border-color .12s ease, background .12s ease;}
+button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
+.tperson .pbadge-name{font-size:12.5px;}
+.tperson.role-executor{border-color:rgba(165,139,214,.35);}
+.tperson.role-watcher .pbadge-name{color:var(--ink-soft); font-weight:600;}
+
+/* Окно «Добавить в задачу» поверх окна задачи. */
+.modal.add-people{max-width:560px;}
+.add-people-hint{margin:-6px 0 10px;}
+.add-people .people-search{width:100%; margin-bottom:10px;}
+.add-people-list{display:flex; flex-direction:column; gap:4px; max-height:min(52vh, 460px); overflow-y:auto; overscroll-behavior:contain; margin:0 -6px; padding:0 6px;}
+.add-people-row{display:flex; align-items:center; gap:10px; justify-content:space-between; padding:6px 8px; border-radius:10px; flex-wrap:wrap;}
+.add-people-row:hover{background:rgba(255,255,255,.03);}
+.add-people-name{display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px; min-width:0;}
+.add-people-roles{display:inline-flex; gap:6px; flex-wrap:wrap;}
+.add-people-roles .participant-chip{padding:5px 10px; font-size:12px;}
+.role-pick-executor:hover{border-color:var(--kind-in); color:var(--kind-in);}
+.add-people-empty{padding:14px 8px; color:var(--ink-soft); font-size:13px;}
+.add-people-done{font-size:12.5px; color:var(--success); margin-bottom:8px;}
+.add-people-new{margin-top:10px;}
+
+/* ---------- Описание отдельным блоком (TaskDescription) ---------- */
+.desc-block{
+  margin:0 0 10px; padding:10px 13px 12px; border-radius:var(--radius-md);
+  background:var(--paper-soft); border:1px solid var(--line-soft); box-shadow:var(--shadow-1), var(--edge);
+}
+.desc-block.empty{box-shadow:var(--edge);}
+.desc-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px;}
+.desc-edit{
+  display:inline-flex; align-items:center; gap:5px; cursor:pointer;
+  background:none; border:1px solid var(--line-soft); border-radius:999px; padding:4px 10px;
+  font-family:var(--display); font-size:12px; font-weight:700; color:var(--ink-soft);
+}
+.desc-edit:hover{color:var(--accent); border-color:var(--accent);}
+.desc-block .task-card-desc{margin:0 0 6px;}
+.desc-block .expand-toggle{margin:2px 0 6px;}
+.desc-empty{font-size:13px; color:var(--ink-soft);}
+.desc-block .auto-grow{
+  width:100%; padding:10px 12px; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
+  font-family:var(--sans); font-size:13.5px; line-height:1.55; background:var(--bg); color:var(--ink); resize:none;
+}
+.desc-block .auto-grow:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
+.desc-files-edit{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
+.desc-attach{margin-top:8px;}
+
+/* ---------- Поле сообщения: не выше пяти строк, без ручки ----------
+   «Окно для сообщения можно растянуть до того состояния, что оно
+   перекрывает весь чат… чтобы больше чем на 5 строк не растягивалось, и
+   способ растяжения убери вообще». Растёт поле само, по тексту
+   (field-sizing — его понимают Chrome, Edge и окно на ПК), до пяти строк, а
+   дальше прокручивается внутри. Где field-sizing нет, поле остаётся своей
+   высоты и прокручивается — растянуть его рукой нельзя нигде. */
+.chat-composer textarea{
+  resize:none; field-sizing:content;
+  min-height:42px; max-height:calc(5 * 1.5em + 22px); line-height:1.5; overflow-y:auto;
+}
+/* То же правило — для всех полей ввода трекера: ручка в углу textarea
+   нигде не нужна, высоту поля решает его текст. */
+.field textarea, .outcome-field textarea, .chat-edit-box textarea{resize:none;}
+.chat-edit-box textarea{max-height:calc(8 * 1.5em + 20px); overflow-y:auto;}
+
+/* ---------- Встречи — тот же язык, что у задач --------------------------
+   «Подумай, какие аспекты текущих исправлений и в какой форме натянуть на
+   работу со встречами» (13.10.2026). Перенесено то, что значит то же
+   самое: название в рамке, своя встреча — фирменным краем, встреча, куда
+   позвали, — лавандовым, участники в окне — фишками целиком, со своим
+   откликом. Заливки нет: фон карточки встречи уже занят выбранным днём. */
+.meeting-chip .mtitle{
+  padding:3px 8px; border-radius:8px; font-weight:700;
+  background:rgba(0,0,0,.16); border:1px solid rgba(255,255,255,.07);
+}
+.meeting-chip.kind-outgoing{border-color:rgba(62,138,168,.5);}
+.meeting-chip.kind-incoming{border-color:rgba(165,139,214,.34);}
+.meeting-chip.kind-outgoing .mtitle{border-color:rgba(62,138,168,.3);}
+.meeting-chip.kind-incoming .mtitle{border-color:rgba(165,139,214,.25);}
+.meeting-chip.selected-day{border-color:var(--today);}
+.meeting-chip:hover:not(.dragging){border-color:var(--today);}
+.meeting-chip .mtime{
+  padding:1px 7px; border-radius:999px; background:rgba(79,168,216,.12);
+}
+
+/* Участники встречи в окне — фишками, как люди на задаче: имя не рвётся
+   посередине, а отклик стоит значком перед ним. */
+.facts .fact-people{gap:6px;}
+.facts .fact-person{
+  padding:3px 10px 3px 7px; border-radius:999px;
+  background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.08); font-size:12.5px;
+}
+.facts .fact-person.vote-yes{border-color:rgba(63,169,104,.45);}
+.facts .fact-person.vote-late{border-color:rgba(224,184,77,.45);}
+.facts .fact-person.vote-no{border-color:rgba(224,122,95,.5);}

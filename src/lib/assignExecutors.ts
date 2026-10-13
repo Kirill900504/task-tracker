@@ -49,6 +49,26 @@ export async function selfAssigneeName(admin: SupabaseClient, userId: string): P
   return self?.name || "";
 }
 
+// Имя того, кто поручает, — как оно записано в списке людей.
+//
+// Нужно ровно одному правилу: задача без названного исполнителя ставится
+// на того, кто её ставит («либо ты сам, либо кто-то другой, — без нельзя»,
+// Кирилл 13.10.2026). Владелец — его строка «(я)» (имя должно совпасть
+// буква в букву, по нему триггер 0024 заводит участие); руководитель — его
+// строка по членству. Пусто — найти не удалось, и тогда задача остаётся
+// без исполнителя, как раньше: выдумать человека хуже.
+export async function authorAssigneeName(admin: SupabaseClient, spaceId: string, createdBy: string | null): Promise<string> {
+  if (!createdBy || createdBy === spaceId) return selfAssigneeName(admin, spaceId);
+  const { data } = await admin
+    .from("workspace_members")
+    .select("assignees(name)")
+    .eq("owner_id", spaceId)
+    .eq("member_id", createdBy)
+    .maybeSingle();
+  const row = data as { assignees: { name: string } | { name: string }[] | null } | null;
+  return (row ? (Array.isArray(row.assignees) ? row.assignees[0]?.name : row.assignees?.name) : "") || "";
+}
+
 async function ownerDisplayName(admin: SupabaseClient, userId: string): Promise<string> {
   const self = await selfAssigneeName(admin, userId);
   return self.replace(/\(я\)\s*$/, "").trim() || "трекера";

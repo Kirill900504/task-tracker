@@ -175,7 +175,7 @@ test("приглашённый на чужую встречу не видит к
   // ждёт «включения» карточки вечно, хотя нажатие мышью она принимает.
   await chip.getByText(title).click({ force: true });
   // Окно открылось — сводка встречи на месте…
-  await expect(page.locator(".meeting-fact-title", { hasText: title })).toBeVisible();
+  await expect(page.locator("#meetingModalTitle", { hasText: title })).toBeVisible();
   // …а переноса в ней нет.
   await expect(page.locator("#meetingMoveBtn")).toHaveCount(0);
 });

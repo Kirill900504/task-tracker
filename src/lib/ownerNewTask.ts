@@ -4,7 +4,7 @@ import { encodeCallback } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { newTaskRow } from "@/lib/newTask";
-import { attachExecutors, assignNote } from "@/lib/assignExecutors";
+import { attachExecutors, assignNote, authorAssigneeName } from "@/lib/assignExecutors";
 import { withoutSelfMark } from "@/lib/actorName";
 import { uid } from "@/lib/uid";
 import { isoDate, workdayIn } from "@/lib/whenDate";
@@ -108,6 +108,13 @@ export async function createTaskFromBot(
   // отчёт, и по нему же бот потом пустит его к приёмке этой задачи.
   createdBy: string | null = null,
 ): Promise<{ text: string }> {
+  // Ни одного исполнителя (раздел, где закреплены только соисполнители и
+  // наблюдатели) — исполнителем становится тот, кто поручает: задачи без
+  // исполнителя не бывает (13.10.2026, «либо ты сам, либо кто-то другой»).
+  if (!people.some((p) => p.role === "executor")) {
+    const me = await authorAssigneeName(admin, userId, createdBy);
+    if (me) people = [{ name: me, role: "executor" }, ...people.filter((p) => p.name !== me)];
+  }
   const executors = people.filter((p) => p.role === "executor").map((p) => p.name);
   const id = uid();
   // Номер ставит база (миграция 0045) — он нужен сообщению исполнителю.

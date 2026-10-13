@@ -140,9 +140,9 @@ test("владелец не распоряжается задачей, кото�
     // Как исполнитель он отвечает — это его право, как у всех.
     await expect(modal.getByRole("button", { name: "Сделал" })).toBeVisible();
     // А распоряжаться — нет.
-    await expect(modal.getByRole("button", { name: "Удалить" })).toHaveCount(0);
-    await expect(modal.getByRole("button", { name: /Закрыть волевым/ })).toHaveCount(0);
-    await expect(modal.getByRole("button", { name: /\+ добавить/ })).toHaveCount(0);
+    await expect(modal.locator("#deleteTaskBtn")).toHaveCount(0);
+    await expect(modal.locator("#forceCloseBtn")).toHaveCount(0);
+    await expect(modal.locator("#addTeamBtn")).toHaveCount(0);
     await page.keyboard.press("Escape");
   } finally {
     await admin.auth.admin.deleteUser(colleague.user.id);

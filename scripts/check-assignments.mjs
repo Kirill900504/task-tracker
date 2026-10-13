@@ -51,11 +51,40 @@ const MEETINGS = `
      and not exists (select 1 from meeting_participants p where p.meeting_id = m.id and p.assignee_id = a.id)
    order by m.date`;
 
+// Задачи без исполнителя вовсе: открытые, и ни одной строки executor.
+// «У любой задачи должен быть обязательно основной исполнитель — либо ты
+// сам, либо кто-то другой» (13.10.2026). Таких накопилось из времени, когда
+// мысль переносилась в задачи без формы, и из списка дел после встречи.
+// Исполнителем становится тот, кто её поставил: владелец — своей строкой
+// «(я)», руководитель — строкой по членству. Задача от этого становится
+// «своей» и встаёт в «Новые» — честно: её никто ещё не брал.
+// Те, что уже ловит TASKS (имя на карточке есть, строки нет), сюда не идут.
+const ORPHANS = `
+  select t.id, t.title,
+         coalesce(
+           (select w.assignee_id from workspace_members w
+             where w.owner_id = t.user_id and w.member_id = t.created_by limit 1),
+           case when t.created_by is null then
+             (select a.id from assignees a where a.user_id = t.user_id and a.name ilike '%(я)' limit 1)
+           end
+         ) as author_assignee_id
+    from tasks t
+   where t.deleted_at is null
+     and t.status <> 'done'
+     and coalesce(t.approval_state, 'open') <> 'accepted'
+     and not exists (select 1 from task_participants p where p.task_id = t.id and p.role = 'executor')
+     and not exists (select 1 from assignees a where a.user_id = t.user_id and a.name = t.assignee)
+   order by t.created_at`;
+
 const tasks = (await client.query(TASKS)).rows;
+const orphans = (await client.query(ORPHANS)).rows;
 const meetings = (await client.query(MEETINGS)).rows;
 
 console.log(`Задачи, назначенные только на словах: ${tasks.length}`);
 for (const t of tasks) console.log(`  «${t.title.slice(0, 60)}» → ${t.assignee}`);
+
+console.log(`\nЗадачи без исполнителя вовсе: ${orphans.length}`);
+for (const t of orphans) console.log(`  «${t.title.slice(0, 60)}»${t.author_assignee_id ? "" : " — автора нет в списке людей, не исправить"}`);
 
 console.log(`\nПриглашения на встречи без строки голосования: ${meetings.length}`);
 const byMeeting = new Map();
@@ -69,7 +98,7 @@ for (const [, m] of byMeeting) {
 }
 
 if (!fix) {
-  const total = tasks.length + meetings.length;
+  const total = tasks.length + meetings.length + orphans.length;
   console.log(total ? `\nВсего расхождений: ${total}. Чтобы дозавести — повторите с --fix.` : "\nРасхождений нет.");
   await client.end();
   process.exit(0);
@@ -97,5 +126,18 @@ for (const m of meetings) {
   );
   meetingRows++;
 }
-console.log(`\nДозаведено: исполнителей ${taskRows}, приглашений ${meetingRows}.`);
+// Без исполнителя — автор становится исполнителем, а его имя ложится в
+// поле задачи (по нему её находят бот и сводки). Роль — именно executor:
+// если автор уже стоял на задаче наблюдателем, он им больше не будет.
+let orphanRows = 0;
+for (const t of orphans) {
+  if (!t.author_assignee_id) continue;
+  await client.query(
+    "insert into task_participants (task_id, assignee_id, role) values ($1, $2, 'executor') on conflict (task_id, assignee_id) do update set role = 'executor'",
+    [t.id, t.author_assignee_id],
+  );
+  await client.query("update tasks set assignee = (select name from assignees where id = $2) where id = $1", [t.id, t.author_assignee_id]);
+  orphanRows++;
+}
+console.log(`\nДозаведено: исполнителей ${taskRows}, авторов исполнителями ${orphanRows}, приглашений ${meetingRows}.`);
 await client.end();

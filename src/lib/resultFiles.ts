@@ -25,6 +25,14 @@ export function tooBigFile(files: File[]): File | null {
 }
 
 export async function uploadResultFiles(taskId: string, files: File[]): Promise<Attachment[]> {
+  return uploadTaskFiles(taskId, files, "result");
+}
+
+// Тот же путь для документов к описанию задачи (миграция 0053): своя папка
+// внутри задачи, корзина и права — те же. Задачи может ещё не быть в базе
+// (файлы к новой задаче грузятся до её сохранения) — корзине это не важно:
+// права решает первый сегмент пути, а не строка в tasks.
+export async function uploadTaskFiles(taskId: string, files: File[], folder: "result" | "desc"): Promise<Attachment[]> {
   if (!files.length) return [];
   const db = createClient();
   const { workspaceId } = await me();
@@ -34,7 +42,7 @@ export async function uploadResultFiles(taskId: string, files: File[]): Promise<
     // точка и дефис — кириллица и пробелы в ключе объекта превращаются в
     // проценты, а ключ потом читают глазами в журнале.
     const safe = file.name.replace(/[^\w.\-]+/g, "_").slice(-80);
-    const path = `${workspaceId}/task/${taskId}/result/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safe}`;
+    const path = `${workspaceId}/task/${taskId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safe}`;
     const { error } = await db.storage.from(BUCKET).upload(path, file, { upsert: false });
     if (error) throw new Error(`Не загрузился файл «${file.name}»: ${error.message}`);
     out.push({ path, name: file.name, size: file.size, type: file.type });

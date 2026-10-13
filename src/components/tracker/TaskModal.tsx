@@ -23,7 +23,6 @@ import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
 import Icon from "./Icon";
 import ItemFacts from "./ItemFacts";
-import ExpandableText from "./ExpandableText";
 import ResultFiles from "./ResultFiles";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
@@ -33,6 +32,13 @@ import { isSnoozed, snoozeChoices } from "@/lib/snooze";
 import { answerWithFiles } from "@/lib/answerFiles";
 import { isSelfTask } from "@/lib/selfTask";
 import { isoDate, workdayIn } from "@/lib/whenDate";
+import { taskProgress } from "@/lib/taskProgress";
+import { uploadTaskFiles } from "@/lib/resultFiles";
+import { humanError } from "@/lib/humanError";
+import ItemModalHead from "./ItemModalHead";
+import TaskPeople from "./TaskPeople";
+import TaskDescription from "./TaskDescription";
+import AttachFiles from "./AttachFiles";
 
 // Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
 // «Понедельник…Воскресенье» подряд не помещаются никуда, а «Пн Вт Ср» читают
@@ -98,6 +104,7 @@ export default function TaskModal({
   prefill,
   sections,
   onSave,
+  onPatch,
   onDelete,
   onClose,
   onAddAssignee,
@@ -129,6 +136,14 @@ export default function TaskModal({
   prefill?: TaskPrefill;
   sections: Section[];
   onSave: (task: Task, pendingParticipants: PendingParticipant[]) => void;
+  // Правка заведённой задачи — кусок, который ложится поверх ТЕКУЩЕЙ
+  // строки, а не поверх снимка, с которым окно открыли. Кнопки
+  // «Сохранить» у открытой задачи больше нет (13.10.2026, «любые
+  // изменения… должны автоматически в ней сохраняться»), и каждое
+  // изменение пишется сразу — а снимок к этому моменту может быть уже
+  // старым: срок сдвинули, задачу приняли, и запись всего снимка вернула
+  // бы прежнее молча.
+  onPatch?: (patch: Partial<Task>) => void;
   onDelete: () => void;
   onClose: () => void;
   onAddAssignee: (name: string) => void;
@@ -237,19 +252,41 @@ export default function TaskModal({
   // Срок своей задачи помнится здесь: `task` у открытого окна — снимок на
   // момент открытия, и без своей копии второй перенос показывал бы первый.
   const [selfDeadline, setSelfDeadline] = useState(() => task?.deadline || "");
+  // Описание и его файлы — тоже своей копией, по той же причине.
+  const [descNow, setDescNow] = useState(() => ({ desc: task?.desc || "", files: task?.descFiles || [] }));
+  // Записать кусок заведённой задачи. onPatch кладёт его поверх ТЕКУЩЕЙ
+  // строки; без него (старый вызов) — поверх снимка, как раньше.
+  function patchTask(patch: Partial<Task>) {
+    if (!task) return;
+    if (onPatch) onPatch(patch);
+    else onSave({ ...task, ...patch }, []);
+  }
   function moveOwnDeadline(iso: string) {
     if (!task || iso === selfDeadline) return;
     setSelfDeadline(iso);
-    onSave({ ...task, deadline: iso }, []);
+    patchTask({ deadline: iso });
   }
+  // Файлы к описанию НОВОЙ задачи: грузятся при сохранении, когда у неё
+  // уже есть id (см. save).
+  const [newDescFiles, setNewDescFiles] = useState<File[]>([]);
+  const [newDescError, setNewDescError] = useState("");
+  const [saving, setSaving] = useState(false);
+  // Принудительное закрытие — один запрос за раз (тот же приём, что busy
+  // у приёмки в TeamCompact).
+  const [closingBusy, setClosingBusy] = useState(false);
 
-  // Состав по ролям — для сводки. Имена без пометки «(я)»: она написана
-  // для одного человека, а карточку читают все.
-  const namesWithRole = (role: TaskParticipantRole) =>
-    participants.filter((p) => p.role === role).map((p) => withoutSelfMark(p.name || ""));
-  const executorNames = namesWithRole("executor");
-  const coexecutorNames = namesWithRole("coexecutor");
-  const watcherNames = namesWithRole("watcher");
+  // Ход работы — словами, тем же счётом, что видят на доске кружки людей:
+  // кто взялся, кто закончил. «0 из 6», считавшее одни отчёты, Кирилл
+  // принял за поломку (13.10.2026, задача №111: пятеро приняли).
+  const progressNow = taskProgress(participants);
+  const tookNow = participants.filter((p) => p.role === "executor" && (p.acceptedAt || p.doneAt)).length;
+  const progressText = progressNow.total
+    ? [
+        `взяли ${tookNow} из ${progressNow.total}`,
+        `закончили ${progressNow.doneCount}`,
+        ...(progressNow.declined.length ? [`не может ${progressNow.declined.length}`] : []),
+      ].join(" · ")
+    : "";
 
   // Кто и когда отчитался. Порядок — по времени отчёта: последний сверху
   // читался бы как «главный», а их складывают в том порядке, в котором
@@ -300,6 +337,67 @@ export default function TaskModal({
     if (form.assignee.trim() === p.name) setForm((f) => ({ ...f, assignee: "" }));
   }
 
+  // Имя в поле «Исполнитель» заведённой задачи — короткая запись того же
+  // состава, и её читают бот, сводки и триггер миграции 0024. Пока была
+  // кнопка «Сохранить», имя переписывалось при сохранении; теперь состав
+  // меняется сразу — и имя вместе с ним, иначе в задаче остаётся записан
+  // человек, которого с неё сняли («две правды об одном факте»).
+  function syncAssigneeName(nextExecutors: string[]) {
+    if (!task) return;
+    const current = form.assignee.trim();
+    if (current && nextExecutors.includes(current)) return;
+    const next = nextExecutors[0] || "";
+    if (next === current) return;
+    setForm((f) => ({ ...f, assignee: next }));
+    patchTask({ assignee: next });
+  }
+
+  function addToTask(person: PersonOption, role: TaskParticipantRole) {
+    void onAddParticipant(person.id, role);
+    if (role === "executor") {
+      const names = participants.filter((p) => p.role === "executor").map((p) => p.name);
+      syncAssigneeName([...names, person.name]);
+    }
+  }
+
+  function setRoleOnTask(p: Participant, role: TaskParticipantRole) {
+    onSetParticipantRole(p.id, role);
+    const names = participants
+      .filter((x) => (x.id === p.id ? role === "executor" : x.role === "executor"))
+      .map((x) => x.name);
+    syncAssigneeName(names);
+  }
+
+  function removeFromTask(p: Participant) {
+    onRemoveParticipant(p.id);
+    syncAssigneeName(participants.filter((x) => x.id !== p.id && x.role === "executor").map((x) => x.name));
+  }
+
+  // «Принудительное закрытие» — бывшее «Закрыть волевым решением». Слова
+  // Кирилла 13.10.2026: «перенеси в правый верхний угол… переименуй в
+  // „принудительное закрытие“… при принудительном закрытии обязательный
+  // комментарий. Принудительно закрыть может только постановщик задачи!
+  // Соответственно отображаться должно только у него». Маршрут то же самое
+  // и проверяет (api/workspace/review, force_close — только автор).
+  async function handleForceClose() {
+    if (!task || closingBusy) return;
+    const answer = await ask.askWithFiles({
+      title: "Принудительное закрытие",
+      question: "Почему закрываете задачу?",
+      note: "Комментарий обязателен: его увидят все на задаче, и только он объясняет, почему она закрыта без обычной приёмки.",
+      multiline: true,
+      okText: "Закрыть задачу",
+      required: "Без комментария закрыть нельзя — напишите причину.",
+    });
+    if (answer === null || closingBusy) return;
+    setClosingBusy(true);
+    try {
+      await answerWithFiles({ kind: "task", id: task.id }, answer.files, "Документы к принудительному закрытию", () => onForceCloseWork(answer.text.trim()));
+    } finally {
+      setClosingBusy(false);
+    }
+  }
+
   // Кнопки «Отправить» в карточке больше нет.
   //
   // Слова Кирилла 21.09.2026: «что значит эта нижняя серая дополнительная
@@ -319,7 +417,8 @@ export default function TaskModal({
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.focus();
   }
 
-  function save() {
+  async function save() {
+    if (saving) return;
     const title = form.title.trim();
     if (!title) {
       // Ответ на «не заполнено» — само поле: форма к этому моменту обычно
@@ -396,6 +495,20 @@ export default function TaskModal({
       manualOrder: task?.manualOrder ?? null,
       completedAt: task?.completedAt ?? "",
     };
+    // Файлы к описанию новой задачи — в корзину ДО сохранения: задача,
+    // чей обещанный макет не загрузился, ушла бы исполнителю без него, и
+    // он прочёл бы её как полную (то же правило, что у отчёта с актом).
+    if (!task && newDescFiles.length) {
+      setSaving(true);
+      try {
+        next.descFiles = await uploadTaskFiles(next.id, newDescFiles, "desc");
+      } catch (e) {
+        setSaving(false);
+        setNewDescError(humanError(e, "Не получилось загрузить файл — задача не сохранена"));
+        return;
+      }
+      setSaving(false);
+    }
     onSave(next, task ? [] : pending);
     onClose();
   }
@@ -577,54 +690,139 @@ export default function TaskModal({
 
             Новая задача открывается полной формой: пока её никто не видел,
             править в ней можно что угодно. */}
-        {/* Номер над заголовком, а не в нём: заголовок — это название
-            задачи, и его читают (и сравнивают тесты) целиком. */}
-        {isEditing && task?.number != null && <div className="task-modal-num">Задача #{task.number}</div>}
-        <h2 id="modalTitle">{isEditing ? form.title || "Задача" : "Новая задача"}</h2>
+        {/* Шапка заведённой задачи — номер, название в рамке, действия и ×
+            (ItemModalHead). У новой задачи шапка прежняя: это форма, и
+            закрывают её «Отменой». */}
+        {isEditing && task ? (
+          <ItemModalHead
+            kicker={task.number != null ? <>Задача #{task.number}</> : "Задача"}
+            title={form.title || "Задача"}
+            titleId="modalTitle"
+            closeId="cancelBtn"
+            onClose={onClose}
+            actions={
+              <>
+                {/* Принудительное закрытие — только у постановщика, только
+                    у открытой задачи и не у своей: свою закрывают галочкой. */}
+                {canEdit && !selfTask && stage !== "done" && task.status !== "done" && (
+                  <button type="button" className="item-head-btn force-close" id="forceCloseBtn" disabled={closingBusy} onClick={() => void handleForceClose()}>
+                    Принудительное закрытие
+                  </button>
+                )}
+                {canEdit && task.status !== "done" && (
+                  <button
+                    type="button"
+                    className={"item-head-icon" + (isSnoozed(task.snoozedUntil, todayStr()) ? " on" : "")}
+                    id="snoozeTaskBtn"
+                    title={
+                      isSnoozed(task.snoozedUntil, todayStr())
+                        ? `Отложена до ${fmtDate(task.snoozedUntil || "")} — нажмите, чтобы вернуть или перенести`
+                        : "Отложить: убрать с доски до выбранного дня и напомнить в этот день"
+                    }
+                    aria-label="Отложить"
+                    onClick={() =>
+                      void (async () => {
+                        const today = todayStr();
+                        const snoozed = isSnoozed(task.snoozedUntil, today);
+                        const choice = await ask.choose({
+                          title: "Отложить до…",
+                          question: snoozed ? `Сейчас отложена до ${fmtDate(task.snoozedUntil || "")}.` : "Когда напомнить?",
+                          note: "До этого дня задача не видна на вашей доске, в сам день бот о ней напомнит. У исполнителей всё остаётся как было.",
+                          options: [...(snoozed ? [{ value: "", label: "Вернуть сейчас" }] : []), ...snoozeChoices(today)],
+                        });
+                        if (choice === null) return;
+                        patchTask({ snoozedUntil: choice });
+                        onClose();
+                      })()
+                    }
+                  >
+                    <Icon name="clock" size={17} />
+                  </button>
+                )}
+                {task.status === "done" && onRepeat && (
+                  <button
+                    type="button"
+                    className="item-head-btn"
+                    id="repeatTaskBtn"
+                    title="Завести такую же задачу с новым сроком"
+                    onClick={() =>
+                      onRepeat({
+                        title: task.title,
+                        desc: task.desc,
+                        sectionId: task.sectionId,
+                        people: participants.map((p) => ({ name: p.name, role: p.role })),
+                        // У старых задач строк участия может не быть — тогда
+                        // исполнитель берётся из поля самой задачи.
+                        assignee: participants.length ? undefined : task.assignee,
+                      })
+                    }
+                  >
+                    Повторить
+                  </button>
+                )}
+                {/* Удаление — значком в шапке: Кирилл попросил убрать
+                    «Удалить / Сохранить / Отмена» снизу, а удалить задачу
+                    всё равно иногда нужно. Спрашивается и отменяется
+                    уведомлением, как всё разрушительное. */}
+                {canEdit && (
+                  <button
+                    type="button"
+                    className="item-head-icon danger"
+                    id="deleteTaskBtn"
+                    title="Удалить задачу"
+                    aria-label="Удалить задачу"
+                    onClick={() =>
+                      void (async () => {
+                        const yes = await ask.confirm({
+                          question: "Удалить эту задачу?",
+                          note: "Сразу после удаления её можно вернуть из уведомления — потом уже нет.",
+                          okText: "Удалить",
+                          danger: true,
+                        });
+                        if (!yes) return;
+                        onDelete();
+                        onClose();
+                      })()
+                    }
+                  >
+                    <Icon name="trash" size={17} />
+                  </button>
+                )}
+              </>
+            }
+          />
+        ) : (
+          <h2 id="modalTitle">Новая задача</h2>
+        )}
         <input type="hidden" id="taskId" value={task?.id ?? ""} readOnly />
 
         {/* Заведённая задача разворачивается в два столбца на десктопе:
-            слева всё функциональное (сводка, состав, приёмка), справа —
-            обсуждение. Слова Кирилла 22.09.2026: «хочу, чтобы в версии
-            для ПК чат был правее функционального окна задачи, так легче
-            управлять бегунком задачи и чата по отдельности». Оба столбца
-            прокручиваются независимо (см. .modal.has-chat в tracker.css);
-            на телефоне и на узком окне .modal-split ничего не значит
-            (display:contents) и всё просто идёт одной колонкой, как раньше. */}
+            слева всё функциональное (решения, сводка, описание, результат),
+            справа — обсуждение. Слова Кирилла 22.09.2026: «хочу, чтобы в
+            версии для ПК чат был правее функционального окна задачи».
+            На телефоне и на узком окне .modal-split ничего не значит
+            (display:contents) и всё идёт одной колонкой. */}
         {task ? (
           <div className="modal-split">
             <div className="modal-main">
-              {form.desc && <ExpandableText text={form.desc} className="task-card-desc" />}
-
-              {/* Решение постановщика — сразу под описанием: принять или
-                  вернуть, согласиться на перенос или нет. Раньше оно стояло
-                  под фактами, результатом и составом, то есть в середине
-                  окна, а на телефоне — в самом низу (24.09.2026). Состав —
-                  второй половиной того же компонента, ниже. */}
+              {/* Решение постановщика — первым: принять или вернуть,
+                  согласиться на перенос или нет (24.09.2026). */}
               {canEdit && !selfTask && (
                 <TeamCompact
                   taskId={task.id}
-                  part="decisions"
                   participants={participants}
-                  availablePeople={availablePeople}
                   approvalState={task.approvalState || "open"}
                   approvalComment={task.approvalComment}
-                  onAddParticipant={onAddParticipant}
-                  onSetParticipantRole={onSetParticipantRole}
-                  onRemoveParticipant={onRemoveParticipant}
                   onApproveWork={onApproveWork}
                   onReturnWork={onReturnWork}
-                  onReturnOne={onReturnOne}
-                  onForceCloseWork={onForceCloseWork}
                   onReopenWork={onReopenWork}
                   onAcceptReschedule={onAcceptReschedule}
                   onRejectReschedule={onRejectReschedule}
                 />
               )}
 
-              {/* Первым — то, чего ждут ОТ ВАС: ради этого карточку и
-                  открывают, когда задачу поручили вам. Ниже идёт всё
-                  остальное, что о ней известно. */}
+              {/* То, чего ждут ОТ ВАС: ради этого карточку и открывают,
+                  когда задачу поручили вам. */}
               {myPart && !selfTask && (
                 <TaskAnswer
                   me={myPart}
@@ -665,15 +863,10 @@ export default function TaskModal({
                 </div>
               )}
 
-              {/* Главное о задаче — одной короткой таблицей, сразу под
-                  названием. Слова Кирилла 21.09.2026: «требуется компактное
-                  окно с основной информацией о задаче, в которое входит:
-                  кто постановщик → напротив дата постановки задачи, кто
-                  исполнитель → напротив крайний срок выполнения (дедлайн),
-                  далее соисполнители (списком), далее наблюдатели
-                  (списком)». Бейдж стадии («в работе», «на приёмке»…)
-                  переехал сюда же 22.09.2026 — раньше он стоял отдельной
-                  строкой над списком «Кто на задаче». */}
+              {/* Главное о задаче — одним блоком: кто поставил и когда, срок
+                  и ход работы, а ниже — люди по ролям, каждый со своим
+                  этапом, и «+» (13.10.2026). Бейдж стадии — в правом верхнем
+                  углу (24.09.2026). */}
               <ItemFacts
                 id="taskFacts"
                 badge={stage && !selfTask && <span className={"tp-stage tp-stage-" + stage}>{STAGE_LABEL[stage]}</span>}
@@ -684,27 +877,45 @@ export default function TaskModal({
                   },
                   {
                     left: {
-                      label: executorNames.length > 1 ? "Исполнители" : "Исполнитель",
-                      value: executorNames.length ? executorNames.join(", ") : "не назначен",
-                      muted: !executorNames.length,
-                    },
-                    right: {
                       label: "Крайний срок",
                       value: selfDeadline ? fmtDate(selfDeadline) : "без срока",
                       muted: !selfDeadline,
                     },
+                    right: selfTask || !progressText ? undefined : { label: "Ход работы", value: progressText },
                   },
-                  ...(coexecutorNames.length
-                    ? [{ wide: { label: "Соисполнители", value: coexecutorNames.join(", ") } } as const]
-                    : []),
-                  ...(watcherNames.length ? [{ wide: { label: "Наблюдатели", value: watcherNames.join(", ") } } as const] : []),
                 ]}
+                footer={
+                  <TaskPeople
+                    taskId={task.id}
+                    participants={participants}
+                    availablePeople={availablePeople}
+                    canEdit={canEdit}
+                    selfTask={selfTask}
+                    closed={stage === "done"}
+                    onAdd={addToTask}
+                    onSetRole={setRoleOnTask}
+                    onRemove={removeFromTask}
+                    onReturnOne={onReturnOne}
+                    onAddPerson={isAdmin ? () => void handleAddAssignee() : undefined}
+                    meId={myAssigneeId}
+                  />
+                }
               />
 
-              {/* Результат — то, ради чего приёмку вообще открывают.
-                  Кирилл просил «поле Результат с датой и временем
-                  проведения», чтобы постановщик «мог прочесть данные по
-                  результату и принять решение». */}
+              {/* Описание — своим блоком под сводкой (13.10.2026), с
+                  документами; правит постановщик, пишется само. */}
+              <TaskDescription
+                taskId={task.id}
+                desc={descNow.desc}
+                files={descNow.files}
+                canEdit={canEdit}
+                onSave={(desc, files) => {
+                  setDescNow({ desc, files });
+                  patchTask({ desc, descFiles: files });
+                }}
+              />
+
+              {/* Результат — то, ради чего приёмку вообще открывают. */}
               {reports.length > 0 && (
                 <div className="results" id="taskResults">
                   <div className="results-head">Результат</div>
@@ -716,8 +927,7 @@ export default function TaskModal({
                       </div>
                       <div className="result-text">{r.doneComment || "без комментария"}</div>
                       {/* Документы лежат ЗДЕСЬ, у результата, а не в
-                          обсуждении: на приёмке акт или фотография нужны
-                          ровно в эту секунду. */}
+                          обсуждении: на приёмке акт нужен ровно в эту секунду. */}
                       <ResultFiles files={r.doneFiles || []} />
                     </div>
                   ))}
@@ -728,45 +938,6 @@ export default function TaskModal({
                 <div className="task-card-note">
                   Эту задачу поставил не вы — менять её может только постановщик. Написать в обсуждение можно.
                 </div>
-              )}
-
-              {/* Прямой правки срока у заведённой задачи больше нет —
-                  слова Кирилла 23.09.2026: «этот блок „срок“ в созданной
-                  задаче бесполезен... если кто-то просит изменить время,
-                  он запрашивает это функционалом возможности перенести
-                  срок». Перенос теперь идёт только через просьбу
-                  исполнителя (кнопка «Прошу перенос» в TaskAnswer) и ответ
-                  постановщика на неё («Перенести» в TeamCompact, который и
-                  двигает дату). */}
-
-              {/* Состав, статус каждого и приёмка — одним компактным
-                  блоком вместо прежних двух («Кто на задаче» списком
-                  кнопок и под ним ещё раз списком строк). Слова Кирилла
-                  22.09.2026: «оба блока «кто на задаче» — не нужны, но
-                  какая-то возможность добавить исполнителей должна
-                  присутствовать, но не занимать много места… функцию на
-                  стадии приёмки тоже перенести вверх». */}
-              {canEdit && (
-                <TeamCompact
-                  taskId={task.id}
-                  part="team"
-                  selfTask={selfTask}
-                  participants={participants}
-                  availablePeople={availablePeople}
-                  approvalState={task.approvalState || "open"}
-                  approvalComment={task.approvalComment}
-                  onAddParticipant={onAddParticipant}
-                  onSetParticipantRole={onSetParticipantRole}
-                  onRemoveParticipant={onRemoveParticipant}
-                  onApproveWork={onApproveWork}
-                  onReturnWork={onReturnWork}
-                  onReturnOne={onReturnOne}
-                  onForceCloseWork={onForceCloseWork}
-                  onReopenWork={onReopenWork}
-                  onAcceptReschedule={onAcceptReschedule}
-                  onRejectReschedule={onRejectReschedule}
-                  onAddPerson={isAdmin ? () => void handleAddAssignee() : undefined}
-                />
               )}
             </div>
 
@@ -811,13 +982,18 @@ export default function TaskModal({
               <div className="field">
                 <label>Описание (необязательно)</label>
                 <div className="input-with-mic">
-                  <AutoGrowTextarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} minRows={2} />
+                  <AutoGrowTextarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} minRows={2} maxRows={12} />
                   <MicButton value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} title="Надиктовать описание" />
                 </div>
+                {/* Документы к описанию — техзадание, макет, скриншот
+                    (13.10.2026, «при создании задачи в блок описание добавь
+                    возможность добавлять файлы»). Грузятся при сохранении. */}
+                <AttachFiles files={newDescFiles} onChange={setNewDescFiles} onError={setNewDescError} />
+                {newDescError && <div className="ms-answer-error">{newDescError}</div>}
               </div>
             ) : (
               <button type="button" className="btn btn-small field-add" id="addDescBtn" onClick={() => setDescOpen(true)}>
-                + описание
+                + описание и файлы
               </button>
             )}
 
@@ -1005,88 +1181,27 @@ export default function TaskModal({
         </>
         )}
 
-        <div className="modal-actions">
-          <div className="left">
-            {isEditing && canEdit && (
-              <button
-                className="btn btn-danger-ghost"
-                id="deleteTaskBtn"
-                onClick={() =>
-                  void (async () => {
-                    const yes = await ask.confirm({
-                      question: "Удалить эту задачу?",
-                      note: "Сразу после удаления её можно вернуть из уведомления — потом уже нет.",
-                      okText: "Удалить",
-                      danger: true,
-                    });
-                    if (!yes) return;
-                    onDelete();
-                    onClose();
-                  })()
-                }
-              >
-                Удалить
+        {/* Кнопки внизу — только у НОВОЙ задачи: это форма, и её сохраняют
+            или отменяют. У заведённой их нет вовсе (13.10.2026, «любые
+            изменения… должны автоматически в ней сохраняться, то есть
+            кнопки „Удалить, Сохранить, Отмена“ вроде как не должны быть
+            нужны»): всё, что в ней меняется, пишется сразу, закрывает её ×
+            в шапке или Esc, а удаление и «Отложить» живут в шапке. */}
+        {!isEditing && (
+          <div className="modal-actions">
+            <div className="left" />
+            <div className="left">
+              <button className="btn" id="cancelBtn" onClick={onClose}>
+                Отмена
               </button>
-            )}
+              {canEdit && (
+                <button className="btn btn-primary" id="saveTaskBtn" disabled={saving} onClick={() => void save()}>
+                  {saving ? "Загружаю файлы…" : "Сохранить"}
+                </button>
+              )}
+            </div>
           </div>
-          <div className="left">
-            {/* «Отложить до…» (миграция 0049) — у своей открытой задачи:
-                убрать её с глаз до дня, когда к ней пора вернуться, и в тот
-                день получить напоминание. Исполнителей это не касается. */}
-            {isEditing && canEdit && task.status !== "done" && (
-              <button
-                className="btn"
-                id="snoozeTaskBtn"
-                title="Убрать с доски до выбранного дня и напомнить в этот день"
-                onClick={() =>
-                  void (async () => {
-                    const today = todayStr();
-                    const snoozed = isSnoozed(task.snoozedUntil, today);
-                    const picked = await ask.choose({
-                      title: "Отложить до…",
-                      question: snoozed ? `Сейчас отложена до ${fmtDate(task.snoozedUntil || "")}.` : "Когда напомнить?",
-                      note: "До этого дня задача не видна на вашей доске, в сам день бот о ней напомнит. У исполнителей всё остаётся как было.",
-                      options: [...(snoozed ? [{ value: "", label: "Вернуть сейчас" }] : []), ...snoozeChoices(today)],
-                    });
-                    if (picked === null) return;
-                    onSave({ ...task, snoozedUntil: picked }, []);
-                    onClose();
-                  })()
-                }
-              >
-                {isSnoozed(task.snoozedUntil, todayStr()) ? `Отложена до ${fmtDate(task.snoozedUntil || "")}` : "Отложить…"}
-              </button>
-            )}
-            {isEditing && task.status === "done" && onRepeat && (
-              <button
-                className="btn"
-                id="repeatTaskBtn"
-                title="Завести такую же задачу с новым сроком"
-                onClick={() =>
-                  onRepeat({
-                    title: task.title,
-                    desc: task.desc,
-                    sectionId: task.sectionId,
-                    people: participants.map((p) => ({ name: p.name, role: p.role })),
-                    // У старых задач строк участия может не быть — тогда
-                    // исполнитель берётся из поля самой задачи.
-                    assignee: participants.length ? undefined : task.assignee,
-                  })
-                }
-              >
-                Повторить
-              </button>
-            )}
-            <button className="btn" id="cancelBtn" onClick={onClose}>
-              {canEdit ? "Отмена" : "Закрыть"}
-            </button>
-            {canEdit && (
-              <button className="btn btn-primary" id="saveTaskBtn" onClick={save}>
-                Сохранить
-              </button>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </Modal>
   );

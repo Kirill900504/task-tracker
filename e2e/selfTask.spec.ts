@@ -36,7 +36,7 @@ test("своя задача: в карточке только срок, без �
   const modal = page.locator("dialog[open]");
   await expect(modal.getByRole("button", { name: /Принял/ })).toHaveCount(0);
   await expect(modal.getByRole("button", { name: /Не могу/ })).toHaveCount(0);
-  await expect(modal.getByRole("button", { name: /Закрыть волевым решением/ })).toHaveCount(0);
+  await expect(modal.locator("#forceCloseBtn")).toHaveCount(0);
 
   // «Завтра» двигает срок сразу, без просьбы и решения.
   await page.locator("#selfDeadline .participant-chip", { hasText: "Завтра" }).click();

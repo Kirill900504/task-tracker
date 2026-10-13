@@ -46,10 +46,13 @@ test("событие в обсуждении всплывает, открыва�
 
   // Строка хроники от чужого имени — так её пишет маршрут, когда
   // исполнитель отвечает из мессенджера: без автора-пользователя.
-  await admin.from("item_comments").insert({ item_kind: "task", item_id: taskId, body: "✅ Робот принял в работу", source: "app", system: true });
+  // Событие — из тех, что адресованы постановщику (lib/desktopAlerts,
+  // addresseeOf): «принял в работу» с 13.10.2026 молчит нарочно — по нему
+  // некому действовать, — а «отчитался» ждёт решения автора.
+  await admin.from("item_comments").insert({ item_kind: "task", item_id: taskId, body: "🏁 Робот отчитался: готово", source: "app", system: true });
 
   // Подписка приносит это за секунду, опрос — не позже чем через минуту.
-  const toast = page.locator(".toast-open", { hasText: "Робот принял в работу" });
+  const toast = page.locator(".toast-open", { hasText: "Робот отчитался" });
   await expect(toast).toBeVisible({ timeout: 75_000 });
   await expect(toast).toContainText(title);
   await expect(page.locator(".toast-actions button", { hasText: "Не показывать ход работы" })).toBeVisible();

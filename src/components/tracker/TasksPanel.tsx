@@ -25,7 +25,8 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useIsMiniApp } from "@/lib/miniApp";
 import type { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { useSectionAssignees } from "@/hooks/useSectionAssignees";
-import { hasDeclined, progressShort, taskStage } from "@/lib/taskProgress";
+import { hasDeclined, taskStage } from "@/lib/taskProgress";
+import { cardKind } from "@/lib/taskCardKind";
 import { peopleLoad } from "@/lib/peoplePanel";
 import type { useToasts } from "@/hooks/useToasts";
 import SectionTabs from "./SectionTabs";
@@ -283,15 +284,10 @@ export default function TasksPanel({
   // все исполнители». Пустой created_by означает владельца — это правило
   // живёт в одном месте (lib/authorName), а не считается здесь заново.
   const authorOf = (t: Task) => authorLabel(t.createdBy, authors, assignees);
-  // Все исполнители задачи — для той же строки на кубике. Соисполнители и
-  // наблюдатели туда не идут: «соисполнителей и наблюдателей выводить не
-  // надо» (он же, тогда же).
-  const executorsOf = (t: Task) =>
-    participants
-      .forTask(t.id)
-      .filter((p) => p.role === "executor")
-      .map((p) => p.name)
-      .filter(Boolean);
+  // Чем задача является для меня — из этого кубик берёт весь свой вид
+  // (lib/taskCardKind): моё поручение другим, моя личная, поручение мне,
+  // помогаю, смотрю.
+  const kindOf = (t: Task) => cardKind({ authored: authored(t), selfTask: selfOf(t), role: roleOn(t) });
 
   // Цифра на кнопке считается по всем задачам, а не по отфильтрованным:
   // иначе, включив фильтр, она показывала бы сама себя.
@@ -712,7 +708,6 @@ export default function TasksPanel({
                     <TaskCard
                       task={t}
                       section={sectionById.get(t.sectionId) ?? null}
-                      progress={progressShort(participants.forTask(t.id))}
                       stage={stageOf(t)}
                       // Кто-то отказался — это видно на кубике и тогда, когда
                       // задача уже уехала на приёмку: столбец говорит «ждёт
@@ -723,7 +718,7 @@ export default function TasksPanel({
                       awaitingReschedule={hasPendingReschedule(t)}
                       unreadCount={unread[t.id] || 0}
                       role={role}
-                      outgoing={authored(t) && role === "none" && sharedBoard}
+                      kind={kindOf(t)}
                       dimOverdue={!showsOverdue(role, !sharedBoard || view === "assigned")}
                       onToggleDone={() => void quickDone(t)}
                       // Галочка — право постановщика: закрыть задачу
@@ -738,7 +733,7 @@ export default function TasksPanel({
                       justCreated={justCreatedId === t.id}
                       menuItems={isMobile ? menuItemsFor(t) : undefined}
                       authorName={authorOf(t)}
-                      executors={executorsOf(t)}
+                      people={participants.forTask(t.id)}
                     />
                   )}
                 </SortableTask>
@@ -1069,13 +1064,37 @@ export default function TasksPanel({
             // окно не занимает весь экран, и тост рядом с ним не путают с
             // ответом на само действие; «не подключён» по-прежнему видно в
             // карточке участника и придёт в утреннюю сводку.
-            void participants.attachOnCreate(t.id, t.assignee, pending).then((notices) => {
-              if (isMobile) return;
-              for (const notice of notices || []) toasts.showToast(notice);
-            });
+            //
+            // Только у НОВОЙ: правка заведённой задачи (отложить, срок,
+            // описание) раньше звала то же самое, и имя в поле
+            // «Исполнитель» заводило строку участия заново — человека,
+            // снятого с задачи минуту назад, возвращало следующее же
+            // сохранение. С автосохранением (13.10.2026) правок стало
+            // много, и это перестало быть редкостью.
+            if (!modalTask) {
+              void participants.attachOnCreate(t.id, t.assignee, pending).then((notices) => {
+                if (isMobile) return;
+                for (const notice of notices || []) toasts.showToast(notice);
+              });
+            }
             // Задача заведена из мысли — теперь, а не при открытии формы,
             // мысль уходит из списка (см. TaskPrefill.fromIdeaId).
             if (!modalTask && modalPrefill?.fromIdeaId) onIdeaConverted?.(modalPrefill.fromIdeaId, t);
+          }}
+          // Правка открытой задачи — поверх ТЕКУЩЕЙ строки списка, а не
+          // снимка, с которым открыли окно (см. TaskModal.onPatch).
+          onPatch={(patch) => {
+            if (!modalTask) return;
+            const current = (allTasks ?? tasks).find((x) => x.id === modalTask.id) || modalTask;
+            const next = { ...current, ...patch };
+            actions.saveTask(next);
+            if ("deadline" in patch && (next.deadline || "") !== (current.deadline || "")) {
+              void fetch("/api/workspace/review", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "deadline", taskId: next.id, date: next.deadline || "", comment: current.deadline || "" }),
+              }).catch(() => {});
+            }
           }}
           onDelete={() => modalTask && deleteTask(modalTask)}
           onClose={closeModal}

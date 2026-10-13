@@ -48,9 +48,10 @@ test("карточка задачи говорит, кто поручил, ко�
 
   const card = page.locator(`.task:has-text("${title}")`).first();
   await expect(card).toBeVisible({ timeout: 20_000 });
-  // На кубике — «кто поручил → кому» и срок со словом «до».
-  await expect(card.locator(".task-who")).toBeVisible();
-  await expect(card.locator(".task-due")).toContainText(/до |сегодня|просрочено/);
+  // На кубике — «кто поручил → кому» (люди со своим этапом) и срок
+  // пилюлей словами (13.10.2026).
+  await expect(card.locator(".task-people")).toBeVisible();
+  await expect(card.locator(".task-due-pill")).toContainText(/до |сегодня|завтра|просрочено/);
 
   await card.click();
   const facts = page.locator("#taskFacts");

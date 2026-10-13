@@ -2,6 +2,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
+import { centerOnScreen } from "./helpers";
 
 // Место взятой карточки обязано быть ПУСТЫМ — и проверить это может только
 // браузер.
@@ -42,7 +43,7 @@ function isTransparent(color: string): boolean {
 // заведомо больше; отпускание идёт через Escape, чтобы проверка ничего не
 // переставила.
 async function ghostStyleOf(page: Page, card: Locator, ghost: Locator) {
-  await card.scrollIntoViewIfNeeded();
+  await centerOnScreen(card);
   const box = (await card.boundingBox())!;
   await page.mouse.move(box.x + 40, box.y + box.height / 2);
   await page.mouse.down();

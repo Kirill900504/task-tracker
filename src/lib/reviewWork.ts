@@ -111,7 +111,7 @@ export async function applyReview(
         text:
           action === "approve"
             ? `✅ ${who.label} принял работу за этот круг${text ? ": " + text : ""}`
-            : `🔒 ${who.label} закрыл этот круг волевым решением: ${text}`,
+            : `🔒 ${who.label} принудительно закрыл этот круг: ${text}`,
       });
       if (!quiet) await tellExecutors(admin, task, action, text);
       return { ok: true };
@@ -163,7 +163,7 @@ export async function applyReview(
           ? `✅ ${who.label} принял работу${text ? ": " + text : ""}`
           : action === "reopen"
             ? `🔄 ${who.label} открыл задачу заново${text ? ": " + text : ""}`
-            : `🔒 ${who.label} закрыл задачу волевым решением: ${text}`,
+            : `🔒 ${who.label} принудительно закрыл задачу: ${text}`,
   });
 
   if (!quiet) await tellExecutors(admin, task, action, text);

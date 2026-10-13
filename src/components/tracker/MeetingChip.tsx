@@ -201,6 +201,11 @@ export default function MeetingChip({
         (justCreated ? " just-created" : "") +
         (isDragging ? " dragging" : "") +
         (canManage ? "" : " readonly") +
+        // Тот же язык, что у кубика задачи (lib/taskCardKind, 13.10.2026):
+        // своя встреча — фирменным тоном, встреча, куда позвали, —
+        // лавандовым. «Однотипное по расположению ключевой информации»
+        // (20.09.2026) значит и одинаковое по смыслу цвета.
+        (canManage ? " kind-outgoing" : " kind-incoming") +
         (gathered ? " all-in" : "") +
         (someoneOut ? " has-decline" : "")
       }

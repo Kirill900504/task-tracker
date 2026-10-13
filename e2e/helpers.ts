@@ -65,11 +65,22 @@ export async function pickSelfExecutor(page: Page) {
 // движение к цели, и только потом отпускание. Паузы — чтобы React успел
 // перерисовать расступившиеся списки: без них отпускание приходит в тот
 // момент, когда цель ещё не знает, что над ней что-то висит.
+// Прокрутить элемент в СЕРЕДИНУ экрана, а не к краю. scrollIntoViewIfNeeded
+// ставит его вплотную к верхнему краю — то есть под закреплённую шапку
+// трекера, и нажатие мышью уходит в шапку (видно по выделенному тексту
+// даты на снимке падения). Чаще это стало 13.10.2026, когда кубики
+// выросли до трёх строк и столбцы стали длиннее. Человек целится в
+// середину видимого — так же и тест.
+export async function centerOnScreen(locator: Locator) {
+  await locator.evaluate((el) => el.scrollIntoView({ block: "center", inline: "nearest" }));
+  await settled(locator);
+}
+
 export async function dragOnto(page: Page, source: Locator, target: Locator) {
   // Мышь не может взять то, чего нет на экране: boundingBox отдаёт
   // координаты и для элемента ниже сгиба, а движение туда просто не
   // попадёт ни во что. Человек в этом месте сначала прокручивает.
-  await source.scrollIntoViewIfNeeded();
+  await centerOnScreen(source);
   const from = await source.boundingBox();
   if (!from) throw new Error('не найден источник перетаскивания');
 

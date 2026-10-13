@@ -39,6 +39,10 @@ export type TaskRow = {
   // Номер ставит триггер (миграция 0045), taskToRow его не пишет.
   number?: number | null;
   snoozed_until?: string | null;
+  // Документы к описанию (миграция 0053). Пишет синхронизация — всегда
+  // массивом, потому что пачка PostgREST не подставляет значения по
+  // умолчанию и пропущенный ключ стал бы NULL в not null колонке.
+  desc_files?: { path: string; name: string; size: number; type: string }[];
 };
 
 export type MeetingRow = {
@@ -120,6 +124,7 @@ export function taskToRow(t: Task): TaskRow {
     manual_order: t.manualOrder != null && (t.manualOrder as unknown as string) !== "" ? Number(t.manualOrder) : null,
     completed_at: t.completedAt || null,
     snoozed_until: t.snoozedUntil || null,
+    desc_files: t.descFiles || [],
     // deleted_at is deliberately NOT part of this row — see softDeleteRow()/
     // restoreRow() in useTrackerData.ts for why an ordinary upsert must
     // never touch it.
@@ -153,6 +158,7 @@ export function taskFromRow(r: TaskRow): Task {
     createdAt: r.created_at || "",
     ...(r.number != null ? { number: r.number } : {}),
     snoozedUntil: r.snoozed_until || "",
+    descFiles: Array.isArray(r.desc_files) ? r.desc_files : [],
   };
 }
 

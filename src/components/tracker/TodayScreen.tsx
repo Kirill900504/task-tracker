@@ -10,6 +10,8 @@ import type { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { myRoleOn } from "@/lib/myRole";
+import { cardKind } from "@/lib/taskCardKind";
+import { isSelfTask } from "@/lib/selfTask";
 
 // The phone's first screen: what is overdue, what is due today, who you are
 // meeting. The same cards as everywhere else — tapping opens the same
@@ -70,12 +72,13 @@ export default function TodayScreen({
   const authors = useAuthors();
   const people = participants.people.map((p) => p.name);
   const authorOf = (t: Task) => authorLabel(t.createdBy, authors, people);
-  const executorsOf = (t: Task) =>
-    participants
-      .forTask(t.id)
-      .filter((p) => p.role === "executor")
-      .map((p) => p.name)
-      .filter(Boolean);
+  // Вид кубика — тот же, что на доске (lib/taskCardKind). «Поставил я»
+  // здесь отвечает то же правило, что даёт галочку: закрыть задачу может
+  // только её постановщик.
+  const kindOf = (t: Task) => {
+    const authored = canCompleteTask ? canCompleteTask(t) : false;
+    return cardKind({ authored, selfTask: authored && isSelfTask(participants.forTask(t.id), myAssigneeId), role: roleOf(t) });
+  };
   const nothing = !data.overdue.length && !data.dueToday.length && !data.meetingsToday.length && !data.meetingsTomorrow.length;
 
   return (
@@ -109,7 +112,8 @@ export default function TodayScreen({
               onOpen={() => onOpenTask(task)}
               menuItems={sendMenuFor(task)}
               authorName={authorOf(task)}
-              executors={executorsOf(task)}
+              kind={kindOf(task)}
+              people={participants.forTask(task.id)}
             />
           ))}
         </section>
@@ -129,7 +133,8 @@ export default function TodayScreen({
               onOpen={() => onOpenTask(task)}
               menuItems={sendMenuFor(task)}
               authorName={authorOf(task)}
-              executors={executorsOf(task)}
+              kind={kindOf(task)}
+              people={participants.forTask(task.id)}
             />
           ))}
         </section>

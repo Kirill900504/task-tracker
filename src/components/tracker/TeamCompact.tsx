@@ -2,157 +2,66 @@
 
 import { useState } from "react";
 import type { ApprovalState } from "@/types/tracker";
-import type { TaskParticipantRole } from "@/lib/taskProgress";
-import { hasDeclined, progressLabel, taskProgress, taskStage } from "@/lib/taskProgress";
-import type { Participant, PersonOption } from "@/hooks/useTaskParticipants";
+import { taskProgress, taskStage } from "@/lib/taskProgress";
+import type { Participant } from "@/hooks/useTaskParticipants";
 import { useAsk } from "@/components/Ask";
 import { answerWithFiles } from "@/lib/answerFiles";
 import { withoutSelfMark } from "@/lib/actorName";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
-import ActionMenu from "./ActionMenu";
-import { SEARCH_FROM } from "@/lib/personSearch";
-import Icon, { type IconName } from "./Icon";
 
-// «Кто на задаче» и приёмка — одним компактным блоком.
+// Решения постановщика по задаче — одним блоком сразу под шапкой окна.
 //
-// Раньше это были три отдельных куска карточки: полный ряд кнопок-людей
-// (PeoplePicker), под ним ещё раз тот же список строками с ролью и
-// статусом (TaskParticipants), и в самом низу, у обсуждения, — приёмка.
-// Слова Кирилла 22.09.2026: «в уже созданной задаче оба блока «кто на
-// задаче» — не нужны, но какая-то возможность добавить исполнителей,
-// соисполнителей и наблюдателей должна присутствовать, но не занимать
-// много места… функцию на стадии приёмки тоже перенести вверх».
+// Слова Кирилла 24.09.2026: «блоки, призывающие к действию для
+// постановщика… должны идти сразу за описанием задачи… Не правильно, когда
+// за тем, чтобы отреагировать на исполнение поставленной тобой задачи
+// другому человеку, приходится опускаться в середину окна». Здесь просьбы
+// о переносе, приёмка, «открыть заново» и строка о возврате.
 //
-// Имя человека теперь несёт и роль, и статус — одной кнопкой-фишкой, как
-// везде в трекере, а не отдельной строкой на каждого. Добавление — тем же
-// нажатием «+», только список сразу короче: не вся команда, а только те,
-// кого на задаче ещё нет.
-const ROLE_LABEL: Record<TaskParticipantRole, string> = {
-  executor: "исполнитель",
-  coexecutor: "соисполнитель",
-  watcher: "наблюдатель",
-};
-
-const ROLE_MENU: { role: TaskParticipantRole; label: string }[] = [
-  { role: "executor", label: "Исполнитель — отчитывается сам" },
-  { role: "coexecutor", label: "Соисполнитель — помогает" },
-  { role: "watcher", label: "Наблюдатель — только видит" },
-];
-
-type Status = { cls: string; icon: IconName | null; text: string };
-
-function seenWhen(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const today = new Date();
-  const time = pad(d.getHours()) + ":" + pad(d.getMinutes());
-  return d.toDateString() === today.toDateString() ? "в " + time : pad(d.getDate()) + "." + pad(d.getMonth() + 1) + " в " + time;
-}
-
-function statusOf(p: Participant): Status | null {
-  if (p.doneAt) return { cls: "status-done", icon: "flag", text: "сделал" + (p.doneComment ? ": " + p.doneComment : "") };
-  if (hasDeclined(p)) return { cls: "status-declined", icon: "ban", text: "не может" + (p.declineReason ? ": " + p.declineReason : "") };
-  if (p.acceptedAt) return { cls: "status-accepted", icon: "check", text: "принял" };
-  // «Ждём ответа» от человека без мессенджера — неправда: задача до него
-  // не доехала. См. то же правило в бывшем TaskParticipants.tsx.
-  if (p.reachable === false) return { cls: "status-unreachable", icon: "mailbox", text: "не подключён — задача не ушла" };
-  // «Видел, но молчит» и «ещё не видел» — разные разговоры: первому
-  // напоминают, со вторым договариваются (отзыв Витовского 25.09.2026,
-  // миграция 0042).
-  if (p.role === "executor" && p.seenAt) return { cls: "status-waiting", icon: "eye", text: "видел " + seenWhen(p.seenAt) + ", ответа нет" };
-  // Без отметки — по-прежнему «ждём ответа», а не «не открывал»: отметку
-  // ставит только трекер, а половина людей читает задачу в мессенджере.
-  if (p.role === "executor") return { cls: "status-waiting", icon: null, text: "ждём ответа" };
-  return null;
-}
+// Состава здесь больше нет (13.10.2026): он живёт в сводке задачи
+// (TaskPeople) — с этапом каждого, кнопкой «+», сменой роли и «вернуть
+// ему одному». «Этот блок с дурацким названием „кто на задаче“ дублирует
+// блок со статусом, постановщиком и исполнителем… его предлагаю вообще
+// убрать». Ушло и «Закрыть волевым решением» — теперь это «Принудительное
+// закрытие» в шапке окна (TaskModal), одна кнопка на всё окно, а не по
+// одной на каждую стадию.
 
 export default function TeamCompact({
   taskId,
   participants,
-  availablePeople,
   approvalState,
   approvalComment,
-  onAddParticipant,
-  onSetParticipantRole,
-  onRemoveParticipant,
   onApproveWork,
   onReturnWork,
-  onReturnOne,
-  onForceCloseWork,
   onReopenWork,
   onAcceptReschedule,
   onRejectReschedule,
-  onAddPerson,
-  part,
-  selfTask = false,
 }: {
   // Нужен документам к решению: они ложатся в обсуждение задачи
   // (lib/answerFiles).
   taskId: string;
   participants: Participant[];
-  availablePeople: PersonOption[];
   approvalState: ApprovalState;
   approvalComment?: string;
-  onAddParticipant: (assigneeId: string, role: TaskParticipantRole) => void | Promise<string | void>;
-  onSetParticipantRole: (participantId: string, role: TaskParticipantRole) => void;
-  onRemoveParticipant: (participantId: string) => void;
   onApproveWork: (comment: string) => void | Promise<void>;
   onReturnWork: (comment: string) => void | Promise<void>;
-  // Вернуть на доработку одного исполнителя — не дожидаясь остальных.
-  onReturnOne?: (participantId: string, comment: string) => void | Promise<void>;
-  onForceCloseWork: (reason: string) => void | Promise<void>;
   onReopenWork: (comment: string) => void | Promise<void>;
   onAcceptReschedule: (participantId: string, date: string) => void;
   onRejectReschedule: (participantId: string) => void;
-  // Завести нового человека — только у администратора (см. PeoplePicker).
-  onAddPerson?: () => void;
-  // Какую половину рисовать. «decisions» — то, что ждёт решения
-  // постановщика (просьбы о переносе, приёмка, открыть заново); «team» —
-  // состав и всё остальное. Без значения — обе, одним блоком, как было.
-  //
-  // Разделено 24.09.2026, словами Кирилла: «блоки, призывающие к действию
-  // для постановщика… должны идти сразу за описанием задачи… Не правильно,
-  // когда за тем, чтобы отреагировать на исполнение поставленной тобой
-  // задачи другому человеку, приходится опускаться в середину окна или тем
-  // более в самый низ». Решение стояло под фактами, результатом и списком
-  // людей. Половины — один компонент с одними обработчиками, а не второй
-  // блок приёмки рядом: копия таких правил в этом проекте расходилась с
-  // первой трижды.
-  part?: "decisions" | "team";
-  // Задача самому себе (lib/selfTask): ни «ждём ответа», ни волевого
-  // закрытия — ждать и закрывать «волей» тут некого и нечего.
-  selfTask?: boolean;
 }) {
   const ask = useAsk();
   const identity = useWorkspaceRole();
-  // Пометка «(я)» не показывается никому, владельцу тоже: 24.09.2026 он
-  // попросил убрать её с экрана целиком («убери это дурацкое (я)»), а здесь
-  // её оставили «для него одного» — так она и висела в «Кто на задаче».
+  // Пометка «(я)» не показывается никому, владельцу тоже (24.09.2026).
   const shown = (name: string) => withoutSelfMark(name);
 
   const progress = taskProgress(participants);
   const stage = taskStage(participants, approvalState);
-  const label = progressLabel(participants);
 
-  const [personMenu, setPersonMenu] = useState<{ p: Participant; anchor: DOMRect } | null>(null);
-  const [addMenu, setAddMenu] = useState<DOMRect | null>(null);
-  const [roleFor, setRoleFor] = useState<{ person: PersonOption; anchor: DOMRect } | null>(null);
-  // Приёмка, возврат, волевое закрытие и открытие заново все двигают
-  // задачу и после успеха закрывают карточку (см. onApproveWork и
-  // соседей в TasksPanel.tsx) — но карточка закрывается только когда
-  // ответ сети ВЕРНУЛСЯ, а «Принять» ничем не блокировалось до этого
-  // момента. При задержке сети повторное нажатие успевало открыть окно
-  // комментария второй раз и отправить приёмку ещё раз с другим текстом —
-  // «два раза закрыть с разными комментариями» (Кирилл, 24.09.2026, по
-  // скриншоту). busy — тот же приём, что уже стоит в TaskAnswer.tsx у
-  // ответа исполнителя.
+  // Приёмка, возврат и открытие заново двигают задачу и после успеха
+  // закрывают карточку — но только когда ответ сети ВЕРНУЛСЯ. busy не даёт
+  // второму нажатию за это время отправить то же решение ещё раз с другим
+  // текстом («два раза закрыть с разными комментариями», 24.09.2026).
   const [busy, setBusy] = useState(false);
-
-  const pickedIds = new Set(participants.map((p) => p.assigneeId));
-  const unpicked = availablePeople.filter((p) => !pickedIds.has(p.id));
-  const canAddMore = unpicked.length > 0 || !!onAddPerson;
 
   async function handleApprove() {
     if (busy) return;
@@ -162,11 +71,10 @@ export default function TeamCompact({
       note: "Его увидят исполнители — подтвердите, что именно принимаете.",
       multiline: true,
       okText: "Принять",
-      // Обязателен — как и у возврата, и у волевого закрытия. До
+      // Обязателен — как и у возврата, и у принудительного закрытия. До
       // 23.09.2026 можно было принять чужую работу пустым нажатием: слова
-      // Кирилла об этом прямом случае — «закрыл успешно без заполнения
-      // финального комментария. Это по-хорошему ошибка». Решение без единого
-      // слова неотличимо от того, что его никто не читал.
+      // Кирилла — «закрыл успешно без заполнения финального комментария.
+      // Это по-хорошему ошибка».
       required: "Приёмка без комментария не решение — напишите хотя бы, что именно принимаете.",
     });
     if (answer === null || busy) return;
@@ -199,46 +107,6 @@ export default function TeamCompact({
     }
   }
 
-  async function handleReturnOne(p: Participant) {
-    if (busy || !onReturnOne) return;
-    const answer = await ask.askWithFiles({
-      title: `Вернуть: ${shown(p.name)}`,
-      question: "Что доделать?",
-      note: "Увидит только этот человек. Остальные исполнители и их отчёты не затрагиваются. Приложенные документы лягут в обсуждение задачи.",
-      multiline: true,
-      okText: "Вернуть",
-      required: "Возврат без объяснения бессмысленен — напишите, что не так.",
-    });
-    if (answer === null || busy) return;
-    const comment = answer.text;
-    setBusy(true);
-    try {
-      await answerWithFiles({ kind: "task", id: taskId }, answer.files, `Документы к возврату на доработку: ${shown(p.name)}`, () => onReturnOne(p.id, comment.trim()));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleForceClose() {
-    if (busy) return;
-    const answer = await ask.askWithFiles({
-      title: "Закрыть волевым решением",
-      question: "Почему закрываем?",
-      note: "Причина останется в задаче: именно она объясняет, почему задача закрыта не как обычно.",
-      multiline: true,
-      okText: "Закрыть задачу",
-      required: "Причина обязательна: именно она объясняет, почему задача закрыта не как обычно.",
-    });
-    if (answer === null || busy) return;
-    const reason = answer.text;
-    setBusy(true);
-    try {
-      await answerWithFiles({ kind: "task", id: taskId }, answer.files, "Документы к закрытию задачи", () => onForceCloseWork(reason.trim()));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function handleReopen() {
     if (busy) return;
     const answer = await ask.askWithFiles({
@@ -258,52 +126,51 @@ export default function TeamCompact({
     }
   }
 
-  const asksOpen = participants.some((p) => p.rescheduleTo || p.rescheduleReason);
+  const asks = participants.filter((p) => p.rescheduleTo || p.rescheduleReason);
   // Своя задача: единственный исполнитель — тот, кто её поставил. Приёмки у
   // самого себя нет — сервер закрывает такую задачу сам, как только пришёл
   // отчёт (closeIfEveryoneReported). Но строки участия доезжают сюда раньше,
-  // чем закрытие, и на эти секунды окно спрашивало «Принимаете работу?» с
-  // кнопками «Принять» и «Вернуть на доработку» — вопрос, которого нет
-  // (QA-проход 06.10.2026). Вместо него — что происходит на самом деле.
+  // чем закрытие, и на эти секунды окно спрашивало «Принимаете работу?» —
+  // вопрос, которого нет (QA-проход 06.10.2026).
   const executorsNow = participants.filter((p) => p.role === "executor");
   const selfOnly =
     executorsNow.length === 1 &&
     (identity.assigneeId ? executorsNow[0].assigneeId === identity.assigneeId : isSelfAssignee(executorsNow[0].name || ""));
   const closingOwn = selfOnly && progress.doneCount === 1 && progress.declined.length === 0;
-  const decisionsBlock = (
-    <>
-      {/* Просьбы о переносе — первыми: решение, которого ждут прямо сейчас. */}
-      {participants
-        .filter((p) => p.rescheduleTo || p.rescheduleReason)
-        .map((p) => (
-          <div className="tp-ask" key={"ask-" + p.id}>
-            <div className="tp-ask-text">
-              <b>{shown(p.name)}</b> просит перенести
-              {p.rescheduleTo ? ` на ${p.rescheduleTo.split("-").reverse().join(".")}` : ""}
-              {p.rescheduleReason ? `: ${p.rescheduleReason}` : ""}
-            </div>
-            <div className="tp-ask-actions">
-              {p.rescheduleTo && (
-                <button className="btn btn-small btn-primary" type="button" onClick={() => onAcceptReschedule(p.id, p.rescheduleTo!)}>
-                  Перенести
-                </button>
-              )}
-              <button className="btn btn-small" type="button" onClick={() => onRejectReschedule(p.id)}>
-                Оставить как есть
-              </button>
-            </div>
-          </div>
-        ))}
+  const returned = approvalState === "returned" && !!approvalComment;
 
-      {/* Приёмка — то, ради чего постановщик открывает задачу на этой
-          стадии; где она стоит в окне, решает part (см. выше). */}
+  if (!asks.length && !returned && stage !== "awaiting_review" && stage !== "done") return null;
+
+  return (
+    <div className="field team-decisions" id="taskDecisions">
+      {returned && <div className="tp-returned">Возвращено на доработку: {approvalComment}</div>}
+
+      {/* Просьбы о переносе — первыми: решение, которого ждут прямо сейчас. */}
+      {asks.map((p) => (
+        <div className="tp-ask" key={"ask-" + p.id}>
+          <div className="tp-ask-text">
+            <b>{shown(p.name)}</b> просит перенести
+            {p.rescheduleTo ? ` на ${p.rescheduleTo.split("-").reverse().join(".")}` : ""}
+            {p.rescheduleReason ? `: ${p.rescheduleReason}` : ""}
+          </div>
+          <div className="tp-ask-actions">
+            {p.rescheduleTo && (
+              <button className="btn btn-small btn-primary" type="button" onClick={() => onAcceptReschedule(p.id, p.rescheduleTo!)}>
+                Перенести
+              </button>
+            )}
+            <button className="btn btn-small" type="button" onClick={() => onRejectReschedule(p.id)}>
+              Оставить как есть
+            </button>
+          </div>
+        </div>
+      ))}
+
       {stage === "awaiting_review" && closingOwn && (
         <div className="tp-review">
           <div className="tp-review-text">Вы отчитались по своей задаче.</div>
           {/* Обычно сервер закрывает её сам за секунду. Кнопка — выход на
-              случай, когда этого не случилось (задача заведена до
-              автозакрытия, ответ сервера потерялся): без неё блок был бы
-              тупиком. «Вернуть на доработку» самому себе не предлагается. */}
+              случай, когда этого не случилось: без неё блок был бы тупиком. */}
           <div className="tp-review-actions">
             <button className="btn btn-small btn-primary" type="button" disabled={busy} onClick={() => void handleApprove()}>
               Закрыть задачу
@@ -318,7 +185,7 @@ export default function TeamCompact({
             {progress.declined.length === 0
               ? "Все исполнители отчитались. Принимаете работу?"
               : progress.doneCount === 0
-                ? `Работу не сделают: ${progress.declined.map((d) => shown(d.name)).join(", ")}. Решать вам.`
+                ? `Работу не сделают: ${progress.declined.map((d) => shown(d.name)).join(", ")}. Решать вам — вернуть с объяснением или закрыть принудительно (кнопка вверху).`
                 : `Отчитались не все: ${progress.declined.map((d) => shown(d.name)).join(", ")} не смогут. Решать вам.`}
           </div>
           <div className="tp-review-actions">
@@ -330,11 +197,6 @@ export default function TeamCompact({
             <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleReturn()}>
               {progress.declined.length ? "Вернуть с объяснением" : "Вернуть на доработку"}
             </button>
-            {progress.declined.length > 0 && (
-              <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleForceClose()}>
-                Закрыть волевым решением
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -348,128 +210,6 @@ export default function TeamCompact({
             </button>
           </div>
         </div>
-      )}
-
-    </>
-  );
-
-  if (part === "decisions") {
-    if (!asksOpen && stage !== "awaiting_review" && stage !== "done") return null;
-    return <div className="field team-decisions" id="taskDecisions">{decisionsBlock}</div>;
-  }
-
-  return (
-    <div className="field team-compact">
-      <label>Кто на задаче</label>
-
-      {label && !selfTask && <div className="tp-progress">{label}</div>}
-
-      {approvalState === "returned" && approvalComment && (
-        <div className="tp-returned">Возвращено на доработку: {approvalComment}</div>
-      )}
-
-      {part !== "team" && decisionsBlock}
-
-      {participants.length === 0 && (
-        <div className="tp-empty">
-          Никого нет. Добавьте исполнителя — тогда задача начнёт спрашивать с человека, а не лежать.
-        </div>
-      )}
-
-      <div className="participant-grid">
-        {participants.map((p) => {
-          const status = selfTask ? null : statusOf(p);
-          return (
-            <button
-              key={p.id}
-              type="button"
-              className={"participant-chip selected role-" + p.role}
-              title={`${shown(p.name)} — ${ROLE_LABEL[p.role]}${status ? " · " + status.text : ""}. Нажмите, чтобы изменить роль или убрать`}
-              onClick={(e) => setPersonMenu({ p, anchor: e.currentTarget.getBoundingClientRect() })}
-            >
-              {shown(p.name)}
-              {p.role !== "executor" && <span className="chip-role"> · {ROLE_LABEL[p.role]}</span>}
-              {status && (
-                <span className={"chip-status " + status.cls}>
-                  {status.icon ? <Icon name={status.icon} size={12} /> : "···"}
-                </span>
-              )}
-            </button>
-          );
-        })}
-        {canAddMore && (
-          <button
-            type="button"
-            className="participant-chip chip-add"
-            id="addTeamBtn"
-            title="Добавить исполнителя, соисполнителя или наблюдателя"
-            onClick={(e) => setAddMenu(e.currentTarget.getBoundingClientRect())}
-          >
-            + добавить
-          </button>
-        )}
-      </div>
-
-      {personMenu && (
-        <ActionMenu
-          anchor={personMenu.anchor}
-          title={shown(personMenu.p.name)}
-          items={[
-            ...ROLE_MENU.filter((r) => r.role !== personMenu.p.role).map((r) => ({
-              id: r.role,
-              label: r.label,
-              onSelect: () => onSetParticipantRole(personMenu.p.id, r.role),
-            })),
-            // Отчитался или отказался — значит, его ответ можно вернуть ему
-            // одному, не ожидая остальных (отзыв Витовского 25.09.2026).
-            ...(onReturnOne && stage !== "done" && personMenu.p.role === "executor" && (personMenu.p.doneAt || hasDeclined(personMenu.p))
-              ? [{ id: "return-one", label: "Вернуть ему на доработку", onSelect: () => void handleReturnOne(personMenu.p) }]
-              : []),
-            { id: "remove", label: "Убрать с задачи", onSelect: () => onRemoveParticipant(personMenu.p.id) },
-          ]}
-          onClose={() => setPersonMenu(null)}
-        />
-      )}
-
-      {addMenu && (
-        <ActionMenu
-          anchor={addMenu}
-          title="Кого добавить"
-          searchPlaceholder={unpicked.length >= SEARCH_FROM ? "Найти человека…" : undefined}
-          items={[
-            ...unpicked.map((person) => ({
-              id: person.id,
-              label: shown(person.name),
-              onSelect: () => setRoleFor({ person, anchor: addMenu }),
-            })),
-            ...(onAddPerson ? [{ id: "new-person", label: "+ новый человек", onSelect: onAddPerson }] : []),
-          ]}
-          onClose={() => setAddMenu(null)}
-        />
-      )}
-
-      {roleFor && (
-        <ActionMenu
-          anchor={roleFor.anchor}
-          title={shown(roleFor.person.name)}
-          items={ROLE_MENU.map((r) => ({
-            id: r.role,
-            label: r.label,
-            onSelect: () => void onAddParticipant(roleFor.person.id, r.role),
-          }))}
-          onClose={() => setRoleFor(null)}
-        />
-      )}
-
-      {/* Раньше требовало хотя бы одного участника — а строку про 23.09.2026
-          в taskStage() потому и написали, что задача может остаться и БЕЗ
-          них (сбой синхронизации), и именно тогда эта кнопка — единственный
-          выход. Волевое закрытие не должно зависеть от того, сошлась ли
-          локальная копия участников с тем, что знает сервер. */}
-      {!selfTask && stage !== "done" && stage !== "awaiting_review" && (
-        <button className="btn btn-small tp-force" type="button" disabled={busy} onClick={() => void handleForceClose()}>
-          Закрыть волевым решением
-        </button>
       )}
     </div>
   );

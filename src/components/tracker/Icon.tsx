@@ -58,7 +58,11 @@ export type IconName =
   | "inbox"
   | "bulb"
   | "smile"
-  | "today";
+  | "today"
+  | "user"
+  | "trash"
+  | "edit"
+  | "more";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   search: (
@@ -293,6 +297,34 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="12" r="8.5" />
       <circle cx="12" cy="12" r="2.6" />
+    </>
+  ),
+  // Один человек: «личная задача», своя и ничья больше. Тот же рисунок,
+  // что у «users», только без второго силуэта.
+  user: (
+    <>
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M4 7h16" />
+      <path d="M9.5 7V4.8h5V7" />
+      <path d="M6.5 7l.9 12.2a1.5 1.5 0 0 0 1.5 1.3h6.2a1.5 1.5 0 0 0 1.5-1.3L17.5 7" />
+    </>
+  ),
+  edit: (
+    <>
+      <path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z" />
+      <path d="m14.5 7.5 3 3" />
+    </>
+  ),
+  more: (
+    <>
+      <circle cx="6" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="18" cy="12" r="1.2" fill="currentColor" />
     </>
   ),
 };

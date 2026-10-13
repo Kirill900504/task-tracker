@@ -40,6 +40,7 @@ import { authorLabel, authorRawName } from "@/lib/authorName";
 import { isCurrent, voteTally, withOrganizer } from "@/lib/meetingVotes";
 import { awaitsRecap } from "@/lib/calendarLogic";
 import { markTaskCommentsRead } from "@/hooks/useUnreadTaskComments";
+import ItemModalHead from "./ItemModalHead";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS = WORKDAY_SLOTS;
@@ -490,6 +491,13 @@ export default function MeetingModal({
                       value={result}
                       onChange={setResult}
                       onEnter={() => void setStatus("success")}
+                      // Черновик итога пишется сам, при выходе из поля: кнопки
+                      // «Сохранить» у назначенной встречи больше нет, а
+                      // набранное до того, как решили «успех» или «провал»,
+                      // терять нельзя.
+                      onBlur={() => {
+                        if (meeting && result.trim() !== (meeting.result || "").trim()) onSave({ ...meeting, result: result.trim() });
+                      }}
                     />
                     <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
                   </div>
@@ -519,7 +527,42 @@ export default function MeetingModal({
   return (
     <Modal id="meetingOverlay" onClose={onClose} dismissOnBackdrop={false}>
       <div className={"modal" + (meeting ? " has-chat" : "")}>
-        <h2 id="meetingModalTitle">{isEditing ? "Встреча" : isMove ? "Перенос встречи" : "Новая встреча"}</h2>
+        {/* Шапка назначенной встречи — та же, что у задачи (ItemModalHead,
+            13.10.2026): название в рамке, справа действие организатора и ×.
+            Нижних кнопок у назначенной встречи больше нет: менять в ней
+            нечего, кроме итога, а итог пишется сам, при выходе из поля. */}
+        {meeting ? (
+          <ItemModalHead
+            kicker="Встреча"
+            title={title}
+            titleId="meetingModalTitle"
+            closeId="meetingCancelBtn"
+            onClose={onClose}
+            actions={
+              canEdit && !resolved ? (
+                <button
+                  type="button"
+                  className="item-head-icon danger"
+                  id="deleteMeetingBtn"
+                  title="Отменить встречу — спросим причину, её увидят участники"
+                  aria-label="Отменить встречу"
+                  onClick={() =>
+                    void (async () => {
+                      // Причину отмены спрашивает сам обработчик (MeetingsPanel):
+                      // окно закрывается, только если встречу действительно
+                      // отменили.
+                      if (await onDelete()) onClose();
+                    })()
+                  }
+                >
+                  <Icon name="trash" size={17} />
+                </button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <h2 id="meetingModalTitle">{isMove ? "Перенос встречи" : "Новая встреча"}</h2>
+        )}
         {isMove && (
           <p className="field-hint meeting-move-hint">
             Прежняя встреча закроется как перенесённая, когда вы сохраните эту. Время и состав можно поправить здесь.
@@ -566,7 +609,6 @@ export default function MeetingModal({
                   Слова Кирилла 21.09.2026: «окно созданной встречи должно
                   быть однотипным с окном созданной задачи…». Ровно это и
                   стоит ниже, тем же компонентом, что и у задачи (ItemFacts). */}
-              <div className="meeting-fact-title">{title}</div>
               {decisionsFirst && decisionBlocks}
               <ItemFacts
                 id="meetingFacts"
@@ -881,36 +923,21 @@ export default function MeetingModal({
           </>
         )}
 
-        <div className="modal-actions">
-          <div className="left">
-            {isEditing && canEdit && (
-              <button
-                className="btn btn-danger-ghost"
-                id="deleteMeetingBtn"
-                onClick={() =>
-                  void (async () => {
-                    // Причину отмены спрашивает сам обработчик (MeetingsPanel):
-                    // окно закрывается, только если встречу действительно
-                    // отменили.
-                    if (await onDelete()) onClose();
-                  })()
-                }
-              >
-                Отменить встречу
+        {!isEditing && (
+          <div className="modal-actions">
+            <div className="left" />
+            <div className="left">
+              <button className="btn" id="meetingCancelBtn" onClick={onClose}>
+                Отмена
               </button>
-            )}
+              {canEdit && (
+                <button className="btn btn-primary" id="meetingSaveBtn" onClick={() => void save()}>
+                  Сохранить
+                </button>
+              )}
+            </div>
           </div>
-          <div className="left">
-            <button className="btn" id="meetingCancelBtn" onClick={onClose}>
-              Отмена
-            </button>
-            {canEdit && (
-              <button className="btn btn-primary" id="meetingSaveBtn" onClick={() => void save()}>
-                Сохранить
-              </button>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </Modal>
   );

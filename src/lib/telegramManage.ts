@@ -1,9 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { attachExecutors, assignNote } from "@/lib/assignExecutors";
+import { attachExecutors, assignNote, authorAssigneeName } from "@/lib/assignExecutors";
 import { applyBulkMove, type BulkMovePlan } from "@/lib/bulkActions";
 import { closeMeetingWithResult } from "@/lib/meetingLink";
 import { newTaskRow } from "@/lib/newTask";
 import { REOPEN_PATCH } from "@/lib/reviewWork";
+import { isSelfAssignee } from "@/lib/trackerRows";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // Editing/completing/deleting existing tasks and meetings from Telegram.
 // The model only ever supplies an action + a title fragment ("query") — it
@@ -120,6 +122,17 @@ export function taskPatchFor(action: ManageAction): Record<string, unknown> | nu
   return null;
 }
 
+// Исполнители задачи, кроме самого владельца (его строка помечена «(я)»):
+// по ним «закрой» понимает, своя это задача или чужая работа.
+async function otherExecutors(admin: ReturnType<typeof createAdminClient>, taskId: string): Promise<string[]> {
+  const { data } = await admin.from("task_participants").select("role, assignees(name)").eq("task_id", taskId).eq("role", "executor");
+  type Row = { assignees: { name: string } | { name: string }[] | null };
+  return ((data || []) as Row[])
+    .map((r) => (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "")
+    .filter((name) => name && !isSelfAssignee(name))
+    .map(withoutSelfMark);
+}
+
 async function applyAction(
   admin: ReturnType<typeof createAdminClient>,
   itemType: ManageItemType,
@@ -179,6 +192,25 @@ export async function handleManageItem(
     };
   }
 
+  // «Закрой» по задаче, на которой работают ДРУГИЕ люди, — не галочка, а
+  // решение постановщика, и молча его не принять. До 13.10.2026 команда
+  // ставила «сделано» напрямую: задача уезжала в «Завершённые», исполнитель
+  // не узнавал ничего, а приёмка оставалась «открытой» — проверка данных
+  // нашла так две задачи за 08.10. Закрытие чужой работы требует слов
+  // (приёмка или принудительное закрытие с комментарием), и где их сказать,
+  // бот называет сам.
+  if (itemType === "task" && action === "complete") {
+    const others = await otherExecutors(admin, only.id);
+    if (others.length) {
+      return {
+        reply:
+          `«${only.title}» молча не закрываю: на ней работает ${others.join(", ")}. ` +
+          "Откройте задачу в трекере — «Принять» (если отчитались) или «Принудительное закрытие» вверху окна, с комментарием: его увидят исполнители.",
+        pendingAction: null,
+      };
+    }
+  }
+
   const { error } = await applyAction(admin, itemType, action, only.id);
   if (error) return { reply: `Не получилось: ${error}`, pendingAction: null };
   return { reply: `✓ «${only.title}» — ${describeAction(action, itemType)}.`, pendingAction: null };
@@ -213,12 +245,17 @@ export async function resolvePendingAction(
       return lines.length ? lines.join("\n") : "Нечего записывать.";
     }
 
+    // Пункт списка без имени — задача того, кто её надиктовал. Раньше такие
+    // создавались без единого исполнителя: «• Позвонить в банк» стояло в
+    // ответе розданным, а в трекере висело ничьим (13.10.2026: «у любой
+    // задачи должен быть обязательно основной исполнитель… либо ты сам»).
+    const author = pending.tasks.some((t) => !t.assignee) ? await authorAssigneeName(admin, pending.userId, pending.createdBy || null) : "";
     const rows = pending.tasks.map((t) =>
       newTaskRow({
         id: "tg" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
         userId: pending.userId,
         title: t.title,
-        assignee: t.assignee || "",
+        assignee: t.assignee || author,
         deadline: t.deadline || null,
         createdBy: pending.createdBy || null,
       }),
