@@ -29,7 +29,8 @@ import { useSyncExternalStore } from "react";
 // оно в силе: бот пишет только то, что нельзя не сказать.
 
 export type AlertPrefs = {
-  // Ход работы: принял, сдал, вернул, итог, «напомнил об итоге».
+  // Ход работы: сдали, отказались, вернули, приняли, сдвинули срок — и
+  // только тому, кому это адресовано (lib/desktopAlerts.addresseeOf).
   progress: boolean;
   // Встреча через 15 минут.
   reminders: boolean;

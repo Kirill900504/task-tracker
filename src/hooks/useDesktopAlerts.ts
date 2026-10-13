@@ -87,6 +87,7 @@ export function useDesktopAlerts({
   function deliver(alert: DesktopAlert) {
     if (shown.current.has(alert.key)) return;
     shown.current.add(alert.key);
+    if (!claimShown(alert.key)) return;
     const { showToast: toast, openItem: open } = latest.current;
     const key = muteKey(alert.kind, alert.itemId);
     const focused = document.visibilityState === "visible" && document.hasFocus();
@@ -126,7 +127,7 @@ export function useDesktopAlerts({
 
     for (const t of tasks) {
       const key = muteKey("task", t.id);
-      known.current.set(key, { kind: "task", title: t.title });
+      known.current.set(key, { kind: "task", title: t.title, mine: isCreatedByMe(t, mineOnlyId) });
       if (seen.current.has(key)) continue;
       seen.current.add(key);
       if (quietStart || t.status === "done" || isCreatedByMe(t, mineOnlyId)) continue;
@@ -134,7 +135,7 @@ export function useDesktopAlerts({
     }
     for (const m of meetings) {
       const key = muteKey("meeting", m.id);
-      known.current.set(key, { kind: "meeting", title: m.title });
+      known.current.set(key, { kind: "meeting", title: m.title, mine: isCreatedByMe(m, mineOnlyId) });
       if (seen.current.has(key)) continue;
       seen.current.add(key);
       if (quietStart || (m.status !== "planned" && m.status !== "proposed") || isCreatedByMe(m, mineOnlyId)) continue;
@@ -161,6 +162,14 @@ export function useDesktopAlerts({
     const db = createClient();
     let cancelled = false;
     let watermark = "";
+    // Строки, которые этот опрос уже разобрал. Запрос «не раньше отметки»
+    // каждый раз возвращает и последнюю виденную строку, и самая первая из
+    // них — та, что была последней в базе ДО открытия окна, — обязана сюда
+    // попасть: иначе второй же опрос показывал её как новую. Это и было
+    // «раз пятый с периодичностью в 5–10 мин»: трекер перезагружается сам
+    // после каждой выкладки (VersionWatch), и каждое новое окно заново
+    // объявляло последнее событие пространства.
+    const handled = new Set<string>();
     let running = false;
     let again = false;
 
@@ -175,8 +184,10 @@ export function useDesktopAlerts({
           // Отсчёт — от последней строки, которую знает база, а не от часов
           // этого компьютера: часы бывают впереди сервера, и тогда первые
           // минуты событий пропали бы.
-          const { data } = await db.from("item_comments").select("created_at").order("created_at", { ascending: false }).limit(1);
-          watermark = ((data || []) as { created_at: string }[])[0]?.created_at || new Date(0).toISOString();
+          const { data } = await db.from("item_comments").select("id, created_at").order("created_at", { ascending: false }).limit(5);
+          const last = (data || []) as { id: string; created_at: string }[];
+          watermark = last[0]?.created_at || new Date(0).toISOString();
+          for (const r of last) handled.add(r.id);
           return;
         }
         const { data } = await db
@@ -197,6 +208,8 @@ export function useDesktopAlerts({
         const { myUserId: me, myAssigneeId: meRow } = latest.current;
         const prefs = readAlertPrefs();
         for (const r of rows) {
+          if (handled.has(r.id)) continue;
+          handled.add(r.id);
           const a = Array.isArray(r.assignees) ? r.assignees[0] : r.assignees;
           // Имя владельца — только владельцу (автор пуст или хозяин
           // пространства); безымянный иначе — «Участник», а не «Кирилл»:
@@ -241,6 +254,30 @@ export function useDesktopAlerts({
 // одно место — в openItem, который этот хук получил от NewTracker.
 export function openFromAlert(kind: "task" | "meeting", id: string): void {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: { kind, id } }));
+}
+
+// Что уже всплывало — общее на все окна этого компьютера и переживает
+// перезагрузку. Память в самом хуке живёт до перезагрузки и только в своей
+// вкладке, а открытых окон у человека бывает два-три (вкладка, установленное
+// приложение, настольное), и каждое всплывало бы своим окном. Кто первым
+// записал отпечаток, тот и показывает. Три дня — дольше событие новым не
+// бывает, а список не растёт вечно.
+const SHOWN_KEY = "rokas:alerts-shown";
+const SHOWN_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+
+function claimShown(key: string): boolean {
+  try {
+    const now = Date.now();
+    const raw = JSON.parse(localStorage.getItem(SHOWN_KEY) || "{}") as Record<string, number>;
+    if (raw[key] && now - raw[key] < SHOWN_TTL_MS) return false;
+    const next: Record<string, number> = {};
+    for (const [k, at] of Object.entries(raw)) if (now - at < SHOWN_TTL_MS) next[k] = at;
+    next[key] = now;
+    localStorage.setItem(SHOWN_KEY, JSON.stringify(next));
+  } catch {
+    // Хранилища нет — остаётся память вкладки; показать лучше, чем потерять.
+  }
+  return true;
 }
 
 function canNotify(): boolean {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { composeDigest } from "./noticeQueue";
+import { composeDigest, planFlush } from "./noticeQueue";
 
 const row = (kind: string, who: string, item: string, what = "") => ({ kind, who, item, what });
 
@@ -69,5 +69,27 @@ describe("сводка вместо ленты", () => {
     expect(composeDigest([row("accepted", "А", "1"), row("accepted", "Б", "2")])).toContain("2 события");
     expect(composeDigest(Array.from({ length: 5 }, (_, i) => row("accepted", "Ч" + i, "З" + i)))).toContain("5 событий");
     expect(composeDigest(Array.from({ length: 21 }, (_, i) => row("accepted", "Ч" + i, "З" + i)))).toContain("21 событие");
+  });
+});
+
+// 13.10.2026, отзыв Витковского: «принял в работу» приходило отдельным
+// сообщением через пять минут после нажатия.
+describe("события без решения не шлются отдельным письмом", () => {
+  const now = new Date("2026-10-13T12:00:00Z").getTime();
+  const q = (kind: string, hoursAgo: number) => ({ kind, created_at: new Date(now - hoursAgo * 3600_000).toISOString() });
+
+  it("одно «принял в работу» ждёт и не уходит", () => {
+    expect(planFlush([q("accepted", 0.1)], now)).toEqual({ send: [], drop: [] });
+    expect(planFlush([q("vote_yes", 1), q("idea_taken", 2)], now).send).toEqual([]);
+  });
+
+  it("уходит попутчиком письма, в котором есть что решать", () => {
+    const list = [q("accepted", 3), q("reported_all", 0.1)];
+    expect(planFlush(list, now).send).toEqual(list);
+  });
+
+  it("не дождавшийся письма снимается через сутки молча", () => {
+    const old = q("accepted", 25);
+    expect(planFlush([old, q("vote_yes", 1)], now)).toEqual({ send: [], drop: [old] });
   });
 });

@@ -60,6 +60,25 @@ const GROUPS: { kind: NoticeKind; title: (n: number) => string }[] = [
 // Виды, которые говорят о задаче и теряют смысл, когда она закрыта.
 const TASK_KINDS = new Set<string>(["reported_all", "declined", "reschedule", "reported", "accepted"]);
 
+// События, по которым постановщику делать нечего: человек принял задачу,
+// придёт на встречу, взял мысль. Отдельным письмом они не уходят НИКОГДА —
+// только попутчиками письма, в котором есть что решать. Крон разбирает
+// очередь каждые пять минут, и до 13.10.2026 одно «Евгений принял в работу»
+// было целым сообщением в мессенджере через пять минут после нажатия, а
+// заодно и окном на ПК (lib/desktopAlerts). Кирилл, по отзыву Витковского:
+// «они должны быть адресные и по важным моментам, а не спамом сыпаться».
+// Попутчика, так и не дождавшегося письма, через сутки снимают молча: на
+// доске это давно видно, а вчерашнее «принял» в сегодняшней сводке — шум.
+export const QUIET_KINDS = new Set<string>(["accepted", "vote_yes", "idea_taken"]);
+const QUIET_HOLD_MS = 24 * 60 * 60 * 1000;
+
+// Что из группы одного адресата уходит сейчас, а что снимается без письма.
+// Остальное ждёт следующего прогона.
+export function planFlush<T extends { kind: string; created_at: string }>(list: T[], now: number): { send: T[]; drop: T[] } {
+  if (list.some((r) => !QUIET_KINDS.has(r.kind))) return { send: list, drop: [] };
+  return { send: [], drop: list.filter((r) => now - new Date(r.created_at).getTime() > QUIET_HOLD_MS) };
+}
+
 // Строка внутри группы: сначала человек, потом задача, потом его слова.
 // Человек первым потому, что группа уже сказала, ЧТО произошло, и читается
 // это как список фамилий — по нему и ищут глазами.
@@ -123,13 +142,13 @@ export async function flushNotices(
 ): Promise<number> {
   const { data, error } = await admin
     .from("notification_queue")
-    .select("id, user_id, to_user, kind, item, who, what")
+    .select("id, user_id, to_user, kind, item, who, what, created_at")
     .is("sent_at", null)
     .order("created_at")
     .limit(500);
   if (error || !data?.length) return 0;
 
-  type Row = QueuedRow & { id: string; user_id: string; to_user: string | null };
+  type Row = QueuedRow & { id: string; user_id: string; to_user: string | null; created_at: string };
   const rows = data as Row[];
 
   // Ключ — пространство плюс адресат: у владельца и у руководителя в одном
@@ -147,20 +166,26 @@ export async function flushNotices(
     else groups.set(key, [r]);
   }
 
-  await admin
-    .from("notification_queue")
-    .update({ sent_at: new Date().toISOString() })
-    .in("id", rows.map((r) => r.id));
+  const now = Date.now();
+  const outgoing: Row[][] = [];
+  const done: string[] = [];
+  for (const list of groups.values()) {
+    const { send, drop } = planFlush(list, now);
+    if (send.length) outgoing.push(send);
+    for (const r of [...send, ...drop]) done.push(r.id);
+  }
+  if (!done.length) return 0;
+  await admin.from("notification_queue").update({ sent_at: new Date().toISOString() }).in("id", done);
 
   // Что к минуте отправки уже решено — в письмо не идёт. Отзыв Витовского
   // 25.09.2026: «я тут суету наводил, задачи закрывал, а потом через какое-
   // то время пришла сводка» — с «ждут приёмки» и «просят перенести» по
   // задачам, которые он уже принял. Письмо, требующее решений, которые
   // приняты, учит его не читать.
-  const resolved = await resolvedTitles(admin, rows);
+  const resolved = await resolvedTitles(admin, outgoing.flat());
 
   let sent = 0;
-  for (const raw of groups.values()) {
+  for (const raw of outgoing) {
     const list = raw.filter((r) => !(TASK_KINDS.has(r.kind) && resolved.has(`${r.user_id} ${r.item}`)));
     const text = composeDigest(list);
     if (!text) continue;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertForComment, alertForNewItem, type AlertContext, type CommentRowForAlert } from "./desktopAlerts";
+import { addresseeOf, alertForComment, alertForNewItem, type AlertContext, type CommentRowForAlert } from "./desktopAlerts";
 import type { AlertPrefs } from "./alertPrefs";
 
 const prefs = (patch: Partial<AlertPrefs> = {}): AlertPrefs => ({ progress: true, reminders: true, quietUntil: "", muted: [], ...patch });
@@ -8,8 +8,9 @@ const ctx = (patch: Partial<AlertContext> = {}): AlertContext => ({
   myUserId: "me",
   myAssigneeId: "me-row",
   known: new Map([
-    ["task:t1", { kind: "task", title: "Смета" }],
-    ["meeting:m2", { kind: "meeting", title: "Планёрка" }],
+    ["task:t1", { kind: "task", title: "Смета", mine: true }],
+    ["task:t2", { kind: "task", title: "Отчёт", mine: false }],
+    ["meeting:m2", { kind: "meeting", title: "Планёрка", mine: false }],
   ]),
   prefs: prefs(),
   ...patch,
@@ -76,9 +77,49 @@ describe("alertForComment — хроника", () => {
   });
 
   it("ход работы выключается, и эмодзи из текста не уходит в окно Windows", () => {
-    const r = row({ system: true, author_user_id: null, author_assignee_id: null, body: "✅ Игорь принял в работу" });
-    expect(alertForComment(r, ctx())).toMatchObject({ category: "progress", title: "Задача «Смета»", body: "Игорь принял в работу" });
+    const r = row({ system: true, author_user_id: null, author_assignee_id: null, body: "🏁 Игорь отчитался: смета готова" });
+    expect(alertForComment(r, ctx())).toMatchObject({ category: "progress", title: "Задача «Смета»", body: "Игорь отчитался: смета готова" });
     expect(alertForComment(r, ctx({ prefs: prefs({ progress: false }) }))).toBeNull();
+  });
+});
+
+// Отзыв Витковского 13.10.2026: «принял в работу» всплывало у него раз за
+// разом. Окно — только тому, кто по событию что-то сделает.
+describe("alertForComment — адресность хроники", () => {
+  const sys = (item_id: string, body: string) => row({ item_id, system: true, author_user_id: "evg", body });
+
+  it("«принял в работу» не всплывает никому — действовать по нему некому", () => {
+    expect(alertForComment(sys("t1", "✅ Евгений Макаров принял в работу"), ctx())).toBeNull();
+    expect(alertForComment(sys("t2", "✅ Евгений Макаров принял в работу"), ctx())).toBeNull();
+  });
+
+  it("отчёт, отказ и просьба о переносе — только постановщику", () => {
+    for (const body of ["🏁 Евгений отчитался: готово", "⛔ Евгений не может: нет доступа", "📅 Евгений просит перенос на 20.10: болею"]) {
+      expect(alertForComment(sys("t1", body), ctx())).not.toBeNull();
+      expect(alertForComment(sys("t2", body), ctx())).toBeNull();
+    }
+  });
+
+  it("возврат, приёмка и новый срок — только тем, кому поручено", () => {
+    for (const body of ["↩ Кирилл вернул на доработку: не то", "✅ Кирилл принял работу", "📅 Срок перенесён на 20.10"]) {
+      expect(alertForComment(sys("t2", body), ctx())).not.toBeNull();
+      expect(alertForComment(sys("t1", body), ctx())).toBeNull();
+    }
+  });
+
+  it("ответы на встречу: «не сможет» — организатору, «будет» и итог — никому", () => {
+    const m = (body: string, mine: boolean) =>
+      alertForComment(row({ item_kind: "meeting", item_id: "m2", system: true, author_user_id: "evg", body }), ctx({ known: new Map([["meeting:m2", { kind: "meeting", title: "Планёрка", mine }]]) }));
+    expect(m("❌ Евгений не сможет: в отъезде", true)).not.toBeNull();
+    expect(m("❌ Евгений не сможет: в отъезде", false)).toBeNull();
+    expect(m("✅ Евгений будет", true)).toBeNull();
+    expect(m("🕐 Евгений будет, но опоздает", true)).toBeNull();
+    expect(m("✅ Встреча прошла успешно · итог разослан (3): договорились", false)).toBeNull();
+    expect(m("✅ Все согласились — встреча назначена на 15.10, 10:00", false)).not.toBeNull();
+  });
+
+  it("незнакомая строка хроники молчит", () => {
+    expect(addresseeOf("🧪 что-то новое")).toBeNull();
   });
 });
 

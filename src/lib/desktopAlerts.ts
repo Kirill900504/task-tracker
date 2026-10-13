@@ -47,7 +47,9 @@ export type CommentRowForAlert = {
   authorName: string;
 };
 
-export type KnownItem = { kind: "task" | "meeting"; title: string };
+// mine — я поставил эту задачу или собрал эту встречу. От этого зависит,
+// какие события хроники адресованы мне (см. addresseeOf).
+export type KnownItem = { kind: "task" | "meeting"; title: string; mine: boolean };
 
 export type AlertContext = {
   myUserId: string;
@@ -70,6 +72,32 @@ function plain(text: string): string {
 function oneLine(text: string, max = 180): string {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > max ? flat.slice(0, max - 1) + "…" : flat;
+}
+
+// Кому из видящих элемент событие хроники адресовано.
+//
+// Отзыв Витковского 13.10.2026: «Задача … Евгений Макаров принял в работу»
+// всплывала у него раз пять с перерывом в пять–десять минут, и Кирилл
+// попросил сделать уведомления адресными: «по важным моментам, а не спамом
+// сыпаться людям». До этого любая строка хроники всплывала у каждого, кто
+// видит задачу, — исполнителю про соисполнителя, наблюдателю про всех.
+//
+// Правило то же, что у всех оповещений трекера: окно всплывает только
+// тому, кто по нему что-то СДЕЛАЕТ.
+// *author* — решение за постановщиком или организатором: сдали работу,
+// отказались, просят перенос, кто-то не сможет прийти, просят итог.
+// *doers* — касается тех, кому поручено: вернули, приняли, закрыли,
+// открыли заново, сдвинули срок, ответили на просьбу о переносе.
+// *all* — встреча стала назначенной, и это меняет день каждого.
+// Всё прочее — «принял в работу», «будет», «опоздает», итоги и закрытия
+// встреч — молчит: на доске и в обсуждении это видно, а действовать по
+// этому некому. Незнакомая строка тоже молчит: новое событие хроники
+// становится уведомлением по решению, а не по умолчанию.
+export function addresseeOf(text: string): "author" | "doers" | "all" | null {
+  if (/отчитался|отметил выполненной| не может:|просит перенос| не сможет:|напомнил об итоге/.test(text)) return "author";
+  if (/вернул на доработку|принял работу|волевым решением|открыл задачу заново|^Срок |В переносе отказано/.test(text)) return "doers";
+  if (/встреча назначена/i.test(text)) return "all";
+  return null;
 }
 
 const where = (item: KnownItem) => (item.kind === "task" ? "Задача" : "Встреча") + " «" + item.title + "»";
@@ -110,6 +138,8 @@ export function alertForComment(row: CommentRowForAlert, ctx: AlertContext): Des
   }
 
   if (!prefs.progress || muted) return null;
+  const to = addresseeOf(text);
+  if (!to || (to === "author" && !item.mine) || (to === "doers" && item.mine)) return null;
   return { ...base, category: "progress", title: where(item), body: oneLine(text) };
 }
 
