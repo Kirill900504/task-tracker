@@ -1666,13 +1666,16 @@ test("a space typed while editing a thought stays a space", async ({ page }) => 
   await login(page);
   await page.fill("#ideaInput", text);
   await page.locator("#ideaInput").press("Enter");
-  const item = page.locator(".idea-item", { hasText: text });
-  await expect(item).toBeVisible();
+  await expect(page.locator(".idea-item", { hasText: text })).toBeVisible();
+  // По id, а не по тексту: в правке текст уходит в поле, а значение поля
+  // `hasText` не видит — строка «пропадает» ровно в момент проверки.
+  const id = await page.locator(".idea-item", { hasText: text }).getAttribute("data-idea-id");
+  const item = page.locator(`.idea-item[data-idea-id="${id}"]`);
 
   await item.locator(".idea-text").click();
   const input = item.locator(".idea-edit-input");
   await expect(input).toBeFocused();
-  await input.press("End");
+  await input.press("Control+End");
   await page.keyboard.type(" два слова");
   await expect(input).toHaveValue(`${text} два слова`);
   await expect(page.locator(".idea-item.dragging")).toHaveCount(0);
