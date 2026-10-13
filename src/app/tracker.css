@@ -3227,6 +3227,10 @@
     font-size:12px; box-shadow:var(--shadow-1);
   }
   .ms-link-dismissed:hover{color:var(--ink); border-color:var(--line-soft);}
+  /* Та же плашка в личном кабинете: в потоке окна, без тени и без
+     предела ширины. Специфичность двойная нарочно — на телефоне у .ms-link
+     своя фиксированная позиция над нижней панелью. */
+  .ms-link.ms-link-embedded{position:static; max-width:none; box-shadow:none; z-index:auto; left:auto; right:auto; bottom:auto;}
   .ms-link-state{display:flex; gap:12px; flex-wrap:wrap; align-items:center; padding-right:16px;}
   .ms-link-on{font-size:12.5px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;}
   .ms-link-why{font-size:13px; line-height:1.5; color:var(--ink-soft);}
@@ -3705,3 +3709,68 @@
      зелёная — отправленное не завершено, его ещё решает получатель. */
   .panel-sent-btn{color:var(--accent);}
   .panel-sent-btn:hover{border-color:var(--accent);}
+
+/* Личный кабинет (AccountModal). Разделы — «кто я», «как вхожу», «куда мне
+   пишут», «ещё»; заголовки раздела набраны подписью, а не вторым h2, чтобы
+   окно читалось одним, а не четырьмя. */
+.account-modal{max-width:520px;}
+.account-head{display:flex; align-items:center; gap:14px; margin-bottom:4px;}
+.account-head h2{margin:0;}
+.account-avatar{
+  width:46px; height:46px; flex:none; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--accent); color:#F3F8FA; font-weight:700; font-size:17px; text-transform:uppercase;
+}
+.account-role{margin:2px 0 0;}
+.account-section{display:flex; flex-direction:column; gap:10px; padding-top:16px; margin-top:14px; border-top:1px solid var(--line-soft);}
+.account-section h3{margin:0; font-size:var(--label-size); font-weight:var(--label-weight); color:var(--ink-label); text-transform:uppercase; letter-spacing:.06em;}
+.account-section .field-hint{margin:0;}
+.account-form{display:flex; flex-direction:column; gap:10px; align-items:flex-start;}
+.account-field{display:flex; flex-direction:column; gap:5px; width:100%; font-size:12.5px; color:var(--ink-soft);}
+.account-field input{width:100%;}
+.account-pass{display:flex; gap:8px; align-items:center; width:100%;}
+.account-pass input{flex:1; min-width:0;}
+.account-ok{
+  padding:8px 10px; border-radius:var(--radius-sm);
+  background:rgba(108,190,140,.12); border:1px solid rgba(108,190,140,.4); color:var(--ink); font-size:12.5px;
+}
+.account-owner-ms{display:grid; grid-template-columns:1fr auto; gap:8px 12px; align-items:center;}
+.account-items{display:flex; flex-direction:column; gap:6px;}
+.account-item{justify-content:flex-start; display:flex; align-items:center; gap:8px; width:100%;}
+@media (max-width: 799px){
+  .account-field input{font-size:16px;}
+}
+
+/* Чат как мессенджер (13.10.2026): смайлики у поля, «вниз» с числом новых,
+   ссылки в тексте. */
+.chat{position:relative;}
+.chat-link{color:var(--accent); text-decoration:underline; text-underline-offset:2px; overflow-wrap:anywhere;}
+.chat-msg.mine .chat-link{color:#CFE7F0;}
+.chat-down{
+  position:absolute; right:14px; bottom:84px; z-index:3;
+  width:38px; height:38px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--paper-soft); border:1px solid var(--line); color:var(--ink);
+  box-shadow:var(--shadow-2); cursor:pointer;
+}
+.chat-down:hover{border-color:var(--accent);}
+.chat-down-count{
+  position:absolute; top:-7px; right:-5px; min-width:18px; height:18px; padding:0 5px;
+  border-radius:999px; background:var(--accent); color:#F3F8FA;
+  font-size:11px; font-weight:700; line-height:18px; text-align:center;
+}
+.chat-emoji-wrap{position:relative; display:flex;}
+.chat-clip.on{border-color:var(--accent); color:var(--ink);}
+.emoji-picker{
+  position:absolute; right:0; bottom:calc(100% + 8px); z-index:20;
+  width:min(330px, calc(100vw - 32px));
+  display:flex; flex-direction:column;
+  background:var(--paper-soft); border:1px solid var(--line); border-radius:var(--radius-md);
+  box-shadow:var(--shadow-2); overflow:hidden;
+}
+.emoji-tabs{display:flex; gap:2px; padding:6px; border-bottom:1px solid var(--line-soft);}
+.emoji-tab{flex:1; min-width:0; padding:0; height:34px; border:0; border-radius:8px; background:none; font-size:18px; cursor:pointer;}
+.emoji-tab.on, .emoji-tab:hover{background:rgba(255,255,255,.08);}
+.emoji-grid{display:grid; grid-template-columns:repeat(8, minmax(0, 1fr)); gap:2px; padding:6px; max-height:230px; overflow-y:auto;}
+.emoji-cell{height:36px; min-width:0; padding:0; border:0; border-radius:8px; background:none; font-size:21px; line-height:1; cursor:pointer;}
+.emoji-cell:hover{background:rgba(255,255,255,.08);}

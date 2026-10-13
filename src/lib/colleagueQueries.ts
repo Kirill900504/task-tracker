@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { signInLink } from "@/lib/recoveryLink";
-import { trackerUrl } from "@/lib/trackerUrl";
+import { miniAppUrl, trackerUrl } from "@/lib/trackerUrl";
+import { ensureCabinet } from "@/lib/cabinet";
 import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback, meetingButtons, taskButtons } from "@/lib/colleagues";
 import { openTaskChoices, openVoteChoices } from "@/lib/answerRules";
@@ -24,7 +25,7 @@ import { withoutSelfMark } from "@/lib/actorName";
 // Что видит коллега — только своё: выборки идут по его строке участия, а не
 // по пространству. Читать чужие задачи он не вправе и в трекере.
 
-export type ColleagueQuery = "tasks" | "today" | "overdue" | "meetings" | "review" | "menu" | "help" | "enter";
+export type ColleagueQuery = "tasks" | "today" | "overdue" | "meetings" | "review" | "menu" | "help" | "enter" | "app";
 
 const TRIGGERS: Record<ColleagueQuery, string[]> = {
   tasks: ["/tasks", "мои задачи", "задачи", "мои", "что на мне", "мои дела"],
@@ -40,8 +41,26 @@ const TRIGGERS: Record<ColleagueQuery, string[]> = {
   // Вход в трекер без пароля. Слов много нарочно: человек, который не
   // может войти, пишет боту то, что первым придёт в голову, и «не могу
   // войти» должно сработать так же, как «вход».
-  enter: ["/enter", "вход", "войти", "трекер", "открыть трекер", "не могу войти", "забыл пароль", "пароль"],
+  enter: ["/enter", "вход", "войти", "не могу войти", "забыл пароль", "пароль", "с компьютера", "вход с компьютера"],
+  // Мини-приложение. «Трекер» и «открыть трекер» переехали сюда из входа:
+  // в мессенджере открыть трекер — значит открыть его здесь же, одним
+  // нажатием, а ссылка во внешний браузер нужна для компьютера.
+  app: ["/app", "приложение", "мобильное приложение", "трекер", "открыть трекер"],
 };
+
+// Ответ на «/app»: кнопка мини-приложения и, рядом, вход с компьютера.
+export function appReply(): BotReply {
+  return {
+    text:
+      "📱 Трекер открывается прямо здесь, в мессенджере, — без пароля.\n\n" +
+      "На компьютере удобнее отдельное окно: нажмите «Вход с компьютера», и я пришлю ссылку.",
+    buttons: [
+      [{ text: "📱 Открыть приложение", data: encodeCallback("task", "list", "menu"), app: miniAppUrl() }],
+      [{ text: "💻 Вход с компьютера", data: encodeCallback("task", "list", "enter") }],
+      [{ text: "☰ Меню кнопок", data: encodeCallback("task", "list", "menu") }],
+    ],
+  };
+}
 
 export function matchColleagueCommand(text: string): ColleagueQuery | null {
   const norm = text.trim().toLowerCase().replace(/[?!.]+$/, "");
@@ -227,23 +246,16 @@ export function navButtons(): BotButton[][] {
 // Уходит она в тот чат, откуда пришёл вопрос, — то есть туда же, куда и
 // его задачи, и привязывал этот чат владелец. Живёт час и сгорает при
 // первом открытии: это условие Supabase, и менять его незачем.
+// Кабинет у человека, пишущего из привязанного чата, заводится здесь же
+// (lib/cabinet), а не отправляет его за приглашением к Кириллу. Здесь же
+// стояла проверка `status === "revoked"` — статуса, которого в базе нет:
+// доступ отключают статусом `disabled`, то есть отключённый человек
+// получал свежую ссылку входа словом «вход». Решает теперь одно правило.
 export async function signInReply(admin: SupabaseClient, assigneeId: string): Promise<BotReply> {
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("member_id, status")
-    .eq("assignee_id", assigneeId)
-    .maybeSingle();
+  const cabinet = await ensureCabinet(admin, assigneeId);
+  if (!cabinet.ok) return { text: cabinet.error, buttons: navButtons() };
 
-  if (!member?.member_id || member.status === "revoked") {
-    return {
-      text:
-        "Входа в трекер у вас пока нет — и он не нужен: всё, что от вас ждут, приходит сюда, и отвечать можно прямо отсюда.\n\n" +
-        "Если трекер нужен целиком, попросите Кирилла прислать приглашение.",
-      buttons: navButtons(),
-    };
-  }
-
-  const { data: user } = await admin.auth.admin.getUserById(member.member_id as string);
+  const { data: user } = await admin.auth.admin.getUserById(cabinet.authId);
   const email = user?.user?.email;
   if (!email) return { text: "Не получилось собрать ссылку — скажите об этом Кириллу.", buttons: navButtons() };
 
@@ -267,6 +279,7 @@ export async function replyForColleague(
   if (kind === "menu") return botMenu("recipient");
   if (kind === "help") return { text: colleagueCommandsHelp(colleague.name), buttons: navButtons() };
   if (kind === "enter") return signInReply(admin, colleague.id);
+  if (kind === "app") return appReply();
 
   if (kind === "meetings") {
     const meetings = await myMeetings(admin, colleague.id, today);
@@ -548,7 +561,10 @@ export function colleagueCommandsHelp(name: string): string {
     "",
     "«💬 Ответить» направляет следующее сообщение в обсуждение именно этой задачи — его увидят все её участники.",
     "",
-    "Если у вас есть вход в трекер, можно и поручать отсюда: «поручи Игорю смету к пятнице». Я покажу, что понял, и создам по «да».",
+    "📱 «приложение» — весь трекер прямо здесь, без пароля: доска, встречи, мысли, личный кабинет.",
+    "💻 «вход» — ссылка для входа с компьютера.",
+    "",
+    "Поручать можно и отсюда: «поручи Игорю смету к пятнице». Я покажу, что понял, и создам по «да».",
     "Голосовое тоже понимаю: наговорите, распознаю и обработаю так же, как текст.",
   ].join("\n");
 }

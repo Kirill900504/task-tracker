@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { miniAppSession } from "@/lib/miniAppAuth";
+import { miniAppSignIn } from "@/lib/miniAppRoute";
 import { MAX_CHANNEL } from "@/lib/botTransport";
 import { maxSettings } from "@/lib/botSettings";
 
@@ -21,11 +20,5 @@ export async function POST(req: Request) {
   if (!settings?.token) {
     return NextResponse.json({ error: "Бот MAX не подключён — откройте /max в трекере" }, { status: 503 });
   }
-
-  const body = (await req.json().catch(() => null)) as { initData?: string } | null;
-  const admin = createAdminClient();
-  const result = await miniAppSession(admin, MAX_CHANNEL, settings.token, String(body?.initData || ""));
-  if (!result.ok) return NextResponse.json({ error: result.error, fields: result.fields }, { status: result.status });
-
-  return NextResponse.json({ tokenHash: result.tokenHash, email: result.email });
+  return miniAppSignIn(req, MAX_CHANNEL, settings.token);
 }

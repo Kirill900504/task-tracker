@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig, BotTransport } from "@/lib/botTransport";
 import { answerOwnOpenQuestion, colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
-import { navButtons } from "@/lib/colleagueQueries";
+import { appReply, matchColleagueCommand, navButtons, signInReply } from "@/lib/colleagueQueries";
 import { encodeCallback, findColleagueByChat, findOwnerSelfByChat } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { parseQuickAdd } from "@/lib/quickAdd";
@@ -18,6 +18,7 @@ import { attachExecutors, attachMeetingParticipants, assignNote, selfAssigneeNam
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 import { newTaskRow } from "@/lib/newTask";
 import { ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav } from "@/lib/ownerQueries";
+import { botMenu } from "@/lib/botMenu";
 import { whenButtons, whoButtons, type NewTaskPending } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
@@ -466,7 +467,26 @@ export async function handleLinkCode(ctx: BotContext, rawCode: string, username:
       return true;
     }
     await ctx.admin.from("telegram_link_codes").delete().eq("code", code);
-    await say(ctx, `✓ Готово, ${person?.name || "вы"} на связи. Сюда будут приходить задачи и встречи — отвечать можно кнопками под сообщением.`);
+    // Подключение — это и есть вход в трекер: дальше человеку не нужно ни
+    // приглашения, ни пароля. Кабинет заведётся при первом открытии
+    // приложения (lib/cabinet), поэтому кнопка стоит прямо в приветствии,
+    // а не ждёт, пока её найдут словом «меню». Меню — той половины, что
+    // разберёт нажатия: постановщицкие кнопки понимает только тот, у кого
+    // уже есть вход (lib/botActor).
+    const { data: member } = await ctx.admin
+      .from("workspace_members")
+      .select("status, member_id")
+      .eq("assignee_id", linkRow.assignee_id)
+      .maybeSingle();
+    const menu = botMenu(member?.status === "active" && member.member_id ? "assigner" : "recipient");
+    await ctx.transport.send(
+      ctx.chatId,
+      `✓ Готово, ${withoutSelfMark(person?.name || "") || "вы"} на связи.\n\n` +
+        "Сюда приходят задачи и встречи — отвечать можно кнопками под сообщением.\n" +
+        "📱 Весь трекер — кнопка «Мобильное приложение» ниже: открывается прямо здесь, без пароля.\n" +
+        "💻 На компьютере — «Вход с компьютера»: пришлю ссылку.",
+      { buttons: menu.buttons },
+    );
     return true;
   }
 
@@ -863,6 +883,19 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     const menu = ownerMenu();
     await ctx.transport.send(ctx.chatId, menu.text, menu.buttons?.length ? { buttons: menu.buttons } : undefined);
     return;
+  }
+
+  // «Приложение» и «вход» — те же слова, что у всех остальных
+  // (colleagueQueries): команды из меню у поля ввода одни на весь бот, и
+  // у владельца они не могут отвечать тишиной или уезжать в поручение.
+  const ownerWord = matchColleagueCommand(trimmed);
+  if (ownerWord === "app" || ownerWord === "enter") {
+    const selfRow = ownerWord === "enter" ? await findOwnerSelfByChat(ctx.admin, ctx.chatId, ctx.channel) : null;
+    const reply = ownerWord === "app" ? appReply() : selfRow ? await signInReply(ctx.admin, selfRow.id) : null;
+    if (reply) {
+      await ctx.transport.send(ctx.chatId, reply.text, reply.buttons?.length ? { buttons: reply.buttons } : undefined);
+      return;
+    }
   }
 
   // The owner is a recipient too: a manager sets him a task or a meeting,

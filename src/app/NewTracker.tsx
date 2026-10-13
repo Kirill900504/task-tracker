@@ -50,10 +50,10 @@ import { useAsk } from "@/components/Ask";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole, MEMBER_ROLE_LABELS } from "@/hooks/useWorkspaceRole";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
-import ActionMenu from "@/components/tracker/ActionMenu";
 import { withoutSelfMark } from "@/lib/actorName";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import MessengerLink from "@/components/tracker/MessengerLink";
+import AccountModal from "@/components/tracker/AccountModal";
 import { useMyMessenger } from "@/hooks/useMyMessenger";
 import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
@@ -298,7 +298,8 @@ export default function NewTracker() {
   // под личным аккаунтом в системе». Без этого экран у всех четырнадцати
   // выглядел одинаково, и «Выйти» была единственной подсказкой, что вход
   // вообще персональный.
-  const [accountMenuAnchor, setAccountMenuAnchor] = useState<DOMRect | null>(null);
+  // С 13.10.2026 это не меню, а окно — личный кабинет (AccountModal).
+  const [accountOpen, setAccountOpen] = useState(false);
 
   // Список команды спрашивается заранее, а не в момент нажатия. «Команда» и
   // любое ✈ открываются из уже открытого трекера, то есть время на запрос
@@ -842,6 +843,21 @@ export default function NewTracker() {
           23.09.2026 она стояла только в десктопной ветке ниже, и
           руководитель, открывший трекер с телефона, о ней не узнавал вовсе. */}
       {messengerMissing && <MessengerLink messenger={myMessenger} />}
+      {accountOpen && (
+        <AccountModal
+          name={withoutSelfMark(myName)}
+          roleLabel={MEMBER_ROLE_LABELS[identity.memberRole]}
+          messenger={identity.role === "manager" ? myMessenger : null}
+          owner={isOwner ? { needs: botLink.needs, maxAvailable: myMessenger.max.available, link: botLink.link } : null}
+          items={[
+            ...awayItem,
+            { id: "calendar", label: "Встречи в календаре телефона", icon: "calendar", onSelect: () => void subscribeCalendar() },
+            ...(installPrompt.visible ? [{ id: "install", label: "Установить приложение на компьютер", icon: "install" as const, onSelect: installPrompt.promptInstall }] : []),
+          ]}
+          onSignOut={() => actions.signOut()}
+          onClose={() => setAccountOpen(false)}
+        />
+      )}
       {isMobile ? (
         <>
           {/* Одна кнопка в шапке, и её меню — единственное место, куда
@@ -856,6 +872,7 @@ export default function NewTracker() {
             accountName={withoutSelfMark(myName)}
             extra={<ConnectionStatus offline={offline} />}
             items={[
+              { id: "account", label: "Личный кабинет", icon: "users" as const, onSelect: () => setAccountOpen(true) },
               ...(isOwner ? [{ id: "team", label: "Команда", icon: "users" as const, onSelect: () => setTeamOpen(true) }] : []),
               // Поиск вернулся сюда 23.09.2026. Он жил здесь до 22.09.2026,
               // переехал шестой кнопкой в нижнюю панель, а с появлением
@@ -1069,25 +1086,13 @@ export default function NewTracker() {
               className="btn account-btn"
               id="accountBtn"
               title="Личный кабинет"
-              onClick={(e) => setAccountMenuAnchor(e.currentTarget.getBoundingClientRect())}
+              onClick={() => setAccountOpen(true)}
             >
               <Icon name="users" size={14} /> {withoutSelfMark(myName) || "Аккаунт"}
             </button>
           </div>
         </div>
       </header>
-      {accountMenuAnchor && (
-        <ActionMenu
-          anchor={accountMenuAnchor}
-          title={MEMBER_ROLE_LABELS[identity.memberRole]}
-          items={[
-            ...awayItem,
-            { id: "calendar", label: "Встречи в календаре телефона", icon: "calendar", onSelect: () => void subscribeCalendar() },
-            { id: "signout", label: "Выйти", icon: "logout", onSelect: () => actions.signOut() },
-          ]}
-          onClose={() => setAccountMenuAnchor(null)}
-        />
-      )}
       {/* Мессенджер — первое, чего не хватает человеку, который вошёл по
           приглашению: без него задачи, напоминания и кнопки «Принял /
           Сделал» приходят только сюда, а сюда он заходит не каждый день.

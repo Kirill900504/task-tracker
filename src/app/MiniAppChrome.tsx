@@ -26,8 +26,24 @@ import { hasMessengerLaunch } from "@/lib/messengerLaunch";
 // скрипт не загрузится, не будет ровно этих удобств, а трекер откроется
 // как открывался.
 
+// Значение флага — какой мессенджер, а не просто «да»: у каждого свой мост,
+// и до 13.10.2026 внутри MAX грузился телеграмовский. Он MAX не знает, и
+// окно MAX так ни разу и не услышало `ready()` — а держит оно свою белую
+// заглушку именно до этого сигнала или до полной загрузки страницы.
+// «1» — значение из прежней версии: оно означало Telegram.
 const FLAG = "rokas:miniapp";
-const SCRIPT_ID = "tg-webapp-script";
+const SCRIPT_ID = "messenger-webapp-script";
+const BRIDGE: Record<"telegram" | "max", string> = {
+  telegram: "https://telegram.org/js/telegram-web-app.js",
+  max: "https://st.max.ru/js/max-web-app.js",
+};
+
+function launchChannel(hash: string): "telegram" | "max" | null {
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  if (params.get("tgWebAppData")) return "telegram";
+  if (params.get("WebAppData")) return "max";
+  return null;
+}
 
 type TelegramWebApp = {
   ready?: () => void;
@@ -58,38 +74,43 @@ export default function MiniAppChrome() {
 
     // Пришли из мессенджера прямо сейчас — или приходили в этой вкладке
     // раньше. Второе и есть причина флага: на «/» фрагмента уже нет.
-    let launched = false;
+    let channel: "telegram" | "max" | null = null;
     try {
-      launched = sessionStorage.getItem(FLAG) === "1";
+      const stored = sessionStorage.getItem(FLAG);
+      channel = stored === "max" ? "max" : stored ? "telegram" : null;
     } catch {
       // Приватное окно или запрет на хранилище: тогда работаем только по
       // фрагменту, то есть на первой странице.
     }
     // Тем же правилом, каким это распознаёт страница входа: второй
     // разбор фрагмента разошёлся бы с первым в первый же день.
-    const fromHash = hasMessengerLaunch(window.location.hash || "");
-    if (fromHash && !launched) {
-      launched = true;
+    const hash = window.location.hash || "";
+    if (hasMessengerLaunch(hash)) {
+      channel = launchChannel(hash) ?? channel;
       try {
-        sessionStorage.setItem(FLAG, "1");
+        if (channel) sessionStorage.setItem(FLAG, channel);
       } catch {
         /* см. выше */
       }
     }
-    if (!launched) return;
+    if (!channel) return;
 
+    const current = () => {
+      const w = window as unknown as { Telegram?: { WebApp?: TelegramWebApp }; WebApp?: TelegramWebApp };
+      return channel === "max" ? w.WebApp : w.Telegram?.WebApp;
+    };
     // Объект уже есть (скрипт подключён мессенджером или нами раньше).
-    if (win.Telegram?.WebApp || win.WebApp) {
-      tune(win.Telegram?.WebApp ?? win.WebApp);
+    if (channel === "max" ? win.WebApp : win.Telegram?.WebApp) {
+      tune(current());
       return;
     }
     if (document.getElementById(SCRIPT_ID)) return;
 
     const script = document.createElement("script");
     script.id = SCRIPT_ID;
-    script.src = "https://telegram.org/js/telegram-web-app.js";
+    script.src = BRIDGE[channel];
     script.async = true;
-    script.onload = () => tune((window as unknown as { Telegram?: { WebApp?: TelegramWebApp } }).Telegram?.WebApp);
+    script.onload = () => tune(current());
     // Молча: не загрузился — значит просто нет этих удобств.
     script.onerror = () => {};
     document.head.appendChild(script);

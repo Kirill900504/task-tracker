@@ -150,7 +150,7 @@ export function colleagueHelp(name: string): string {
 // уехавшего вверх, должна открывать хоть что-то.
 function listView(action: CallbackAction): ColleagueQuery {
   if (action.kind === "meeting") return "meetings";
-  const known: ColleagueQuery[] = ["today", "overdue", "review", "menu", "help"];
+  const known: ColleagueQuery[] = ["today", "overdue", "review", "menu", "help", "enter", "app"];
   return known.find((v) => v === action.id) ?? "tasks";
 }
 

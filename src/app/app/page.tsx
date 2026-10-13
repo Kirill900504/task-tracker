@@ -87,12 +87,20 @@ export default function MiniApp() {
       try {
         const res = await fetch(`/api/${launch.channel}/miniapp-auth`, {
           method: "POST",
+          credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ initData: launch.initData }),
         });
         const body = (await res.json().catch(() => null)) as
-          | { tokenHash?: string; error?: string; fields?: string[] }
+          | { signedIn?: boolean; tokenHash?: string; error?: string; fields?: string[] }
           | null;
+        // Сессию поставил сам маршрут (lib/miniAppRoute) — или она уже
+        // была у этого же человека. Обычный случай, и в нём браузер больше
+        // никуда не ходит до самого трекера.
+        if (res.ok && body?.signedIn) {
+          window.location.replace("/");
+          return;
+        }
         if (!res.ok || !body?.tokenHash) {
           if (!cancelled) {
             setStage({

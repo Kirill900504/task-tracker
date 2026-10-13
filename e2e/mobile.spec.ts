@@ -395,7 +395,7 @@ test("в мини-приложении подключается скрипт м�
 
   // Обычный вход: никакого чужого скрипта на странице.
   await login(page);
-  await expect(page.locator("#tg-webapp-script")).toHaveCount(0);
+  await expect(page.locator("#messenger-webapp-script")).toHaveCount(0);
   expect(asked, "в обычном браузере скрипт мессенджера не должен запрашиваться").toBe(0);
 
   // Пришли «из мессенджера»: подпись заведомо негодная, вход не удастся —
@@ -404,7 +404,17 @@ test("в мини-приложении подключается скрипт м�
   await page.goto("/login#tgWebAppData=auth_date%3D1%26hash%3Dnope");
   // Сам тег — и есть предмет проверки: загрузился ли он к этой секунде,
   // дело асинхронное и к правилу отношения не имеет.
-  await expect(page.locator("#tg-webapp-script")).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.locator("#messenger-webapp-script")).toHaveAttribute("src", /telegram\.org/, { timeout: 15_000 });
+});
+
+// Внутри MAX — мост MAX. До 13.10.2026 грузился телеграмовский: MAX его не
+// знает, `ready()` до окна не доходил, и окно держало свою белую заглушку.
+test("в мини-приложении MAX подключается мост MAX, а не телеграмовский", async ({ page }) => {
+  await page.route("https://st.max.ru/js/max-web-app.js", (route) =>
+    route.fulfill({ status: 200, contentType: "application/javascript", body: "window.WebApp={ready(){},expand(){}};" }),
+  );
+  await page.goto("/login#WebAppData=auth_date%3D1%26hash%3Dnope");
+  await expect(page.locator("#messenger-webapp-script")).toHaveAttribute("src", /st\.max\.ru/, { timeout: 15_000 });
 });
 
 // «Принял» — из списка, не открывая карточку.

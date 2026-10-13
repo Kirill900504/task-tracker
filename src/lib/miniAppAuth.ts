@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig } from "@/lib/botTransport";
 import { checkInitData } from "@/lib/telegramInitData";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { ensureCabinet } from "@/lib/cabinet";
 
 // Вход в трекер из мини-приложения — одинаковый для Telegram и MAX.
 //
@@ -23,11 +24,13 @@ import { checkRateLimit } from "@/lib/rateLimit";
 // один раз и забыт. Мессенджер уже знает, кто перед ним, и подтверждает
 // это подписью, которую нельзя подделать, не зная токена бота.
 //
-// Чем это НЕ является: новым доступом. Сессия выдаётся только тому, у кого
-// вход в трекер уже есть; человеку без учётной записи отвечаем словами.
+// Чем это НЕ является: новым доступом. Сессия выдаётся только тому, чей
+// чат привязан к строке в «Команде» — привязку выдаёт Кирилл, — и никогда
+// тому, кому он доступ отключил. Учётной записи у такого человека может
+// ещё не быть: тогда она заводится здесь же (lib/cabinet).
 
 export type MiniAppResult =
-  | { ok: true; tokenHash: string; email: string }
+  | { ok: true; tokenHash: string; email: string; same?: boolean }
   // `fields` — только имена полей, пришедших от мессенджера, и только
   // когда подпись не сошлась. Без них отказ ничего не объясняет, а
   // повторить настоящую подпись на нашей стороне нельзя.
@@ -38,6 +41,7 @@ export async function miniAppSession(
   channel: BotChannelConfig,
   botToken: string,
   initData: string,
+  currentUserId: string | null = null,
 ): Promise<MiniAppResult> {
   const check = checkInitData(initData, botToken);
   if (!check.ok) return { ok: false, status: 401, error: check.error, fields: check.fields };
@@ -63,31 +67,30 @@ export async function miniAppSession(
       .limit(1)
       .maybeSingle();
     const assigneeId = (person as { id: string } | null)?.id;
-    if (assigneeId) {
-      const { data: member } = await admin
-        .from("workspace_members")
-        .select("member_id")
-        .eq("assignee_id", assigneeId)
-        .eq("status", "active")
-        .maybeSingle();
-      authId = (member as { member_id: string | null } | null)?.member_id || null;
+    if (!assigneeId) {
+      // Чат вовсе не привязан ни к кому в «Команде» — тут кабинета не
+      // завести: неизвестно, чей он.
+      return {
+        ok: false,
+        status: 403,
+        error:
+          "Этот чат ещё не подключён к трекеру. Откройте ссылку подключения, которую прислал Кирилл, " +
+          "или нажмите «Подключить» в своём трекере — и возвращайтесь сюда.",
+      };
     }
+    // Чат привязан — значит, Кирилл этого человека в трекер уже позвал, и
+    // кабинет заводится сам (lib/cabinet). Раньше здесь был отказ «нет
+    // входа, попросите приглашение» — то есть второй круг через Кирилла.
+    const cabinet = await ensureCabinet(admin, assigneeId);
+    if (!cabinet.ok) return { ok: false, status: 403, error: cabinet.error };
+    authId = cabinet.authId;
   }
 
-  if (!authId) {
-    // Два разных «нет», и разница человеку важна: чат может быть вовсе не
-    // привязан, а может принадлежать тому, кому задачи только присылают.
-    // Второе — не поломка и не недонастройка, а то, как трекер устроен, и
-    // сказать об этом надо словами, а не пустым экраном в окне без
-    // адресной строки.
-    return {
-      ok: false,
-      status: 403,
-      error:
-        "У этого чата нет входа в трекер. Задачи и кнопки работают прямо здесь, в боте — напишите «меню». " +
-        "Если нужен полный доступ, попросите Кирилла прислать приглашение.",
-    };
-  }
+  // Тот же человек уже вошёл в этом окне — новая сессия не нужна, и это
+  // самый частый случай: мини-приложение открывают по десять раз на дню.
+  // Раньше каждое открытие выписывало одноразовый код и меняло его на
+  // сессию — два лишних полёта до Supabase перед первым кадром.
+  if (currentUserId && currentUserId === authId) return { ok: true, same: true, tokenHash: "", email: "" };
 
   // Считаем по найденному входу, а не по чату: ограничиваем того, кому
   // выдаём сессию.

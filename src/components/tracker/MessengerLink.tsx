@@ -53,7 +53,9 @@ function readDismissed(): boolean {
   }
 }
 
-export default function MessengerLink({ messenger }: { messenger: MessengerState }) {
+// `embedded` — та же плашка внутри личного кабинета: там она не плавает,
+// не прячется крестиком и показывает подключённое, а не только недостающее.
+export default function MessengerLink({ messenger, embedded = false }: { messenger: MessengerState; embedded?: boolean }) {
   const [pending, setPending] = useState<{ channel: ColleagueChannel; link: string; code: string } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -103,7 +105,7 @@ export default function MessengerLink({ messenger }: { messenger: MessengerState
   // Свёрнутое напоминание закрыто крестиком: ничего не рисуем, пока не
   // начали подключать канал (тогда есть что показать — код или ссылку) и
   // пока сам мессенджер не подключился (тогда напоминание и не про что).
-  if (dismissed && !connected && !pending) {
+  if (!embedded && dismissed && !connected && !pending) {
     return (
       <button type="button" className="ms-link-dismissed" onClick={() => setDismissed(false)}>
         <Icon name="link" size={13} /> Мессенджер не подключён
@@ -114,8 +116,8 @@ export default function MessengerLink({ messenger }: { messenger: MessengerState
   const PendingBrandIcon = pending ? BRAND_ICON[pending.channel] : TelegramBrandIcon;
 
   return (
-    <div className={"ms-link" + (connected ? " ms-link-quiet" : "")}>
-      {!connected && !pending && (
+    <div className={"ms-link" + (connected ? " ms-link-quiet" : "") + (embedded ? " ms-link-embedded" : "")}>
+      {!embedded && !connected && !pending && (
         <button type="button" className="ms-link-close" aria-label="Скрыть напоминание" onClick={() => {
           setDismissed(true);
           try { sessionStorage.setItem(DISMISS_KEY, "1"); } catch { /* см. readDismissed */ }
@@ -146,6 +148,29 @@ export default function MessengerLink({ messenger }: { messenger: MessengerState
         <div className="ms-link-actions">
           {offer.map((channel) => {
             const BrandIcon = BRAND_ICON[channel];
+            // Код выписан заранее (useMyMessenger.prepared) — кнопка сразу
+            // ссылка на бота: нажатию не нужен сервер, а значит, его не
+            // остановит моргнувшая сеть. Блок с кодом и «Готово, проверить»
+            // раскрывается тем же нажатием.
+            const ready = messenger.prepared[channel];
+            if (ready) {
+              return (
+                <a
+                  key={channel}
+                  className={"btn btn-small" + (connected ? "" : " btn-primary")}
+                  href={ready.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => {
+                    setError("");
+                    setNotYet(false);
+                    setPending({ channel, link: ready.link, code: ready.code });
+                  }}
+                >
+                  <BrandIcon size={15} /> Подключить {LABEL[channel]}
+                </a>
+              );
+            }
             return (
               <button
                 key={channel}

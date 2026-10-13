@@ -222,7 +222,7 @@ test("встречи уходят в календарь телефона по л
     ]);
     await login(page);
     await page.click("#accountBtn");
-    await page.locator(".export-item", { hasText: "Встречи в календаре телефона" }).click();
+    await page.locator(".account-item", { hasText: "Встречи в календаре телефона" }).click();
     await expect(page.getByRole("button", { name: "Подписаться" })).toBeVisible();
     await page.keyboard.press("Escape");
 

@@ -36,7 +36,47 @@ export type MessengerState = {
   // почему одной ссылки мало.
   connect: (channel: ColleagueChannel) => Promise<ConnectResult>;
   refresh: () => Promise<LinkedNow>;
+  // Ссылка и код, выписанные ЗАРАНЕЕ, — по каналу, который ещё не
+  // подключён. Кнопка «Подключить» с ними — обычная ссылка, которой в
+  // момент нажатия сервер не нужен вовсе (см. PREPARED_KEY).
+  prepared: Partial<Record<ColleagueChannel, { link: string; code: string }>>;
 };
+
+// Выписанный код лежит в браузере до истечения.
+//
+// 13.10.2026 Юрий Нодберг снова не смог подключиться сам: ни одна из двух
+// кнопок не сработала, обе ответили «Нет связи с сервером трекера», и
+// подключился он только ссылкой, которую Кирилл выдал из «Команды». Запрос
+// за кодом шёл В МОМЕНТ НАЖАТИЯ — то есть ровно тогда, когда телефон в
+// дороге, сеть моргает, а вкладка, открытая из кэша, ещё не проснулась.
+// Повтор через секунду (добавлен после первого такого случая 25.09) этого
+// не лечит. Теперь код просится, как только трекер открылся и понял, что
+// мессенджера нет, и запоминается здесь; нажатие уже ничего не спрашивает.
+// Код живёт трое суток на сервере (api/telegram/invite) — здесь меньше,
+// чтобы ссылка не умерла у человека в руках.
+const PREPARED_KEY = (assigneeId: string, channel: ColleagueChannel) => `rokas:ms-code:${assigneeId}:${channel}`;
+const PREPARED_TTL_MS = 2 * 24 * 60 * 60 * 1000;
+
+function readPrepared(assigneeId: string, channel: ColleagueChannel): { link: string; code: string } | null {
+  try {
+    const raw = localStorage.getItem(PREPARED_KEY(assigneeId, channel));
+    if (!raw) return null;
+    const value = JSON.parse(raw) as { link?: string; code?: string; until?: number };
+    if (!value.link || !value.code || !value.until || value.until < Date.now()) return null;
+    return { link: value.link, code: value.code };
+  } catch {
+    return null;
+  }
+}
+
+function writePrepared(assigneeId: string, channel: ColleagueChannel, value: { link: string; code: string } | null) {
+  try {
+    if (value) localStorage.setItem(PREPARED_KEY(assigneeId, channel), JSON.stringify({ ...value, until: Date.now() + PREPARED_TTL_MS }));
+    else localStorage.removeItem(PREPARED_KEY(assigneeId, channel));
+  } catch {
+    /* хранилище закрыто — тогда просто без запаса, как раньше */
+  }
+}
 
 // Чтение отдельно от состояния: строку читает функция вне хука, а в React
 // её результат кладёт `apply`. Это не стиль, а требование — правило
@@ -154,11 +194,47 @@ export function useMyMessenger(assigneeId: string): MessengerState {
     [assigneeId],
   );
 
+  // Запас кода — по каждому неподключённому каналу, фоном. Из браузерной
+  // памяти, если там свежий; иначе с сервера, и тогда в память. Повторяется
+  // при возвращении на вкладку, пока не получится: сеть, которой не было
+  // при открытии, к этому времени обычно есть.
+  const [fetched, setFetched] = useState<Partial<Record<ColleagueChannel, { link: string; code: string }>>>({});
+  const needTg = !state.loading && !state.tg.connected;
+  const needMax = !state.loading && maxBot.available && !state.mx.connected;
+  useEffect(() => {
+    if (!assigneeId) return;
+    let alive = true;
+    const wanted: ColleagueChannel[] = [...(needTg ? ["telegram" as const] : []), ...(needMax ? ["max" as const] : [])];
+    const fill = () => {
+      for (const channel of wanted) {
+        if (readPrepared(assigneeId, channel)) continue;
+        void connect(channel).then((result) => {
+          if (!alive || !result.ok || !result.link) return;
+          writePrepared(assigneeId, channel, { link: result.link, code: result.code });
+          setFetched((prev) => ({ ...prev, [channel]: { link: result.link, code: result.code } }));
+        });
+      }
+    };
+    fill();
+    window.addEventListener("focus", fill);
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", fill);
+    };
+  }, [assigneeId, needTg, needMax, connect]);
+
+  // Подключённому каналу запас не нужен — и показывать его нельзя: код уже
+  // сгорел на сервере.
+  const prepared: MessengerState["prepared"] = {};
+  if (assigneeId && needTg) prepared.telegram = fetched.telegram ?? readPrepared(assigneeId, "telegram") ?? undefined;
+  if (assigneeId && needMax) prepared.max = fetched.max ?? readPrepared(assigneeId, "max") ?? undefined;
+
   return {
     loading: state.loading,
     telegram: state.tg,
     max: { ...state.mx, available: maxBot.available },
     connect,
     refresh,
+    prepared,
   };
 }

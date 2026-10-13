@@ -39,18 +39,28 @@ function headers(token: string): Record<string, string> {
   return { Authorization: token, "Content-Type": "application/json" };
 }
 
-function keyboardAttachment(buttons: BotButton[][]) {
+// Кнопка, открывающая трекер, — `open_app`, то есть мини-приложение прямо
+// в чате, с подписью MAX, по которой /app впускает без пароля. До
+// 13.10.2026 здесь стояла обычная ссылка: мини-приложения у бота тогда не
+// было, и ссылка уводила во внешний браузер — без подписи, то есть на
+// форму входа с паролем, которого человек не помнит. Мини-приложение
+// подключено 20.09.2026 (CLAUDE.md). Поле `web_app` — имя бота, чьё
+// мини-приложение открыть, а не адрес: на адрес MAX отвечает «Link not
+// found» (проверено запросом 13.10.2026). Пока имя бота неизвестно, кнопка
+// остаётся ссылкой — молча превратить её в callback было бы хуже всего:
+// нажатие ушло бы боту, который о ней ничего не знает.
+export function keyboardAttachment(buttons: BotButton[][], botUsername = "") {
   return {
     type: "inline_keyboard",
     payload: {
-      // Кнопка, открывающая трекер, в MAX — обычная ссылка, а не
-      // мини-приложение: опубликованного мини-приложения у нас там нет
-      // (правка published-бота уходит на модерацию, см. CLAUDE.md), а
-      // ссылка открывает тот же трекер во внешнем браузере и работает
-      // сегодня. Молча превратить её в callback было бы хуже всего:
-      // нажатие ушло бы боту, который о ней ничего не знает.
       buttons: buttons.map((row) =>
-        row.map((b) => (b.app ? { type: "link", text: b.text, url: b.app } : { type: "callback", text: b.text, payload: b.data })),
+        row.map((b) =>
+          b.app
+            ? botUsername
+              ? { type: "open_app", text: b.text, web_app: botUsername }
+              : { type: "link", text: b.text, url: b.app }
+            : { type: "callback", text: b.text, payload: b.data },
+        ),
       ),
     },
   };
@@ -87,7 +97,7 @@ export async function sendMaxMessage(userId: number, text: string, options?: { b
       headers: headers(settings.token),
       body: JSON.stringify({
         text: clip(text),
-        ...(options?.buttons?.length ? { attachments: [keyboardAttachment(options.buttons)] } : {}),
+        ...(options?.buttons?.length ? { attachments: [keyboardAttachment(options.buttons, settings.username)] } : {}),
       }),
     });
     if (!res.ok) return { ok: false, error: await errorText(res) };
@@ -167,7 +177,7 @@ export async function editMaxMessage(messageId: string, text: string, buttons?: 
       // the rewrite is that they stop being offered. Непустой — заменяет
       // их: ответ, данный в Telegram, оставляет в MAX ровно те кнопки,
       // что ещё действуют (lib/botMirror).
-      body: JSON.stringify({ text: clip(text), attachments: buttons?.length ? [keyboardAttachment(buttons)] : [] }),
+      body: JSON.stringify({ text: clip(text), attachments: buttons?.length ? [keyboardAttachment(buttons, settings.username)] : [] }),
     });
   } catch {
     /* cosmetic */
@@ -223,7 +233,7 @@ export async function answerMaxCallback(
                 // MAX это единственный способ оставить действие доступным
                 // после нажатия: переписанное сообщение — весь ответ,
                 // который человек увидит.
-                attachments: buttons?.length ? [keyboardAttachment(buttons)] : [],
+                attachments: buttons?.length ? [keyboardAttachment(buttons, settings.username)] : [],
               },
             }
           : {}),

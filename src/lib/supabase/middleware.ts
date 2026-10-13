@@ -1,7 +1,32 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// A write to /api sent by a page on ANOTHER site. The sign-in cookie is
+// SameSite=Lax today, which already keeps it off such a request — but that is
+// the library's default, not a decision of ours, and the routes read their
+// bodies with req.json() whatever the Content-Type, so a form posting
+// text/plain would reach them the moment the default changed (the MAX
+// mini-app on a computer lives in a cross-site frame and is exactly the
+// reason it might). This makes the rule ours. Browsers always send Origin on
+// a cross-site POST; a missing one means a server calling us (the messenger
+// webhooks, the cron pinger), and those carry their own secrets.
+export function crossSiteWrite(method: string, origin: string | null, host: string | null): boolean {
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return false;
+  if (!origin || !host) return false;
+  try {
+    return new URL(origin).host !== host;
+  } catch {
+    return true;
+  }
+}
+
 export async function updateSession(request: NextRequest) {
+  if (
+    request.nextUrl.pathname.startsWith("/api/") &&
+    crossSiteWrite(request.method, request.headers.get("origin"), request.headers.get("host"))
+  ) {
+    return NextResponse.json({ error: "Запрос пришёл не со страницы трекера" }, { status: 403 });
+  }
   // Маршруты /api — мимо, и ДО всякого обращения к Supabase.
   //
   // `auth.getUser()` ниже — это запрос по сети, и стоял он первой строкой:

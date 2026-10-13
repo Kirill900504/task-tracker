@@ -14,13 +14,21 @@ import type { NextConfig } from "next";
 const SUPABASE_ORIGIN = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://*.supabase.co";
 const SUPABASE_WS = SUPABASE_ORIGIN.replace(/^https:/, "wss:");
 
+// The messengers' own mini-app bridges (window.Telegram.WebApp and MAX's
+// window.WebApp). MiniAppChrome loads one of them, and only inside the
+// mini-app; until 13.10.2026 the policy refused both, so «ready», full height
+// and the swipe lock had never once reached either messenger.
+const BRIDGE_SCRIPTS = "https://telegram.org https://st.max.ru";
+
 const CSP = [
   "default-src 'self'",
   // 'unsafe-eval' only in development: React's dev build uses eval() for
   // debugging features (reconstructing call stacks, and so on) and floods
   // the console with CSP errors without it. The production build never
   // calls eval, so the deployed policy stays without it.
-  process.env.NODE_ENV === "production" ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  process.env.NODE_ENV === "production"
+    ? `script-src 'self' 'unsafe-inline' ${BRIDGE_SCRIPTS}`
+    : `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${BRIDGE_SCRIPTS}`,
   "style-src 'self' 'unsafe-inline'",
   // Supabase in img-src and frame-src: attachments are signed Storage URLs on
   // the Supabase host, and without it every photo in a report or a thread

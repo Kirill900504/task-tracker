@@ -129,7 +129,8 @@ export async function settled(locator: Locator, tries = 20): Promise<{ x: number
 // с этого момента про выход знает только этот хелпер.
 export async function signOut(page: Page) {
   await page.click("#accountBtn");
-  await page.locator(".export-item", { hasText: "Выйти" }).click();
+  // С 13.10.2026 это окно «Личный кабинет», и «Выйти» — его кнопка внизу.
+  await page.locator(".account-modal").getByRole("button", { name: "Выйти" }).click();
 }
 
 // Сделать задачу ЧУЖИМ поручением тестовому аккаунту.

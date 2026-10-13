@@ -57,6 +57,7 @@ export type IconName =
   | "tasks"
   | "inbox"
   | "bulb"
+  | "smile"
   | "today";
 
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -271,6 +272,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
   // Мысль: лампа. Единственный значок набора, у которого есть «лучик», и
   // он тут к месту — соседние четыре про работу, а этот про то, что в
   // голову пришло.
+  smile: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M8.6 14.2a4.2 4.2 0 0 0 6.8 0" />
+      <path d="M9.3 9.8h.01" />
+      <path d="M14.7 9.8h.01" />
+    </>
+  ),
   bulb: (
     <>
       <path d="M9 17.5h6" />

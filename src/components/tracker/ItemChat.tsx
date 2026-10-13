@@ -10,6 +10,8 @@ import MicButton from "./MicButton";
 import { humanError } from "@/lib/humanError";
 import { withoutSelfMark } from "@/lib/actorName";
 import { ChatMuteButton } from "./AlertsButton";
+import EmojiPicker from "./EmojiPicker";
+import { insertAt, nearBottom, splitLinks } from "@/lib/chatText";
 
 // Обсуждение задачи там же, где задача.
 //
@@ -112,10 +114,26 @@ function escapeRegExp(s: string): string {
 // приёмом, что цвет имени над чужой репликой. Список кандидатов — участники
 // именно этой задачи/встречи, а не всё пространство: тегнуть можно только
 // того, кто и так эту переписку видит.
+// Ссылки в сообщении нажимаются — как в любом мессенджере. Раньше адрес
+// был просто текстом, и его приходилось выделять и копировать.
+function withLinks(text: string, keyBase: string) {
+  const parts = splitLinks(text);
+  if (parts.length === 1 && typeof parts[0] === "string") return text;
+  return parts.map((part, i) =>
+    typeof part === "string" ? (
+      part
+    ) : (
+      <a key={keyBase + i} className="chat-link" href={part.url} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>
+        {part.text}
+      </a>
+    ),
+  );
+}
+
 function renderWithMentions(body: string, candidates: string[]) {
-  if (!candidates.length || !body.includes("@")) return body;
+  if (!candidates.length || !body.includes("@")) return withLinks(body, "l");
   const names = [...new Set(candidates)].filter(Boolean).sort((a, b) => b.length - a.length).map(escapeRegExp);
-  if (!names.length) return body;
+  if (!names.length) return withLinks(body, "l");
   const re = new RegExp(`@(?:${names.join("|")})`, "g");
   const parts: Array<string | { key: number; text: string }> = [];
   let last = 0;
@@ -127,9 +145,11 @@ function renderWithMentions(body: string, candidates: string[]) {
     last = m.index + m[0].length;
   }
   if (last < body.length) parts.push(body.slice(last));
-  if (parts.length <= 1 && typeof parts[0] === "string") return body;
-  return parts.map((p) =>
-    typeof p === "string" ? p : (
+  if (parts.length <= 1 && typeof parts[0] === "string") return withLinks(body, "l");
+  return parts.map((p, i) =>
+    typeof p === "string" ? (
+      <span key={"t" + i}>{withLinks(p, "l" + i + "-")}</span>
+    ) : (
       <span className="chat-mention" key={p.key} style={{ color: colorOf(p.text.slice(1)) }}>
         {p.text}
       </span>
@@ -222,6 +242,11 @@ export default function ItemChat({
   // секунду подсвечивается и само по себе гаснет.
   const [flashId, setFlashId] = useState<string | null>(null);
   const draftRef = useRef<HTMLTextAreaElement>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  // Внизу ли лента — и сколько пришло, пока человек читал выше.
+  const atBottom = useRef(true);
+  const [unseen, setUnseen] = useState(0);
+  const lastCount = useRef(0);
 
   // Лента прокручивается к последнему сообщению — как любой мессенджер.
   //
@@ -229,12 +254,46 @@ export default function ItemChat({
   // ради чего карточку открыли, надо листать вниз через весь разговор.
   // Прокручиваем на каждое изменение длины ленты: и при открытии, и когда
   // пришло чужое сообщение, и когда отправили своё.
+  //
+  // Но не всегда, а как это делает Telegram: только если человек и так был
+  // внизу или сообщение его собственное. Раньше лента прыгала вниз на каждое
+  // пришедшее сообщение, и читать историю выше, пока коллеги пишут, было
+  // нельзя — её вырывало из-под глаз. Пропущенное считает кнопка «вниз».
   const feed = useRef<HTMLDivElement>(null);
   const count = comments.length;
+  const lastMine = comments[count - 1]?.mine ?? false;
   useEffect(() => {
     const el = feed.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [count]);
+    const grew = count - lastCount.current;
+    const first = lastCount.current === 0;
+    lastCount.current = count;
+    if (!el) return;
+    if (first || atBottom.current || lastMine) {
+      el.scrollTop = el.scrollHeight;
+      atBottom.current = true;
+    } else if (grew > 0) {
+      // Колбэк пришедшего изменения, а не синхронный setState эффекта:
+      // счёт растёт от того, что лента выросла, пока человек читал выше.
+      queueMicrotask(() => setUnseen((n) => n + grew));
+    }
+  }, [count, lastMine]);
+
+  function toBottom() {
+    const el = feed.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    atBottom.current = true;
+    setUnseen(0);
+  }
+
+  function insertEmoji(emoji: string) {
+    const el = draftRef.current;
+    const { value, caret } = insertAt(draft, el?.selectionStart ?? draft.length, el?.selectionEnd ?? draft.length, emoji);
+    setDraft(value);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(caret, caret);
+    });
+  }
 
   // Долгое нажатие на телефоне открывает то же меню, что правая кнопка на
   // компьютере: 450 мс — граница, на которой обычное нажатие ещё не
@@ -406,7 +465,16 @@ export default function ItemChat({
           формы: без ленты поле ввода поднималось под самый заголовок, а с
           приходом сообщений уезжало вниз — окно прыгало. Теперь меняется
           только содержимое ленты, а поле стоит на своём месте. */}
-      <div className={"chat-feed" + (loading || comments.length === 0 ? " is-empty" : "")} ref={feed}>
+      <div
+        className={"chat-feed" + (loading || comments.length === 0 ? " is-empty" : "")}
+        ref={feed}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const bottom = nearBottom(el.scrollTop, el.clientHeight, el.scrollHeight);
+          atBottom.current = bottom;
+          if (bottom && unseen) setUnseen(0);
+        }}
+      >
         {loading && (
           <div className="chat-skeleton" aria-hidden>
             <div className="chat-skel-line" style={{ width: "62%" }} />
@@ -511,6 +579,16 @@ export default function ItemChat({
                         setMenuFor({ id: c.id, at: { x: e.clientX, y: e.clientY } });
                       }}
                       {...(c.sending || editingThis ? {} : longPressProps(c.id))}
+                      // Двойное нажатие — быстрая реакция 👍, как в Telegram.
+                      // Выделение слова, которое браузер делает тем же
+                      // движением, снимается: реакцию ставили, а не копировали.
+                      onDoubleClick={(e) => {
+                        if (c.sending || editingThis || c.proposal) return;
+                        if ((e.target as HTMLElement).closest("button, a, textarea, input")) return;
+                        window.getSelection()?.removeAllRanges();
+                        const on = c.reactions.some((r) => r.emoji === "👍" && r.mine);
+                        void react(c.id, "👍", !on);
+                      }}
                     >
                       {!c.mine && !sameAuthor && (
                         <div className="chat-author" style={{ color: colorOf(c.authorName) }}>
@@ -695,6 +773,15 @@ export default function ItemChat({
         )}
       </div>
 
+      {/* «Вниз» — когда ленту увели выше конца; число на ней — сколько
+          пришло за это время. */}
+      {unseen > 0 && (
+        <button type="button" className="chat-down" aria-label="К новым сообщениям" onClick={toBottom}>
+          <Icon name="arrow-down" size={16} />
+          <span className="chat-down-count">{unseen}</span>
+        </button>
+      )}
+
       {/* Меню сообщения — одно на всю ветку, а не по штуке на реплику:
           открыто всегда не больше одного. */}
       {menuFor && (() => {
@@ -810,8 +897,23 @@ export default function ItemChat({
               if (mentionHits.length) pickMention(mentionHits[0]);
               else void handleSend();
             }
+            if (e.key === "Escape" && emojiOpen) {
+              e.preventDefault();
+              e.stopPropagation();
+              setEmojiOpen(false);
+              return;
+            }
             if (e.key === "Escape" && replyTo) {
               setReplyTo(null);
+            }
+            // ↑ в пустом поле — исправить своё последнее сообщение, как в
+            // Telegram и Slack: опечатку замечают сразу после отправки.
+            if (e.key === "ArrowUp" && !draft) {
+              const own = [...comments].reverse().find((x) => x.mine && !x.system && !x.sending && !x.proposal);
+              if (own) {
+                e.preventDefault();
+                startEdit(own);
+              }
             }
           }}
           rows={2}
@@ -832,6 +934,20 @@ export default function ItemChat({
             обсуждениях». Надиктованное дописывается в поле, а не уходит
             само: распознавание ошибается, и прочесть перед отправкой
             дешевле, чем исправлять отправленное. */}
+        {/* Смайлики — у поля, как в Telegram и MAX. */}
+        <div className="chat-emoji-wrap">
+          <button
+            type="button"
+            className={"btn btn-small chat-clip" + (emojiOpen ? " on" : "")}
+            title="Смайлики"
+            aria-label="Смайлики"
+            aria-expanded={emojiOpen}
+            onClick={() => setEmojiOpen((v) => !v)}
+          >
+            <Icon name="smile" size={16} />
+          </button>
+          {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
+        </div>
         <MicButton value={draft} onChange={setDraft} title="Надиктовать сообщение" />
         <button
           type="button"

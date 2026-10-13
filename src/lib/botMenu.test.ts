@@ -46,16 +46,19 @@ describe("меню бота", () => {
       .join(" ");
     expect(labels).not.toContain("Поручить");
     expect(labels).not.toContain("Люди");
-    // И трекер тоже: входа у него нет, мини-приложение ответило бы
-    // отказом, а кнопка, ведущая к отказу, хуже отсутствующей.
-    expect(labels).not.toContain("Открыть трекер");
   });
 
-  it("кнопка «Открыть трекер» открывает страницу, а не пишет боту", () => {
-    const app = menuButtons("assigner")
-      .flat()
-      .find((b) => b.text.includes("Открыть трекер"));
-    expect(app?.app).toMatch(/^https:\/\/.+\/app$/);
+  it("первой строкой — мобильное приложение, у обеих половин (13.10.2026)", () => {
+    // «Меню должно предлагать оба варианта — и меню кнопок, и мобильное
+    // приложение». Получателю тоже: кабинет у него теперь заводится при
+    // первом открытии (lib/cabinet), так что кнопка не ведёт к отказу.
+    for (const who of ["assigner", "recipient"] as const) {
+      const first = menuButtons(who)[0];
+      expect(first).toHaveLength(1);
+      expect(first[0].text).toContain("Мобильное приложение");
+      expect(first[0].app).toMatch(/^https:\/\/.+\/app$/);
+      expect(menuButtons(who).flat().map((b) => b.text).join(" ")).toContain("Вход с компьютера");
+    }
   });
 
   it("каждая кнопка адресована той половине, которая её разбирает", () => {
@@ -69,8 +72,10 @@ describe("меню бота", () => {
       // и в его чате нажатие, не узнанное постановщицкой половиной,
       // разбирается половиной получателя (lib/botCallback) — проверено на
       // живой базе в чате владельца 07.10.2026.
+      // Так же разбираются кнопки, общие для всех: вход с компьютера и
+      // запасной ответ кнопки приложения (меню).
       if (decoded.action === "list") {
-        expect(decoded.id).toBe("my");
+        expect(["my", "enter", "menu"]).toContain(decoded.id);
         continue;
       }
       expect(["olist", "omenu", "new"]).toContain(decoded.action);
