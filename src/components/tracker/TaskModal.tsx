@@ -32,6 +32,7 @@ import { fmtDate, todayStr } from "@/lib/taskDisplay";
 import { isSnoozed, snoozeChoices } from "@/lib/snooze";
 import { answerWithFiles } from "@/lib/answerFiles";
 import { isSelfTask } from "@/lib/selfTask";
+import { isoDate, workdayIn } from "@/lib/whenDate";
 
 // Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
 // «Понедельник…Воскресенье» подряд не помещаются никуда, а «Пн Вт Ср» читают
@@ -58,10 +59,10 @@ const QUICK_DEADLINES = [
   { label: "Через неделю", days: 7 },
 ];
 
+// «Завтра» и «Через неделю» — рабочим днём: в пятницу «Завтра» ставит
+// понедельник, а не субботу (см. workdayIn в lib/whenDate).
 function isoInDays(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return isoDate(workdayIn(new Date(), days));
 }
 
 // Дата и время — одной строкой, для сводки и для отчётов. Час и минуты

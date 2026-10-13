@@ -7,6 +7,7 @@ import { newTaskRow } from "@/lib/newTask";
 import { attachExecutors, assignNote } from "@/lib/assignExecutors";
 import { withoutSelfMark } from "@/lib/actorName";
 import { uid } from "@/lib/uid";
+import { isoDate, workdayIn } from "@/lib/whenDate";
 
 // Поручить прямо из мессенджера — кнопками, а не фразой.
 //
@@ -87,10 +88,10 @@ export function resolveWhen(code: string, today: Date = new Date()): string {
     // в пятницу, означает следующую — сегодня уже поздно договариваться.
     const ahead = (5 - d.getDay() + 7) % 7 || 7;
     d.setDate(d.getDate() + ahead);
-  } else {
-    d.setDate(d.getDate() + (Number(code) || 0));
+    return isoDate(d);
   }
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // «Завтра» в пятницу — понедельник (см. workdayIn).
+  return isoDate(workdayIn(d, Number(code) || 0));
 }
 
 // Завести задачу и сказать людям. Через assignExecutors — то же, чем это

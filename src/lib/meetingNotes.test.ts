@@ -13,11 +13,13 @@ describe("resolveWhen", () => {
     expect(resolveWhen("", SATURDAY)).toBe("");
   });
 
-  it("resolves the relative labels", () => {
+  it("resolves the relative labels to working days", () => {
+    // "Today" stays today even on a Saturday; everything relative that
+    // lands on a weekend moves to Monday (workdayIn, 13.10.2026).
     expect(resolveWhen("today", SATURDAY)).toBe("2026-09-05");
-    expect(resolveWhen("tomorrow", SATURDAY)).toBe("2026-09-06");
+    expect(resolveWhen("tomorrow", SATURDAY)).toBe("2026-09-07");
     expect(resolveWhen("day_after", SATURDAY)).toBe("2026-09-07");
-    expect(resolveWhen("next_week", SATURDAY)).toBe("2026-09-12");
+    expect(resolveWhen("next_week", SATURDAY)).toBe("2026-09-14");
   });
 
   it("resolves a weekday to its next occurrence", () => {

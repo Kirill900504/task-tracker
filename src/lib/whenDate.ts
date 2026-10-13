@@ -19,6 +19,26 @@ export function addDays(now: Date, days: number): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
 }
 
+// «Завтра», «послезавтра», «через неделю» — это рабочие дни.
+//
+// 13.10.2026, слова Кирилла: «при нажатии „завтра“, например, в пятницу…
+// задача или встреча ставилась автоматически на понедельник, а не на
+// субботу или воскресенье». Суббота и воскресенье — выходные, и срок,
+// упавший на них, никто не увидит до понедельника, а ступени просрочки
+// начнут считать с субботы. Поэтому день, выпавший на выходной, едет на
+// ближайший понедельник. «Сегодня» (ноль дней) не трогается: сегодня —
+// это сегодня, даже в субботу. Названный день недели тоже не трогается —
+// «к субботе» сказано нарочно. Праздники не учитываются: календаря
+// праздников в трекере нет, а выдуманный был бы хуже отсутствующего.
+export function workdayIn(now: Date, days: number): Date {
+  const d = addDays(now, days);
+  if (days === 0) return d;
+  const dow = d.getDay();
+  if (dow === 6) return addDays(d, 2);
+  if (dow === 0) return addDays(d, 1);
+  return d;
+}
+
 // Сегодняшний день ПО МОСКВЕ, обычной локальной датой.
 //
 // Считает это не Vercel, где `new Date()` — это UTC: с полуночи до трёх
@@ -48,9 +68,9 @@ export function resolveWhen(when: string, now: Date): string {
   const key = String(when || "").trim().toLowerCase();
   if (!key || key === "none") return "";
   if (key === "today") return isoDate(now);
-  if (key === "tomorrow") return isoDate(addDays(now, 1));
-  if (key === "day_after") return isoDate(addDays(now, 2));
-  if (key === "next_week") return isoDate(addDays(now, 7));
+  if (key === "tomorrow") return isoDate(workdayIn(now, 1));
+  if (key === "day_after") return isoDate(workdayIn(now, 2));
+  if (key === "next_week") return isoDate(workdayIn(now, 7));
   // "На этой неделе" without a day named: the end of the working week is the
   // most useful reading of it, and never a date already in the past.
   if (key === "this_week") {
