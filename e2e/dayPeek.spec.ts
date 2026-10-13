@@ -75,4 +75,21 @@ test("правый щелчок по дню показывает его зада
   await cell.click({ button: "right" });
   await peek.locator(".day-peek-row", { hasText: meetingTitle }).click();
   await expect(page.locator("dialog[open]", { hasText: meetingTitle })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("dialog[open]", { hasText: meetingTitle })).toHaveCount(0);
+
+  // Встреча с итогом из окна дня уходит: окно показывает то, что предстоит,
+  // а прошлое живёт в «Завершённых» (слова Кирилла 13.10.2026 — «завершённые
+  // в него попадать не должны»). Задача того же дня остаётся.
+  const chip = page.locator(".meeting-chip", { hasText: meetingTitle });
+  await chip.locator(".meeting-act.success").click();
+  await page.fill("#askInput", "Договорились");
+  await page.click("#askOkBtn");
+  await expect(page.locator(".ask-modal")).toContainText("Поставить задачу по итогам встречи?");
+  await page.click("#askCancelBtn");
+  await expect(chip).toHaveCount(0);
+  await cell.click({ button: "right" });
+  await expect(peek).toBeVisible();
+  await expect(peek.locator(".day-peek-row", { hasText: taskTitle })).toBeVisible();
+  await expect(peek.locator(".day-peek-row", { hasText: meetingTitle })).toHaveCount(0);
 });

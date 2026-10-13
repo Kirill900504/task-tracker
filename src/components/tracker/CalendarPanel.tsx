@@ -29,6 +29,14 @@ const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 // с сегодняшнего дня вперёд и не раньше дня постановки: прошлые круги
 // календарь не планирует, их итог живёт в самой задаче. Закрытая задача
 // (сделана или принята) точки не ставит вовсе.
+// The meeting half of the same rule, and the same reason: the calendar
+// plans what is still ahead. A meeting with an outcome (success / no result)
+// is history — it lives in «Завершённые», not on the day. A moved one lives
+// on its new date; its row here would be a second record of one agreement.
+function meetingOnCalendar(m: Meeting, ds: string): boolean {
+  return m.date === ds && !m.movedToDate && m.status !== "success" && m.status !== "no_result";
+}
+
 function onCalendar(t: Task, day: Date, ds: string): boolean {
   if (t.status === "done") return false;
   if (t.recur === "none") return t.approvalState !== "accepted" && isTaskDueOnDate(t, day);
@@ -158,7 +166,7 @@ export default function CalendarPanel({
         {gridDates.map((cd) => {
           const ds = dateStr(cd);
           const dueTasks = tasks.filter((t) => onCalendar(t, cd, ds));
-          const dayMeetings = meetings.filter((m) => m.date === ds);
+          const dayMeetings = meetings.filter((m) => meetingOnCalendar(m, ds));
           return (
             <CalendarDay
               key={ds}
@@ -197,9 +205,7 @@ export default function CalendarPanel({
                 const day = new Date(y, m - 1, d);
                 return tasks.filter((t) => onCalendar(t, day, popover.date));
               })()}
-              // Перенесённая встреча живёт на новой дате — здесь её строка
-              // была бы второй записью одной договорённости.
-              meetings={meetings.filter((m) => m.date === popover.date && !m.movedToDate)}
+              meetings={meetings.filter((m) => meetingOnCalendar(m, popover.date))}
               onOpenTask={(id) => {
                 setPopover(null);
                 onOpenTask?.(id);

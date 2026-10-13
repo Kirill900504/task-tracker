@@ -9,6 +9,8 @@
 // повторяют левый щелчок, чтобы заглянуть и сразу добавить было одним
 // движением. Списки приходят уже отобранными той же функцией, что ставит
 // точки, — иначе точка и список разошлись бы на повторяющихся задачах.
+// Завершённого здесь нет вовсе (сделанные задачи, встречи с итогом): окно
+// отвечает «что предстоит», а прошлое живёт в «Завершённых».
 import type { Meeting, Task } from "@/types/tracker";
 import { fmtDate } from "@/lib/taskDisplay";
 
@@ -45,21 +47,12 @@ export default function DayPeek({
       {byTime.length > 0 && (
         <div className="day-peek-group">
           <div className="day-peek-label">Встречи · {byTime.length}</div>
-          {byTime.map((mt) => {
-            const closed = mt.status === "success" || mt.status === "no_result";
-            return (
-              <button
-                key={mt.id}
-                type="button"
-                className={"day-peek-row" + (closed ? " closed" : "")}
-                title={closed ? "Встреча уже прошла" : undefined}
-                onClick={() => onOpenMeeting(mt.id)}
-              >
-                <span className="day-peek-time">{mt.time || "—"}</span>
-                <span className="day-peek-title">{mt.title || "Без названия"}</span>
-              </button>
-            );
-          })}
+          {byTime.map((mt) => (
+            <button key={mt.id} type="button" className="day-peek-row" onClick={() => onOpenMeeting(mt.id)}>
+              <span className="day-peek-time">{mt.time || "—"}</span>
+              <span className="day-peek-title">{mt.title || "Без названия"}</span>
+            </button>
+          ))}
         </div>
       )}
       {tasks.length > 0 && (
