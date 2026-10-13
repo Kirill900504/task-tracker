@@ -14,11 +14,12 @@ import Icon from "./Icon";
 // быть какой-то формат приёмки в приложении на ПК и мобильной версии».
 //
 // Устроено как короткая очередь над своими мыслями: каждая присланная —
-// кто, когда, что, и три ответа. «В работу» заводит задачу на меня тем же
-// маршрутом, что и кнопка в боте; «Сохранить» кладёт копию в мои мысли с
-// сегодняшней датой, и она встаёт в общий порядок как только что
-// записанная (его же решение 23.09.2026 — «получить и сохранить», см.
-// docs/next-ten.md, п. 12); «Принял» — прочитал, у себя не храню. После любого ответа мысль уходит из блока, а автор видит ответ в
+// кто, когда, что, и четыре ответа — те же, что под мыслью в мессенджере
+// (08.10.2026). «В работу» и «Встреча» открывают обычные формы (см. пропсы
+// ниже); «Сохранить» кладёт копию в мои мысли с сегодняшней датой, и она
+// встаёт в общий порядок как только что записанная (его же решение
+// 23.09.2026 — «получить и сохранить», см. docs/next-ten.md, п. 12);
+// «Прочитать» — прочитал, у себя не храню. После любого ответа мысль уходит из блока, а автор видит ответ в
 // списке «кому отправлена» у своей мысли. Блока нет вовсе, пока отвечать
 // не на что: пустой заголовок над списком — та самая надпись, которая
 // называет очевидное.
@@ -27,6 +28,8 @@ export default function IncomingIdeas({
   authorOf,
   onAnswered,
   onKeep,
+  onToTask,
+  onToMeeting,
 }: {
   rows: IdeaRecipientRow[];
   // Имя того, кто прислал (authorLabel: пустой created_by — владелец).
@@ -36,18 +39,27 @@ export default function IncomingIdeas({
   // «Сохранить»: завести копию в своих мыслях. Зовётся только после того,
   // как ответ записан, — иначе отказ и повторное нажатие дали бы две копии.
   onKeep: (row: IdeaRecipientRow) => void;
+  // «В работу» и «Встреча» открывают ОБЫЧНЫЕ формы новой задачи и новой
+  // встречи — с названием из мысли (и автором мысли в составе встречи).
+  // Ответ записывается только после «Сохранить»: «Отмена» оставляет мысль
+  // в блоке. Так же, как в мессенджере (lib/ideaInbox), задачу можно
+  // поручить и себе, и коллеге — слова Кирилла 08.10.2026: «взять в
+  // работу — то есть создать на себя или коллегу конкретную задачу,
+  // назначить встречу — создать на основании мысли встречу».
+  onToTask: (row: IdeaRecipientRow) => void;
+  onToMeeting: (row: IdeaRecipientRow) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ id: string; text: string } | null>(null);
 
   if (!rows.length) return null;
 
-  async function answer(row: IdeaRecipientRow, action: "take_idea" | "ack_idea" | "keep_idea") {
+  async function answer(row: IdeaRecipientRow, action: "ack_idea" | "keep_idea") {
     const keep = action === "keep_idea";
     setBusy(row.id);
     setError(null);
     // Экран отвечает раньше облака — строка уходит сразу, а не после ответа.
-    onAnswered(row, action === "take_idea" ? "taken" : "seen");
+    onAnswered(row, "seen");
     try {
       const res = await fetch("/api/workspace/report", {
         method: "POST",
@@ -81,10 +93,19 @@ export default function IncomingIdeas({
               type="button"
               className="btn btn-primary"
               disabled={busy === row.id}
-              title="Завести себе задачу из этой мысли"
-              onClick={() => void answer(row, "take_idea")}
+              title="Завести задачу — себе или коллеге"
+              onClick={() => onToTask(row)}
             >
               В работу
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy === row.id}
+              title="Назначить встречу по этой мысли"
+              onClick={() => onToMeeting(row)}
+            >
+              Встреча
             </button>
             <button
               type="button"
@@ -102,7 +123,7 @@ export default function IncomingIdeas({
               title="Прочитал — задачей это не станет"
               onClick={() => void answer(row, "ack_idea")}
             >
-              Принял
+              Прочитать
             </button>
           </div>
           {error?.id === row.id && <div className="send-result">{error.text}</div>}

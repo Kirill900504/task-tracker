@@ -181,6 +181,59 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  // Присланная мысль стала задачей или встречей — в обычной форме трекера
+  // («В работу» и «Встреча» в блоке «Прислали вам»). Саму задачу или
+  // встречу завёл браузер через движок синхронизации, сюда приходит только
+  // её id, когда форма сохранена. Ответ отмечается сразу (мысль уходит из
+  // блока на всех устройствах), а связь с задачей — когда задача доедет до
+  // базы: на converted_task_id стоит внешний ключ, и запись раньше времени
+  // молча упала бы.
+  if (body.action === "idea_task" || body.action === "idea_meeting") {
+    const itemId = body.action === "idea_task" ? body.taskId : body.meetingId;
+    if (!body.recipientId || !itemId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
+    const { data: rec } = await admin
+      .from("idea_recipients")
+      .select("id, idea_id, assignee_id, ideas(text, created_by)")
+      .eq("id", body.recipientId)
+      .maybeSingle();
+    type IdeaRef = { text: string; created_by: string | null };
+    const recipient = rec as { id: string; idea_id: string; assignee_id: string; ideas: IdeaRef | IdeaRef[] | null } | null;
+    if (!recipient || recipient.assignee_id !== m.assignee_id) return NextResponse.json({ error: "Эта мысль не ваша" }, { status: 403 });
+    await admin.from("idea_recipients").update({ seen_at: now }).eq("id", recipient.id);
+
+    const idea = Array.isArray(recipient.ideas) ? recipient.ideas[0] : recipient.ideas;
+    const text = idea?.text || "";
+    const ownerId = m.owner_id;
+    const assigneeId = m.assignee_id;
+    const isTask = body.action === "idea_task";
+    after(async () => {
+      const table = isTask ? "tasks" : "meetings";
+      const columns = isTask ? "id, title, assignee, deadline" : "id, title, date, time";
+      let row: Record<string, string | null> | null = null;
+      for (let i = 0; i < 16 && !row; i++) {
+        const { data } = await admin.from(table).select(columns).eq("id", itemId).eq("user_id", ownerId).maybeSingle();
+        row = (data as Record<string, string | null> | null) || null;
+        if (!row) await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      if (!row) return;
+      let verdict: string;
+      if (isTask) {
+        await admin.from("idea_recipients").update({ converted_task_id: itemId }).eq("id", recipient.id);
+        const who = withoutSelfMark(row.assignee || "");
+        verdict = `✅ Поручено: ${who}${row.deadline ? ", срок " + fmtDate(row.deadline) : ", без срока"}`;
+        await notifyAuthor(admin, ownerId, idea?.created_by || null, `➕ ${myName} поручил вашу мысль: ${who} — «${row.title}»`, {
+          kind: "idea_taken",
+          item: row.title || text,
+          who: myName,
+        });
+      } else {
+        verdict = `✅ Встреча: ${fmtDate(row.date || "")}${row.time ? ", " + row.time : ""}`;
+      }
+      await mirrorAnswer(admin, { kind: "idea", itemId: recipient.idea_id, assigneeId, text: `💡 ${text}\n\n${verdict}` });
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   if (body.action === "vote") {
     const { data: row } = await admin
       .from("meeting_participants")

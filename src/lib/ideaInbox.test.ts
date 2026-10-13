@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byPrefix, dayByOffset, freeSlots, isIdeaInboxAction, meetingDays, personRef, splitRef } from "@/lib/ideaInbox";
+import { byPrefix, dayByOffset, freeSlots, indicesOf, isIdeaInboxAction, listStamp, maskOf, meetingDays, personRef, splitRef } from "@/lib/ideaInbox";
 import { decodeCallback, encodeCallback, ideaButtons } from "@/lib/colleagues";
 
 // Москва = UTC+3; moscowNow() отдаёт дату, чьи UTC-поля читаются как
@@ -29,6 +29,33 @@ describe("кнопки получателя мысли", () => {
   it("несут шаги в хвосте кнопки", () => {
     expect(splitRef("abc.me")).toEqual(["abc", "me"]);
     expect(splitRef("abc.12345678.fri")).toEqual(["abc", "12345678", "fri"]);
+  });
+});
+
+describe("кого позвали — маска по списку людей", () => {
+  it("туда и обратно даёт тот же набор", () => {
+    for (const set of [[], [0], [3], [0, 2, 14], [1, 5, 9, 13, 20, 29, 40, 51]]) {
+      expect(indicesOf(maskOf(set))).toEqual(set);
+    }
+  });
+
+  it("не путается в повторах и мусоре", () => {
+    expect(indicesOf(maskOf([2, 2, -1]))).toEqual([2]);
+    expect(indicesOf("ЖЖ")).toEqual([]);
+    expect(indicesOf("")).toEqual([]);
+  });
+
+  it("отпечаток меняется вместе со списком", () => {
+    expect(listStamp(["a", "b"])).toBe(listStamp(["a", "b"]));
+    expect(listStamp(["a", "b"])).not.toBe(listStamp(["a", "b", "c"]));
+    expect(listStamp(["a"])).toHaveLength(3);
+  });
+
+  it("самая длинная кнопка встречи влезает в 64 байта при пятнадцати людях", () => {
+    const ideaId = "0f8b6c1e-9d2a-4b7e-8c3f-1a2b3c4d5e6f";
+    const all = Array.from({ length: 15 }, (_, i) => i);
+    const data = encodeCallback("idea", "mt", `${ideaId}.12.1730.${maskOf(all)}.${listStamp(["x"])}`);
+    expect(new TextEncoder().encode(data).length).toBeLessThanOrEqual(64);
   });
 });
 

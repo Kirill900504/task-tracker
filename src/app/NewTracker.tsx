@@ -22,7 +22,7 @@ import SyncStatusPill from "@/components/tracker/SyncStatusPill";
 import TasksPanel from "@/components/tracker/TasksPanel";
 import MeetingsPanel from "@/components/tracker/MeetingsPanel";
 import CalendarPanel from "@/components/tracker/CalendarPanel";
-import IdeasPanel from "@/components/tracker/IdeasPanel";
+import IdeasPanel, { type IncomingConversion } from "@/components/tracker/IdeasPanel";
 import ToastStack from "@/components/tracker/ToastStack";
 import DashboardLayout from "@/components/tracker/DashboardLayout";
 import TrackerDnd from "@/components/tracker/dnd/TrackerDnd";
@@ -250,6 +250,12 @@ export default function NewTracker() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [openTaskRequest, setOpenTaskRequest] = useState<TaskPrefill | null>(null);
   const [openMeetingRequest, setOpenMeetingRequest] = useState<MeetingPrefill | null>(null);
+  // Присланная мысль, которую превращают в задачу или встречу из блока
+  // «Прислали вам». Формы те же самые, что у своей мысли; разница в конце:
+  // свою мысль удаляют, а на чужую записывают ответ (IdeasPanel).
+  // Отменённая форма оставляет её здесь — её сбрасывает следующее открытие
+  // любой другой заготовки.
+  const [incoming, setIncoming] = useState<IncomingConversion | null>(null);
   const [justCreatedTaskId, setJustCreatedTaskId] = useState<string | null>(null);
   const [justCreatedMeetingId, setJustCreatedMeetingId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -366,12 +372,21 @@ export default function NewTracker() {
   function convertIdeaToTask(ideaId: string) {
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
+    setIncoming(null);
     setOpenTaskRequest({ title: idea.text, fromIdeaId: idea.id });
   }
 
   // Удаление мысли и заведение задачи — одна отмена на двоих: отмена
   // возвращает мысль и убирает задачу.
   function ideaConvertedToTask(ideaId: string, task: Task) {
+    // Присланная мысль: она не моя, удалять нечего — ответ записывает
+    // панель мыслей (IncomingConversion.done).
+    if (incoming?.kind === "task" && incoming.ideaId === ideaId) {
+      incoming.done(task.id);
+      setIncoming(null);
+      flashTask(task.id);
+      return;
+    }
     const idea = ideas.find((i) => i.id === ideaId);
     flashTask(task.id);
     if (!idea) return;
@@ -390,12 +405,26 @@ export default function NewTracker() {
   // replace the task itself.
   const [pendingIdeaConversion, setPendingIdeaConversion] = useState<string | null>(null);
 
+  function convertIncoming(req: IncomingConversion) {
+    setIncoming(req);
+    setPendingIdeaConversion(null);
+    if (req.kind === "task") {
+      // Исполнитель — я, но поле обычное: отдать задачу коллеге можно тут же.
+      setOpenTaskRequest({ title: req.title, assignee: req.me || undefined, fromIdeaId: req.ideaId });
+    } else {
+      // Встреча — с автором мысли: он её прислал, с ним и говорить. Состав
+      // правится в той же форме.
+      setOpenMeetingRequest({ title: req.title, participants: req.author && req.author !== req.me ? [req.author] : [] });
+    }
+  }
+
   // Время в этих заготовках встречи нарочно не задаётся: его выбирает форма
   // (defaultMeetingStart) — первый ещё не начавшийся слот. Жёсткое «10:00»
   // вечером означало встречу в прошлом, и форма сама же о ней переспрашивала.
   function ideaDroppedOnDate(ideaId: string, date: string) {
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
+    setIncoming(null);
     setPendingIdeaConversion(idea.id);
     setOpenMeetingRequest({ title: idea.text, date, fromIdeaId: idea.id });
   }
@@ -403,6 +432,7 @@ export default function NewTracker() {
   function taskDroppedOnDate(taskId: string, date: string) {
     const task = visibleTasks.find((t) => t.id === taskId);
     if (!task) return;
+    setIncoming(null);
     setPendingIdeaConversion(null);
     setOpenMeetingRequest({
       title: task.title,
@@ -415,6 +445,11 @@ export default function NewTracker() {
 
   function requestedMeetingSaved(meeting: Meeting) {
     flashMeeting(meeting.id);
+    if (incoming?.kind === "meeting") {
+      incoming.done(meeting.id);
+      setIncoming(null);
+      return;
+    }
     if (!pendingIdeaConversion) return;
     const idea = ideas.find((i) => i.id === pendingIdeaConversion);
     setPendingIdeaConversion(null);
@@ -437,6 +472,7 @@ export default function NewTracker() {
   function convertIdeaToMeeting(ideaId: string) {
     const idea = ideas.find((i) => i.id === ideaId);
     if (!idea) return;
+    setIncoming(null);
     setPendingIdeaConversion(idea.id);
     setOpenMeetingRequest({ title: idea.text, fromIdeaId: idea.id });
   }
@@ -732,6 +768,7 @@ export default function NewTracker() {
             toasts={toasts}
             onConvertToTask={convertIdeaToTask}
             onConvertToMeeting={convertIdeaToMeeting}
+            onIncomingConvert={convertIncoming}
             focusAddSignal={ideaFocusSignal}
           />
         ),

@@ -32,6 +32,10 @@ const sentId = "idea_e2e_out_" + randomUUID().slice(0, 8);
 const keepId = "idea_e2e_keep_" + randomUUID().slice(0, 8);
 const awayId = "idea_e2e_away_" + randomUUID().slice(0, 8);
 const sharedInId = "idea_e2e_shin_" + randomUUID().slice(0, 8);
+const toTaskId = "idea_e2e_task_" + randomUUID().slice(0, 8);
+const toMeetId = "idea_e2e_meet_" + randomUUID().slice(0, 8);
+const toTaskText = "Проверить остатки на складе " + Date.now();
+const toMeetText = "Обсудить скидки для сети " + Date.now();
 
 test.beforeAll(async () => {
   const { data: ownerUser, error: ownerError } = await admin.auth.admin.createUser({
@@ -83,6 +87,8 @@ test.beforeAll(async () => {
     { id: keepId, user_id: owner.id, text: "Книга про переговоры — прочитать", created_by: null },
     { id: awayId, user_id: owner.id, text: "Договор аренды — продлить", created_by: manager.id },
     { id: sharedInId, user_id: owner.id, text: "Идея акции к Новому году", created_by: null },
+    { id: toTaskId, user_id: owner.id, text: toTaskText, created_by: null },
+    { id: toMeetId, user_id: owner.id, text: toMeetText, created_by: null },
   ]);
   if (ideasError) throw ideasError;
   const { error: recError } = await admin.from("idea_recipients").insert([
@@ -92,6 +98,8 @@ test.beforeAll(async () => {
     { user_id: owner.id, idea_id: sentId, assignee_id: annaId, kind: "share", seen_at: new Date().toISOString() },
     { user_id: owner.id, idea_id: awayId, assignee_id: owner.assigneeId, kind: "send", seen_at: null },
     { user_id: owner.id, idea_id: sharedInId, assignee_id: manager.assigneeId, kind: "share", seen_at: null },
+    { user_id: owner.id, idea_id: toTaskId, assignee_id: manager.assigneeId },
+    { user_id: owner.id, idea_id: toMeetId, assignee_id: manager.assigneeId },
   ].map((r) => ({ kind: "send", seen_at: null, ...r })));
   if (recError) throw recError;
 });
@@ -169,8 +177,43 @@ test("присланную мысль принимают в трекере, а �
   await expect(keep).toHaveCount(0);
   await expect(page.locator("#ideaList .idea-item").filter({ hasText: "Книга про переговоры — прочитать" })).toBeVisible();
 
-  // «Принял» убирает мысль из блока и записывается в базу.
-  await incoming.getByRole("button", { name: "Принял" }).click();
+  // «Встреча» открывает обычную форму новой встречи: название из мысли,
+  // автор мысли уже в составе. После «Сохранить» мысль уходит из блока, а
+  // ответ записан в базу (13.10.2026 — те же четыре ответа, что в боте).
+  const toMeet = block.locator(`[data-incoming-idea="${toMeetId}"]`);
+  await toMeet.getByRole("button", { name: "Встреча" }).click();
+  await expect(page.locator("#meetingOverlay")).toBeVisible();
+  await expect(page.locator("#mTitle")).toHaveValue(toMeetText);
+  await expect(page.locator("#mParticipants")).toContainText("Кирилл Тестов");
+  await page.click("#meetingSaveBtn");
+  await expect(toMeet).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const [{ data: m }, { data: r }] = await Promise.all([
+        admin.from("meetings").select("participants").eq("user_id", owner.id).eq("title", toMeetText).maybeSingle(),
+        admin.from("idea_recipients").select("seen_at").eq("idea_id", toMeetId).maybeSingle(),
+      ]);
+      return ((m?.participants as string[] | null) || []).includes("Кирилл Тестов (я)") && !!r?.seen_at;
+    }, { timeout: 20_000 })
+    .toBe(true);
+
+  // «В работу» — обычная форма новой задачи, исполнителем стою я, но его
+  // можно сменить на коллегу. Сохранили — мысль связана с задачей.
+  const toTask = block.locator(`[data-incoming-idea="${toTaskId}"]`);
+  await toTask.getByRole("button", { name: "В работу" }).click();
+  await expect(page.locator("#fTitle")).toHaveValue(toTaskText);
+  await page.click("#saveTaskBtn");
+  await expect(toTask).toHaveCount(0);
+  await expect(page.locator(".task", { hasText: toTaskText })).toBeVisible();
+  await expect
+    .poll(async () => {
+      const { data } = await admin.from("idea_recipients").select("converted_task_id").eq("idea_id", toTaskId).maybeSingle();
+      return !!data?.converted_task_id;
+    }, { timeout: 20_000 })
+    .toBe(true);
+
+  // «Прочитать» убирает мысль из блока и записывается в базу.
+  await incoming.getByRole("button", { name: "Прочитать" }).click();
   await expect(block).toHaveCount(0);
   await expect
     .poll(async () => {

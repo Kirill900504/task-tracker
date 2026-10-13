@@ -2903,9 +2903,16 @@
      отменено им же — и он прав: сторона узнаётся раньше, чем читается
      подпись, и ровно поэтому так сделано в обоих мессенджерах, которыми
      он пользуется. */
+  /* Вбок лента не прокручивается НИКОГДА (13.10.2026: «это че за
+     горизонтальный бегунок в чате!? Убрать его!!»). `overflow-y:auto` сам
+     по себе превращает и `overflow-x` в auto, и плашка быстрых реакций,
+     стоящая сбоку от широкого пузыря, вылезала за край — лента получала
+     полосу прокрутки на ширину этой плашки. Место под плашку теперь
+     оставляет сам пузырь (ниже, `.chat-msg` при наведении), а hidden
+     здесь — страховка на случай, когда места нет вовсе. */
   .chat-feed{
     display:flex; flex-direction:column;
-    max-height:min(46vh, 380px); overflow-y:auto; overscroll-behavior:contain;
+    max-height:min(46vh, 380px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain;
     padding:2px 4px 2px 0; margin-bottom:4px;
   }
   .chat-day{
@@ -2965,6 +2972,14 @@
     padding:2px 4px; box-shadow:var(--shadow-2);
   }
   .chat-msg.mine .chat-quick{left:auto; right:calc(100% + 6px);}
+  /* Пузырь уступает плашке место сбоку: 206px — кружок автора (36) плюс
+     сама плашка с зазором (~170). Своему кружок не нужен. Но не уже 60%
+     строки — в узком окне лучше обрезанная плашка, чем столбик в три
+     слова; обрезает её лента, а не полоса прокрутки. */
+  @media (hover:hover){
+    .chat-msg{max-width:min(520px, max(60%, min(78%, calc(100% - 206px))));}
+    .chat-msg.mine{max-width:min(520px, max(60%, min(78%, calc(100% - 170px))));}
+  }
   /* Мостик через зазор: иначе по дороге мыши от пузыря к плашке наведение
      теряется, и плашка исчезает из-под курсора. */
   .chat-quick::before{content:""; position:absolute; top:-6px; bottom:-6px; right:100%; width:10px;}
@@ -3664,9 +3679,10 @@
   .incoming-idea + .incoming-idea{margin-top:6px;}
   .incoming-idea-text{white-space:pre-wrap; overflow-wrap:anywhere;}
   .incoming-idea-meta{font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
-  /* Три равные кнопки одной строкой: сетка, а не flex-wrap, — ряд не
-     должен рваться по-разному у длинных и коротких мыслей. */
-  .incoming-idea-actions{display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-top:8px;}
+  /* Четыре равные кнопки сеткой 2×2 (те же два ряда, что под мыслью в
+     мессенджере): сетка, а не flex-wrap, — ряд не должен рваться
+     по-разному у длинных и коротких мыслей. */
+  .incoming-idea-actions{display:grid; grid-template-columns:repeat(2, 1fr); gap:6px; margin-top:8px;}
   .incoming-idea-actions .btn{min-height:36px; justify-content:center; padding-left:4px; padding-right:4px; white-space:nowrap;}
   @media (max-width:800px){ .incoming-idea-meta{font-size:12.5px;} }
 

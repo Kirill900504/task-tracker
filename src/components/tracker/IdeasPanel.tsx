@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { Idea } from "@/types/tracker";
 import { doneIdeasNewestFirst, sortIdeasForList } from "@/lib/ideaDisplay";
 import { isMine } from "@/lib/ownership";
-import { formatIdeaCreatedAt } from "@/lib/trackerRows";
+import { formatIdeaCreatedAt, isSelfAssignee } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
 import IdeaItem from "./IdeaItem";
 import DoneListModal from "./DoneListModal";
@@ -47,6 +47,20 @@ function writeKept(week: string, ids: Set<string>) {
 // (см. prefetchIdeaInbox).
 prefetchIdeaInbox();
 
+// Присланная мысль, которую превращают в задачу или встречу в обычной
+// форме. Форма живёт в NewTracker, ответ — здесь: `done` зовётся, когда
+// форма СОХРАНЕНА, с id новой задачи или встречи.
+export type IncomingConversion = {
+  kind: "task" | "meeting";
+  ideaId: string;
+  title: string;
+  // Имена строк ровно как в списке людей (с «(я)» у владельца): ими
+  // заполняются поля исполнителя и состава встречи.
+  me: string;
+  author: string;
+  done: (itemId: string) => void;
+};
+
 function plural(n: number): string {
   const d = n % 10, h = n % 100;
   if (d === 1 && h !== 11) return "мысль";
@@ -62,6 +76,7 @@ export default function IdeasPanel({
   toasts,
   onConvertToTask,
   onConvertToMeeting,
+  onIncomingConvert,
   focusAddSignal = 0,
 }: {
   // Свой auth-id: чужую мысль прислали тебе, а не отдали.
@@ -78,6 +93,7 @@ export default function IdeasPanel({
   // doing exactly one thing, undo toast included.
   onConvertToTask: (ideaId: string) => void;
   onConvertToMeeting: (ideaId: string) => void;
+  onIncomingConvert?: (req: IncomingConversion) => void;
   // The idea the global search just jumped to, briefly flashed.
   highlightId?: string | null;
   // Круглая «+» на телефоне нажата в разделе мыслей. Заводить мысль
@@ -118,6 +134,37 @@ export default function IdeasPanel({
     if (answer === "failed") void recipients.reload();
     else if (answer === "taken") recipients.markLocally(row.id, { convertedTaskId: "pending" });
     else recipients.markLocally(row.id, { seenAt: new Date().toISOString() });
+  }
+
+  // «В работу» / «Встреча» в блоке «Прислали вам». Автор — строка по его
+  // членству, а пустой created_by — владелец, то есть строка «(я)».
+  function convertIncoming(row: IdeaRecipientRow, kind: "task" | "meeting") {
+    if (!onIncomingConvert) return;
+    const createdBy = row.idea?.createdBy || "";
+    const author = createdBy ? recipients.authors[createdBy] || "" : people.find(isSelfAssignee) || "";
+    onIncomingConvert({
+      kind,
+      ideaId: row.ideaId,
+      title: row.idea?.text || "",
+      me: recipients.names[recipients.myAssigneeId] || "",
+      author,
+      done: (itemId) => {
+        answered(row, kind === "task" ? "taken" : "seen");
+        void fetch("/api/workspace/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            kind === "task"
+              ? { action: "idea_task", recipientId: row.id, taskId: itemId }
+              : { action: "idea_meeting", recipientId: row.id, meetingId: itemId },
+          ),
+        })
+          .then((res) => {
+            if (!res.ok) answered(row, "failed");
+          })
+          .catch(() => answered(row, "failed"));
+      },
+    });
   }
 
   // В панели — только живые мысли. Вычеркнутые смотрят в отдельном окне
@@ -240,6 +287,8 @@ export default function IdeasPanel({
         rows={incoming}
         authorOf={(createdBy) => authorLabel(createdBy || undefined, recipients.authors, people)}
         onAnswered={answered}
+        onToTask={(row) => convertIncoming(row, "task")}
+        onToMeeting={(row) => convertIncoming(row, "meeting")}
         // Не через addText: тот очищает поле ввода, а в нём может лежать
         // недописанная своя мысль.
         onKeep={(row) =>

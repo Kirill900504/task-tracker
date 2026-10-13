@@ -35,7 +35,7 @@ export const EMAIL = z
   .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/u, "похоже, это не почта");
 
 export const reportInput = z.object({
-  action: z.enum(["accept", "done", "decline", "reschedule", "vote", "take_idea", "ack_idea", "keep_idea", "seen"]),
+  action: z.enum(["accept", "done", "decline", "reschedule", "vote", "take_idea", "ack_idea", "keep_idea", "idea_task", "idea_meeting", "seen"]),
   // Для «seen»: чья это строка участия — задачи или встречи.
   kind: z.enum(["task", "meeting"]).optional(),
   participantId: UUID.optional(),
@@ -45,6 +45,10 @@ export const reportInput = z.object({
   // найдёт мою строку у этой мысли — и тем самым проверит, что её мне
   // действительно присылали.
   ideaId: ID.optional(),
+  // «idea_task» / «idea_meeting»: присланная мысль стала задачей или
+  // встречей, заведённой в обычной форме трекера (IncomingIdeas).
+  taskId: ID.optional(),
+  meetingId: ID.optional(),
   comment: z.string().max(4000).optional(),
   date: ISO_DATE.optional(),
   response: z.enum(["yes", "no", "late"]).optional(),

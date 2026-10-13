@@ -46,7 +46,7 @@ import { uid } from "@/lib/uid";
 // же правило, что у меню бота («не засорять историю чата»). «← Назад»
 // возвращает исходные четыре кнопки.
 
-export const IDEA_INBOX_ACTIONS = new Set(["read", "keep", "task", "tw", "tg", "meet", "md", "mt", "back"]);
+export const IDEA_INBOX_ACTIONS = new Set(["read", "keep", "task", "tw", "tg", "meet", "mw", "mn", "md", "mt", "back"]);
 
 export function isIdeaInboxAction(action: CallbackAction): boolean {
   return action.kind === "idea" && IDEA_INBOX_ACTIONS.has(action.action);
@@ -85,6 +85,36 @@ export function byPrefix<T extends { id: string }>(people: T[], ref: string): T 
   if (!ref) return null;
   const hits = people.filter((p) => p.id.startsWith(ref));
   return hits.length === 1 ? hits[0] : null;
+}
+
+// Кого позвали на встречу — набор номеров в упорядоченном списке людей,
+// записанный битами в base36: пятнадцать человек — три знака, а не
+// пятнадцать префиксов, которые в 64 байта кнопки не влезли бы.
+// Обычные числа, а не побитовые операции: те режут до 32 бит. Точности
+// double хватает на 52 человека.
+export function maskOf(indices: number[]): string {
+  let n = 0;
+  for (const i of new Set(indices)) if (i >= 0 && i < 52) n += 2 ** i;
+  return n.toString(36);
+}
+
+export function indicesOf(mask: string): number[] {
+  if (!/^[0-9a-z]{1,10}$/.test(mask)) return [];
+  let n = parseInt(mask, 36);
+  const out: number[] = [];
+  for (let i = 0; n > 0 && i < 52; i++) {
+    if (n % 2 === 1) out.push(i);
+    n = Math.floor(n / 2);
+  }
+  return out;
+}
+
+// Отпечаток списка людей, по которому считалась маска: три знака base36
+// от простого хэша идентификаторов. Список изменился — отпечаток другой.
+export function listStamp(ids: string[]): string {
+  let h = 0;
+  for (const ch of ids.join(",")) h = (h * 31 + ch.charCodeAt(0)) % 46656;
+  return h.toString(36).padStart(3, "0");
 }
 
 // Рабочие дни вперёд, начиная с сегодня: выходные пропускаются, их и так
@@ -289,26 +319,68 @@ async function answerIdea(admin: SupabaseClient, me: Receiver | null, action: Ca
     };
   }
 
-  // ——— «Назначить встречу»: с автором мысли — он её прислал, с ним и
-  // говорить. День, потом время; занятое у обоих не предлагается.
-  if (action.action === "meet" || action.action === "md" || action.action === "mt") {
+  // ——— «Назначить встречу»: с кем, какой день, во сколько.
+  //
+  // Сначала «С кем?» — автор мысли отмечен заранее (он её прислал, с ним и
+  // говорить), остальные включаются и выключаются нажатием. Выбор едет в
+  // самой кнопке маской по списку людей (peopleMask) вместе с отпечатком
+  // этого списка: если за время выбора кого-то добавили или убрали, маска
+  // указывала бы не на тех, и бот просит начать заново, а не зовёт чужих.
+  // Кнопки старых сообщений (md/mt без маски) значат «только автор» — так
+  // они и работали до 13.10.2026.
+  if (["meet", "mw", "mn", "md", "mt"].includes(action.action)) {
     const author = await authorRow(admin, idea);
-    const people = [me.name, ...(author && author.id !== me.assigneeId ? [author.name] : [])];
-    const withWhom = author && author.id !== me.assigneeId ? ` с ${withoutSelfMark(author.name)}` : "";
+    const others = (await peopleOf(admin, me.spaceId)).filter((p) => p.id !== me.assigneeId);
+    const stamp = listStamp(others.map((p) => p.id));
+    const authorOnly = maskOf(others.map((p, i) => (author && p.id === author.id ? i : -1)).filter((i) => i >= 0));
 
-    if (action.action === "meet") {
-      const days = meetingDays();
+    // Где в хвосте кнопки лежат маска и отпечаток, зависит от шага.
+    const parts = splitRef(action.id).slice(1);
+    const tail = action.action === "mw" || action.action === "mn" ? parts.slice(0, 2) : action.action === "md" ? parts.slice(1, 3) : parts.slice(2, 4);
+    let mask = action.action === "meet" ? authorOnly : tail[0] ?? "";
+    if (action.action !== "meet" && tail[1] === undefined && (action.action === "md" || action.action === "mt")) mask = authorOnly;
+    else if (action.action !== "meet" && tail[1] !== stamp) return { toast: "Список людей изменился — начните заново", rewriteTo: head(idea), rewriteButtons: ideaButtons(idea.id, { canKeep: !!me.userId }) };
+    const chosen = indicesOf(mask).map((i) => others[i]).filter(Boolean);
+    const ref = `${mask}.${stamp}`;
+    const withWhom = chosen.length ? ` с ${chosen.map((p) => withoutSelfMark(p.name)).join(", ")}` : "";
+
+    if (action.action === "meet" || action.action === "mw") {
+      const picked = new Set(indicesOf(mask));
+      const toggle = (i: number) => maskOf(picked.has(i) ? [...picked].filter((x) => x !== i) : [...picked, i]);
       return {
-        toast: "Какой день?",
-        rewriteTo: `${head(idea)}\n\n📅 Встреча${withWhom}. Какой день?`,
+        toast: "С кем?",
+        rewriteTo: `${head(idea)}\n\n📅 Встреча${withWhom}. С кем? Отметьте и нажмите «Дальше».`,
         rewriteButtons: [
-          ...rows(days.map((d) => ({ text: d.label, data: encodeCallback("idea", "md", `${idea.id}.${d.offset}`) })), 2),
+          ...rows(
+            others.map((p, i) => ({
+              text: `${picked.has(i) ? "✓ " : ""}${withoutSelfMark(p.name)}`,
+              data: encodeCallback("idea", "mw", `${idea.id}.${toggle(i)}.${stamp}`),
+            })),
+            2,
+          ),
+          [{ text: "Дальше →", data: encodeCallback("idea", "mn", `${idea.id}.${ref}`) }],
           back(idea.id),
         ],
       };
     }
 
-    const date = dayByOffset(Number(a) || 0);
+    if (!chosen.length) return { toast: "Отметьте хотя бы одного человека" };
+    const people = [me.name, ...chosen.map((p) => p.name)];
+
+    if (action.action === "mn") {
+      const days = meetingDays();
+      return {
+        toast: "Какой день?",
+        rewriteTo: `${head(idea)}\n\n📅 Встреча${withWhom}. Какой день?`,
+        rewriteButtons: [
+          ...rows(days.map((d) => ({ text: d.label, data: encodeCallback("idea", "md", `${idea.id}.${d.offset}.${ref}`) })), 2),
+          [{ text: "← С кем", data: encodeCallback("idea", "mw", `${idea.id}.${ref}`) }],
+        ],
+      };
+    }
+
+    const [offset = "0", hhmm = ""] = parts;
+    const date = dayByOffset(Number(offset) || 0);
     let busy: Set<string>;
     try {
       busy = await busyStartsOnServer(admin, { spaceId: me.spaceId, date, durationMin: 30, people, slots: WORKDAY_SLOTS });
@@ -318,20 +390,20 @@ async function answerIdea(admin: SupabaseClient, me: Receiver | null, action: Ca
 
     if (action.action === "md") {
       const free = freeSlots(date, busy);
-      if (!free.length) return { toast: "В этот день всё занято" };
+      if (!free.length) return { toast: "В этот день у кого-то из вас всё занято" };
       return {
         toast: fmtDate(date),
         rewriteTo: `${head(idea)}\n\n📅 Встреча${withWhom}, ${fmtDate(date)}. Во сколько? (полчаса)`,
         rewriteButtons: [
-          ...rows(free.map((t) => ({ text: t, data: encodeCallback("idea", "mt", `${idea.id}.${a}.${t.replace(":", "")}`) })), 4),
-          [{ text: "← Другой день", data: encodeCallback("idea", "meet", idea.id) }],
+          ...rows(free.map((t) => ({ text: t, data: encodeCallback("idea", "mt", `${idea.id}.${offset}.${t.replace(":", "")}.${ref}`) })), 4),
+          [{ text: "← Другой день", data: encodeCallback("idea", "mn", `${idea.id}.${ref}`) }],
         ],
       };
     }
 
     // mt: время выбрано — заводим. Проверка занятости ещё раз: между
     // кнопками могли назначить другую встречу.
-    const time = `${b.slice(0, 2)}:${b.slice(2, 4)}`;
+    const time = `${hhmm.slice(0, 2)}:${hhmm.slice(2, 4)}`;
     if (!freeSlots(date, new Set()).includes(time)) return { toast: "Это время уже прошло" };
     let clash: string[];
     try {
@@ -343,7 +415,7 @@ async function answerIdea(admin: SupabaseClient, me: Receiver | null, action: Ca
 
     // Организатор — тот, кто назначил. Без входа организовать от себя нечем
     // (организатор — это `created_by`), и тогда встреча записывается за
-    // автором мысли: он в ней участвует и сможет ею распорядиться.
+    // автором мысли: он её прислал и сможет ею распорядиться.
     const createdBy = me.userId ? (me.userId === me.spaceId ? null : me.userId) : idea.createdBy;
     const meeting = {
       id: uid(),
@@ -359,38 +431,38 @@ async function answerIdea(admin: SupabaseClient, me: Receiver | null, action: Ca
     };
     const { error } = await admin.from("meetings").insert(meeting);
     if (error) return { toast: "Не получилось назначить встречу" };
-    // Строка голоса — у приглашённого автора. Её заводит и триггер
-    // (миграция 0024), но «(я)» он пропускает, а автором бывает владелец, —
-    // значит upsert с пропуском дублей. Организатору строки не заводим, как
-    // и трекер: он идёт на свою встречу по определению (meetingVotes.
-    // withOrganizer). Получатель без входа организатором не стал — его
-    // строку заведёт тот же триггер по имени.
-    if (author && author.id !== me.assigneeId) {
-      await admin
-        .from("meeting_participants")
-        .upsert(
-          { meeting_id: meeting.id, assignee_id: author.id, role: "participant" },
-          { onConflict: "meeting_id,assignee_id", ignoreDuplicates: true },
-        );
-    }
+    // Строки голоса — у приглашённых. Их заводит и триггер (миграция 0024),
+    // но «(я)» он пропускает, а позвать можно и владельца, — значит upsert с
+    // пропуском дублей, иначе пачка упала бы целиком из-за одной строки.
+    // Организатору строки не заводим, как и трекер: он идёт на свою встречу
+    // по определению (meetingVotes.withOrganizer).
+    await admin
+      .from("meeting_participants")
+      .upsert(
+        chosen.map((p) => ({ meeting_id: meeting.id, assignee_id: p.id, role: "participant" })),
+        { onConflict: "meeting_id,assignee_id", ignoreDuplicates: true },
+      );
     await markAnswered();
 
-    // Приглашение — автору, с теми же кнопками, что у любой встречи.
-    let invited = "";
-    if (author && author.id !== me.assigneeId) {
-      const sent = await sendToPerson(
-        admin,
-        me.spaceId,
-        author,
-        meetingMessage({ title: meeting.title, date, time, participants: people }, withoutSelfMark(me.name)),
-        meetingButtons(meeting.id),
-        { kind: "meeting", itemId: meeting.id },
-      );
-      invited = sent ? `\nПриглашение ушло: ${withoutSelfMark(author.name)}.` : `\n📭 ${withoutSelfMark(author.name)} не подключён — приглашение не ушло.`;
-    }
+    // Приглашения — всем отмеченным сразу, с теми же кнопками, что у любой
+    // встречи.
+    const sent = await Promise.all(
+      chosen.map((p) =>
+        sendToPerson(
+          admin,
+          me.spaceId,
+          p,
+          meetingMessage({ title: meeting.title, date, time, participants: people }, withoutSelfMark(me.name)),
+          meetingButtons(meeting.id),
+          { kind: "meeting", itemId: meeting.id },
+        ),
+      ),
+    );
+    const silent = chosen.filter((_, i) => !sent[i]).map((p) => withoutSelfMark(p.name));
+    const note = silent.length ? `\n📭 Не подключены — приглашение не ушло: ${silent.join(", ")}.` : "\nПриглашения ушли.";
     return {
       toast: "Назначено",
-      rewriteTo: `${head(idea)}\n\n✅ Встреча${withWhom}: ${fmtDate(date)}, ${time}.${invited}`,
+      rewriteTo: `${head(idea)}\n\n✅ Встреча${withWhom}: ${fmtDate(date)}, ${time}.${note}`,
     };
   }
 

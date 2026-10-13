@@ -768,6 +768,13 @@ try {
     { otherRec, otherTask },
   );
 
+  // Мысль прислал владелец, значит автор — его строка «(я)». Кнопки дня и
+  // времени без маски — кнопки старых сообщений — значат «только с
+  // автором»: так встреча и должна завестись. Шаг «С кем?» с маской
+  // проверяют юнит-тесты (ideaInbox.test.ts): маска считается по списку
+  // людей в порядке peopleOrder, и пересчитывать его здесь значило бы
+  // писать вторую копию правила.
+  const { data: ownerRow } = await admin.from("assignees").insert({ user_id: userId, name: "Проверочный Владелец (я)" }).select("id").single();
   const meetIdea = await sentIdea("Мысль для встречи");
   await ideaPress(7, "i:meet:" + meetIdea);
   await ideaPress(8, "i:md:" + meetIdea + ".3");
@@ -783,12 +790,25 @@ try {
     ideaMeeting?.time === "17:30" && ideaMeeting?.created_by === memberUser.user.id,
     ideaMeeting,
   );
+  const { data: ownerVote } = ideaMeeting?.id
+    ? await admin.from("meeting_participants").select("assignee_id").eq("meeting_id", ideaMeeting.id).eq("assignee_id", ownerRow.id)
+    : { data: [] };
+  check(
+    "и зовёт автора мысли: он в составе и с кнопками ответа",
+    (ideaMeeting?.participants || []).includes("Проверочный Владелец (я)") && (ownerVote || []).length === 1,
+    { participants: ideaMeeting?.participants, ownerVote },
+  );
+  // Кнопка с чужим отпечатком списка людей не зовёт никого.
+  const staleIdea = await sentIdea("Мысль со старым списком");
+  await ideaPress(10, "i:mt:" + staleIdea + ".3.1800.1.zzz");
+  const { data: staleMeeting } = await admin.from("meetings").select("id").eq("user_id", userId).eq("title", "Мысль со старым списком");
+  check("кнопка устаревшего списка людей встречу не заводит", (staleMeeting || []).length === 0, staleMeeting);
 
   for (const t of [selfRec?.converted_task_id, otherRec?.converted_task_id]) if (t) await admin.from("tasks").delete().eq("id", t);
   if (ideaMeeting?.id) await admin.from("meetings").delete().eq("id", ideaMeeting.id);
   if (keptCopy?.id) await admin.from("ideas").delete().eq("id", keptCopy.id);
-  await admin.from("ideas").delete().in("id", [readIdea, keepIdea, selfIdea, otherIdea, meetIdea]);
-  await admin.from("assignees").delete().eq("id", third.id);
+  await admin.from("ideas").delete().in("id", [readIdea, keepIdea, selfIdea, otherIdea, meetIdea, staleIdea]);
+  await admin.from("assignees").delete().in("id", [third.id, ownerRow.id]);
 
   await admin.from("tasks").delete().eq("id", ownerTask);
   if (created?.id) await admin.from("tasks").delete().eq("id", created.id);
