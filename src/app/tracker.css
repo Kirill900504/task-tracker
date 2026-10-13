@@ -3077,20 +3077,29 @@
   }
   .chat-edit-box textarea:focus{outline:none; box-shadow:0 0 0 3px var(--accent-soft);}
   .chat-edit-actions{display:flex; gap:6px; justify-content:flex-end;}
-  /* Список подсказок @упоминания — прямо над полем ввода, а не всплывающим
-     окном поверх всего: это подсказка к тому, что печатается, и должна
-     идти следом за курсором взглядом, а не отдельным слоем. */
+  /* Список подсказок @упоминания всплывает НАД полем, поверх ленты, как в
+     Telegram (13.10.2026). Стоя в общем столбце между лентой и полем, он
+     был flex-элементом колонки, где лента забирает всю высоту, — и в окне
+     задачи сжимался до одной строки с прокруткой: «ты там тоже есть,
+     просто нужно скролить» (отзыв Игоря). Поверх ленты он ни у кого не
+     отнимает места. До семи строк, дальше своя прокрутка. */
   .chat-mention-list{
-    display:flex; flex-direction:column; gap:2px; margin-bottom:6px;
-    max-height:160px; overflow-y:auto;
-    background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:var(--radius-sm);
-    padding:4px;
+    position:absolute; left:0; right:0; bottom:calc(100% + 6px); z-index:20;
+    display:flex; flex-direction:column; gap:2px;
+    max-height:min(300px, 50vh); overflow-y:auto; overscroll-behavior:contain;
+    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-md);
+    box-shadow:0 10px 28px rgba(0,0,0,.45); padding:5px;
+    animation:chat-mention-in .12s ease-out;
   }
+  @keyframes chat-mention-in{from{opacity:0; transform:translateY(4px);}to{opacity:1; transform:none;}}
   .chat-mention-item{
-    text-align:left; padding:7px 9px; border:0; border-radius:6px; background:none;
-    color:var(--ink); font-family:var(--sans); font-size:13px; cursor:pointer;
+    flex:none; display:flex; align-items:center; gap:10px;
+    text-align:left; padding:6px 9px; min-height:40px; border:0; border-radius:8px; background:none;
+    color:var(--ink); font-family:var(--sans); font-size:14px; cursor:pointer;
   }
-  .chat-mention-item:hover, .chat-mention-item.active{background:var(--accent-soft); color:var(--accent);}
+  .chat-mention-item .chat-avatar{width:26px; height:26px; font-size:10.5px;}
+  .chat-mention-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .chat-mention-item.active{background:var(--accent-soft); color:var(--accent);}
   .chat-foot{display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;}
   .chat-reaction{
     display:inline-flex; align-items:center; gap:5px;
@@ -3139,7 +3148,7 @@
   .chat-menu-item.danger{color:var(--high);}
   .chat-menu-item.danger:hover{background:var(--high-bg); color:var(--high);}
 
-  .chat-composer{display:flex; gap:8px; align-items:flex-end; margin-top:12px;}
+  .chat-composer{display:flex; gap:8px; align-items:flex-end; margin-top:12px; position:relative;}
   .chat-composer textarea{
     flex:1; min-height:42px; resize:vertical; padding:10px 12px; font-size:13.5px;
     font-family:var(--sans); color:var(--ink); background:var(--bg);

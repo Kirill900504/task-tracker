@@ -169,3 +169,58 @@ test("обсуждение выглядит перепиской: своя ре�
   // Лента — со своей прокруткой: без неё разговор растягивает окно задачи.
   await expect(page.locator(".chat-feed")).toBeVisible();
 });
+
+// 13.10.2026, отзыв Игоря: «нажимаю @ и открывается вот такой список…
+// ты там тоже есть, просто нужно скролить». В окне задачи список стоял в
+// общем столбце с лентой и сжимался до одной строки. Теперь он всплывает
+// поверх ленты над полем, показывает всех, а выбирается и мышью, и
+// стрелками с Enter.
+test("@ в обсуждении показывает всех участников поверх ленты", async ({ page }) => {
+  const title = `E2E упоминание ${Date.now()}`;
+
+  await page.goto("/login");
+  await page.fill("#email", email);
+  await page.fill("#password", password);
+  await page.click('button[type="submit"]');
+  await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
+
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  // Второй человек на задаче — чтобы в подсказке было из чего выбирать.
+  await pickWatcher(page);
+  await page.click("#saveTaskBtn");
+  await page.locator(`.task:has-text("${title}")`).first().click();
+
+  const composer = page.locator(".chat-composer textarea");
+  await expect(composer).toBeVisible();
+  await composer.fill("@");
+
+  const list = page.locator(".chat-mention-list");
+  await expect(list).toBeVisible();
+  const items = list.locator(".chat-mention-item");
+  await expect(items).toHaveCount(2);
+  // Обе строки видны целиком, без прокрутки, — то, чего не было у Игоря.
+  for (const item of await items.all()) await expect(item).toBeInViewport({ ratio: 1 });
+  const listBox = (await list.boundingBox())!;
+  const fieldBox = (await composer.boundingBox())!;
+  expect(listBox.height).toBeGreaterThan(70);
+  // Над полем, а не под ним и не вместо него.
+  expect(listBox.y + listBox.height).toBeLessThanOrEqual(fieldBox.y + 1);
+
+  // Стрелка вниз и Enter выбирают вторую строку.
+  const second = (await items.nth(1).locator(".chat-mention-name").textContent())!.trim();
+  await composer.press("ArrowDown");
+  await expect(items.nth(1)).toHaveClass(/active/);
+  await composer.press("Enter");
+  await expect(composer).toHaveValue(`@${second} `);
+  await expect(list).toBeHidden();
+
+  // Escape прячет подсказку, а окно задачи с набранным остаётся.
+  await composer.pressSequentially("@");
+  await expect(list).toBeVisible();
+  await composer.press("Escape");
+  await expect(list).toBeHidden();
+  await expect(composer).toBeVisible();
+  await expect(composer).toHaveValue(`@${second} @`);
+});

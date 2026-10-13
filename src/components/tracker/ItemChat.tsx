@@ -218,6 +218,10 @@ export default function ItemChat({
   const { comments, loading, send, edit, remove, react } = useItemComments(kind, itemId);
   const ask = useAsk();
   const [draft, setDraft] = useState("");
+  const [mentionCursor, setMentionCursor] = useState<{ query: string | null; index: number }>({ query: null, index: 0 });
+  // Escape прячет подсказку для ЭТОГО набранного текста; следующая же буква
+  // возвращает её — так же, как в Telegram.
+  const [mentionDismissed, setMentionDismissed] = useState<string | null>(null);
   // Меню сообщения: какое сообщение и в какой точке экрана его открыли.
   const [menuFor, setMenuFor] = useState<{ id: string; at: { x: number; y: number } } | null>(null);
   // Долгое нажатие — правая кнопка телефона. Таймер один на весь список:
@@ -404,11 +408,20 @@ export default function ItemChat({
     setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1400);
   }
 
+  // Весь состав, без обреза: 13.10.2026 Игорь не нашёл в списке Кирилла —
+  // показывались шесть, да ещё сжатые до одной строки (см.
+  // .chat-mention-list). Обрез в списке ЛЮДЕЙ всегда ошибка: список
+  // кончается молча, и человек решает, что позвать нельзя.
   const mentionQuery = activeMentionQuery(draft);
   const mentionHits =
-    mentionQuery !== null
-      ? mentionCandidates.filter((n) => n.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 6)
+    mentionQuery !== null && mentionDismissed !== draft
+      ? mentionCandidates.filter((n) => n.toLowerCase().includes(mentionQuery.toLowerCase()))
       : [];
+  // Подсветка помнит, к какому набранному слову она относится: напечатали
+  // ещё букву — список другой, и подсвечена снова первая строка. Так не
+  // нужен эффект, сбрасывающий индекс.
+  const mentionIndex =
+    mentionCursor.query === mentionQuery ? Math.min(mentionCursor.index, Math.max(mentionHits.length - 1, 0)) : 0;
 
   function pickMention(name: string) {
     setDraft((cur) => applyMention(cur, name));
@@ -859,20 +872,45 @@ export default function ItemChat({
         </div>
       )}
 
-      {/* Подсказка @упоминания — прямо над полем, а не всплывающим окном:
-          она следует за тем, что печатается, не отдельным слоем поверх
-          всего. */}
-      {mentionHits.length > 0 && (
-        <div className="chat-mention-list">
-          {mentionHits.map((name) => (
-            <button key={name} type="button" className="chat-mention-item" onClick={() => pickMention(name)}>
-              @{name}
-            </button>
-          ))}
-        </div>
-      )}
-
       <div className="chat-composer">
+        {/* Подсказка @упоминания всплывает над полем поверх ленты, как в
+            Telegram. В общем столбце между лентой и полем она в окне
+            задачи сжималась до одной строки (отзыв Игоря 13.10.2026). */}
+        {mentionHits.length > 0 && (
+          <div className="chat-mention-list" role="listbox" aria-label="Кого позвать">
+            {mentionHits.map((name, i) => (
+              <button
+                key={name}
+                type="button"
+                role="option"
+                aria-selected={i === mentionIndex}
+                className={"chat-mention-item" + (i === mentionIndex ? " active" : "")}
+                // mousedown, а не click: иначе поле теряет фокус раньше,
+                // чем выбор до него дошёл.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pickMention(name);
+                }}
+                onMouseEnter={() => setMentionCursor({ query: mentionQuery, index: i })}
+                // Подсвеченная строка держится в видимой части СПИСКА.
+                // scrollIntoView сюда не годится: он двигает и окно задачи
+                // под списком, а список висит поверх ленты.
+                ref={(el) => {
+                  const box = el?.parentElement;
+                  if (!el || !box || i !== mentionIndex) return;
+                  if (el.offsetTop < box.scrollTop) box.scrollTop = el.offsetTop;
+                  else if (el.offsetTop + el.offsetHeight > box.scrollTop + box.clientHeight)
+                    box.scrollTop = el.offsetTop + el.offsetHeight - box.clientHeight;
+                }}
+              >
+                <span className="chat-avatar" style={{ background: colorOf(name) }} aria-hidden>
+                  {initialsOf(name)}
+                </span>
+                <span className="chat-mention-name">{name}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           ref={draftRef}
           value={draft}
@@ -892,9 +930,28 @@ export default function ItemChat({
             // обсуждении почти всегда одно предложение. Пока открыт список
             // подсказок, Enter выбирает первую — тем же движением, что и
             // отправка, только раньше.
+            // Стрелки ходят по подсказкам, Tab выбирает, как и Enter.
+            if (mentionHits.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+              e.preventDefault();
+              const step = e.key === "ArrowDown" ? 1 : -1;
+              setMentionCursor({ query: mentionQuery, index: (mentionIndex + step + mentionHits.length) % mentionHits.length });
+              return;
+            }
+            if (mentionHits.length && e.key === "Tab") {
+              e.preventDefault();
+              pickMention(mentionHits[mentionIndex]);
+              return;
+            }
+            if (mentionHits.length && e.key === "Escape") {
+              // Закрывает только подсказку, а не окно с набранным текстом.
+              e.preventDefault();
+              e.stopPropagation();
+              setMentionDismissed(draft);
+              return;
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              if (mentionHits.length) pickMention(mentionHits[0]);
+              if (mentionHits.length) pickMention(mentionHits[mentionIndex]);
               else void handleSend();
             }
             if (e.key === "Escape" && emojiOpen) {
