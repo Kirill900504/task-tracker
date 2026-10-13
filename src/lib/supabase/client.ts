@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { AUTH_COOKIE_OPTIONS } from "./cookieOptions";
 
 // The browser talks to Supabase over its own origin whenever the direct one
 // cannot be reached.
@@ -160,5 +161,6 @@ export function createClient() {
   void route();
   return createBrowserClient(SUPABASE_URL, SUPABASE_KEY, {
     global: { fetch: routedFetch },
+    cookieOptions: AUTH_COOKIE_OPTIONS,
   });
 }

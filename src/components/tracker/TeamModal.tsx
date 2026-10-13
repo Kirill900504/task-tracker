@@ -177,11 +177,19 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     }
     setBulk({ lines: [], copied: false, busy: true });
     const lines: { name: string; link?: string; error?: string }[] = [];
-    // По одному, а не разом: у маршрута предел на частоту, и десять
-    // одновременных запросов получили бы отказ все сразу.
-    for (const person of unreached) {
-      const result = await invite(person.id, channel);
-      lines.push("error" in result ? { name: withoutSelfMark(person.name), error: result.error } : { name: withoutSelfMark(person.name), link: result.link });
+    // Пачками по четыре, а не по одному и не все разом. По одному на
+    // пятнадцати людях выходило дольше двадцати секунд (поймал e2e
+    // 13.10.2026), а предел маршрута считает ЗАПРОСЫ, не одновременность, —
+    // их столько же. Все разом не стоит другого: строки шли бы вразнобой с
+    // моментом ответа, а порядок здесь — порядок «Команды».
+    const BATCH = 4;
+    for (let i = 0; i < unreached.length; i += BATCH) {
+      const batch = unreached.slice(i, i + BATCH);
+      const results = await Promise.all(batch.map((person) => invite(person.id, channel)));
+      batch.forEach((person, j) => {
+        const result = results[j];
+        lines.push("error" in result ? { name: withoutSelfMark(person.name), error: result.error } : { name: withoutSelfMark(person.name), link: result.link });
+      });
       setBulk({ lines: [...lines], copied: false, busy: true });
     }
     setBulk({ lines, copied: false, busy: false });

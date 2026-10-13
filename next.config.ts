@@ -44,14 +44,18 @@ const CSP = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  // Nothing here is ever meant to be embedded in another page — this is the
-  // modern equivalent of X-Frame-Options, kept alongside it for older browsers.
-  "frame-ancestors 'none'",
+  // Framed by the messengers' web and desktop clients only — that is where
+  // their mini-apps live (MAX's bridge itself trusts *.max.ru and *.oneme.ru
+  // as a parent). «Nobody» stood here until 13.10.2026, and the mini-app
+  // opened from MAX on a computer was a blank white window. Kirill approved
+  // this in so many words: «разрешаю показ в окне MAX». X-Frame-Options is
+  // gone because it cannot name more than one parent, and a browser that
+  // sees both obeys this line anyway.
+  "frame-ancestors 'self' https://*.max.ru https://*.oneme.ru https://web.telegram.org https://*.telegram.org",
 ].join("; ");
 
 const SECURITY_HEADERS = [
   { key: "Content-Security-Policy", value: CSP },
-  { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // The microphone is used for dictation, by this origin only; nothing else

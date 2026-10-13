@@ -1,13 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { AUTH_COOKIE_OPTIONS } from "./cookieOptions";
 
 // A write to /api sent by a page on ANOTHER site. The sign-in cookie is
-// SameSite=Lax today, which already keeps it off such a request — but that is
-// the library's default, not a decision of ours, and the routes read their
-// bodies with req.json() whatever the Content-Type, so a form posting
-// text/plain would reach them the moment the default changed (the MAX
-// mini-app on a computer lives in a cross-site frame and is exactly the
-// reason it might). This makes the rule ours. Browsers always send Origin on
+// SameSite=None (see cookieOptions — the mini-app lives in MAX's and
+// Telegram's frames), so the browser attaches it to such a request, and the
+// routes read their bodies with req.json() whatever the Content-Type: without
+// this check any page the person happens to open could press «Принял» or
+// delete a task on his behalf. Browsers always send Origin on
 // a cross-site POST; a missing one means a server calling us (the messenger
 // webhooks, the cron pinger), and those carry their own secrets.
 export function crossSiteWrite(method: string, origin: string | null, host: string | null): boolean {
@@ -52,6 +52,7 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: AUTH_COOKIE_OPTIONS,
       cookies: {
         getAll() {
           return request.cookies.getAll();
