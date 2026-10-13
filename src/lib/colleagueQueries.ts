@@ -230,6 +230,30 @@ export function navButtons(): BotButton[][] {
   return navRow("recipient");
 }
 
+// Какое меню показать человеку — решает ОН, а не нажатая кнопка.
+//
+// «☰ Меню» получателя (`t:list:menu`) приходит не только получателям:
+// постановщик тоже получает задачи с этой кнопкой, а с 13.10.2026 ею
+// отвечают ещё «Мобильное приложение», «Меню кнопок» и приветствие.
+// Нажатие из чата постановщика, не узнанное его половиной, разбирается
+// половиной получателя (lib/botCallback) — и раньше открывало меню
+// получателя. Там «🔍 На приёмке» значит «что сдал я сам», и Кирилл
+// увидел «Ничего не ждёт приёмки» при задаче, стоящей у него на приёмке
+// (13.10.2026). Вход есть — значит, он постановщик, и меню его.
+export function isOwnerSelfName(name: string): boolean {
+  return /\(я\)\s*$/.test(name);
+}
+
+async function canAssign(admin: SupabaseClient, colleague: { id: string; name: string }): Promise<boolean> {
+  if (isOwnerSelfName(colleague.name)) return true;
+  const { data } = await admin
+    .from("workspace_members")
+    .select("status, member_id")
+    .eq("assignee_id", colleague.id)
+    .maybeSingle();
+  return data?.status === "active" && !!data.member_id;
+}
+
 // «Откройте трекер» — ссылкой, по которой входят без пароля.
 //
 // Это ответ на то, чем для половины людей трекер заканчивался. В MAX
@@ -276,7 +300,7 @@ export async function replyForColleague(
   kind: ColleagueQuery,
   today: string,
 ): Promise<BotReply> {
-  if (kind === "menu") return botMenu("recipient");
+  if (kind === "menu") return botMenu((await canAssign(admin, colleague)) ? "assigner" : "recipient");
   if (kind === "help") return { text: colleagueCommandsHelp(colleague.name), buttons: navButtons() };
   if (kind === "enter") return signInReply(admin, colleague.id);
   if (kind === "app") return appReply();

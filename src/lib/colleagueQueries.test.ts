@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { listReply, markFor, matchColleagueCommand, type MyTask } from "./colleagueQueries";
+import { listReply, markFor, matchColleagueCommand, replyForColleague, type MyTask } from "./colleagueQueries";
+import { decodeCallback } from "./colleagues";
 
 const TODAY = "2026-09-18";
 
@@ -101,5 +102,37 @@ describe("значок состояния", () => {
     expect(markFor(task({ deadline: TODAY }), TODAY)).toBe("●");
     expect(markFor(task(), TODAY)).toBe("🆕");
     expect(markFor(task({ acceptedAt: "2026-09-17" }), TODAY)).toBe("•");
+  });
+});
+
+// «☰ Меню» с кнопки получателя у постановщика. 13.10.2026 Кирилл нажал в
+// нём «На приёмке» и получил «Ничего не ждёт приёмки» при задаче, стоящей
+// у него на приёмке: открылось меню получателя, где этот раздел — «что
+// сдал я сам». Меню выбирается по человеку, а не по кнопке.
+describe("меню по роли", () => {
+  function adminWith(member: { status: string; member_id: string | null } | null) {
+    const chain = {
+      select: () => chain,
+      eq: () => chain,
+      maybeSingle: async () => ({ data: member, error: null }),
+    };
+    return { from: () => chain } as unknown as Parameters<typeof replyForColleague>[0];
+  }
+  const actions = (reply: { buttons?: { data: string }[][] }) =>
+    (reply.buttons || []).flat().map((b) => decodeCallback(b.data)?.action);
+
+  it("владельцу — меню постановщика", async () => {
+    const reply = await replyForColleague(adminWith(null), { id: "a", name: "Кирилл Кучеренко (я)" }, "menu", TODAY);
+    expect(actions(reply)).toContain("olist");
+  });
+
+  it("человеку со входом — тоже", async () => {
+    const reply = await replyForColleague(adminWith({ status: "active", member_id: "u" }), { id: "a", name: "Михаил Котов" }, "menu", TODAY);
+    expect(actions(reply)).toContain("olist");
+  });
+
+  it("получателю без входа — его меню, без чужих разделов", async () => {
+    const reply = await replyForColleague(adminWith(null), { id: "a", name: "Юрий Черкашин" }, "menu", TODAY);
+    expect(actions(reply)).not.toContain("olist");
   });
 });
