@@ -1654,3 +1654,28 @@ test("прошлое в форме встречи не выбирается", as
   const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   await expect(page.locator(`.cal-sheet [data-date="${iso}"]`)).toBeDisabled();
 });
+
+// 13.10.2026: «при нажатии „пробел“ мысль превращается в кирпич, с
+// невозможностью внесения изменений». Поле правки лежит внутри
+// перетаскиваемого блока, и пробел из него запускал перенос с клавиатуры —
+// а следующий пробел в соседней мысли его «бросал». Пробел обязан
+// оставаться буквой.
+test("a space typed while editing a thought stays a space", async ({ page }) => {
+  const text = `E2E мысль ${Date.now()}`;
+
+  await login(page);
+  await page.fill("#ideaInput", text);
+  await page.locator("#ideaInput").press("Enter");
+  const item = page.locator(".idea-item", { hasText: text });
+  await expect(item).toBeVisible();
+
+  await item.locator(".idea-text").click();
+  const input = item.locator(".idea-edit-input");
+  await expect(input).toBeFocused();
+  await input.press("End");
+  await page.keyboard.type(" два слова");
+  await expect(input).toHaveValue(`${text} два слова`);
+  await expect(page.locator(".idea-item.dragging")).toHaveCount(0);
+  await input.press("Enter");
+  await expect(page.locator(".idea-item", { hasText: `${text} два слова` })).toBeVisible();
+});

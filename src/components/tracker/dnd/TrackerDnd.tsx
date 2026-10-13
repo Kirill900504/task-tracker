@@ -128,6 +128,29 @@ class CardPointerSensor extends PointerSensor {
   ];
 }
 
+// Перенос с клавиатуры начинается пробелом или Enter — но ТОЛЬКО когда
+// фокус стоит на самой карточке, а не на чём-то внутри неё.
+//
+// 13.10.2026: «при нажатии „пробел“ мысль превращается в кирпич, с
+// невозможностью внесения изменений». Поле правки мысли лежит ВНУТРИ
+// перетаскиваемого блока, keydown из него всплывает до обработчика
+// dnd-kit, и проверка библиотеки его не останавливает: она сравнивает цель
+// с отдельной «ручкой» (`setActivatorNodeRef`), а ручек у нас нет — блок
+// тянут целиком. Пробел съедался (`preventDefault`), мысль вставала в
+// перенос, а следующий пробел — уже в соседней мысли — его «бросал», и всё
+// откатывалось. Та же дыра была у любого поля внутри карточки, в том числе
+// у окна, открытого из неё: портал всплывает по дереву React, а не DOM.
+class CardKeyboardSensor extends KeyboardSensor {
+  static activators = KeyboardSensor.activators.map((activator) => ({
+    ...activator,
+    handler: (...args: Parameters<(typeof KeyboardSensor.activators)[number]["handler"]>) => {
+      const [event] = args;
+      if (event.target !== event.currentTarget) return false;
+      return activator.handler(...args);
+    },
+  }));
+}
+
 // Чем считать «вот сюда».
 //
 // Для зон — по указателю: панели, дни календаря и списки большие, вложены
@@ -253,7 +276,7 @@ export default function TrackerDnd({
   const sensors = useSensors(
     useSensor(CardPointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(CardKeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   function handleDragStart(event: DragStartEvent) {
