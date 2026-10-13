@@ -42,6 +42,7 @@ const OPEN_EVENT = "rokas:open-item";
 
 type Row = Omit<CommentRowForAlert, "authorName"> & {
   created_at: string;
+  user_id: string | null;
   assignees: { name: string } | { name: string }[] | null;
 };
 
@@ -180,7 +181,7 @@ export function useDesktopAlerts({
         }
         const { data } = await db
           .from("item_comments")
-          .select("id, item_kind, item_id, body, system, author_user_id, author_assignee_id, created_at, assignees(name)")
+          .select("id, item_kind, item_id, body, system, user_id, author_user_id, author_assignee_id, created_at, assignees(name)")
           // «Не раньше», а не «позже»: две строки одной миллисекунды
           // (перенос пишет в обе встречи разом) иначе теряли бы вторую.
           // Повтор последней виденной отсекает отпечаток в deliver.
@@ -197,8 +198,12 @@ export function useDesktopAlerts({
         const prefs = readAlertPrefs();
         for (const r of rows) {
           const a = Array.isArray(r.assignees) ? r.assignees[0] : r.assignees;
+          // Имя владельца — только владельцу (автор пуст или хозяин
+          // пространства); безымянный иначе — «Участник», а не «Кирилл»:
+          // так подписывались реплики руководителей из бота.
+          const fallback = !r.author_user_id || r.author_user_id === r.user_id ? "Кирилл" : "Участник";
           const alert = alertForComment(
-            { ...r, authorName: withoutSelfMark(a?.name || "") || "Кирилл" },
+            { ...r, authorName: withoutSelfMark(a?.name || "") || fallback },
             { myUserId: me, myAssigneeId: meRow, known: known.current, prefs },
           );
           if (!alert) continue;

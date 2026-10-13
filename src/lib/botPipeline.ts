@@ -100,12 +100,17 @@ function say(ctx: BotContext, text: string) {
 //
 // Вставку делает служебный ключ, поэтому автор проставляется руками:
 // `author_user_id` — это и есть «писал сам постановщик», по нему рассылка
-// отличает его слова от чужих и не шлёт ему же копию. Пространство
+// отличает его слова от чужих и не шлёт ему же копию. `author_assignee_id`
+// — его строка в списке людей, и она обязательна тоже: по ней и только по
+// ней трекер подписывает реплику именем. Без неё лента не находила имени и
+// подписывала руководителя запасным «Кирилл» (13.10.2026: «Михаил Котов в
+// чате отображается как Кирилл»). У владельца строки в акторе нет, и пусто
+// здесь честно означает его. Пространство
 // подставит триггер (миграция 0019), а разослать надо через ту же
 // commentDelivery, что и трекер: правило «кому дошло» одно на все двери.
 async function writeOwnerComment(
   ctx: BotContext,
-  userId: string,
+  actor: BotActor,
   aim: OwnerReplyPending,
   body: string,
 ): Promise<string> {
@@ -115,7 +120,8 @@ async function writeOwnerComment(
       item_kind: aim.replyKind,
       item_id: aim.itemId,
       body,
-      author_user_id: userId,
+      author_user_id: actor.userId,
+      author_assignee_id: actor.assigneeId || null,
       source: ctx.channel.id === "max" ? "max" : "telegram",
     })
     .select("id")
@@ -669,7 +675,7 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
   if (isOwnerReply(waiting)) {
     const fresh = Date.now() - (Date.parse(waiting.at || "") || 0) < AIM_LIFETIME_MS;
     if (fresh) {
-      await say(ctx, await writeOwnerComment(ctx, actor.userId, waiting, trimmed));
+      await say(ctx, await writeOwnerComment(ctx, actor, waiting, trimmed));
       return true;
     }
     return false;

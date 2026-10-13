@@ -83,6 +83,7 @@ export type Comment = {
 type ReplyRow = {
   id: string;
   body: string;
+  user_id: string | null;
   author_user_id: string | null;
   assignees: { name: string } | { name: string }[] | null;
 };
@@ -95,6 +96,7 @@ type CommentRow = {
   edited_at: string | null;
   source: "app" | "telegram" | "max";
   system: boolean;
+  user_id: string | null;
   author_user_id: string | null;
   author_assignee_id: string | null;
   assignees: { name: string } | { name: string }[] | null;
@@ -120,13 +122,21 @@ type ReactionRow = {
   actor_user_id: string | null;
 };
 
-function nameOf(row: Pick<CommentRow, "author_user_id" | "assignees">, meId: string, ownerLabel: string): string {
+function nameOf(row: Pick<CommentRow, "user_id" | "author_user_id" | "assignees">, meId: string, ownerLabel: string): string {
   if (row.author_user_id && row.author_user_id === meId) return "Вы";
   const a = row.assignees;
   const name = Array.isArray(a) ? a[0]?.name : a?.name;
   // «(я)» — пометка для того, кто ищет себя в списке людей. В подписи под
   // чужой репликой её читает кто угодно, кроме него.
-  return withoutSelfMark(name || "") || ownerLabel;
+  const known = withoutSelfMark(name || "");
+  if (known) return known;
+  // Имени владельца здесь заслуживает только владелец: автор пуст или
+  // совпадает с хозяином пространства. Иначе это человек, чья строка в
+  // списке людей не записана, — и подписать его «Кириллом» значит
+  // приписать его слова другому (так и было с репликами руководителей из
+  // бота до 13.10.2026). Нейтральное слово честнее чужого имени.
+  if (!row.author_user_id || row.author_user_id === row.user_id) return ownerLabel;
+  return "Участник";
 }
 
 // Сообщение, которое уже на экране, но ещё не в базе. Пока серверная строка
@@ -173,8 +183,8 @@ async function loadComments(kind: ItemKind, itemId: string): Promise<Comment[]> 
   const { data: rows } = await db
     .from("item_comments")
     .select(
-      "id, body, attachments, created_at, edited_at, source, system, author_user_id, author_assignee_id, reply_to, proposal, assignees(name), " +
-        "reply:reply_to(id, body, author_user_id, assignees(name)), " +
+      "id, body, attachments, created_at, edited_at, source, system, user_id, author_user_id, author_assignee_id, reply_to, proposal, assignees(name), " +
+        "reply:reply_to(id, body, user_id, author_user_id, assignees(name)), " +
         "comment_reactions(id, emoji, actor_user_id, assignees(name))",
     )
     .eq("item_kind", kind)
