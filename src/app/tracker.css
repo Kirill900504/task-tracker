@@ -1816,7 +1816,6 @@
     font-family:var(--sans); font-size:13px; color:var(--ink);
   }
   .day-peek-row:hover{background:var(--paper-soft);}
-  .day-peek-row.closed .day-peek-title{color:var(--ink-soft); text-decoration:line-through;}
   .day-peek-time{flex:none; color:var(--accent); font-variant-numeric:tabular-nums;}
   .day-peek-title{flex:1; min-width:0; overflow-wrap:anywhere;}
   .day-peek-who{flex:none; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--ink-soft);}
