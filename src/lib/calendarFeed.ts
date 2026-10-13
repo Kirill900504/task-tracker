@@ -121,7 +121,12 @@ export function buildIcs(meetings: FeedMeeting[], now: Date = new Date()): strin
     // Предложенная встреча времени не занимает (см. CLAUDE.md) — в
     // календаре это «под вопросом», а не «занят».
     lines2.push(`STATUS:${m.status === "proposed" ? "TENTATIVE" : "CONFIRMED"}`);
-    if (m.time) lines2.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${esc(m.title || "Встреча")}`, "TRIGGER:-PT15M", "END:VALARM");
+    // Будильник — только у действующей встречи. Закрытая остаётся в
+    // календаре телефона как запись о том, что было (с итогом), но не
+    // звонит в свой прежний час: 13.10.2026, «убери напоминания о
+    // завершённых, закрытых и удалённых встречах». Предложенная тоже
+    // молчит — крон мессенджера о ней не напоминает, и календарь не должен.
+    if (m.time && (!m.status || m.status === "planned")) lines2.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${esc(m.title || "Встреча")}`, "TRIGGER:-PT15M", "END:VALARM");
     lines2.push("END:VEVENT");
     lines.push(...lines2);
   }

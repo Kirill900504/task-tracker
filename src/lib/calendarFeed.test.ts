@@ -54,6 +54,19 @@ describe("файл календаря", () => {
     expect(ics).toContain("TRIGGER:-PT15M");
   });
 
+  it("закрытая встреча в календаре есть, но не звонит", () => {
+    const closed = buildIcs(
+      [
+        { id: "s", title: "Прошла", date: "2026-10-09", time: "12:00", durationMin: 30, participants: [], status: "success", result: "111" },
+        { id: "n", title: "Перенесена", date: "2026-10-09", time: "13:00", durationMin: 30, participants: [], status: "no_result" },
+        { id: "p", title: "Предложена", date: "2026-10-09", time: "14:00", durationMin: 30, participants: [], status: "proposed" },
+      ],
+      now,
+    );
+    expect(closed).toContain("UID:s@rokas-tracker");
+    expect(closed).not.toContain("VALARM");
+  });
+
   it("строки не длиннее 75 байт и разделены CRLF", () => {
     for (const line of ics.split("\r\n")) expect(Buffer.byteLength(line)).toBeLessThanOrEqual(75);
     expect(ics.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);

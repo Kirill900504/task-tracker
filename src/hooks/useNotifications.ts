@@ -140,6 +140,13 @@ export function useNotifications({
     const prefs = readAlertPrefs();
     if (!prefs.reminders || isQuiet(prefs)) return;
     meetings.forEach((m) => {
+      // Только действующая встреча. Закрытую заранее («Успех», «Провал»,
+      // перенос — он тоже закрывает прежнюю) трекер объявлял «через 15
+      // минут» в её прежний час, хотя крон мессенджера её давно пропускал:
+      // 13.10.2026, «убери напоминания о завершённых, закрытых и удалённых
+      // встречах у всех». Пустой статус — старые строки, это «planned».
+      // Предложенная времени не занимает, о ней тоже не напоминают.
+      if (m.status && m.status !== "planned") return;
       if (m.date !== today || !m.time) return;
       const [hh, mm] = m.time.split(":").map(Number);
       if (Number.isNaN(hh) || Number.isNaN(mm)) return;
