@@ -208,6 +208,21 @@ export default function AskProvider({ children }: { children: ReactNode }) {
     close({ kind: current.kind, value: true });
   }
 
+  // Поле с уже вписанным текстом («Имя», название) открывается курсором в
+  // конце: правят обычно хвост, а браузер ставит курсор в начало. Кадр
+  // отложен потому же, что в AutoGrowTextarea: showModal() у окна двигает
+  // фокус сам и делает это позже нашего эффекта.
+  useEffect(() => {
+    if (pending?.kind !== "ask") return;
+    const frame = requestAnimationFrame(() => {
+      const el = document.getElementById("askInput") as HTMLInputElement | HTMLTextAreaElement | null;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pending]);
+
   const isOpen = pending !== null;
   useEffect(() => {
     if (!isOpen) return;

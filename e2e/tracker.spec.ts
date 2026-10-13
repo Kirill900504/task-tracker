@@ -1675,7 +1675,10 @@ test("a space typed while editing a thought stays a space", async ({ page }) => 
   await item.locator(".idea-text").click();
   const input = item.locator(".idea-edit-input");
   await expect(input).toBeFocused();
-  await input.press("Control+End");
+  // Курсор сам встаёт в конец — правят хвост, а не начало.
+  await expect
+    .poll(() => input.evaluate((el: HTMLTextAreaElement) => el.selectionStart === el.value.length))
+    .toBe(true);
   await page.keyboard.type(" два слова");
   await expect(input).toHaveValue(`${text} два слова`);
   await expect(page.locator(".idea-item.dragging")).toHaveCount(0);

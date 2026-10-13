@@ -167,6 +167,10 @@ export default function IdeaItem({
             <AutoGrowTextarea
               className="idea-edit-input"
               autoFocus
+              // Курсор в конец: мысль правят, чтобы дописать или поправить
+              // хвост, а браузер ставит его в начало, и первое же слово
+              // вставало перед текстом (13.10.2026, «поставь курсор в конец»).
+              focusAtEnd
               value={draft}
               onChange={setDraft}
               onEnter={save}
