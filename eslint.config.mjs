@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Third-party scripts copied verbatim (the Telegram bridge, see
+    // MiniAppChrome): not ours to lint, and editing them defeats the copy.
+    "public/vendor/**",
   ]),
   {
     rules: {

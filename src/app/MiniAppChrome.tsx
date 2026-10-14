@@ -33,9 +33,18 @@ import { hasMessengerLaunch } from "@/lib/messengerLaunch";
 // «1» — значение из прежней версии: оно означало Telegram.
 const FLAG = "rokas:miniapp";
 const SCRIPT_ID = "messenger-webapp-script";
-const BRIDGE: Record<"telegram" | "max", string> = {
-  telegram: "https://telegram.org/js/telegram-web-app.js",
-  max: "https://st.max.ru/js/max-web-app.js",
+// Telegram's bridge is served from our own origin first. telegram.org is
+// blocked or throttled on a large share of Russian networks (14.10.2026: two
+// of three Moscow/St Petersburg probes timed out on it), and the mini-app's
+// WebView fetches it over the phone's own connection, not through Telegram's.
+// Our origin is, by definition, reachable whenever the page itself loaded.
+// The copy is Telegram's own file, unmodified; refresh it from
+// https://telegram.org/js/telegram-web-app.js when a newer Bot API method is
+// needed. The original address stays as the fallback. MAX's st.max.ru answered
+// from every Russian probe, so it is loaded where MAX publishes it.
+const BRIDGE: Record<"telegram" | "max", string[]> = {
+  telegram: ["/vendor/telegram-web-app.js", "https://telegram.org/js/telegram-web-app.js"],
+  max: ["https://st.max.ru/js/max-web-app.js"],
 };
 
 function launchChannel(hash: string): "telegram" | "max" | null {
@@ -106,14 +115,23 @@ export default function MiniAppChrome() {
     }
     if (document.getElementById(SCRIPT_ID)) return;
 
-    const script = document.createElement("script");
-    script.id = SCRIPT_ID;
-    script.src = BRIDGE[channel];
-    script.async = true;
-    script.onload = () => tune(current());
-    // Молча: не загрузился — значит просто нет этих удобств.
-    script.onerror = () => {};
-    document.head.appendChild(script);
+    const load = (sources: string[]) => {
+      const [src, ...rest] = sources;
+      if (!src) return;
+      const script = document.createElement("script");
+      script.id = SCRIPT_ID;
+      script.src = src;
+      script.async = true;
+      script.onload = () => tune(current());
+      // Не загрузился — следующий адрес; кончились — молча: значит просто
+      // нет этих удобств.
+      script.onerror = () => {
+        script.remove();
+        load(rest);
+      };
+      document.head.appendChild(script);
+    };
+    load(BRIDGE[channel]);
   }, []);
 
   return null;
