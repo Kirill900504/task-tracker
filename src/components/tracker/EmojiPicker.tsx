@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 // Смайлики в тексте сообщения — кнопка ☺ у поля ввода, как в Telegram и
@@ -17,6 +17,12 @@ import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 // принадлежит полю ввода и уходит вместе с ним (см. «Ничто не всплывает
 // поверх кнопок наполовину» в CLAUDE.md — здесь оно накрывает только ленту
 // над полем, которую в эту секунду не читают).
+//
+// Одно открытие — один смайлик (14.10.2026, его слова: «максимум добавленных
+// смайликов за одно открытие — один смайлик, выбрал и окно автоматически
+// закрывается»). И окно уходит само, как только человек занялся другим:
+// щелчок в поле, в ленту, куда угодно мимо него — то же, что Escape.
+// Висящее над лентой окно, о котором забыли, закрывает собой переписку.
 
 const GROUPS: { id: string; label: string; emojis: string[] }[] = [
   {
@@ -86,8 +92,24 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
   // кнопке у поля, и до него Escape не доходил (поймал e2e 13.10.2026).
   useEscapeToClose(onClose);
 
+  // Щелчок мимо закрывает. Слушаем pointerdown в фазе перехвата: и щелчок
+  // в поле ввода, и нажатие на кнопку в ленте, и касание пальцем — всё это
+  // сюда приходит первым. Кнопка ☺ рядом не в счёт: она сама переключает
+  // окно, и закрыть его здесь значило бы тут же открыть снова.
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDown(e: PointerEvent) {
+      const wrap = box.current?.parentElement;
+      if (wrap && e.target instanceof Node && wrap.contains(e.target)) return;
+      onClose();
+    }
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [onClose]);
+
   return (
     <div
+      ref={box}
       className="emoji-picker"
       role="dialog"
       aria-label="Смайлики"
@@ -114,6 +136,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
             onClick={() => {
               rememberEmoji(emoji);
               onPick(emoji);
+              onClose();
             }}
           >
             {emoji}

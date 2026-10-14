@@ -2991,13 +2991,14 @@
     padding:2px 4px; box-shadow:var(--shadow-2);
   }
   .chat-msg.mine .chat-quick{left:auto; right:calc(100% + 6px);}
-  /* Пузырь уступает плашке место сбоку: 206px — кружок автора (36) плюс
-     сама плашка с зазором (~170). Своему кружок не нужен. Но не уже 60%
+  /* Пузырь уступает плашке место сбоку: 236px — кружок автора (36) плюс
+     сама плашка с зазором (~200: четыре реакции, «+» и «ответить»). Своему
+     кружок не нужен. Но не уже 60%
      строки — в узком окне лучше обрезанная плашка, чем столбик в три
      слова; обрезает её лента, а не полоса прокрутки. */
   @media (hover:hover){
-    .chat-msg{max-width:min(520px, max(60%, min(78%, calc(100% - 206px))));}
-    .chat-msg.mine{max-width:min(520px, max(60%, min(78%, calc(100% - 170px))));}
+    .chat-msg{max-width:min(520px, max(60%, min(78%, calc(100% - 236px))));}
+    .chat-msg.mine{max-width:min(520px, max(60%, min(78%, calc(100% - 200px))));}
   }
   /* Мостик через зазор: иначе по дороге мыши от пузыря к плашке наведение
      теряется, и плашка исчезает из-под курсора. */
@@ -3130,6 +3131,11 @@
   }
   .chat-reaction:hover{border-color:var(--accent);}
   .chat-reaction.mine{border-color:var(--accent); background:var(--accent-soft); color:var(--accent);}
+  /* Новая реакция появляется толчком, как в Telegram: иначе плашка, выросшая
+     под чужим сообщением, неотличима от той, что стояла там всегда. */
+  .chat-reaction{animation:reaction-pop .22s ease-out;}
+  @keyframes reaction-pop{0%{transform:scale(.6); opacity:0;} 70%{transform:scale(1.08); opacity:1;} 100%{transform:scale(1);}}
+  @media (prefers-reduced-motion: reduce){ .chat-reaction{animation:none;} }
   .chat-mini{
     background:none; border:0; padding:2px 4px; cursor:pointer;
     font-size:11.5px; color:var(--ink-soft); font-family:var(--sans);
@@ -3796,10 +3802,14 @@
   display:flex; flex-direction:column;
   background:var(--paper-soft); border:1px solid var(--line); border-radius:var(--radius-md);
   box-shadow:var(--shadow-2); overflow:hidden;
+  transform-origin:bottom right; animation:emoji-in .14s ease-out;
 }
+@keyframes emoji-in{from{opacity:0; transform:translateY(6px) scale(.97);} to{opacity:1; transform:none;}}
+@media (prefers-reduced-motion: reduce){ .emoji-picker{animation:none;} }
 .emoji-tabs{display:flex; gap:2px; padding:6px; border-bottom:1px solid var(--line-soft);}
 .emoji-tab{flex:1; min-width:0; padding:0; height:34px; border:0; border-radius:8px; background:none; font-size:18px; cursor:pointer;}
 .emoji-tab.on, .emoji-tab:hover{background:rgba(255,255,255,.08);}
 .emoji-grid{display:grid; grid-template-columns:repeat(8, minmax(0, 1fr)); gap:2px; padding:6px; max-height:230px; overflow-y:auto;}
 .emoji-cell{height:36px; min-width:0; padding:0; border:0; border-radius:8px; background:none; font-size:21px; line-height:1; cursor:pointer;}
-.emoji-cell:hover{background:rgba(255,255,255,.08);}
+.emoji-cell{transition:background .1s ease, transform .1s ease;}
+.emoji-cell:hover{background:rgba(255,255,255,.08); transform:scale(1.18);}

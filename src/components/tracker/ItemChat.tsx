@@ -740,6 +740,23 @@ export default function ItemChat({
                                   </button>
                                 );
                               })}
+                              {/* Весь набор реакций — тут же, у четырёх
+                                  частых. Раньше он жил только в меню по
+                                  правой кнопке, а о правой кнопке на
+                                  сообщении знает не каждый: остальные
+                                  тринадцать реакций для них не существовали. */}
+                              <button
+                                type="button"
+                                className="chat-quick-btn"
+                                title="Другие реакции"
+                                aria-label="Другие реакции"
+                                onClick={(e) => {
+                                  const r = e.currentTarget.getBoundingClientRect();
+                                  setMenuFor({ id: c.id, at: { x: r.left, y: r.bottom + 4 } });
+                                }}
+                              >
+                                <Icon name="plus" size={14} />
+                              </button>
                               <button
                                 type="button"
                                 className="chat-quick-btn"

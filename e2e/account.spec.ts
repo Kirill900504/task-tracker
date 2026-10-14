@@ -51,11 +51,22 @@ test("смайлик из кнопки у поля встаёт на место 
   await page.locator(".emoji-cell", { hasText: "👍" }).first().click();
   await expect(composer).toHaveValue("привет👍 мир");
 
-  // Окно смайликов после выбора остаётся открытым, как в Telegram, —
-  // можно поставить несколько подряд. Escape закрывает только его, а окно
-  // задачи остаётся.
+  // Одно открытие — один смайлик (14.10.2026): выбрал — окно закрылось, а
+  // курсор вернулся в поле.
+  await expect(page.locator(".emoji-picker")).toBeHidden();
+  await expect(composer).toBeFocused();
+
+  // Escape закрывает только его, а окно задачи остаётся.
+  await page.click('.chat-composer button[aria-label="Смайлики"]');
   await expect(page.locator(".emoji-picker")).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(page.locator(".emoji-picker")).toBeHidden();
+  await expect(composer).toBeVisible();
+
+  // Щелчок в любое другое место — в поле ввода — тоже закрывает.
+  await page.click('.chat-composer button[aria-label="Смайлики"]');
+  await expect(page.locator(".emoji-picker")).toBeVisible();
+  await composer.click();
   await expect(page.locator(".emoji-picker")).toBeHidden();
   await expect(composer).toBeVisible();
 });
