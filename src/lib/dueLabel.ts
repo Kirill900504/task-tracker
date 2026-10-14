@@ -33,11 +33,11 @@ export function dueInfo(deadline: string, opts: { today: string; soon?: boolean 
   const sameYear = due.getFullYear() === now.getFullYear();
   const day = `${due.getDate()} ${MONTHS[due.getMonth()]}${sameYear ? "" : " " + due.getFullYear()}`;
   const full = `Срок: ${String(due.getDate()).padStart(2, "0")}.${String(due.getMonth() + 1).padStart(2, "0")}.${due.getFullYear()}`;
-  if (days < 0) return { text: `просрочено ${-days} дн.`, tone: "late", title: `${full} — просрочено на ${-days} дн.` };
-  if (days === 0) return { text: "сегодня", tone: "today", title: `${full} — сегодня` };
-  if (days === 1) return { text: "завтра", tone: opts.soon === false ? "normal" : "soon", title: `${full} — завтра` };
+  if (days < 0) return { text: `Просрочено ${-days} дн.`, tone: "late", title: `${full} — просрочено на ${-days} дн.` };
+  if (days === 0) return { text: "Сегодня", tone: "today", title: `${full} — сегодня` };
+  if (days === 1) return { text: "Завтра", tone: opts.soon === false ? "normal" : "soon", title: `${full} — завтра` };
   // Остаток числом — только пока он помещается в голову: «через 40 дн.»
   // читают как дату, и тогда дата полезнее.
   const tail = days <= 14 ? ` · ${days} дн.` : "";
-  return { text: `до ${day}${tail}`, tone: opts.soon ? "soon" : "normal", title: `${full} — осталось ${days} дн.` };
+  return { text: `До ${day}${tail}`, tone: opts.soon ? "soon" : "normal", title: `${full} — осталось ${days} дн.` };
 }

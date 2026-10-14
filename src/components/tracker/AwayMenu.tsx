@@ -49,7 +49,7 @@ export function useAwayEditor() {
           const text = await ask.ask({
             title: "До какого дня",
             question: "Последний день отсутствия",
-            placeholder: "например, 15.10",
+            placeholder: "Например, 15.10",
             required: "Напишите дату — например, 15.10",
           });
           if (!text) return;

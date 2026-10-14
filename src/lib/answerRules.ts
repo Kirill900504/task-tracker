@@ -88,6 +88,14 @@ export function lockedVoteText(v: MyVote): string {
 // отказ (reviewWork). «Принял» и «Прошу перенос» — не ответы, а шаги по
 // дороге к ним; повторять их незачем, поэтому и они гаснут, как только
 // сделаны: каждое повторное нажатие писало в хронику ещё одну строку.
+//
+// Просьба о переносе сужает выбор до одной двери (14.10.2026, слова
+// Кирилла: «после запроса о переносе времени должна оставаться только одна
+// возможная кнопка „Успел выполнить“ или просто дожидаться переноса срока
+// постановщиком»). Попросить срок и тут же отказаться — два ответа,
+// которые спорят друг с другом: постановщик решает по просьбе, а отказ
+// поверх неё оставил бы его решать уже не то. «Сделал» остаётся — успеть
+// раньше нового срока обычное дело.
 export type MyTaskPart = {
   acceptedAt?: string | null;
   doneAt?: string | null;
@@ -105,7 +113,7 @@ export function openTaskChoices(p: MyTaskPart | null | undefined): TaskChoices {
   return {
     accept: !answered && !p?.acceptedAt,
     done: !answered,
-    decline: !answered,
+    decline: !answered && !p?.reschedulePending,
     move: !answered && !p?.reschedulePending,
   };
 }

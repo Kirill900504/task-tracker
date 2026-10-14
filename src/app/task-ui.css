@@ -143,6 +143,12 @@
 /* Низ: срок пилюлей, повтор, состояние, значки. */
 .task-foot{display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-top:8px; font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
 .task-foot .task-marks{margin-left:auto;}
+/* «Просит перенести» — пилюля тёплого телесного тона (14.10.2026, слова
+   Кирилла: «приглушённо красноватый, похожий на цвет кожи человека,
+   приятный»). Не красный: красный на доске значит «горит», а просьба о
+   переносе — вопрос постановщику, который ждёт ответа, а не пожар. */
+.task-chip{display:inline-flex; align-items:center; padding:2px 9px; border-radius:999px; font-weight:700; white-space:nowrap;}
+.task-chip.reschedule{color:#3A211A; background:#D9A48F; border:1px solid #E3B6A3;}
 .task-due-pill{
   display:inline-flex; align-items:center; gap:5px; padding:2px 9px 2px 7px; border-radius:999px;
   font-weight:700; white-space:nowrap; color:var(--ink);

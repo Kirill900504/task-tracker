@@ -253,8 +253,8 @@ export default function MeetingChip({
               {votes && votes.no.length > 0 && <span className="mpeople-no"> · {votes.no.length} не смогут</span>}
             </span>
           )}
-          {proposed && <span className="pill pill-proposed">предложена</span>}
-          {waitingRecap && <span className="pill pill-recap">нужен итог</span>}
+          {proposed && <span className="pill pill-proposed">Предложена</span>}
+          {waitingRecap && <span className="pill pill-recap">Нужен итог</span>}
         </div>
 
         {/* Три исхода встречи, каждый одним словом и все в одну строку.

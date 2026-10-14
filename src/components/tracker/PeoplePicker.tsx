@@ -141,7 +141,7 @@ export default function PeoplePicker({
         {label}
         {requireExecutor && (
           <span className={"field-req" + (hasExecutor ? " met" : "")}>
-            {hasExecutor ? "исполнитель назначен" : "нужен исполнитель"}
+            {hasExecutor ? "Исполнитель назначен" : "Нужен исполнитель"}
           </span>
         )}
       </label>

@@ -200,32 +200,29 @@ export default function TaskAnswer({
         />
       )}
 
-      {!pending && !closed && (open.done || open.decline) && (
+      {!pending && !closed && open.done && (
         <div className="ms-actions">
-          {/* «Принял» не исчезает после нажатия, а становится плашкой на
-              том же месте. Раньше кнопка пропадала, ряд перестраивался, и
-              «Сделал» уезжала из-под руки ровно в ту секунду, когда к ней
-              тянутся следом (QA-проход 06.10.2026); строка «Вы приняли в
-              работу» над рядом сдвигала его ещё и вниз. Плашка говорит то
-              же самое и ничего не двигает. Пока ответ идёт — а это до
-              нескольких секунд, — на кнопке написано, что он идёт. */}
-          {open.accept ? (
-            <button type="button" className="btn btn-small btn-primary my-work-accept-slot" disabled={busy} onClick={() => void run(onAccept)}>
+          {/* «Принял» после нажатия уходит совсем. 06.10.2026 он оставался
+              плашкой «Принято» на том же месте, чтобы «Сделал» не уезжала
+              из-под руки; 14.10.2026 Кирилл сказал о ней прямо: «прожатая
+              кнопка „принял“ не должна высвечиваться при дальнейших
+              манипуляциях с задачей». Что задача принята, и так видно —
+              она стоит в «В работе», а у исполнителя на кубике галочка.
+              Пока ответ идёт — а это до нескольких секунд, — на кнопке
+              написано, что он идёт. */}
+          {open.accept && (
+            <button type="button" className="btn btn-small btn-primary" disabled={busy} onClick={() => void run(onAccept)}>
               <Icon name="check" size={14} /> {busy ? "Отправляю…" : "Принял"}
             </button>
-          ) : (
-            me.acceptedAt && (
-              <span className="btn btn-small my-work-accept-slot my-work-accepted" aria-label="Вы приняли в работу">
-                <Icon name="check" size={14} /> Принято
-              </span>
-            )
           )}
           {/* Флажка 🏁 здесь больше нет: соседние три кнопки нарисованы
               контуром из Icon.tsx, а этот рисовала система — и на телефоне
               рисовала пустым прямоугольником, то есть главная кнопка
-              исполнителя выглядела сломанной. Осмотр 21.09.2026. */}
+              исполнителя выглядела сломанной. Осмотр 21.09.2026.
+              После просьбы о переносе она остаётся одна и называется тем,
+              что значит (lib/answerRules). */}
           <button type="button" className="btn btn-small btn-primary" onClick={() => setPending("done")}>
-            <Icon name="flag" size={14} /> Сделал
+            <Icon name="flag" size={14} /> {me.rescheduleTo && !open.move ? "Успел выполнить" : "Сделал"}
           </button>
           {open.decline && (
             <button type="button" className="btn btn-small" onClick={() => setPending("decline")}>

@@ -27,16 +27,16 @@ describe("cardKind — чем задача является для меня", ()
 describe("dueInfo — срок словами", () => {
   const today = "2026-10-13";
   it("считает остаток и пишет месяц словом", () => {
-    expect(dueInfo("2026-10-19", { today })).toEqual({ text: "до 19 окт · 6 дн.", tone: "normal", title: "Срок: 19.10.2026 — осталось 6 дн." });
+    expect(dueInfo("2026-10-19", { today })).toEqual({ text: "До 19 окт · 6 дн.", tone: "normal", title: "Срок: 19.10.2026 — осталось 6 дн." });
   });
   it("далёкий срок — без остатка, чужой год — с годом", () => {
-    expect(dueInfo("2026-12-31", { today })!.text).toBe("до 31 дек");
-    expect(dueInfo("2027-01-05", { today })!.text).toBe("до 5 янв 2027");
+    expect(dueInfo("2026-12-31", { today })!.text).toBe("До 31 дек");
+    expect(dueInfo("2027-01-05", { today })!.text).toBe("До 5 янв 2027");
   });
   it("сегодня, завтра и просрочка — своими словами и тоном", () => {
-    expect(dueInfo("2026-10-13", { today })).toMatchObject({ text: "сегодня", tone: "today" });
-    expect(dueInfo("2026-10-14", { today })).toMatchObject({ text: "завтра", tone: "soon" });
-    expect(dueInfo("2026-10-10", { today })).toMatchObject({ text: "просрочено 3 дн.", tone: "late" });
+    expect(dueInfo("2026-10-13", { today })).toMatchObject({ text: "Сегодня", tone: "today" });
+    expect(dueInfo("2026-10-14", { today })).toMatchObject({ text: "Завтра", tone: "soon" });
+    expect(dueInfo("2026-10-10", { today })).toMatchObject({ text: "Просрочено 3 дн.", tone: "late" });
   });
   it("«скоро» решает тот, кто знает рабочие дни", () => {
     expect(dueInfo("2026-10-15", { today, soon: true })!.tone).toBe("soon");

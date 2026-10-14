@@ -167,7 +167,7 @@ export default function TaskDescription({
             <span className="ms-answer-file" key={f.path}>
               <Icon name="clip" size={13} /> {f.name} <span className="ms-answer-file-size">{sizeLabel(f.size)}</span>
               <button type="button" className="chat-mini" onClick={() => removeFile(f.path)}>
-                убрать
+                Убрать
               </button>
             </span>
           ))}

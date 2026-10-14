@@ -162,7 +162,7 @@ function JoinForm() {
                   id="joinPassword"
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
-                  placeholder="не короче 8 символов"
+                  placeholder="Не короче 8 символов"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -173,7 +173,7 @@ function JoinForm() {
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
                 >
-                  {showPassword ? "скрыть" : "показать"}
+                  {showPassword ? "Скрыть" : "Показать"}
                 </button>
               </div>
 

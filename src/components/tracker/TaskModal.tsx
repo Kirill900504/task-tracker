@@ -282,7 +282,7 @@ export default function TaskModal({
   const tookNow = participants.filter((p) => p.role === "executor" && (p.acceptedAt || p.doneAt)).length;
   const progressText = progressNow.total
     ? [
-        `взяли ${tookNow} из ${progressNow.total}`,
+        `Взяли ${tookNow} из ${progressNow.total}`,
         `закончили ${progressNow.doneCount}`,
         ...(progressNow.declined.length ? [`не может ${progressNow.declined.length}`] : []),
       ].join(" · ")
@@ -624,7 +624,7 @@ export default function TaskModal({
         Срок
         {form.recur === "none" && (
           <span className={"field-req" + (form.deadline ? " met" : "")}>
-            {form.deadline ? "срок стоит" : "без срока — не напомним"}
+            {form.deadline ? "Срок стоит" : "Без срока — не напомним"}
           </span>
         )}
       </label>
@@ -878,7 +878,7 @@ export default function TaskModal({
                   {
                     left: {
                       label: "Крайний срок",
-                      value: selfDeadline ? fmtDate(selfDeadline) : "без срока",
+                      value: selfDeadline ? fmtDate(selfDeadline) : "Без срока",
                       muted: !selfDeadline,
                     },
                     right: selfTask || !progressText ? undefined : { label: "Ход работы", value: progressText },

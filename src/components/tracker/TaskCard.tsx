@@ -298,20 +298,25 @@ export default function TaskCard({
             {!task.deadline && task.recur !== "none" && isDueTodayHighlight(task) && (
               <span className="task-due-pill tone-today">
                 <Icon name="calendar" size={12} />
-                сегодня
+                Сегодня
               </span>
             )}
             {recurLabel(task) && <span className="task-recur">{recurLabel(task)}</span>}
             {/* Два состояния, которых не видно по столбцу: «В работе» стоит
                 и тот, кто взялся, и тот, кто отказался, и тот, кому вернули. */}
-            {(stage === "blocked" || refused) && <span className="task-state blocked">не может</span>}
-            {stage === "returned" && <span className="task-state returned">на доработке</span>}
+            {(stage === "blocked" || refused) && <span className="task-state blocked">Не может</span>}
+            {stage === "returned" && <span className="task-state returned">На доработке</span>}
+            {/* Просьба о переносе — словом, а не значком. До 14.10.2026 здесь
+                был кружок с календарём в углу, и Кирилл сказал о нём: «он
+                непонятный вообще». Словом и мягкой заливкой «цвета кожи» —
+                его же описание: заметно, но не тревожно, решение ждёт, а
+                не горит. */}
+            {awaitingReschedule && (
+              <span className="task-chip reschedule" title="Исполнитель просит перенести срок — решение за постановщиком">
+                Просит перенести
+              </span>
+            )}
             <span className="task-marks">
-              {awaitingReschedule && (
-                <span className="task-mark reschedule" title="Просят перенести срок — ждёт решения постановщика">
-                  <Icon name="calendar" size={12} />
-                </span>
-              )}
               {!!unreadCount && (
                 <span className="task-mark unread" title={`${unreadCount} новых сообщений в обсуждении`}>
                   {unreadCount > 9 ? "9+" : unreadCount}
@@ -379,9 +384,9 @@ export default function TaskCard({
           из-под неё по мере движения: жест объясняет себя сам, а не
           требует, чтобы о нём знали заранее. */}
       {(canComplete || swipe.offset > 0) && (
-        <div className="swipe-hint">{task.status === "done" ? "↩ вернуть" : "✓ готово"}</div>
+        <div className="swipe-hint">{task.status === "done" ? "↩ Вернуть" : "✓ Готово"}</div>
       )}
-      {hasMenu && <div className="swipe-hint left">действия ⋮</div>}
+      {hasMenu && <div className="swipe-hint left">Действия ⋮</div>}
       {card}
     </div>
   );

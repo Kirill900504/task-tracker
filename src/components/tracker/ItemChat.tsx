@@ -865,7 +865,7 @@ export default function ItemChat({
                 className="chat-mini"
                 onClick={() => setPending((prev) => prev.filter((_, j) => j !== i))}
               >
-                убрать
+                Убрать
               </button>
             </span>
           ))}

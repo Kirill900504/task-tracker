@@ -140,12 +140,12 @@ export default function AccountModal({
                   <input
                     type={show ? "text" : "password"}
                     autoComplete="new-password"
-                    placeholder={email ? "оставьте пустым, чтобы не менять" : "не короче 8 символов"}
+                    placeholder={email ? "Оставьте пустым, чтобы не менять" : "Не короче 8 символов"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
                   <button type="button" className="btn btn-small" onClick={() => setShow((v) => !v)}>
-                    {show ? "скрыть" : "показать"}
+                    {show ? "Скрыть" : "Показать"}
                   </button>
                 </span>
               </label>

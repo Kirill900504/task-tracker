@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import AttachFiles from "./AttachFiles";
+import MiniCalendar from "./MiniCalendar";
+import { dateStr } from "@/lib/taskDisplay";
 
 // Ответ исполнителя — формой в карточке, а не системным окном браузера.
 //
@@ -125,8 +127,15 @@ export default function AnswerForm({
       />
       {date && (
         <div className="ms-answer-date">
-          <label htmlFor={id + "-date"}>{date.label}</label>
-          <input id={id + "-date"} type="date" value={when} onChange={(e) => setWhen(e.target.value)} />
+          <span>{date.label}</span>
+          {/* Тот же календарь-шторка, что в форме задачи и встречи, а не
+              системное «дд.мм.гггг»: оно открывалось только с крошечного
+              значка у края, и нажатие на саму строку ставило курсор в
+              «мм» (14.10.2026: «календарь везде должен открываться
+              нажатием на любое место в строке выбора даты»). Строка здесь
+              — одна кнопка целиком. Прошлое гаснет: просить перенос на
+              вчера бессмысленно. */}
+          <MiniCalendar popover id={id + "-date"} value={when} onChange={setWhen} minDate={dateStr(new Date())} />
         </div>
       )}
       {withFiles && <AttachFiles files={files} onChange={setFiles} onError={setError} />}

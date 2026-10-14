@@ -416,7 +416,7 @@ export default function MeetingModal({
   const tally = voteTally(counted, round);
   const answeredLabel = tally.expected
     ? `${tally.answered} из ${tally.expected}` + (tally.no.length ? ` · не смогут: ${tally.no.length}` : "")
-    : "ответов не ждём";
+    : "Ответов не ждём";
 
   // Решения организатора — назначить предложенную встречу и записать
   // итог. Слова Кирилла 24.09.2026: блоки, призывающие к действию, «во
@@ -637,7 +637,7 @@ export default function MeetingModal({
                                   title="Эта встреча останется, следующих не будет"
                                   onClick={() => onSave({ ...meeting, recur: "none" })}
                                 >
-                                  больше не повторять
+                                  Больше не повторять
                                 </button>
                               )}
                             </span>
@@ -667,7 +667,7 @@ export default function MeetingModal({
                           })}
                         </span>
                       ) : (
-                        "никого не позвали"
+                        "Никого не позвали"
                       ),
                       muted: !participants.length,
                     },
@@ -687,7 +687,7 @@ export default function MeetingModal({
                 <button type="button" className="btn btn-primary meeting-move-btn" id="meetingMoveBtn" onClick={onReschedule}>
                   <Icon name="calendar" size={17} />
                   <span>Перенести встречу</span>
-                  <span className="meeting-move-sub">время или состав</span>
+                  <span className="meeting-move-sub">Время или состав</span>
                 </button>
               )}
 

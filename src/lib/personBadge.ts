@@ -13,11 +13,11 @@ import { hasDeclined, type TaskParticipant } from "@/lib/taskProgress";
 export type PersonState = "done" | "declined" | "working" | "waiting" | "unreachable";
 
 export const PERSON_STATE_LABEL: Record<PersonState, string> = {
-  done: "закончил",
-  declined: "не может",
-  working: "в работе",
-  waiting: "ещё не приступал",
-  unreachable: "задача не дошла",
+  done: "Закончил",
+  declined: "Не может",
+  working: "В работе",
+  waiting: "Ещё не приступал",
+  unreachable: "Задача не дошла",
 };
 
 export function personState(p: Pick<TaskParticipant, "doneAt" | "declinedAt" | "acceptedAt" | "reachable">): PersonState {

@@ -56,8 +56,7 @@ describe("ответ на задачу даётся один раз", () => {
     expect(openTaskChoices({ acceptedAt: "x", doneAt: "y" })).toEqual({ accept: false, done: false, decline: false, move: false });
   });
 
-  it("просьба о переносе ждёт решения — второй раз не просят", () => {
-    expect(openTaskChoices({ reschedulePending: true }).move).toBe(false);
-    expect(openTaskChoices({ reschedulePending: true }).done).toBe(true);
+  it("просьба о переносе ждёт решения — остаётся одно «успел выполнить»", () => {
+    expect(openTaskChoices({ acceptedAt: "x", reschedulePending: true })).toEqual({ accept: false, done: true, decline: false, move: false });
   });
 });

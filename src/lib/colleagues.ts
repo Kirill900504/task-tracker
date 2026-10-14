@@ -159,7 +159,9 @@ export function taskButtons(
   const rows: (BotButton | false)[][] = [
     [
       open.accept && { text: "✅ Принял", data: encodeCallback("task", "acc", taskId) },
-      open.done && { text: "🏁 Сделал", data: encodeCallback("task", "done", taskId) },
+      // После просьбы о переносе это единственная дверь, и называется она
+      // тем, что значит: успел раньше нового срока.
+      open.done && { text: open.move ? "🏁 Сделал" : "🏁 Успел выполнить", data: encodeCallback("task", "done", taskId) },
     ],
     [
       open.decline && { text: "⛔ Не могу", data: encodeCallback("task", "no", taskId) },

@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
-import { handOverAuthorship, pickSelfExecutor, settled } from "./helpers";
+import { handOverAuthorship, pickSelfExecutor } from "./helpers";
 
 // Сторожа к тому, что нашёл полный QA-проход 06.10.2026 руками в браузере.
 //
@@ -149,9 +149,11 @@ test("владелец не распоряжается задачей, кото�
   }
 });
 
-// «Сделал» не уезжает из-под руки. После «Принял» кнопка исчезала, ряд
-// перестраивался, и второе нажатие приходилось мимо (QA 06.10.2026).
-test("после «Принял» кнопка «Сделал» остаётся на месте", async ({ page, browser }) => {
+// Нажатое «Принял» уходит совсем, а «Сделал» остаётся (14.10.2026: «прожатая
+// кнопка „принял“ не должна высвечиваться при дальнейших манипуляциях»).
+// До этого на её месте стояла плашка «Принято» — ради того, чтобы ряд не
+// перестраивался (QA 06.10.2026); Кирилл решил, что лишняя плашка хуже.
+test("после «Принял» остаётся «Сделал», а сама «Принял» исчезает", async ({ page, browser }) => {
   const title = `QA ряд ${Date.now()}`;
   await login(page);
   await page.click("#newTaskBtn");
@@ -175,15 +177,10 @@ test("после «Принял» кнопка «Сделал» остаётся
     const modal = fresh.locator("dialog[open]");
     const done = modal.getByRole("button", { name: "Сделал" });
     await expect(done).toBeVisible({ timeout: 20_000 });
-    // Окно открывается с анимацией (масштаб около 98% в первые доли
-    // секунды): замер до её конца даёт «сдвиг» в несколько пикселей,
-    // которого на экране нет. Сначала ждём, пока кнопка остановится.
-    const before = await settled(done);
     await modal.getByRole("button", { name: "Принял" }).click();
-    await expect(modal.locator(".my-work-accepted")).toBeVisible({ timeout: 15_000 });
-    const after = await done.boundingBox();
-    expect(Math.abs(after!.x - before!.x)).toBeLessThan(2);
-    expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
+    await expect(modal.getByRole("button", { name: "Принял" })).toHaveCount(0, { timeout: 15_000 });
+    await expect(modal.getByText("Принято", { exact: true })).toHaveCount(0);
+    await expect(done).toBeVisible();
     await fresh.context().close();
   } finally {
     await handed.done();

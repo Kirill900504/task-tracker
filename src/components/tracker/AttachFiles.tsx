@@ -71,7 +71,7 @@ export default function AttachFiles({
         <span className="ms-answer-file" key={f.name + i}>
           <Icon name="clip" size={13} /> {f.name} <span className="ms-answer-file-size">{sizeLabel(f.size)}</span>
           <button type="button" className="chat-mini" onClick={() => onChange(files.filter((_, j) => j !== i))}>
-            убрать
+            Убрать
           </button>
         </span>
       ))}

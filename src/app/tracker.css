@@ -872,14 +872,8 @@
     width:15px; height:15px; border-radius:50%;
     background:var(--med-bg); color:var(--med); border:1px solid var(--med);
   }
-  /* Просьба о переносе и «ждёт приёмки» — тем же приглушённым кружком, но
-     своим цветом каждая: не событие само по себе кричит, а то, что решение
-     по нему ждёт постановщика. Подсказка (title) называет их словами —
-     значок без слов рядом не проверить не открыв карточку. */
-  .task-mark.reschedule{
-    width:17px; height:17px; border-radius:50%;
-    background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent);
-  }
+  /* «Ждёт приёмки» — приглушённым кружком. Просьба о переносе с 14.10.2026
+     говорит словом (.task-chip.reschedule в task-ui.css). */
   .task-mark.review{
     width:17px; height:17px; border-radius:50%;
     background:var(--paper-soft); color:var(--ink-soft); border:1px solid var(--line);
@@ -3431,12 +3425,6 @@
      правило «нигде ничего не должно вылетать за рамки окна», 24.09.2026 —
      поймано на «Вернули на доработку» с текстом без единого пробела). */
   .my-work-said{font-size:13px; line-height:1.5; color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;}
-  /* «Принято» — плашка на месте кнопки «Принял»: та же форма, чтобы ряд не
-     перестраивался, но не кнопка — нажимать здесь больше нечего. */
-  /* Одно место на «Принял», «Отправляю…» и «Принято»: ширина не зависит от
-     слова, поэтому соседняя «Сделал» не сдвигается ни на пиксель. */
-  .my-work-accept-slot{min-width:118px; justify-content:center;}
-  .my-work-accepted{display:inline-flex; align-items:center; gap:7px; white-space:nowrap; cursor:default; color:var(--accent); border-color:var(--accent-soft, var(--line)); background:transparent; box-shadow:none;}
   .my-work-said.declined{color:var(--high);}
   .my-work-returned{
     font-size:13px; line-height:1.5; color:var(--high);

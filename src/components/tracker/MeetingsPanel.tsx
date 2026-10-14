@@ -645,7 +645,7 @@ export default function MeetingsPanel({
             id: m.id,
             title: m.title,
             when: fmtDate(m.date) + (m.time ? ", " + m.time : ""),
-            note: m.status === "success" ? m.result || "прошла" : m.status === "no_result" ? "без результата" : m.movedToDate ? "перенесена на " + fmtDate(m.movedToDate) : "",
+            note: m.status === "success" ? m.result || "Прошла" : m.status === "no_result" ? "Без результата" : m.movedToDate ? "Перенесена на " + fmtDate(m.movedToDate) : "",
             onOpen: () => setModalState({ open: true, meeting: m }),
             onRestore: isMine(m, myUserId) ? () => setStatus(m, "planned", m.result) : undefined,
           }))}

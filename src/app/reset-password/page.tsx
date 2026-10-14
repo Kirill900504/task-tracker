@@ -120,7 +120,7 @@ export default function ResetPasswordPage() {
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
                 >
-                  {showPassword ? "скрыть" : "показать"}
+                  {showPassword ? "Скрыть" : "Показать"}
                 </button>
               </div>
 

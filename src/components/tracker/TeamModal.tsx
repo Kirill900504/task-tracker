@@ -446,10 +446,10 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                           (кнопки в шапке), а вход у него и так есть. */}
                       <span className={person.isMe ? "linked" : person.linked ? "linked" : ""}>
                         {person.isMe
-                          ? "это вы — так вас видят остальные"
+                          ? "Это вы — так вас видят остальные"
                           : person.linked
                             ? where + (person.username ? ` · @${person.username}` : "")
-                            : "не подключён"}
+                            : "Не подключён"}
                       </span>
                       {isAwayOn(person.awayUntil, todayStr()) && (
                         <>
