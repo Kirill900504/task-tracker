@@ -183,7 +183,13 @@ test("мысль, брошенная в столбец задач, открыв�
     await page.mouse.up();
 
     await expect(page.locator("#fTitle")).toHaveValue(text, { timeout: 5_000 });
-    await page.click("#cancelBtn");
-    await expect(page.locator("#fTitle")).toHaveCount(0);
+    // Закрытие повторяется: однажды (14.10.2026, общий прогон, 1 из 7)
+    // первое нажатие × сразу после броска не закрыло окно — похоже на
+    // нажатие, которое dnd-kit гасит как хвост только что кончившегося
+    // переноса. Проверяется здесь перенос, а не крестик.
+    await expect(async () => {
+      await page.click("#cancelBtn", { timeout: 1_000 });
+      await expect(page.locator("#fTitle")).toHaveCount(0, { timeout: 1_000 });
+    }).toPass({ timeout: 10_000 });
   }
 });
