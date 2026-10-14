@@ -11,13 +11,22 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { FocusEvent, KeyboardEvent } from "react";
 
+// Потолок роста любого текстового поля трекера, в строках. Дальше поле не
+// растёт, а прокручивается внутри. Слова Кирилла 14.10.2026: «поле
+// „Название задачи“ не должно быть бесконечным… максимум как поле с
+// описанием… 14 строчек, если больше — внутри должен срабатывать бегунок…
+// по такому принципу должны работать все поля». До этого потолок задавал
+// каждый вызов сам, и у названия его не было вовсе: длинный текст растягивал
+// окно, и кнопки «Сохранить» за ним не было видно. Число одно и для полей
+// без этого компонента — `--text-max-rows` в text-fields.css.
+export const TEXT_MAX_ROWS = 14;
+
 export default function AutoGrowTextarea({
   value,
   onChange,
   id,
   placeholder,
   minRows = 1,
-  maxRows,
   singleLine = false,
   onEnter,
   onKeyDown,
@@ -31,9 +40,9 @@ export default function AutoGrowTextarea({
   id?: string;
   placeholder?: string;
   minRows?: number;
-  // Потолок роста в строках. Дальше поле не растёт, а прокручивается
-  // внутри: поле, выросшее выше окна, закрывает то, ради чего окно открыто
-  // (13.10.2026 — поле сообщения, растянутое на весь чат).
+  // Не действует: потолок один на все поля, TEXT_MAX_ROWS ниже. Оставлен в
+  // типе, пока два места (форма задачи и её описание) ещё передают 12 —
+  // уберётся при следующей правке этих файлов.
   maxRows?: number;
   singleLine?: boolean;
   onEnter?: () => void;
@@ -62,16 +71,15 @@ export default function AutoGrowTextarea({
     // clipped behind a scrollbar that never appears.
     const style = getComputedStyle(el);
     const borders = parseFloat(style.borderTopWidth || "0") + parseFloat(style.borderBottomWidth || "0");
-    let height = el.scrollHeight + borders;
-    if (maxRows) {
-      const line = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5 || 20;
-      const pad = parseFloat(style.paddingTop || "0") + parseFloat(style.paddingBottom || "0");
-      const cap = Math.ceil(line * maxRows + pad + borders);
-      el.style.overflowY = height > cap ? "auto" : "hidden";
-      height = Math.min(height, cap);
-    }
-    el.style.height = height + "px";
-  }, [value, maxRows]);
+    const height = el.scrollHeight + borders;
+    // lineHeight is "normal" (not a number) for fields without an explicit
+    // one, hence the fallback from the font size.
+    const line = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5 || 20;
+    const pad = parseFloat(style.paddingTop || "0") + parseFloat(style.paddingBottom || "0");
+    const cap = Math.ceil(line * TEXT_MAX_ROWS + pad + borders);
+    el.style.overflowY = height > cap ? "auto" : "hidden";
+    el.style.height = Math.min(height, cap) + "px";
+  }, [value]);
 
   // Mount only: refocusing on a later prop change would steal the caret.
   useEffect(() => {
