@@ -53,7 +53,17 @@ export async function applyReview(
   // закрытой собственным отчётом (closeIfEveryoneReported): «работу
   // приняли» самому себе — это сообщение о том, что ты только что нажал.
   quiet = false,
+  // Чем отправить сообщения людям. Маршрут трекера передаёт сюда after():
+  // рассылка — это полёт до Telegram и до MAX в России, и человек, нажавший
+  // «Вернуть», ждал его целиком, прежде чем окно закрывалось. Решение
+  // записано в базу до ответа — это и есть то, что ему нужно знать сразу.
+  defer?: (job: () => Promise<void>) => void,
 ): Promise<ReviewResult> {
+  const tell = async (a: ReviewAction, t: string) => {
+    if (quiet) return;
+    if (defer) defer(() => tellExecutors(admin, task, a, t));
+    else await tellExecutors(admin, task, a, t);
+  };
   const text = comment.trim();
   if (action === "return" && !text) return { ok: false, error: "Напишите, что доделать" };
   if (action === "force" && !text) return { ok: false, error: "Нужна причина" };
@@ -70,6 +80,26 @@ export async function applyReview(
   // уже случилось первым запросом.
   if ((action === "approve" || action === "force") && task.status === "done") {
     return { ok: true };
+  }
+
+  // Возвращают ОТВЕТ, и вернуть можно только то, что сдали.
+  //
+  // 14.10.2026 Кирилл трижды подряд вернул одну задачу, между возвратами
+  // отчитавшись лишь раз: возврат снимает отчёты, но карточка ещё
+  // показывала «Все исполнители отчитались», и кнопка была под рукой.
+  // Второй возврат без нового отчёта — второе сообщение человеку о том же
+  // самом и вторая строка в хронике, которая читается как «вернули
+  // дважды». Поэтому возврат требует хотя бы одного ответа (отчёта или
+  // отказа) — того, что он и снимет.
+  if (action === "return") {
+    const { data: answered } = await admin
+      .from("task_participants")
+      .select("id")
+      .eq("task_id", task.id)
+      .eq("role", "executor")
+      .or("done_at.not.is.null,declined_at.not.is.null")
+      .limit(1);
+    if (!answered?.length) return { ok: false, error: "Уже возвращено на доработку — ждём нового отчёта" };
   }
 
   const now = new Date().toISOString();
@@ -113,7 +143,7 @@ export async function applyReview(
             ? `✅ ${who.label} принял работу за этот круг${text ? ": " + text : ""}`
             : `🔒 ${who.label} принудительно закрыл этот круг: ${text}`,
       });
-      if (!quiet) await tellExecutors(admin, task, action, text);
+      await tell(action, text);
       return { ok: true };
     }
   }
@@ -166,7 +196,7 @@ export async function applyReview(
             : `🔒 ${who.label} принудительно закрыл задачу: ${text}`,
   });
 
-  if (!quiet) await tellExecutors(admin, task, action, text);
+  await tell(action, text);
   return { ok: true };
 }
 

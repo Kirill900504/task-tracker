@@ -1196,6 +1196,10 @@ export default function TasksPanel({
           }}
           onReturnOne={async (participantId, comment) => {
             if (!modalTask) return;
+            // «Ответили все» больше не правда — с приёмки задача уходит
+            // сразу, как и на сервере (там то же условие).
+            const current = (allTasks ?? tasks).find((x) => x.id === modalTask.id) || modalTask;
+            if (current.approvalState === "awaiting_review") actions.saveTask({ ...current, approvalState: "open" });
             try {
               await participants.returnOne(modalTask.id, participantId, comment);
               toasts.showToast("Вернули на доработку", "Человеку сказано, остальных это не касается.");

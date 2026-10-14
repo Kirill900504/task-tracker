@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { snapshotList, sameJson, sameLists, diffRows, diffAssignees, upsertById, removeById, mergeIncoming, type WithId } from "./trackerSync";
+import { snapshotList, sameJson, sameLists, diffRows, diffAssignees, upsertById, removeById, mergeIncoming, withServerFields, type WithId } from "./trackerSync";
 
 type Item = WithId & { status: string };
 const toRow = (x: Item) => ({ id: x.id, status: x.status });
@@ -177,5 +177,25 @@ describe("mergeIncoming — подписка не стирает неотпра�
     const out = mergeIncoming(live, shadow, fromOtherDevice, { ...fromOtherDevice }, toRow);
     expect(out.live[0].status).toBe("no_result");
     expect(out.shadow[0].status).toBe("no_result");
+  });
+});
+describe("withServerFields — серверные колонки доходят до экрана всегда", () => {
+  type T = { id: string; title: string; approvalState: string; approvalComment: string };
+  const toRow = (t: T) => ({ id: t.id, title: t.title });
+
+  it("возврат на доработку виден, даже когда на строке лежит несохранённая правка", () => {
+    // 14.10.2026: задачу вернули, а она осталась «На приёмке» — на строке
+    // в эту секунду была правка названия, и слияние оставляло экран целиком.
+    const live = [{ id: "t", title: "правлю", approvalState: "awaiting_review", approvalComment: "" }];
+    const shadow = [{ id: "t", title: "было", approvalState: "awaiting_review", approvalComment: "" }];
+    const echo = { id: "t", title: "было", approvalState: "returned", approvalComment: "переделать" };
+    const out = mergeIncoming(live, shadow, echo, { ...echo }, toRow);
+    expect(out.live[0]).toEqual({ id: "t", title: "правлю", approvalState: "returned", approvalComment: "переделать" });
+  });
+
+  it("свою колонку не трогает", () => {
+    const local = { id: "t", title: "моё", approvalState: "open", approvalComment: "" };
+    const server = { id: "t", title: "чужое", approvalState: "open", approvalComment: "" };
+    expect(withServerFields(local, server, toRow).title).toBe("моё");
   });
 });

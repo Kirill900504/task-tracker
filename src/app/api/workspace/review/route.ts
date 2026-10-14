@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readInput, reviewInput } from "@/lib/apiInput";
@@ -87,11 +87,17 @@ export async function POST(req: Request) {
     if (!comment) return NextResponse.json({ error: "Напишите, что доделать" }, { status: 400 });
     const { data: partRow } = await admin
       .from("task_participants")
-      .select("id, assignee_id, task_id, role")
+      .select("id, assignee_id, task_id, role, done_at, declined_at")
       .eq("id", body.participantId || "")
       .maybeSingle();
-    const one = partRow as { id: string; assignee_id: string; task_id: string; role: string } | null;
+    const one = partRow as { id: string; assignee_id: string; task_id: string; role: string; done_at: string | null; declined_at: string | null } | null;
     if (!one || one.task_id !== task.id) return NextResponse.json({ error: "Этого человека нет на задаче" }, { status: 404 });
+    // Вернуть можно только сданное — то же правило, что у общего возврата
+    // (см. applyReview): второй возврат без нового отчёта ничего не снимает
+    // и только дублирует сообщение человеку.
+    if (!one.done_at && !one.declined_at) {
+      return NextResponse.json({ error: "Уже возвращено на доработку — ждём нового отчёта" }, { status: 409 });
+    }
     await admin
       .from("task_participants")
       .update({ done_at: null, done_comment: null, done_files: [], declined_at: null, decline_reason: null })
@@ -111,10 +117,12 @@ export async function POST(req: Request) {
       itemId: task.id,
       text: `↩ ${label} вернул на доработку ${person ? withoutSelfMark(person.name) : "исполнителю"}: ${comment}`,
     });
+    // Сообщение — после ответа: решение уже в базе, а полёт до мессенджера
+    // человек, нажавший кнопку, ждать не должен.
     if (person) {
-      await sendToPerson(admin, task.user_id, person, `↩ Вернули на доработку: «${task.title}»
+      after(() => sendToPerson(admin, task.user_id, person, `↩ Вернули на доработку: «${task.title}»
 
-${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId: task.id });
+${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId: task.id }).then(() => undefined));
     }
     return NextResponse.json({ ok: true });
   }
@@ -165,7 +173,7 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
         : "📅 С задачи «" + task.title + "» сняли срок";
       // К сведению — без кнопок, по той же причине, что и ответ на просьбу
       // о переносе ниже. Всем сразу, а не по очереди.
-      await Promise.all(people.map((person) => sendToPerson(admin, task.user_id, person, text)));
+      after(() => Promise.all(people.map((person) => sendToPerson(admin, task.user_id, person, text))).then(() => undefined));
     }
     return NextResponse.json({ ok: true });
   }
@@ -214,7 +222,7 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
       .eq("id", part.assignee_id)
       .maybeSingle();
     if (person) {
-      await sendToPerson(
+      after(() => sendToPerson(
         admin,
         task.user_id,
         person as ColleagueRow,
@@ -226,7 +234,7 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
         // перенос», и Игорь Витковский прочёл это как вопрос, на который
         // надо выбрать ответ (отзыв 25.09.2026). Так же уже пишет бот,
         // когда срок продлевают из мессенджера (tellAssignees).
-      );
+      ).then(() => undefined));
     }
     return NextResponse.json({ ok: true });
   }
@@ -242,6 +250,8 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
     body.action as ReviewAction,
     comment,
     { label: await actorName(admin, task.user_id, user.id), userId: user.id },
+    false,
+    (job) => after(job),
   );
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
   return NextResponse.json({ ok: true });

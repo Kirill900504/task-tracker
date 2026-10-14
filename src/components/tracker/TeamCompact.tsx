@@ -138,6 +138,7 @@ export default function TeamCompact({
     (identity.assigneeId ? executorsNow[0].assigneeId === identity.assigneeId : isSelfAssignee(executorsNow[0].name || ""));
   const closingOwn = selfOnly && progress.doneCount === 1 && progress.declined.length === 0;
   const returned = approvalState === "returned" && !!approvalComment;
+  const nothingHandedIn = progress.total > 0 && progress.doneCount === 0 && progress.declined.length === 0;
 
   if (!asks.length && !returned && stage !== "awaiting_review" && stage !== "done") return null;
 
@@ -179,7 +180,11 @@ export default function TeamCompact({
         </div>
       )}
 
-      {stage === "awaiting_review" && !closingOwn && (
+      {/* Отчёт сняли возвратом, а новый ещё не пришёл: решать нечего, и
+          второй «Вернуть» был бы вторым сообщением о том же самом
+          (14.10.2026 — задачу вернули трижды за два отчёта). Сервер это
+          тоже запрещает (applyReview); здесь — чтобы кнопки не было. */}
+      {stage === "awaiting_review" && !closingOwn && !nothingHandedIn && (
         <div className="tp-review">
           <div className="tp-review-text">
             {progress.declined.length === 0

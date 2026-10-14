@@ -108,9 +108,35 @@ export function mergeIncoming<T extends WithId, R>(
   const known = shadow.find((x) => x.id === incoming.id);
   const pending = !!local && (!known || !sameJson(toRow(local), toRow(known)));
   return {
-    live: pending ? live : upsertById(live, incoming),
+    live: pending ? upsertById(live, withServerFields(local!, incoming, toRow)) : upsertById(live, incoming),
     shadow: upsertById(shadow, confirmed),
   };
+}
+
+// Строка с неотправленной работой берёт с сервера всё, чего браузер НЕ
+// пишет сам.
+//
+// «Неотправленная работа» — это колонки движка (toRow): название, срок,
+// описание. Но на той же строке живут и колонки, которые пишет только
+// сервер, — приёмка, возврат на доработку, номер. 14.10.2026 Кирилл вернул
+// задачу на доработку, а она осталась «На приёмке»: на строке в эту
+// секунду лежала несохранённая правка, и слияние оставляло на экране
+// строку ЦЕЛИКОМ — вместе со старым approval_state, который отсюда не
+// уедет никогда и потому не исправится сам до перечитывания. Колонку,
+// которую браузер не пишет, держать «как на экране» незачем: на экране
+// она может быть только старой.
+//
+// Какая колонка чья, говорит сам toRow: поле, подмена которого не меняет
+// строку для базы, браузеру не принадлежит.
+export function withServerFields<T extends object, R>(local: T, incoming: T, toRow: (x: T) => R): T {
+  const base = toRow(local);
+  let out = local;
+  for (const key of Object.keys(incoming) as (keyof T)[]) {
+    if (sameJson(local[key], incoming[key])) continue;
+    const probe = { ...local, [key]: incoming[key] } as T;
+    if (sameJson(toRow(probe), base)) out = { ...out, [key]: incoming[key] };
+  }
+  return out;
 }
 
 export function upsertById<T extends WithId>(list: T[], item: T): T[] {

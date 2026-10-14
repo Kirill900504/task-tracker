@@ -442,20 +442,42 @@ export function useTaskParticipants() {
   // Решение постановщика уходит на сервер по той же причине, по которой
   // туда ушли ответы исполнителя: правила должны жить в одном месте, и
   // сказать людям о возврате может только тот, у кого есть доступ к боту.
+  // Ответ, который возврат снимает, исчезает с экрана сразу — так же, как
+  // ответ исполнителя появляется сразу (answerPatch). Отказ сервера
+  // перечитывает участие и тем возвращает экран к правде.
+  const clearAnswers = useCallback((taskId: string, participantId?: string) => {
+    setByTask((prev) => {
+      const list = prev[taskId];
+      if (!list) return prev;
+      return {
+        ...prev,
+        [taskId]: list.map((p) =>
+          (participantId ? p.id === participantId : p.role === "executor")
+            ? { ...p, doneAt: null, doneComment: null, doneFiles: [], declinedAt: null, declineReason: null }
+            : p,
+        ),
+      };
+    });
+  }, []);
+
   const review = useCallback(
     async (action: "approve" | "return" | "force" | "reopen", taskId: string, comment: string) => {
+      if (action === "return") clearAnswers(taskId);
       const res = await fetch("/api/workspace/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, taskId, comment }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok || !data || data.error) throw new Error(data?.error || "Не получилось");
+      if (!res.ok || !data || data.error) {
+        if (action === "return") void load();
+        throw new Error(data?.error || "Не получилось");
+      }
       // Сверка фоном, а не ожиданием: решение сервер уже принял, окно можно
       // закрывать сразу — подписка принесёт новые строки следом.
       void load();
     },
-    [load],
+    [load, clearAnswers],
   );
 
   // ---- Ответ исполнителя --------------------------------------------
@@ -549,16 +571,21 @@ export function useTaskParticipants() {
   // /api/workspace/review).
   const returnOne = useCallback(
     async (taskId: string, participantId: string, comment: string) => {
+      clearAnswers(taskId, participantId);
       const res = await fetch("/api/workspace/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "return_one", taskId, participantId, comment }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok || !data || data.error) throw new Error(data?.error || "Не получилось вернуть");
-      await load();
+      if (!res.ok || !data || data.error) {
+        void load();
+        throw new Error(data?.error || "Не получилось вернуть");
+      }
+      // Сверка фоном: экран уже поменялся, подписка принесёт остальное.
+      void load();
     },
-    [load],
+    [load, clearAnswers],
   );
   // Приёмку снимает только сервер: колонка не принадлежит движку
   // синхронизации, и снятая в браузере галочка «сделано» оставляла задачу

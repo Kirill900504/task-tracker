@@ -1,4 +1,4 @@
-import { sameJson, type WithId } from "@/lib/trackerSync";
+import { sameJson, withServerFields, type WithId } from "@/lib/trackerSync";
 
 // What happens to changes made while the tab was offline (or closed before a
 // save landed).
@@ -15,7 +15,16 @@ import { sameJson, type WithId } from "@/lib/trackerSync";
 // server. Everything untouched comes from the server — including rows
 // changed on another device in the meantime.
 
-export function applyLocalChanges<T extends WithId>(server: T[], cachedLive: T[], cachedShadow: T[]): T[] {
+// `toRow` — какие колонки пишет браузер. С ним строка, правленная локально,
+// всё равно берёт с сервера то, чего браузер не пишет (приёмку, возврат,
+// номер): см. withServerFields — без этого задача, возвращённая на
+// доработку, оставалась «На приёмке» до следующего входа.
+export function applyLocalChanges<T extends WithId, R = unknown>(
+  server: T[],
+  cachedLive: T[],
+  cachedShadow: T[],
+  toRow?: (x: T) => R,
+): T[] {
   const liveById = new Map(cachedLive.map((x) => [x.id, x]));
   const shadowById = new Map(cachedShadow.map((x) => [x.id, x]));
 
@@ -34,7 +43,7 @@ export function applyLocalChanges<T extends WithId>(server: T[], cachedLive: T[]
     const shadow = shadowById.get(row.id);
     // Edited offline (live differs from what was last synced) — the local
     // version stands. Otherwise the server's row is the newer truth.
-    if (live && shadow && !sameJson(live, shadow)) result.push(live);
+    if (live && shadow && !sameJson(live, shadow)) result.push(toRow ? withServerFields(live, row, toRow) : live);
     else result.push(row);
   }
 

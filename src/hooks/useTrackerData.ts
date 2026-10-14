@@ -828,10 +828,10 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       const local: { live: TrackerLists; shadow: TrackerLists } | null =
         localBefore ?? (cached ? { live: cached.live, shadow: cached.shadow } : null);
       if (local && hasUnsyncedWork(local.live as unknown as Record<string, unknown[]>, local.shadow as unknown as Record<string, unknown[]>)) {
-        loadedTasks = applyLocalChanges(loadedTasks, local.live.tasks, local.shadow.tasks);
-        loadedMeetings = applyLocalChanges(loadedMeetings, local.live.meetings, local.shadow.meetings);
-        loadedIdeas = applyLocalChanges(loadedIdeas, local.live.ideas, local.shadow.ideas);
-        loadedSections = applyLocalChanges(loadedSections, local.live.sections, local.shadow.sections);
+        loadedTasks = applyLocalChanges(loadedTasks, local.live.tasks, local.shadow.tasks, taskToRow);
+        loadedMeetings = applyLocalChanges(loadedMeetings, local.live.meetings, local.shadow.meetings, meetingToRow);
+        loadedIdeas = applyLocalChanges(loadedIdeas, local.live.ideas, local.shadow.ideas, ideaToRow);
+        loadedSections = applyLocalChanges(loadedSections, local.live.sections, local.shadow.sections, sectionToRow);
         loadedAssignees = applyLocalNameChanges(loadedAssignees, local.live.assignees, local.shadow.assignees);
       }
 
@@ -1007,11 +1007,11 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
           shadowBefore as unknown as Record<string, unknown[]>,
         )
           ? {
-              tasks: applyLocalChanges(server.tasks, live.tasks, shadowBefore.tasks),
-              meetings: applyLocalChanges(server.meetings, live.meetings, shadowBefore.meetings),
-              ideas: applyLocalChanges(server.ideas, live.ideas, shadowBefore.ideas),
+              tasks: applyLocalChanges(server.tasks, live.tasks, shadowBefore.tasks, taskToRow),
+              meetings: applyLocalChanges(server.meetings, live.meetings, shadowBefore.meetings, meetingToRow),
+              ideas: applyLocalChanges(server.ideas, live.ideas, shadowBefore.ideas, ideaToRow),
               assignees: applyLocalNameChanges(server.assignees, live.assignees, shadowBefore.assignees),
-              sections: applyLocalChanges(server.sections, live.sections, shadowBefore.sections),
+              sections: applyLocalChanges(server.sections, live.sections, shadowBefore.sections, sectionToRow),
             }
           : server;
 
