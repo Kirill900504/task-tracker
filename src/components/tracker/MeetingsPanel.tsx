@@ -564,7 +564,7 @@ export default function MeetingsPanel({
       {!isMobile && (
         <div className="dash-panel-head">
           <div className="panel-title">
-            Встречи <span className="count">{sorted.length + needRecap.length}</span>
+            Встречи <span className={"count" + (sorted.length + needRecap.length === 0 ? " zero" : "")}>{sorted.length + needRecap.length}</span>
           </div>
           {/* Иконка завершённых — рядом с «+», а не переключателем в
               шапке трекера: это вопрос к ЭТОЙ панели, и отвечать на него

@@ -227,7 +227,7 @@ export default function IdeasPanel({
       {!isMobile && (
         <div className="dash-panel-head">
           <div className="panel-title">
-            Идеи и мысли <span className="count">{visible.length + shared.length}</span>
+            Идеи и мысли <span className={"count" + (visible.length + shared.length === 0 ? " zero" : "")}>{visible.length + shared.length}</span>
           </div>
           {sentList.length > 0 && (
             <button
