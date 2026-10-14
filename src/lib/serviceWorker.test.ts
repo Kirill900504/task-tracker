@@ -169,6 +169,37 @@ describe("сервис-воркер: ответ на навигацию", () => 
     expect(nameIn(page)).toBe(nameIn(worker));
   });
 
+  it("сохранённый трекер открывается сразу, даже когда сеть повисла", async () => {
+    // 14.10.2026: «бывает вообще дальше белого экрана ничего не происходит».
+    // Сеть, которая режет *.vercel.app по имени, не отвечает отказом — она
+    // молчит. Прежний воркер ждал её ответа, и окно оставалось белым при
+    // готовой копии в кэше. Сеть здесь не отвечает никогда: тест упадёт по
+    // таймауту, если воркер снова начнёт её ждать.
+    worker.cache.set("/", reply({ body: "<html>сохранённый трекер</html>" }));
+    worker.setFetch(() => new Promise(() => {}));
+    const answer = (await worker.navigate("https://tracker.test/")) as FakeResponse;
+    expect(answer.body).toContain("сохранённый трекер");
+  });
+
+  it("а свежую версию тем временем кладёт в кэш для следующего открытия", async () => {
+    worker.cache.set("/", reply({ body: "<html>вчерашний</html>" }));
+    worker.setFetch(async () => reply({ body: "<html>сегодняшний</html>" }));
+    const answer = (await worker.navigate("https://tracker.test/")) as FakeResponse;
+    expect(answer.body).toContain("вчерашний");
+    await new Promise((r) => setTimeout(r, 0));
+    expect((worker.cache.get("/") as FakeResponse).body).toContain("сегодняшний");
+  });
+
+  it("вход из мессенджера (/app) тоже открывается из кэша сразу", async () => {
+    worker.setFetch(async () => reply({ url: "https://tracker.test/app", body: "<html>вход</html>" }));
+    await worker.navigate("https://tracker.test/app");
+    expect(worker.cache.has("/app")).toBe(true);
+
+    worker.setFetch(() => new Promise(() => {}));
+    const answer = (await worker.navigate("https://tracker.test/app")) as FakeResponse;
+    expect(answer.body).toContain("вход");
+  });
+
   it("без сети и без кэша объясняет это по-русски, а не падает", async () => {
     worker.setFetch(async () => {
       throw new Error("сеть недоступна");

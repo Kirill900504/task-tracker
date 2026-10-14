@@ -31,6 +31,11 @@ export async function miniAppSignIn(req: Request, channel: BotChannelConfig, bot
   if (result.same) return NextResponse.json({ signedIn: true });
 
   const { error } = await supabase.auth.verifyOtp({ type: "magiclink", token_hash: result.tokenHash });
-  if (!error) return NextResponse.json({ signedIn: true });
+  // `switched`: the cookies on this response belong to someone other than
+  // the session the browser came with (or it came with none that held). The
+  // mini-app now opens the tracker at once on a returning device and asks
+  // this route in the background (MiniAppChrome); this flag is how it learns
+  // that the screen it already shows is the wrong person's.
+  if (!error) return NextResponse.json({ signedIn: true, switched: true });
   return NextResponse.json({ tokenHash: result.tokenHash, email: result.email });
 }

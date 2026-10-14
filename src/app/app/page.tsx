@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import BootSkeleton from "@/components/tracker/BootSkeleton";
 
 // Трекер, открытый внутри мессенджера.
 //
@@ -62,6 +63,23 @@ function readLaunch(): Launch | null {
   return null;
 }
 
+// Сессия на этом устройстве уже есть — без единого запроса в сеть. Куки
+// входа @supabase/ssr читаемы из страницы (не httpOnly) и называются
+// `sb-<проект>-auth-token`, иногда с хвостом `.0`, `.1` — длинная сессия
+// режется на части. Это не проверка подлинности: её делает прослойка на «/»
+// и тот же маршрут входа, запущенный фоном (MiniAppChrome).
+function hasSessionCookie(): boolean {
+  try {
+    return /(?:^|;\s*)sb-[^=]*-auth-token(?:\.\d+)?=/.test(document.cookie);
+  } catch {
+    return false;
+  }
+}
+
+// Ключ, под которым подпись мессенджера ждёт фоновой проверки на «/».
+// Тот же текст стоит в MiniAppChrome — она его и забирает.
+const PENDING = "rokas:miniapp-pending";
+
 export default function MiniApp() {
   const [stage, setStage] = useState<Stage>({ kind: "working" });
 
@@ -70,6 +88,27 @@ export default function MiniApp() {
 
     async function signIn() {
       const launch = readLaunch();
+
+      // Повторное открытие — обычный случай: человек уже входил с этого
+      // телефона. 14.10.2026: «удостоверься, что… открывается моментально
+      // (даже без всяких страниц загрузок)». До этого каждое открытие ждало
+      // ответа маршрута входа — полный полёт до сервера, который на
+      // мобильной сети стоит секунды, — и только потом шло в трекер. Теперь
+      // трекер открывается сразу (из кэша, см. public/sw.js), а подпись
+      // проверяется там же фоном: тот же маршрут, те же правила. Если он
+      // скажет, что это ДРУГОЙ человек (два аккаунта в одном мессенджере),
+      // MiniAppChrome перезагрузит трекер под ним.
+      if (launch && hasSessionCookie()) {
+        try {
+          sessionStorage.setItem(PENDING, JSON.stringify(launch));
+        } catch {
+          /* хранилище недоступно — проверка просто не случится, как и раньше при входе с паролем */
+        }
+        // Фрагмент едет дальше: мост мессенджера (MiniAppChrome) на «/»
+        // берёт данные запуска именно из адреса.
+        window.location.replace("/" + window.location.hash);
+        return;
+      }
       if (!launch) {
         // Открыли в обычном браузере — и это не ошибка, а нормальный
         // случай: в MAX кнопка «Открыть трекер» пока обычная ссылка
@@ -151,24 +190,24 @@ export default function MiniApp() {
     };
   }, []);
 
+  // Пока идёт вход — каркас трекера, а не страница «Входим…»: человек
+  // открывает трекер, и первым кадром должен видеть его форму (то же
+  // правило, что у «/», см. BootSkeleton). Слова остаются только для
+  // неудачи — там они и есть всё объяснение.
+  if (stage.kind === "working") return <BootSkeleton />;
+
   return (
     <div className="auth-screen">
       <div className="auth-card">
-        <h1 className="auth-title">{stage.kind === "working" ? "Входим…" : "Не вышло войти"}</h1>
-        {stage.kind === "working" ? (
-          <p className="auth-sub">Секунду — открываю трекер.</p>
-        ) : (
-          <>
-            <p className="auth-sub">{stage.message}</p>
-            {stage.canRetry && (
-              <button className="auth-btn" onClick={() => window.location.reload()}>
-                Попробовать ещё раз
-              </button>
-            )}
-            {stage.detail && (
-              <p style={{ marginTop: 18, fontSize: 11, opacity: 0.45, wordBreak: "break-all" }}>{stage.detail}</p>
-            )}
-          </>
+        <h1 className="auth-title">Не вышло войти</h1>
+        <p className="auth-sub">{stage.message}</p>
+        {stage.canRetry && (
+          <button className="auth-btn" onClick={() => window.location.reload()}>
+            Попробовать ещё раз
+          </button>
+        )}
+        {stage.detail && (
+          <p style={{ marginTop: 18, fontSize: 11, opacity: 0.45, wordBreak: "break-all" }}>{stage.detail}</p>
         )}
       </div>
     </div>

@@ -77,7 +77,52 @@ function tune(app: TelegramWebApp | undefined) {
   app.setBackgroundColor?.(CHROME);
 }
 
+// Подпись мессенджера, которую /app не стал проверять до перехода, потому
+// что сессия на устройстве уже была (см. там же). Ключ — тот же текст, что
+// в src/app/app/page.tsx.
+const PENDING = "rokas:miniapp-pending";
+
+// Проверить её фоном тем же маршрутом, которым /app входит сам. Ответа три:
+// тот же человек — ничего не делать (обычный случай, экран уже верный);
+// другой человек — маршрут уже поставил его куки, и трекер открывается
+// заново под ним; отказ — тоже ничего: сессия на устройстве принадлежит
+// тому, кто её завёл, и прослойка на «/» проверяет её сама, как при
+// обычном входе с паролем.
+async function verifyPending() {
+  let launch: { channel?: string; initData?: string } | null = null;
+  try {
+    launch = JSON.parse(sessionStorage.getItem(PENDING) || "null");
+    sessionStorage.removeItem(PENDING);
+  } catch {
+    return;
+  }
+  if (!launch?.initData || (launch.channel !== "telegram" && launch.channel !== "max")) return;
+  try {
+    const res = await fetch(`/api/${launch.channel}/miniapp-auth`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initData: launch.initData }),
+    });
+    const body = (await res.json().catch(() => null)) as { switched?: boolean; tokenHash?: string } | null;
+    if (body?.switched) {
+      window.location.replace("/");
+    } else if (body?.tokenHash) {
+      // Сервер не смог поставить сессию сам — так же, как на /app.
+      const { createClient } = await import("@/lib/supabase/client");
+      const { error } = await createClient().auth.verifyOtp({ type: "magiclink", token_hash: body.tokenHash });
+      if (!error) window.location.replace("/");
+    }
+  } catch {
+    /* нет связи — экран остаётся тем, что уже открыт */
+  }
+}
+
 export default function MiniAppChrome() {
+  useEffect(() => {
+    void verifyPending();
+  }, []);
+
   useEffect(() => {
     const win = window as unknown as { Telegram?: { WebApp?: TelegramWebApp }; WebApp?: TelegramWebApp };
 

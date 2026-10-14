@@ -288,8 +288,17 @@ service-role client bypasses RLS entirely, so server code must filter by
 or the session middleware redirects them to /login and they answer 405 with
 nothing in the logs.
 
-**Service worker** (`public/sw.js`): network-first for navigations,
-cache-first for `/_next/static`, never caches "/" at install (it redirects to
+**Service worker** (`public/sw.js`): «/» и `/app` — СНАЧАЛА копия из кэша,
+свежая версия фоном (с 14.10.2026); прочие навигации network-first;
+cache-first for `/_next/static`. Копия первой — не вкус, а ответ на «белый
+экран, дальше которого ничего не происходит»: сеть, режущая `vercel.app`
+по имени, не отказывает, а молчит, и network-first ждал её вечно при
+готовой копии в кэше. Устаревшую копию снимает `VersionWatch` (сверка
+версии при старте), а битой она не бывает: Vercel отдаёт файлы прежних
+сборок (проверено — 200). Повторный вход из мессенджера тоже не ждёт
+сервера: `/app` при живой куке сразу уходит на «/», подпись проверяет фоном
+`MiniAppChrome` (`switched` в ответе — открыл другой человек). Сторож —
+`e2e/instantOpen.spec.ts`; на прежнем воркере он падал по таймауту. never caches "/" at install (it redirects to
 /login and a redirected response cannot answer a navigation), and is disabled
 and unregistered in development — a stale dev chunk once looked exactly like
 a broken feature.

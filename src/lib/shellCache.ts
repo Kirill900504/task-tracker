@@ -9,6 +9,31 @@
 // both files and fails if they disagree.
 const SHELL_CACHE = "rokas-shell-v2";
 
+// Forget the stored shell ("/" and the mini-app entry "/app").
+//
+// The worker answers those two addresses from this cache FIRST (public/sw.js,
+// since 14.10.2026), so a shell whose build files are gone would fail the
+// same way on every start: «Открыть заново» would reopen exactly the copy that
+// just broke. Vercel keeps old builds' files, so this should not happen in
+// production — but a missing chunk is precisely the failure nobody can
+// recover from by hand, so global-error drops the copy and reloads.
+export async function dropShell(): Promise<void> {
+  try {
+    if (typeof caches === "undefined") return;
+    const cache = await caches.open(SHELL_CACHE);
+    await Promise.all([cache.delete("/", { ignoreVary: true }), cache.delete("/app", { ignoreVary: true })]);
+  } catch {
+    /* nothing to drop */
+  }
+}
+
+// A failed import of a build file — the one crash a reload from the network
+// cures and a reload from the cache does not.
+export function isChunkLoadError(error: unknown): boolean {
+  const e = error as { name?: string; message?: string } | null;
+  return !!e && (e.name === "ChunkLoadError" || /Failed to load chunk|Loading chunk .* failed|dynamically imported module/i.test(e.message || ""));
+}
+
 // Puts the application shell into the service worker's cache, so the tracker
 // opens without a connection.
 //

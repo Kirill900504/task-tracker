@@ -387,8 +387,11 @@ test("«Задачи» и «В работе» — отдельные разде�
 // фрагмента адреса).
 test("в мини-приложении подключается скрипт мессенджера, а в браузере — нет", async ({ page }) => {
   // Наружу не ходим: сам факт подключения и есть предмет проверки.
+  // Мост грузится с нашего сайта (public/vendor, 14.10.2026 — telegram.org
+  // в России доступен не везде), а прежний адрес остался запасным; считаем
+  // оба.
   let asked = 0;
-  await page.route("https://telegram.org/js/telegram-web-app.js", async (route) => {
+  await page.route(/\/telegram-web-app\.js$/, async (route) => {
     asked++;
     await route.fulfill({ status: 200, contentType: "application/javascript", body: "window.Telegram={WebApp:{ready(){},expand(){},disableVerticalSwipes(){},setHeaderColor(){},setBackgroundColor(){}}};" });
   });
@@ -404,7 +407,7 @@ test("в мини-приложении подключается скрипт м�
   await page.goto("/login#tgWebAppData=auth_date%3D1%26hash%3Dnope");
   // Сам тег — и есть предмет проверки: загрузился ли он к этой секунде,
   // дело асинхронное и к правилу отношения не имеет.
-  await expect(page.locator("#messenger-webapp-script")).toHaveAttribute("src", /telegram\.org/, { timeout: 15_000 });
+  await expect(page.locator("#messenger-webapp-script")).toHaveAttribute("src", /^\/vendor\/telegram-web-app\.js$/, { timeout: 15_000 });
 });
 
 // Внутри MAX — мост MAX. До 13.10.2026 грузился телеграмовский: MAX его не

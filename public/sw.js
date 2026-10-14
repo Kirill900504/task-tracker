@@ -106,6 +106,40 @@ async function networkFirst(request, fallbackUrl) {
   }
 }
 
+// The tracker itself ("/") and the mini-app entry ("/app"): the stored copy
+// answers AT ONCE, and the network refreshes it in the background for the
+// next start.
+//
+// 14.10.2026, Kirill: «когда открывается мобильное приложение очень долго
+// прогружается белый экран, бывает вообще дальше белого экрана ничего не
+// происходит». Network-first was the cause. It waits for the network before
+// painting anything, and a slow mobile network means seconds of the white
+// window; worse, on the Russian networks that filter *.vercel.app by name
+// (see CLAUDE.md) the connection does not fail — it hangs, so the fallback
+// below never ran and the window stayed white for good, with a working copy
+// of the tracker sitting right here in the cache.
+//
+// What made network-first look necessary — «a stale shell is how a PWA ends
+// up running last week's build» — is now answered elsewhere: VersionWatch
+// compares the build with /api/version on start and reloads, by which time
+// this refresh has put the new shell in the cache. And an old shell is never
+// a broken one: Vercel keeps serving earlier builds' /_next/static files
+// (checked 14.10.2026 — a replaced build's chunks still answered 200), and
+// the ones this shell used are cached right beside it anyway. An expired
+// session is safe too: the shell is the same for everyone, and the page
+// itself sends a reader without a session to /login.
+async function cachedThenRefresh(event, key) {
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(key, { ignoreVary: true, ignoreSearch: true });
+  const fresh = networkFirst(event.request, key);
+  if (cached && !cached.redirected) {
+    if (event.waitUntil) event.waitUntil(fresh.catch(() => {}));
+    else fresh.catch(() => {});
+    return cached;
+  }
+  return fresh;
+}
+
 // Served only when the network failed AND nothing is cached — that is, on a
 // first run without a connection. Deliberately one self-contained file: it
 // has to render when nothing else can be fetched.
@@ -152,8 +186,16 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
-    // Every route falls back to "/" — the tracker is one page, and the login
-    // page is useless offline anyway.
+    // The two doors people open the tracker by — the app icon and the
+    // messenger button — answer from the cache first (see cachedThenRefresh).
+    // /app is a static page: the messenger's signature travels in the
+    // address FRAGMENT, which never reaches this worker or the cache key.
+    if (url.pathname === "/" || url.pathname === "/app") {
+      event.respondWith(cachedThenRefresh(event, url.pathname));
+      return;
+    }
+    // Every other route falls back to "/" — the tracker is one page, and the
+    // login page is useless offline anyway.
     event.respondWith(networkFirst(request, "/"));
     return;
   }

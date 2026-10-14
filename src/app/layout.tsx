@@ -58,7 +58,12 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ru" className={manrope.variable} suppressHydrationWarning>
+    // Цвет фона — прямо в теге, а не только в globals.css: стили приезжают
+    // отдельным файлом, и до них окно белое. На медленной сети это и был
+    // «белый экран» при открытии (14.10.2026) — тёмный трекер начинался с
+    // белой вспышки, а на сети, где файл стилей не доехал, белым и
+    // оставался. Значение то же, что --paper и themeColor ниже.
+    <html lang="ru" className={manrope.variable} style={{ backgroundColor: "#232B2E" }} suppressHydrationWarning>
       <body suppressHydrationWarning>
         <RegisterSW />
         {/* Поломка, о которой знает только пострадавший, — это отсутствующий

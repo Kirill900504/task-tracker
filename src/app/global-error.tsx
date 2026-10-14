@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { reportCrash } from "@/lib/reportCrash";
+import { dropShell, isChunkLoadError } from "@/lib/shellCache";
 
 // Что человек видит вместо белого экрана.
 //
@@ -17,6 +18,21 @@ import { reportCrash } from "@/lib/reportCrash";
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     reportCrash(error, { where: "экран трекера" });
+    // Не нашёлся файл сборки — экран открыт из сохранённой копии, которая
+    // ссылается на то, чего уже нет. «Открыть заново» открыл бы ту же
+    // копию (сервис-воркер отдаёт её первой), поэтому копия выбрасывается и
+    // страница перезагружается из сети сама. Один раз за минуту: если и
+    // свежая сборка падает так же, человек видит этот экран, а не мигание.
+    if (!isChunkLoadError(error)) return;
+    const KEY = "rokas:chunk-reload";
+    try {
+      const last = Number(sessionStorage.getItem(KEY) || 0);
+      if (Date.now() - last < 60_000) return;
+      sessionStorage.setItem(KEY, String(Date.now()));
+    } catch {
+      return;
+    }
+    void dropShell().then(() => window.location.reload());
   }, [error]);
 
   return (
