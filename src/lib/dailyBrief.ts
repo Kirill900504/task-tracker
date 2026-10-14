@@ -3,6 +3,7 @@ import { gigaChatComplete } from "@/lib/gigachat/client";
 import { moscowNow, dateStr, isDueToday, isOverdue, type TaskRow } from "@/lib/taskLogic";
 import { rewriteIsFaithful } from "@/lib/factGuard";
 import { tasksWord } from "@/lib/plural";
+import { ownerSeesMeeting, ownerSeesTask, ownerSight } from "@/lib/ownerVisible";
 
 // The morning briefing: instead of "17 задач просрочено", say what actually
 // matters today and why — "сегодня главное вот эти три, потому что завтра по
@@ -31,7 +32,7 @@ export type BriefFacts = {
   totalOpen: number;
 };
 
-type MeetingRow = { title: string; date: string; time: string; participants: string[] | null; status: string };
+type MeetingRow = { title: string; date: string; time: string; participants: string[] | null; status: string; created_by?: string | null };
 
 function daysBetween(fromIso: string, toIso: string): number {
   const a = Date.parse(fromIso + "T00:00:00Z");
@@ -61,23 +62,26 @@ export async function buildBriefFacts(admin: SupabaseClient, userId: string): Pr
   const today = dateStr(now);
   const tomorrow = dateStr(new Date(now.getTime() + 86400000));
 
-  const [taskRes, meetingRes] = await Promise.all([
+  // Только то, что владелец видит и в трекере (lib/ownerVisible): своё и
+  // то, где он участник. До 14.10.2026 здесь было всё пространство.
+  const [taskRes, meetingRes, sight] = await Promise.all([
     admin
       .from("tasks")
-      .select("id,title,assignee,status,deadline,priority,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month")
+      .select("id,title,assignee,status,deadline,priority,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month,created_by")
       .eq("user_id", userId)
       .is("deleted_at", null),
     admin
       .from("meetings")
-      .select("title,date,time,participants,status")
+      .select("title,date,time,participants,status,created_by")
       .eq("user_id", userId)
       .is("deleted_at", null)
       .in("date", [today, tomorrow]),
+    ownerSight(admin, userId),
   ]);
 
-  const allTasks = (taskRes.data || []) as (TaskRow & { priority?: string })[];
+  const allTasks = ((taskRes.data || []) as (TaskRow & { priority?: string; created_by?: string | null })[]).filter((t) => ownerSeesTask(sight, t));
   const open = allTasks.filter((t) => t.status !== "done");
-  const meetings = ((meetingRes.data || []) as MeetingRow[]).filter((m) => !m.status || m.status === "planned");
+  const meetings = ((meetingRes.data || []) as MeetingRow[]).filter((m) => (!m.status || m.status === "planned") && ownerSeesMeeting(sight, m));
   const meetingsToday = meetings.filter((m) => m.date === today);
   const meetingsTomorrow = meetings.filter((m) => m.date === tomorrow);
   const soon = [...meetingsToday, ...meetingsTomorrow];

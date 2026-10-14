@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtDate } from "@/lib/taskDisplay";
 import { withoutSelfMark } from "@/lib/actorName";
+import { numbered } from "@/lib/taskRef";
 
 // Утренняя сводка руководителю — та же услуга, что владелец получает с
 // самого начала, только про его собственные дела.
@@ -77,7 +78,7 @@ export async function buildManagerBrief(
 
   const { data: rows } = await admin
     .from("task_participants")
-    .select("task_id, role, accepted_at, done_at, declined_at, tasks(title, deadline, status, recur, approval_state, approval_comment, deleted_at)")
+    .select("task_id, role, accepted_at, done_at, declined_at, tasks(title, number, deadline, status, recur, approval_state, approval_comment, deleted_at)")
     .eq("assignee_id", assignee.id)
     .eq("user_id", ownerId)
     .eq("role", "executor");
@@ -89,6 +90,7 @@ export async function buildManagerBrief(
     declined_at: string | null;
     tasks: {
       title: string;
+      number?: number | null;
       deadline: string | null;
       status: string | null;
       recur: string | null;
@@ -109,11 +111,11 @@ export async function buildManagerBrief(
     // Витовского 25.09.2026 — закрытая ежедневная задача в «Просрочено».
     const recurring = (t.recur || "none") !== "none";
     const deadline = t.deadline || "";
-    if (t.approval_state === "returned") facts.returned.push({ title: t.title, comment: t.approval_comment || "" });
-    if (!recurring && deadline && deadline < today) facts.overdue.push({ title: t.title, deadline });
-    else if (!recurring && deadline === today) facts.today.push({ title: t.title, deadline });
-    else if (!recurring && deadline && soonUntil && deadline > today && deadline <= soonUntil) facts.soon.push({ title: t.title, deadline });
-    if (!r.accepted_at && !r.declined_at) facts.unanswered.push({ title: t.title });
+    if (t.approval_state === "returned") facts.returned.push({ title: numbered(t), comment: t.approval_comment || "" });
+    if (!recurring && deadline && deadline < today) facts.overdue.push({ title: numbered(t), deadline });
+    else if (!recurring && deadline === today) facts.today.push({ title: numbered(t), deadline });
+    else if (!recurring && deadline && soonUntil && deadline > today && deadline <= soonUntil) facts.soon.push({ title: numbered(t), deadline });
+    if (!r.accepted_at && !r.declined_at) facts.unanswered.push({ title: numbered(t) });
   }
 
   const { data: meetings } = await admin
@@ -154,7 +156,7 @@ export async function buildManagerBrief(
       ),
     ];
     const titleOf = new Map(
-      ((rows || []) as unknown as Row[]).filter((r) => r.tasks).map((r) => [r.task_id, r.tasks!.title]),
+      ((rows || []) as unknown as Row[]).filter((r) => r.tasks).map((r) => [r.task_id, numbered(r.tasks!)]),
     );
     for (const id of others) {
       const title = titleOf.get(id);

@@ -13,6 +13,7 @@ import { colleagueCommandsHelp, matchColleagueCommand, meetingCard, meetingRoste
 import type { ColleagueQuery } from "@/lib/colleagueQueries";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import type { Notice } from "@/lib/noticeQueue";
+import { numbered, taskRef, taskRef as taskLabel } from "@/lib/taskRef";
 import { mirrorAnswer, type MirrorRef } from "@/lib/botMirror";
 import { acceptProposal, voteOnProposal } from "@/lib/meetingProposal";
 
@@ -216,7 +217,7 @@ async function colleagueCallback(
   if (action.kind === "task") {
     const { data: task } = await admin
       .from("tasks")
-      .select("id, title, assignee, user_id, status, created_by")
+      .select("id, title, number, assignee, user_id, status, created_by")
       .eq("id", action.id)
       .is("deleted_at", null)
       .maybeSingle();
@@ -273,7 +274,7 @@ async function colleagueCallback(
     if (participant && myPart && !wants) {
       return {
         toast: lockedTaskText(myPart),
-        rewriteTo: `📋 ${task.title}\n\n${lockedTaskText(myPart)}`,
+        rewriteTo: `📋 ${numbered(task)}\n\n${lockedTaskText(myPart)}`,
         rewriteButtons: taskButtons(task.id, participant.role, open),
       };
     }
@@ -294,14 +295,14 @@ async function colleagueCallback(
       });
       return {
         toast: "Принято",
-        rewriteTo: `📋 ${task.title}\n\n✅ Принято в работу`,
+        rewriteTo: `📋 ${numbered(task)}\n\n✅ Принято в работу`,
         // Следующий шаг — отчёт, отказ или перенос — обязан остаться под
         // рукой: переписанное без кнопок сообщение оставляло человека с
         // «принято» и без единой кнопки, чтобы потом отчитаться.
         rewriteButtons: participant ? taskButtons(task.id, participant.role, { ...open, accept: false }) : undefined,
         notifyTo: task.created_by,
-        notifyOwner: `✅ ${withoutSelfMark(colleague.name)} принял в работу: «${task.title}»`,
-        notice: { kind: "accepted", item: task.title, who: withoutSelfMark(colleague.name) },
+        notifyOwner: `✅ ${withoutSelfMark(colleague.name)} принял в работу: ${taskRef(task)}`,
+        notice: { kind: "accepted", item: task.title, itemId: task.id, num: task.number ?? null, who: withoutSelfMark(colleague.name) },
       };
     }
 
@@ -328,12 +329,12 @@ async function colleagueCallback(
         const closed = await closeIfEveryoneReported(admin, task.id);
         return {
           toast: "Отмечено",
-          rewriteTo: `📋 ${task.title}\n\n🏁 Отмечено выполненным.\nНапишите одним сообщением, что именно сделано — это увидит постановщик.`,
+          rewriteTo: `📋 ${numbered(task)}\n\n🏁 Отмечено выполненным.\nНапишите одним сообщением, что именно сделано — это увидит постановщик.`,
           notifyTo: task.created_by,
-          notice: { kind: closed ? "reported_all" : "reported", item: task.title, who: withoutSelfMark(colleague.name) },
+          notice: { kind: closed ? "reported_all" : "reported", item: task.title, itemId: task.id, num: task.number ?? null, who: withoutSelfMark(colleague.name) },
           notifyOwner: closed
-            ? `🏁 ${withoutSelfMark(colleague.name)} выполнил: «${task.title}» — отчитались все, задача ждёт вашей приёмки`
-            : `🏁 ${withoutSelfMark(colleague.name)} выполнил свою часть: «${task.title}»`,
+            ? `🏁 ${withoutSelfMark(colleague.name)} выполнил: ${taskRef(task)} — отчитались все, задача ждёт вашей приёмки`
+            : `🏁 ${withoutSelfMark(colleague.name)} выполнил свою часть: ${taskRef(task)}`,
         };
       }
 
@@ -350,10 +351,10 @@ async function colleagueCallback(
       });
       return {
         toast: "Отмечено выполненным",
-        rewriteTo: `📋 ${task.title}\n\n🏁 Выполнено`,
+        rewriteTo: `📋 ${numbered(task)}\n\n🏁 Выполнено`,
         notifyTo: task.created_by,
-        notifyOwner: `🏁 ${withoutSelfMark(colleague.name)} выполнил: «${task.title}»`,
-        notice: { kind: "reported_all", item: task.title, who: withoutSelfMark(colleague.name) },
+        notifyOwner: `🏁 ${withoutSelfMark(colleague.name)} выполнил: ${taskRef(task)}`,
+        notice: { kind: "reported_all", item: task.title, itemId: task.id, num: task.number ?? null, who: withoutSelfMark(colleague.name) },
       };
     }
 
@@ -364,10 +365,10 @@ async function colleagueCallback(
         // некуда, поэтому это остаётся сообщением постановщику.
         return {
           toast: "Передал",
-          rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
+          rewriteTo: `📋 ${numbered(task)}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
           notifyTo: task.created_by,
-          notifyOwner: `⛔ ${withoutSelfMark(colleague.name)} не может выполнить: «${task.title}»`,
-          notice: { kind: "declined", item: task.title, who: withoutSelfMark(colleague.name) },
+          notifyOwner: `⛔ ${withoutSelfMark(colleague.name)} не может выполнить: ${taskRef(task)}`,
+          notice: { kind: "declined", item: task.title, itemId: task.id, num: task.number ?? null, who: withoutSelfMark(colleague.name) },
         };
       }
       await admin
@@ -393,12 +394,12 @@ async function colleagueCallback(
       const answered = await closeIfEveryoneReported(admin, task.id);
       return {
         toast: "Передал",
-        rewriteTo: `📋 ${task.title}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
+        rewriteTo: `📋 ${numbered(task)}\n\n⛔ Отмечено: не сможете\nНапишите одним сообщением, почему — это увидит постановщик.`,
         notifyTo: task.created_by,
         notifyOwner: answered
-          ? `⛔ ${withoutSelfMark(colleague.name)} не может выполнить: «${task.title}» — ответили все, задача ждёт вашего решения`
-          : `⛔ ${withoutSelfMark(colleague.name)} не может выполнить: «${task.title}»`,
-        notice: { kind: "declined", item: task.title, who: withoutSelfMark(colleague.name) },
+          ? `⛔ ${withoutSelfMark(colleague.name)} не может выполнить: ${taskRef(task)} — ответили все, задача ждёт вашего решения`
+          : `⛔ ${withoutSelfMark(colleague.name)} не может выполнить: ${taskRef(task)}`,
+        notice: { kind: "declined", item: task.title, itemId: task.id, num: task.number ?? null, who: withoutSelfMark(colleague.name) },
       };
     }
 
@@ -412,7 +413,7 @@ async function colleagueCallback(
       if (!participant) return { toast: "Эта задача уже не ваша" };
       return {
         toast: "На сколько перенести?",
-        say: `📅 На сколько перенести «${task.title}»?\nПосле выбора напишите, что мешает успеть — без причины это не просьба, а просто новая дата.`,
+        say: `📅 На сколько перенести ${taskRef(task)}?\nПосле выбора напишите, что мешает успеть — без причины это не просьба, а просто новая дата.`,
         sayButtons: rescheduleButtons(task.id),
       };
     }
@@ -434,7 +435,7 @@ async function colleagueCallback(
         .eq("id", participant.id);
       return {
         toast: "Записал дату",
-        say: `📅 Прошу перенести «${task.title}» на ${fmtDate(date)}.\nНапишите одним сообщением, что мешает успеть — это увидит постановщик, и решение за ним.`,
+        say: `📅 Прошу перенести ${taskRef(task)} на ${fmtDate(date)}.\nНапишите одним сообщением, что мешает успеть — это увидит постановщик, и решение за ним.`,
       };
     }
   }
@@ -707,7 +708,7 @@ export async function handleColleagueText(
     .from("task_participants")
     .select(
       "id, task_id, done_at, done_comment, declined_at, decline_reason, " +
-        "reschedule_requested_at, reschedule_to, reschedule_reason, tasks(title, created_by)",
+        "reschedule_requested_at, reschedule_to, reschedule_reason, tasks(title, number, created_by)",
     )
     .eq("assignee_id", colleague.id)
     .eq("user_id", colleague.user_id);
@@ -754,7 +755,7 @@ type OpenRow = {
   reschedule_requested_at: string | null;
   reschedule_to: string | null;
   reschedule_reason: string | null;
-  tasks: { title: string; created_by: string | null } | { title: string; created_by: string | null }[] | null;
+  tasks: { title: string; number?: number | null; created_by: string | null } | { title: string; number?: number | null; created_by: string | null }[] | null;
 };
 
 const askedAt = (r: OpenRow) => Date.parse(r.done_at || r.declined_at || r.reschedule_requested_at || "") || 0;
@@ -796,7 +797,7 @@ export async function answerOwnOpenQuestion(
     .from("task_participants")
     .select(
       "id, task_id, done_at, done_comment, declined_at, decline_reason, " +
-        "reschedule_requested_at, reschedule_to, reschedule_reason, tasks(title, created_by)",
+        "reschedule_requested_at, reschedule_to, reschedule_reason, tasks(title, number, created_by)",
     )
     .eq("assignee_id", self.id)
     .eq("user_id", self.user_id);
@@ -829,6 +830,8 @@ async function fillOpenAnswerRow(
   const row = rows[0];
   const taskRef = Array.isArray(row.tasks) ? row.tasks[0] : row.tasks;
   const title = taskRef?.title || "";
+  const named = taskRef ? taskLabel(taskRef) : `«${title}»`;
+  const ref = { item: title, itemId: row.task_id, num: taskRef?.number ?? null, who: withoutSelfMark(colleague.name) };
 
   if (row.reschedule_requested_at && !row.reschedule_reason) {
     await admin.from("task_participants").update({ reschedule_reason: body }).eq("id", row.id);
@@ -840,10 +843,10 @@ async function fillOpenAnswerRow(
       text: `📅 ${withoutSelfMark(colleague.name)} просит перенос${to}: ${body}`,
     });
     return {
-      reply: `Передал: просите перенести «${title}»${to} — ${body}.\nСрок двигает постановщик, я скажу, когда он ответит.`,
+      reply: `Передал: просите перенести ${named}${to} — ${body}.\nСрок двигает постановщик, я скажу, когда он ответит.`,
       notifyTo: taskRef?.created_by ?? null,
-      notifyOwner: `📅 ${withoutSelfMark(colleague.name)} просит перенести «${title}»${to}: ${body}`,
-      notice: { kind: "reschedule", item: title, who: withoutSelfMark(colleague.name), what: `${to.trim() || "на другой срок"} — ${body}` },
+      notifyOwner: `📅 ${withoutSelfMark(colleague.name)} просит перенести ${named}${to}: ${body}`,
+      notice: { kind: "reschedule", ...ref, what: `${to.trim() || "на другой срок"} — ${body}` },
     };
   }
 
@@ -858,10 +861,10 @@ async function fillOpenAnswerRow(
       text: `🏁 ${withoutSelfMark(colleague.name)} отчитался: ${body}`,
     });
     return {
-      reply: `Записал по задаче «${title}»: ${body}`,
+      reply: `Записал по задаче ${named}: ${body}`,
       notifyTo: taskRef?.created_by ?? null,
-      notifyOwner: `🏁 ${withoutSelfMark(colleague.name)} по задаче «${title}»: ${body}`,
-      notice: { kind: "reported", item: title, who: withoutSelfMark(colleague.name), what: body },
+      notifyOwner: `🏁 ${withoutSelfMark(colleague.name)} по задаче ${named}: ${body}`,
+      notice: { kind: "reported", ...ref, what: body },
     };
   }
 
@@ -873,10 +876,10 @@ async function fillOpenAnswerRow(
     text: `⛔ ${withoutSelfMark(colleague.name)} не может: ${body}`,
   });
   return {
-    reply: `Записал: не сможете «${title}» — ${body}`,
+    reply: `Записал: не сможете ${named} — ${body}`,
     notifyTo: taskRef?.created_by ?? null,
-    notifyOwner: `⛔ ${withoutSelfMark(colleague.name)} не может «${title}»: ${body}`,
-    notice: { kind: "declined", item: title, who: withoutSelfMark(colleague.name), what: body },
+    notifyOwner: `⛔ ${withoutSelfMark(colleague.name)} не может ${named}: ${body}`,
+    notice: { kind: "declined", ...ref, what: body },
   };
 }
 

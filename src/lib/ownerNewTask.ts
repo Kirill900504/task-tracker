@@ -8,6 +8,7 @@ import { attachExecutors, assignNote, authorAssigneeName } from "@/lib/assignExe
 import { withoutSelfMark } from "@/lib/actorName";
 import { uid } from "@/lib/uid";
 import { isoDate, workdayIn } from "@/lib/whenDate";
+import { taskRef } from "@/lib/taskRef";
 
 // Поручить прямо из мессенджера — кнопками, а не фразой.
 //
@@ -141,5 +142,5 @@ export async function createTaskFromBot(
 
   const when = deadline ? `, срок ${fmtDate(deadline)}` : ", без срока";
   const who = people.map((p) => p.name).join(", ");
-  return { text: `✅ Поручено: «${title}»\n${who}${when}.${notes.length ? "\n\n" + notes.join("\n") : ""}` };
+  return { text: `✅ Поручено: ${taskRef({ title, number: inserted?.number ?? null })}\n${who}${when}.${notes.length ? "\n\n" + notes.join("\n") : ""}` };
 }

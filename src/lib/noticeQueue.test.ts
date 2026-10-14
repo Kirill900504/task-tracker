@@ -72,6 +72,70 @@ describe("сводка вместо ленты", () => {
   });
 });
 
+// 14.10.2026, снимок Кирилла: «не может выполнить» и ниже «написали в
+// обсуждении» — один человек, одна задача с названием в десять строк,
+// дважды. «Зачем ты ниже ещё добавляешь НАПИСАЛИ В ОБСУЖДЕНИИ… бред».
+describe("один человек по одной задаче — одна строка", () => {
+  const LONG = "Большая большая мобильная тестовая задача траааааааааааааааааааааааа ".repeat(8).trim();
+  const r = (kind: string, what: string, who = "Кирилл (тест)") => ({ kind, who, item: LONG, item_id: "t1", item_number: 85, what });
+
+  it("реплика того же человека в той же задаче приклеивается к ответу", () => {
+    const text = composeDigest([r("declined", "Не успеваю из-за других задач"), r("comment", "123123123")]);
+    expect(text).not.toContain("Написали в обсуждении");
+    expect(text).not.toContain("РОКАС ·");
+    expect(text).toContain("Не успеваю из-за других задач");
+    expect(text).toContain("💬 123123123");
+    expect(text.match(/Большая/g)).toHaveLength(1);
+  });
+
+  it("реплика, повторяющая ответ, пропадает вовсе", () => {
+    const text = composeDigest([r("declined", "Не успеваю"), r("comment", "Не успеваю")]);
+    expect(text.match(/Не успеваю/g)).toHaveLength(1);
+    expect(text).not.toContain("💬");
+  });
+
+  it("подпись к документам ответа читается как «приложены документы»", () => {
+    const text = composeDigest([r("declined", "Нет данных"), r("comment", "Документы к отказу")]);
+    expect(text).toContain("📎 приложены документы");
+    expect(text).not.toContain("Документы к отказу");
+  });
+
+  it("задача названа номером и коротким названием", () => {
+    const text = composeDigest([r("declined", "Нет данных")]);
+    expect(text).toContain("#85 «Большая");
+    expect(text).toContain("…»");
+    expect(text.length).toBeLessThan(200);
+  });
+
+  it("«не могу» кнопкой и причина следом — одна строка с причиной", () => {
+    // Бот спрашивает причину вторым сообщением, и каждое из двух клало
+    // своё событие.
+    const text = composeDigest([r("accepted", ""), r("declined", ""), r("declined", "Нет доступа")]);
+    expect(text).not.toContain("Приняли в работу");
+    expect(text.match(/Кирилл/g)).toHaveLength(1);
+    expect(text).toContain("Нет доступа");
+  });
+
+  it("«отчитались все» не теряется, когда следом приходят слова отчёта", () => {
+    const text = composeDigest([r("reported_all", ""), r("reported", "Свёл цифры"), { ...r("declined", "x", "Игорь"), item_id: "t2", item: "Другая" }]);
+    expect(text).toContain("Ждут вашей приёмки (1)");
+    expect(text).not.toContain("Отчитались о своей части");
+    expect(text).toContain("Свёл цифры");
+  });
+
+  it("чужие реплики и реплики по другим задачам остаются своей группой", () => {
+    const text = composeDigest([r("declined", "Нет данных"), r("comment", "Помогу", "Игорь"), { ...r("comment", "По другой"), item_id: "t2", item: "Другая" }]);
+    expect(text).toContain("Написали в обсуждении (2)");
+  });
+
+  it("несколько реплик одного человека в одном обсуждении — одна строка", () => {
+    const text = composeDigest([r("comment", "раз"), r("comment", "два"), { ...r("declined", "x", "Игорь"), item_id: "t2" }]);
+    expect(text).toContain("Написали в обсуждении (1)");
+    expect(text).toContain("раз");
+    expect(text).toContain("💬 два");
+  });
+});
+
 // 13.10.2026, отзыв Витковского: «принял в работу» приходило отдельным
 // сообщением через пять минут после нажатия.
 describe("события без решения не шлются отдельным письмом", () => {

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { taskRef } from "@/lib/taskRef";
 
 // Просроченное должно подавать голос.
 //
@@ -31,6 +32,7 @@ export type Step = (typeof STEPS)[number];
 export type StuckTask = {
   taskId: string;
   title: string;
+  number?: number | null;
   deadline: string;
   // Кому поручено — те, кто ещё не ответил и не отчитался.
   waiting: { assigneeId: string; name: string }[];
@@ -52,9 +54,9 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((b - a) / 86400000);
 }
 
-export function nudgeText(task: { title: string; deadline: string }, days: number): string {
+export function nudgeText(task: { title: string; number?: number | null; deadline: string }, days: number): string {
   return (
-    `⏰ Задача «${task.title}» просрочена на ${days} ${plural(days)}.\n\n` +
+    `⏰ Задача ${taskRef(task)} просрочена на ${days} ${plural(days)}.\n\n` +
     "Что с ней? Ответьте кнопкой — этого достаточно."
   );
 }
@@ -62,13 +64,13 @@ export function nudgeText(task: { title: string; deadline: string }, days: numbe
 // Своя задача (lib/selfTaskServer): напоминание, а не вопрос. Кнопок
 // «Сделал / Не могу» под ним нет — отвечать самому себе незачем, а закрыть
 // её — галочкой в трекере.
-export function selfOverdueText(task: { title: string; deadline: string }, days: number): string {
-  return `⏰ Ваша задача «${task.title}» просрочена на ${days} ${plural(days)}.\n\nСделали — отметьте галочкой в трекере; нет — перенесите срок там же.`;
+export function selfOverdueText(task: { title: string; number?: number | null; deadline: string }, days: number): string {
+  return `⏰ Ваша задача ${taskRef(task)} просрочена на ${days} ${plural(days)}.\n\nСделали — отметьте галочкой в трекере; нет — перенесите срок там же.`;
 }
 
-export function alarmText(task: { title: string; deadline: string }, days: number, names: string[]): string {
+export function alarmText(task: { title: string; number?: number | null; deadline: string }, days: number, names: string[]): string {
   const who = names.length ? names.join(", ") : "исполнитель";
-  return `⏰ «${task.title}» просрочена на ${days} ${plural(days)}, и ответа нет. Ждём: ${who}.`;
+  return `⏰ ${taskRef(task)} просрочена на ${days} ${plural(days)}, и ответа нет. Ждём: ${who}.`;
 }
 
 function plural(n: number): string {
@@ -87,14 +89,14 @@ function plural(n: number): string {
 export async function findStuck(admin: SupabaseClient, userId: string, today: string): Promise<{ task: StuckTask; step: Step }[]> {
   const { data } = await admin
     .from("tasks")
-    .select("id, title, deadline, created_by, status, recur, approval_state")
+    .select("id, title, number, deadline, created_by, status, recur, approval_state")
     .eq("user_id", userId)
     .eq("status", "in_progress")
     .eq("recur", "none")
     .not("deadline", "is", null)
     .is("deleted_at", null);
 
-  type Row = { id: string; title: string; deadline: string; created_by: string | null; approval_state: string | null };
+  type Row = { id: string; title: string; number?: number | null; deadline: string; created_by: string | null; approval_state: string | null };
   const rows = ((data || []) as Row[]).filter((t) => t.deadline < today && t.approval_state !== "awaiting_review");
   if (!rows.length) return [];
 
@@ -134,6 +136,7 @@ export async function findStuck(admin: SupabaseClient, userId: string, today: st
       task: {
         taskId: row.id,
         title: row.title,
+        number: row.number ?? null,
         deadline: row.deadline,
         waiting: waitingBy.get(row.id) || [],
         createdBy: row.created_by,

@@ -26,6 +26,7 @@ import { deliverComment } from "@/lib/commentDelivery";
 import { actorScope, authorFilter, findActorByChat, type BotActor } from "@/lib/botActor";
 import { actorName, withoutSelfMark } from "@/lib/actorName";
 import { busyOnServer } from "@/lib/meetingBusyServer";
+import { taskRef } from "@/lib/taskRef";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
 // мессенджере, а закрывает следующее сообщение владельца.
@@ -190,7 +191,7 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     const extra = Array.isArray(input.executors) ? (input.executors as unknown[]).filter((n): n is string => typeof n === "string") : [];
     const assigned = await attachExecutors(ctx.admin, userId, { ...row, number: inserted?.number ?? null }, [row.assignee, ...extra]);
 
-    const lines = [`✓ Задача: «${row.title}»`];
+    const lines = [`✓ Задача: ${taskRef({ title: row.title as string, number: inserted?.number ?? null })}`];
     if (row.deadline) lines.push("Срок: " + fmtDate(row.deadline as string));
     // Множественное число не украшение: «Исполнитель: Игорь» под задачей,
     // которая стоит на двоих, — это и есть «я думал, что поручил обоим».
@@ -636,12 +637,12 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
     const ask = waiting as ReturnPending;
     const { data: taskRow } = await ctx.admin
       .from("tasks")
-      .select("id, title, user_id")
+      .select("id, title, number, user_id")
       .eq("id", ask.taskId)
       .match(actorScope(actor)).or(authorFilter(actor))
       .is("deleted_at", null)
       .maybeSingle();
-    const task = taskRow as { id: string; title: string; user_id: string } | null;
+    const task = taskRow as { id: string; title: string; number?: number | null; user_id: string } | null;
     if (!task) {
       await say(ctx, "Эта задача больше не найдена.");
       return true;
@@ -650,7 +651,7 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
       label: await actorName(ctx.admin, task.user_id, actor.userId),
       userId: actor.userId,
     });
-    await say(ctx, done.ok ? `↩ Вернул «${task.title}» на доработку — исполнителям сказано.` : done.error);
+    await say(ctx, done.ok ? `↩ Вернул ${taskRef(task)} на доработку — исполнителям сказано.` : done.error);
     return true;
   }
 

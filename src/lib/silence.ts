@@ -97,7 +97,7 @@ export async function findSilent(admin: SupabaseClient, userId: string, now: Dat
   const cutoff = new Date(now.getTime() - SILENT_AFTER_HOURS * 60 * 60 * 1000).toISOString();
   const { data } = await admin
     .from("task_participants")
-    .select("created_at, assignee_id, assignees(name, telegram_chat_id, max_user_id, away_until), tasks(title, status, deleted_at)")
+    .select("created_at, assignee_id, assignees(name, telegram_chat_id, max_user_id, away_until), tasks(title, status, deleted_at, created_by)")
     .eq("user_id", userId)
     .eq("role", "executor")
     .is("accepted_at", null)
@@ -110,7 +110,7 @@ export async function findSilent(admin: SupabaseClient, userId: string, now: Dat
     created_at: string;
     assignee_id: string;
     assignees: Person | Person[] | null;
-    tasks: { title: string; status: string | null; deleted_at: string | null } | null;
+    tasks: { title: string; status: string | null; deleted_at: string | null; created_by: string | null } | null;
   };
 
   // Кто в отпуске или на больничном (миграция 0047), тот не «молчит»:
@@ -118,7 +118,16 @@ export async function findSilent(admin: SupabaseClient, userId: string, now: Dat
   const today = dateStr(now);
   const personOf = (r: Raw) => (Array.isArray(r.assignees) ? r.assignees[0] : r.assignees);
   const raw = ((data || []) as unknown as Raw[]).filter(
-    (r) => r.tasks && !r.tasks.deleted_at && r.tasks.status !== "done" && !isAwayOn(personOf(r)?.away_until, today),
+    (r) =>
+      r.tasks &&
+      !r.tasks.deleted_at &&
+      r.tasks.status !== "done" &&
+      // Только поручения самого владельца (`created_by` пуст): кто молчит
+      // по задаче руководителя, сообщает руководителю его сводка
+      // (managerBrief), а владельцу чужая работа не видна и в трекере
+      // (lib/itemVisibility, «это правило касается и меня»).
+      !r.tasks.created_by &&
+      !isAwayOn(personOf(r)?.away_until, today),
   );
 
   // Вход в трекер — второй способ ответить: человек без мессенджера, но с

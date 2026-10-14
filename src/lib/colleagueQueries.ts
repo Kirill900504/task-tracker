@@ -10,6 +10,7 @@ import { botMenu, navRow } from "@/lib/botMenu";
 import { fmtDate } from "@/lib/taskDisplay";
 import { isDueToday, moscowNow, overdueOn, type TaskRow as LogicRow } from "@/lib/taskLogic";
 import { withoutSelfMark } from "@/lib/actorName";
+import { numbered } from "@/lib/taskRef";
 
 // О чём коллега может спросить бота.
 //
@@ -83,6 +84,7 @@ type TaskRow = {
   tasks: {
     id: string;
     title: string;
+    number?: number | null;
     description: string | null;
     deadline: string | null;
     priority: string | null;
@@ -103,6 +105,8 @@ export type MyTask = {
   participantId: string;
   taskId: string;
   title: string;
+  // Номер задачи (миграция 0045) — первым в строке списка и в кнопке.
+  number?: number | null;
   description: string;
   deadline: string;
   priority: string;
@@ -125,7 +129,7 @@ export async function myTasks(admin: SupabaseClient, assigneeId: string): Promis
     .from("task_participants")
     .select(
       "id, role, accepted_at, done_at, declined_at, " +
-        "tasks(id, title, description, deadline, priority, status, approval_state, approval_comment, deleted_at, recur, recur_weekday, recur_weekdays, recur_monthday, recur_year_day, recur_year_month)",
+        "tasks(id, title, number, description, deadline, priority, status, approval_state, approval_comment, deleted_at, recur, recur_weekday, recur_weekdays, recur_monthday, recur_year_day, recur_year_month)",
     )
     .eq("assignee_id", assigneeId);
 
@@ -135,6 +139,7 @@ export async function myTasks(admin: SupabaseClient, assigneeId: string): Promis
       participantId: r.id,
       taskId: r.tasks!.id,
       title: r.tasks!.title,
+      number: r.tasks!.number ?? null,
       description: r.tasks!.description || "",
       deadline: r.tasks!.deadline || "",
       priority: r.tasks!.priority || "med",
@@ -202,7 +207,8 @@ export async function myMeetings(admin: SupabaseClient, assigneeId: string, toda
 // длинный текст не переносится, а урезается посередине самим клиентом — и
 // тогда не видно ни начала, ни конца.
 function taskButton(t: MyTask, mark: string): BotButton {
-  const title = t.title.length > 28 ? t.title.slice(0, 27) + "…" : t.title;
+  const full = numbered(t);
+  const title = full.length > 28 ? full.slice(0, 27) + "…" : full;
   return { text: `${mark} ${title}`, data: encodeCallback("task", "show", t.taskId) };
 }
 
@@ -243,7 +249,7 @@ export function listReply(title: string, tasks: MyTask[], today: string, empty: 
     if (t.role === "watcher") bits.push("наблюдатель");
     if (t.approvalState === "returned") bits.push("вернули на доработку");
     if (t.doneAt) bits.push("вы отчитались");
-    return `${markFor(t, today)} ${t.title}${bits.length ? "\n   " + bits.join(" · ") : ""}`;
+    return `${markFor(t, today)} ${numbered(t)}${bits.length ? "\n   " + bits.join(" · ") : ""}`;
   });
   const more = tasks.length > PAGE ? `\n\nИ ещё ${tasks.length - PAGE} — откройте трекер, там видно всё.` : "";
   return {
@@ -419,7 +425,7 @@ export async function taskCard(
 ): Promise<BotReply | null> {
   const { data } = await admin
     .from("task_participants")
-    .select("role, accepted_at, done_at, done_comment, declined_at, decline_reason, reschedule_to, reschedule_reason, tasks(id, title, description, deadline, priority, status, approval_state, approval_comment, deleted_at, user_id, recur)")
+    .select("role, accepted_at, done_at, done_comment, declined_at, decline_reason, reschedule_to, reschedule_reason, tasks(id, title, number, description, deadline, priority, status, approval_state, approval_comment, deleted_at, user_id, recur)")
     .eq("assignee_id", colleague.id)
     .eq("task_id", taskId)
     .maybeSingle();
@@ -435,6 +441,7 @@ export async function taskCard(
     reschedule_reason: string | null;
     tasks: {
       title: string;
+      number?: number | null;
       description: string | null;
       deadline: string | null;
       priority: string | null;
@@ -451,7 +458,7 @@ export async function taskCard(
   const task = row?.tasks;
   if (!row || !task || task.deleted_at || task.user_id !== colleague.user_id) return null;
 
-  const lines = [`📋 ${task.title}`];
+  const lines = [`📋 ${numbered(task)}`];
   if (task.description) lines.push("", task.description);
 
   const meta: string[] = [];

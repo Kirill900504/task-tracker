@@ -5,6 +5,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 import { isDueToday, moscowNow, overdueOn, type TaskRow } from "@/lib/taskLogic";
 import { actorScope, authorFilter, type BotActor } from "@/lib/botActor";
 import { botMenu, navRow } from "@/lib/botMenu";
+import { numbered } from "@/lib/taskRef";
 
 // О чём ПОСТАНОВЩИК может спросить бота — и что он может нажать.
 //
@@ -37,6 +38,8 @@ export type OwnerReply = { text: string; buttons?: BotButton[][] };
 export type OwnerTaskRow = {
   id: string;
   title: string;
+  // Номер (миграция 0045) — первым в строке списка и в кнопке.
+  number?: number | null;
   assignee: string;
   deadline: string | null;
   status: string | null;
@@ -51,6 +54,7 @@ export type OwnerTaskRow = {
 type TaskRaw = {
   id: string;
   title: string;
+  number?: number | null;
   assignee: string | null;
   deadline: string | null;
   status: string | null;
@@ -84,7 +88,7 @@ export function effectiveApproval(
 export async function ownerTasks(admin: SupabaseClient, actor: BotActor): Promise<OwnerTaskRow[]> {
   const { data } = await admin
     .from("tasks")
-    .select("id, title, assignee, deadline, status, approval_state, priority, recur, recur_weekday, recur_weekdays, recur_monthday, recur_year_day, recur_year_month, task_participants(role, done_at, declined_at)")
+    .select("id, title, number, assignee, deadline, status, approval_state, priority, recur, recur_weekday, recur_weekdays, recur_monthday, recur_year_day, recur_year_month, task_participants(role, done_at, declined_at)")
     .match(actorScope(actor)).or(authorFilter(actor))
     .is("deleted_at", null)
     .neq("status", "done")
@@ -92,6 +96,7 @@ export async function ownerTasks(admin: SupabaseClient, actor: BotActor): Promis
   return ((data || []) as TaskRaw[]).map((t) => ({
     id: t.id,
     title: t.title,
+    number: t.number ?? null,
     assignee: t.assignee || "",
     deadline: t.deadline,
     status: t.status,
@@ -204,13 +209,13 @@ function taskList(title: string, tasks: OwnerTaskRow[], today: string, empty: st
     const bits: string[] = [];
     if (t.assignee) bits.push(t.assignee);
     if (t.deadline && t.row.recur === "none") bits.push((overdueOn(t.row, today) ? "просрочено " : "до ") + fmtDate(t.deadline));
-    return `${mark(t, today)} ${t.title}${bits.length ? "\n   " + bits.join(" · ") : ""}`;
+    return `${mark(t, today)} ${numbered(t)}${bits.length ? "\n   " + bits.join(" · ") : ""}`;
   });
   const more = tasks.length > PAGE ? `\n\nИ ещё ${tasks.length - PAGE} — они в трекере.` : "";
   return {
     text: `${title} (${tasks.length}):\n\n${lines.join("\n")}${more}\n\nНажмите задачу, чтобы открыть её.`,
     buttons: [
-      ...shown.map((t) => [{ text: `${mark(t, today)} ${short(t.title)}`, data: encodeCallback("task", "oshow", t.id) }]),
+      ...shown.map((t) => [{ text: `${mark(t, today)} ${short(numbered(t))}`, data: encodeCallback("task", "oshow", t.id) }]),
       ...ownerNav(),
     ],
   };

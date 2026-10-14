@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { replyButtons, type ColleagueRow } from "@/lib/colleagues";
-import { notifyAuthor, notifyOwner } from "@/lib/botDelivery";
+import { notifyAuthor } from "@/lib/botDelivery";
 import { sendToPerson } from "@/lib/reach";
-import { queueNotice } from "@/lib/noticeQueue";
+import { taskRef } from "@/lib/taskRef";
 import { actorName, withoutSelfMark } from "@/lib/actorName";
 import { organizerRowId, proposalAcceptButtons, proposalVoteButtons, proposalWhen, type Proposal } from "@/lib/meetingProposal";
 
@@ -17,8 +17,9 @@ import { organizerRowId, proposalAcceptButtons, proposalVoteButtons, proposalWhe
 //
 // Правило проекта — «петля должна замыкаться»: у каждого действия есть
 // тот, кто его ждёт. Здесь этих ожидающих сразу несколько, поэтому вопрос
-// «кому сказать» отвечается один раз и в одном месте: участники итема,
-// постановщик и владелец пространства, минус автор сообщения.
+// «кому сказать» отвечается один раз и в одном месте: участники итема и
+// постановщик, минус автор сообщения. Владелец пространства — только как
+// один из них (14.10.2026, см. ниже).
 
 const QUIET_GAP_MS = 2 * 60 * 60 * 1000;
 
@@ -44,20 +45,37 @@ export function commentText(
   title: string,
   body: string,
   fileCount = 0,
+  // Номер задачи (миграция 0045) — для ориентира, как во всех сообщениях
+  // бота (lib/taskRef). У встреч и мыслей номера нет.
+  num: number | null = null,
 ): string {
   const what = kind === "meeting" ? "по встрече" : kind === "idea" ? "по мысли" : "по задаче";
   // Файл без слов — обычное дело («вот фотография»), и пустая строка после
   // двоеточия выглядела бы как сообщение, которое не дошло.
   const tail = body.trim() || (fileCount ? `📎 ${fileCount === 1 ? "файл" : "файлов: " + fileCount}` : "");
-  return `💬 ${authorName} ${what} «${title}»: ${tail}`;
+  return `💬 ${authorName} ${what} ${taskRef({ title, number: num })}: ${tail}`;
 }
 
-async function itemTitle(admin: SupabaseClient, kind: CommentRow["item_kind"], id: string): Promise<string> {
+// Название, номер и автор дела — одним запросом.
+//
+// Автор: здесь стояло «постановщик отдельной строкой не нужен — он всегда
+// участник того, что завёл», и это было правдой ровно до тех пор, пока
+// заводил один владелец. Руководитель, поставивший задачу Игорю, участником
+// НЕ становится — участники задачи это исполнители, соисполнители и
+// наблюдатели, — и ответ Игоря в обсуждении не доходил до него ни сразу,
+// ни сводкой. То есть ровно то, ради чего этот файл написан: двое
+// переписываются, и один из них об этом не знает.
+async function itemInfo(
+  admin: SupabaseClient,
+  kind: CommentRow["item_kind"],
+  id: string,
+): Promise<{ title: string; number: number | null; createdBy: string | null }> {
   const table = kind === "task" ? "tasks" : kind === "meeting" ? "meetings" : "ideas";
-  const column = kind === "idea" ? "text" : "title";
-  const { data } = await admin.from(table).select(column).eq("id", id).maybeSingle();
-  const value = (data as Record<string, string> | null)?.[column] || "";
-  return kind === "idea" ? value.slice(0, 60) : value;
+  const columns = kind === "task" ? "title, number, created_by" : kind === "idea" ? "text, created_by" : "title, created_by";
+  const { data } = await admin.from(table).select(columns).eq("id", id).maybeSingle();
+  const row = (data || {}) as { title?: string; text?: string; number?: number | null; created_by?: string | null };
+  const title = kind === "idea" ? (row.text || "").slice(0, 60) : row.title || "";
+  return { title, number: row.number ?? null, createdBy: row.created_by ?? null };
 }
 
 // Все, кто на итеме.
@@ -66,20 +84,6 @@ async function audience(admin: SupabaseClient, kind: CommentRow["item_kind"], it
   const column = kind === "task" ? "task_id" : kind === "meeting" ? "meeting_id" : "idea_id";
   const { data } = await admin.from(table).select("assignee_id").eq(column, itemId);
   return ((data || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
-}
-
-// Кто это поручил. Здесь стояло «постановщик отдельной строкой не нужен —
-// он всегда участник того, что завёл», и это было правдой ровно до тех
-// пор, пока заводил один владелец: его строка ниже получает всё.
-// Руководитель, поставивший задачу Игорю, участником НЕ становится —
-// участники задачи это исполнители, соисполнители и наблюдатели, — и
-// ответ Игоря в обсуждении не доходил до него ни сразу, ни сводкой. То
-// есть ровно то, ради чего этот файл написан: двое переписываются, и
-// один из них об этом не знает.
-async function itemAuthor(admin: SupabaseClient, kind: CommentRow["item_kind"], itemId: string): Promise<string | null> {
-  const table = kind === "task" ? "tasks" : kind === "meeting" ? "meetings" : "ideas";
-  const { data } = await admin.from(table).select("created_by").eq("id", itemId).maybeSingle();
-  return (data as { created_by?: string | null } | null)?.created_by ?? null;
 }
 
 // Разговор считается новым, если до него в этом итеме два часа никто не
@@ -131,10 +135,9 @@ export async function deliverComment(admin: SupabaseClient, commentId: string): 
     return { delivered: 0, skipped: "throttled" };
   }
 
-  const [title, assigneeIds, createdBy] = await Promise.all([
-    itemTitle(admin, comment.item_kind, comment.item_id),
+  const [{ title, number, createdBy }, assigneeIds] = await Promise.all([
+    itemInfo(admin, comment.item_kind, comment.item_id),
     audience(admin, comment.item_kind, comment.item_id),
-    itemAuthor(admin, comment.item_kind, comment.item_id),
   ]);
 
   // Автор, постановщик и владелец могут оказаться одним человеком — каждый
@@ -188,7 +191,7 @@ export async function deliverComment(admin: SupabaseClient, commentId: string): 
   }
 
   const fileCount = (comment.attachments || []).length;
-  const text = commentText(authorName, comment.item_kind, title, comment.body, fileCount);
+  const text = commentText(authorName, comment.item_kind, title, comment.body, fileCount, number);
   // Ответить можно тем же нажатием, которым читаешь: без этой кнопки
   // единственный способ ответить — найти в переписке то сообщение, которым
   // задачу присылали, а его к тому времени уже переписали.
@@ -202,43 +205,46 @@ export async function deliverComment(admin: SupabaseClient, commentId: string): 
     delivered += await sendToPerson(admin, comment.user_id, person, text, buttons);
   }
 
-  // Постановщику — если он не владелец (тот получит ниже), не автор этой
-  // реплики и не стоит участником сам (тогда ему уже ушло). Строкой в
-  // сводку, по той же причине, что и владельцу: реплика в обсуждении —
-  // самое частое, что здесь происходит.
-  if (createdBy && createdBy !== comment.user_id && createdBy !== comment.author_user_id) {
-    // Его собственная строка в списке людей — по членству: в `assignees`
-    // колонка `user_id` означает владельца пространства, а не человека.
-    const { data: memberRow } = await admin
-      .from("workspace_members")
-      .select("assignee_id")
-      .eq("member_id", createdBy)
-      .eq("owner_id", comment.user_id)
-      .maybeSingle();
-    const ownRow = (memberRow as { assignee_id?: string } | null)?.assignee_id;
+  // Постановщику — если он не автор этой реплики и не стоит участником сам
+  // (тогда ему уже ушло). Строкой в сводку, а не отдельным сообщением:
+  // реплика в обсуждении — самое частое, что здесь происходит, и именно она
+  // первой превращает мессенджер в ленту. Участникам, наоборот, уходит
+  // сразу: разговор, ответ на который приходит через десять минут, — не
+  // разговор.
+  //
+  // Постановщик владельца — сам владелец: `created_by` у его строк пуст.
+  // Отдельной ветки «владельцу — всегда, он видит всё» здесь больше нет
+  // (14.10.2026): видимость в трекере своя у каждого, владелец включительно
+  // (lib/itemVisibility), и сводка с чужими переписками по задачам, которых
+  // он не видит на доске, была той самой лентой — и вторым экземпляром
+  // каждой реплики там, где он и постановщик, и участник.
+  const authorId = createdBy || comment.user_id;
+  if (authorId !== comment.author_user_id) {
+    // Его собственная строка в списке людей: у руководителя — по членству
+    // (в `assignees` колонка `user_id` означает владельца пространства, а
+    // не человека), у владельца — строка с пометкой «(я)».
+    let ownRow: string | undefined;
+    if (createdBy && createdBy !== comment.user_id) {
+      const { data: memberRow } = await admin
+        .from("workspace_members")
+        .select("assignee_id")
+        .eq("member_id", createdBy)
+        .eq("owner_id", comment.user_id)
+        .maybeSingle();
+      ownRow = (memberRow as { assignee_id?: string } | null)?.assignee_id;
+    } else {
+      ownRow = rows.find((r) => /\(я\)\s*$/.test(r.name))?.id;
+    }
     if (!ownRow || !wanted.has(ownRow)) {
       await notifyAuthor(admin, comment.user_id, createdBy, text, {
         kind: "comment",
         item: title,
+        itemId: comment.item_id,
+        num: number,
         who: authorName,
-        what: comment.body.trim(),
+        what: comment.body.trim() || (fileCount ? "📎 приложены документы" : ""),
       });
       delivered++;
-    }
-  }
-
-  // Владелец — всегда, если он не автор: он отвечает за пространство и
-  // видит в нём всё.
-  //
-  // Ему это идёт строкой в сводку, а не отдельным сообщением: реплика в
-  // обсуждении — самое частое, что здесь происходит, и именно она первой
-  // превращает мессенджер в ленту. Участникам, наоборот, уходит сразу:
-  // разговор, ответ на который приходит через десять минут, — не разговор.
-  if (comment.author_user_id !== comment.user_id) {
-    if (await queueNotice(admin, comment.user_id, null, { kind: "comment", item: title, who: authorName, what: comment.body.trim() })) {
-      delivered++;
-    } else {
-      delivered += await notifyOwner(admin, comment.user_id, text);
     }
   }
 

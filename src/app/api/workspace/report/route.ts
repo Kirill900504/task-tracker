@@ -15,6 +15,7 @@ import { newTaskRow } from "@/lib/newTask";
 import { recordEvent } from "@/lib/itemHistory";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import type { Notice } from "@/lib/noticeQueue";
+import { taskRef as taskLabel } from "@/lib/taskRef";
 import { lockedTaskText, lockedVoteText, openTaskChoices, voteVerdict } from "@/lib/answerRules";
 
 // Ответ руководителя: один путь для трекера и для мессенджера.
@@ -292,8 +293,13 @@ export async function POST(req: Request) {
       text: late ? `🕐 ${myName} будет, но опоздает` : coming ? `✅ ${myName} будет` : `❌ ${myName} не сможет: ${reason}`,
     });
     // Организатору, а не владельцу: планёрку собирает тот, кому и важно,
-    // кто на неё придёт.
-    await notifyAuthor(
+    // кто на неё придёт. Сводкой, как и тот же ответ из мессенджера
+    // (colleagueReplies): до 14.10.2026 ответ из трекера уходил отдельным
+    // сообщением, а из бота — строкой в сводку, и «буду» одного и того же
+    // человека приходило организатору по-разному в зависимости от того,
+    // какую кнопку он нажал. И не самому организатору: о своём ответе ему
+    // сообщать незачем — то же правило, что у задач ниже.
+    if ((meeting?.created_by || m.owner_id) !== user.id) await notifyAuthor(
       admin,
       m.owner_id,
       meeting?.created_by || null,
@@ -302,6 +308,13 @@ export async function POST(req: Request) {
         : coming
           ? `✅ ${myName} будет на встрече «${meeting?.title || ""}» (${when})`
           : `❌ ${myName} не сможет быть на «${meeting?.title || ""}» (${when}): ${reason}`,
+      {
+        kind: late ? "vote_late" : coming ? "vote_yes" : "vote_no",
+        item: meeting?.title || "",
+        itemId: vote.meeting_id,
+        who: myName,
+        what: coming ? when : reason,
+      },
     );
     // Предложение, на которое согласились все, становится встречей само —
     // иначе «все сказали „буду“» ничем не отличается от «никто не ответил».
@@ -312,10 +325,10 @@ export async function POST(req: Request) {
   if (!body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
   const { data: row } = await admin
     .from("task_participants")
-    .select("id, assignee_id, task_id, accepted_at, done_at, declined_at, reschedule_requested_at, reschedule_reason, tasks(title, created_by)")
+    .select("id, assignee_id, task_id, accepted_at, done_at, declined_at, reschedule_requested_at, reschedule_reason, tasks(title, number, created_by)")
     .eq("id", body.participantId)
     .maybeSingle();
-  type TaskRef = { title: string; created_by: string | null };
+  type TaskRef = { title: string; number: number | null; created_by: string | null };
   const part = row as {
     id: string;
     assignee_id: string;
@@ -347,6 +360,9 @@ export async function POST(req: Request) {
   if (!allowed) return NextResponse.json({ error: lockedTaskText(myPart) }, { status: 409 });
   const taskRef = Array.isArray(part.tasks) ? part.tasks[0] : part.tasks;
   const title = taskRef?.title || "";
+  // «#12 «Смета»» — номер для ориентира (lib/taskRef), и он же в сводке.
+  const named = taskLabel({ title, number: taskRef?.number });
+  const ref = { item: title, itemId: part.task_id, num: taskRef?.number ?? null, who: myName };
   // Ответ адресован тому, кто поручил. Пока поручает только владелец, это
   // он и есть; как только поручит руководитель — узнает он, а не Кирилл.
   //
@@ -368,7 +384,7 @@ export async function POST(req: Request) {
     await admin.from("task_participants").update({ accepted_at: now }).eq("id", part.id);
     await admin.from("tasks").update({ accepted_at: now }).eq("id", part.task_id);
     await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `✅ ${myName} принял в работу` });
-    await tell(`✅ ${myName} принял в работу: «${title}»`, { kind: "accepted", item: title, who: myName });
+    await tell(`✅ ${myName} принял в работу: ${named}`, { kind: "accepted", ...ref });
     return NextResponse.json({ ok: true });
   }
 
@@ -416,9 +432,9 @@ export async function POST(req: Request) {
     const attached = files.length ? `\n📎 Приложено файлов: ${files.length} — смотреть в задаче.` : "";
     await tell(
       everyone
-        ? `🏁 ${myName} по задаче «${title}»: ${comment}${attached}\n\nОтчитались все — задача ждёт вашей приёмки.`
-        : `🏁 ${myName} по задаче «${title}»: ${comment}${attached}`,
-      { kind: everyone ? "reported_all" : "reported", item: title, who: myName, what: comment },
+        ? `🏁 ${myName} по задаче ${named}: ${comment}${attached}\n\nОтчитались все — задача ждёт вашей приёмки.`
+        : `🏁 ${myName} по задаче ${named}: ${comment}${attached}`,
+      { kind: everyone ? "reported_all" : "reported", ...ref, what: comment },
     );
     return NextResponse.json({ ok: true, awaitingReview: everyone });
   }
@@ -454,9 +470,9 @@ export async function POST(req: Request) {
     const everyone = await closeIfEveryoneReported(admin, part.task_id);
     await tell(
       everyone
-        ? `⛔ ${myName} не может «${title}»: ${reason}\n\nОтветили все — задача ждёт вашего решения.`
-        : `⛔ ${myName} не может «${title}»: ${reason}`,
-      { kind: "declined", item: title, who: myName, what: reason },
+        ? `⛔ ${myName} не может ${named}: ${reason}\n\nОтветили все — задача ждёт вашего решения.`
+        : `⛔ ${myName} не может ${named}: ${reason}`,
+      { kind: "declined", ...ref, what: reason },
     );
     return NextResponse.json({ ok: true, awaitingReview: everyone });
   }
@@ -470,7 +486,7 @@ export async function POST(req: Request) {
       .eq("id", part.id);
     const to = body.date ? ` на ${fmtDate(body.date)}` : "";
     await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `📅 ${myName} просит перенос${to}: ${reason}` });
-    await tell(`📅 ${myName} просит перенести «${title}»${to}: ${reason}`, { kind: "reschedule", item: title, who: myName, what: `${to.trim() || "на другой срок"} — ${reason}` });
+    await tell(`📅 ${myName} просит перенести ${named}${to}: ${reason}`, { kind: "reschedule", ...ref, what: `${to.trim() || "на другой срок"} — ${reason}` });
     return NextResponse.json({ ok: true });
   }
 

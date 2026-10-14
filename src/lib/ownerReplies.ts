@@ -12,6 +12,7 @@ import { actorName } from "@/lib/actorName";
 import { actorScope, authorFilter, type BotActor } from "@/lib/botActor";
 import { latecomerText } from "@/lib/meetingNudges";
 import { sendToPerson } from "@/lib/reach";
+import { numbered, taskRef } from "@/lib/taskRef";
 
 // Что происходит, когда ПОСТАНОВЩИК нажимает кнопку.
 //
@@ -106,6 +107,7 @@ async function sectionPeople(
 type TaskRow = {
   id: string;
   title: string;
+  number?: number | null;
   description: string | null;
   assignee: string | null;
   deadline: string | null;
@@ -123,7 +125,7 @@ type TaskRow = {
 async function loadTask(admin: SupabaseClient, actor: BotActor, taskId: string): Promise<TaskRow | null> {
   const { data } = await admin
     .from("tasks")
-    .select("id, title, description, assignee, deadline, status, approval_state, approval_comment")
+    .select("id, title, number, description, assignee, deadline, status, approval_state, approval_comment")
     .eq("id", taskId)
     .match(actorScope(actor)).or(authorFilter(actor))
     .is("deleted_at", null)
@@ -169,7 +171,7 @@ export async function ownerTaskCard(admin: SupabaseClient, actor: BotActor, task
   if (!task) return null;
   const people = await participantsOf(admin, taskId);
 
-  const lines = [`📋 ${task.title}`];
+  const lines = [`📋 ${numbered(task)}`];
   if (task.description) lines.push("", task.description);
   const facts: string[] = [];
   if (task.deadline) facts.push("срок " + fmtDate(task.deadline));
@@ -400,7 +402,7 @@ export async function handleOwnerCallback(
     if (!task) return { toast: "Эта задача не найдена" };
     return {
       toast: "На сколько двигаем?",
-      say: `📅 «${task.title}»\n\nТекущий срок: ${task.deadline ? fmtDate(task.deadline) : "не назначен"}. На сколько продлить?`,
+      say: `📅 ${taskRef(task)}\n\nТекущий срок: ${task.deadline ? fmtDate(task.deadline) : "не назначен"}. На сколько продлить?`,
       sayButtons: extendButtons(action.id),
     };
   }
@@ -424,11 +426,11 @@ export async function handleOwnerCallback(
     });
     return {
       toast: "Срок продлён",
-      rewriteTo: `📅 Срок «${task.title}» — до ${fmtDate(next)}.`,
+      rewriteTo: `📅 Срок ${taskRef(task)} — до ${fmtDate(next)}.`,
       rewriteButtons: [[{ text: "📋 Открыть задачу", data: encodeCallback("task", "oshow", action.id) }], ...ownerNav()],
       // Перенос срока — событие, а не тихая правка: человек планировал
       // неделю под прежнее число.
-      tellAssignees: { taskId: action.id, text: `📅 Срок задачи «${task.title}» продлён до ${fmtDate(next)}.` },
+      tellAssignees: { taskId: action.id, text: `📅 Срок задачи ${taskRef(task)} продлён до ${fmtDate(next)}.` },
     };
   }
 
@@ -451,7 +453,7 @@ export async function handleOwnerCallback(
     if (!done.ok) return { toast: done.error };
     return {
       toast: "Принято",
-      rewriteTo: `✅ Принято: «${task.title}». Задача закрыта, исполнителям сказано.`,
+      rewriteTo: `✅ Принято: ${taskRef(task)}. Задача закрыта, исполнителям сказано.`,
       // Кнопка обратного хода стоит прямо здесь, под тем сообщением,
       // которым задачу закрыли: промахнуться по «Принять работу» в
       // телефоне легко, а искать потом закрытую задачу в списках — долго.
@@ -472,7 +474,7 @@ export async function handleOwnerCallback(
     if (!done.ok) return { toast: done.error };
     return {
       toast: "Открыл заново",
-      rewriteTo: `🔄 «${task.title}» снова в работе. Исполнителям сказано.`,
+      rewriteTo: `🔄 ${taskRef(task)} снова в работе. Исполнителям сказано.`,
       rewriteButtons: [[{ text: "📋 Открыть задачу", data: encodeCallback("task", "oshow", task.id) }], ...ownerNav()],
     };
   }
@@ -483,7 +485,7 @@ export async function handleOwnerCallback(
     return {
       toast: "Что доделать?",
       askReturn: { taskId: task.id, title: task.title },
-      say: `↩ «${task.title}»\n\nНапишите следующим сообщением, что именно доделать, — отправлю исполнителям.`,
+      say: `↩ ${taskRef(task)}\n\nНапишите следующим сообщением, что именно доделать, — отправлю исполнителям.`,
     };
   }
 
@@ -721,7 +723,7 @@ export async function handleOwnerCallback(
       toast: "Напомнил",
       tellAssignees: {
         taskId: action.id,
-        text: `🔔 Напоминание по задаче «${task.title}»${task.deadline ? ` (срок ${fmtDate(task.deadline)})` : ""}. Что с ней?`,
+        text: `🔔 Напоминание по задаче ${taskRef(task)}${task.deadline ? ` (срок ${fmtDate(task.deadline)})` : ""}. Что с ней?`,
       },
     };
   }

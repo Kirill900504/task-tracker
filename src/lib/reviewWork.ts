@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { replyButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
+import { taskRef } from "@/lib/taskRef";
 
 // Решение постановщика — одно на трекер и на бота.
 //
@@ -208,11 +209,13 @@ async function tellExecutors(
   action: ReviewAction,
   comment: string,
 ): Promise<void> {
-  const { data: parts } = await admin
-    .from("task_participants")
-    .select("assignee_id, role")
-    .eq("task_id", task.id)
-    .in("role", ["executor", "coexecutor"]);
+  // Номер спрашивается здесь, а не у вызывающих: зовут сюда пять дверей
+  // (трекер, бот, итог встречи…), и каждая знает задачу в своём объёме.
+  const [{ data: parts }, { data: numRow }] = await Promise.all([
+    admin.from("task_participants").select("assignee_id, role").eq("task_id", task.id).in("role", ["executor", "coexecutor"]),
+    admin.from("tasks").select("number").eq("id", task.id).maybeSingle(),
+  ]);
+  const named = taskRef({ title: task.title, number: (numRow as { number?: number | null } | null)?.number ?? null });
   const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
   if (!ids.length) return;
 
@@ -220,12 +223,12 @@ async function tellExecutors(
 
   const text =
     action === "return"
-      ? `↩ Вернули на доработку: «${task.title}»\n\n${comment}`
+      ? `↩ Вернули на доработку: ${named}\n\n${comment}`
       : action === "approve"
-        ? `✅ Принято: «${task.title}»${comment ? "\n\n" + comment : ""}`
+        ? `✅ Принято: ${named}${comment ? "\n\n" + comment : ""}`
         : action === "reopen"
-          ? `🔄 Задачу открыли заново: «${task.title}»${comment ? "\n\n" + comment : ""}`
-          : `🔒 Задача закрыта: «${task.title}»\n\n${comment}`;
+          ? `🔄 Задачу открыли заново: ${named}${comment ? "\n\n" + comment : ""}`
+          : `🔒 Задача закрыта: ${named}\n\n${comment}`;
 
   // Под возвратом — кнопки, которыми на него отвечают: сообщение, которым
   // задачу присылали, к этому моменту уже переписано, и отчитаться заново

@@ -9,6 +9,7 @@ import { applyReview, type ReviewAction } from "@/lib/reviewWork";
 import { actorName, withoutSelfMark } from "@/lib/actorName";
 import { fmtDate } from "@/lib/taskDisplay";
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { taskRef } from "@/lib/taskRef";
 
 // Решение постановщика по отчёту: принять, вернуть, закрыть волевым.
 //
@@ -50,11 +51,11 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: taskRow } = await admin
     .from("tasks")
-    .select("id, title, user_id, created_by, status")
+    .select("id, title, number, user_id, created_by, status")
     .eq("id", body.taskId)
     .is("deleted_at", null)
     .maybeSingle();
-  const task = taskRow as { id: string; title: string; user_id: string; created_by: string | null; status: string } | null;
+  const task = taskRow as { id: string; title: string; number?: number | null; user_id: string; created_by: string | null; status: string } | null;
   if (!task) return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
 
   // Принимает работу тот, кто её поручил — и только он, даже когда он же
@@ -120,7 +121,7 @@ export async function POST(req: Request) {
     // Сообщение — после ответа: решение уже в базе, а полёт до мессенджера
     // человек, нажавший кнопку, ждать не должен.
     if (person) {
-      after(() => sendToPerson(admin, task.user_id, person, `↩ Вернули на доработку: «${task.title}»
+      after(() => sendToPerson(admin, task.user_id, person, `↩ Вернули на доработку: ${taskRef(task)}
 
 ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId: task.id }).then(() => undefined));
     }
@@ -169,8 +170,8 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
       const { data: found } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
       const people = ((found || []) as ColleagueRow[]).filter((p) => !(user.id === task.user_id && isSelfAssignee(p.name || "")));
       const text = to
-        ? "📅 Новый срок по задаче «" + task.title + "»: " + fmtDate(to)
-        : "📅 С задачи «" + task.title + "» сняли срок";
+        ? "📅 Новый срок по задаче " + taskRef(task) + ": " + fmtDate(to)
+        : "📅 С задачи " + taskRef(task) + " сняли срок";
       // К сведению — без кнопок, по той же причине, что и ответ на просьбу
       // о переносе ниже. Всем сразу, а не по очереди.
       after(() => Promise.all(people.map((person) => sendToPerson(admin, task.user_id, person, text))).then(() => undefined));
@@ -227,14 +228,43 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
         task.user_id,
         person as ColleagueRow,
         moved
-          ? `📅 Срок перенесён: «${task.title}»${when ? "\nНовый срок: " + fmtDate(when) : ""}${comment ? "\n\n" + comment : ""}`
-          : `📅 Срок остаётся прежним: «${task.title}»${comment ? "\n\n" + comment : ""}`,
+          ? `📅 Срок перенесён: ${taskRef(task)}${when ? "\nНовый срок: " + fmtDate(when) : ""}${comment ? "\n\n" + comment : ""}`
+          : `📅 Срок остаётся прежним: ${taskRef(task)}${comment ? "\n\n" + comment : ""}`,
         // Без кнопок: это уведомление «к сведению», отвечать на него нечем
         // и незачем. Под ним стояли «Принял / Сделал / Не могу / Прошу
         // перенос», и Игорь Витковский прочёл это как вопрос, на который
         // надо выбрать ответ (отзыв 25.09.2026). Так же уже пишет бот,
         // когда срок продлевают из мессенджера (tellAssignees).
       ).then(() => undefined));
+    }
+    // Срок у задачи один на всех, а просил его один. Остальные исполнители
+    // планировали под прежнее число и об этом переносе не слышали вовсе:
+    // сообщение уходило только попросившему, а «Новый срок по задаче»
+    // (action: "deadline" выше) вкладка при согласии на просьбу не зовёт —
+    // иначе попросивший получил бы о том же два сообщения. Найдено
+    // разбором оповещений 14.10.2026.
+    if (moved && when) {
+      const { data: parts } = await admin
+        .from("task_participants")
+        .select("assignee_id")
+        .eq("task_id", task.id)
+        .in("role", ["executor", "coexecutor"]);
+      const { data: memberRow } = await admin
+        .from("workspace_members")
+        .select("assignee_id")
+        .eq("member_id", user.id)
+        .eq("owner_id", task.user_id)
+        .maybeSingle();
+      const actorAssignee = (memberRow as { assignee_id: string | null } | null)?.assignee_id || "";
+      const others = ((parts || []) as { assignee_id: string }[])
+        .map((p) => p.assignee_id)
+        .filter((id) => id !== part.assignee_id && id !== actorAssignee);
+      if (others.length) {
+        const { data: found } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", others);
+        const people = ((found || []) as ColleagueRow[]).filter((p) => !(user.id === task.user_id && isSelfAssignee(p.name || "")));
+        const text = "📅 Новый срок по задаче " + taskRef(task) + ": " + fmtDate(when);
+        after(() => Promise.all(people.map((p) => sendToPerson(admin, task.user_id, p, text))).then(() => undefined));
+      }
     }
     return NextResponse.json({ ok: true });
   }

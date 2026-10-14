@@ -27,6 +27,8 @@ import { setMaxCommands, setTelegramCommands, syncTelegramAppButtons } from "@/l
 import { alarmText, findStuck, nudgeText, selfOverdueText } from "@/lib/escalation";
 import { selfTaskIds } from "@/lib/selfTaskServer";
 import { findWaiting, unacceptedText, unreviewedText } from "@/lib/waitingNudges";
+import { numbered, taskRef } from "@/lib/taskRef";
+import { ownerSeesTask, ownerSight } from "@/lib/ownerVisible";
 import { normalizeDuration } from "@/lib/meetingTime";
 import { timeIsUpText } from "@/lib/meetingNudges";
 import { buildOwnerWeekly, composeOwnerWeekly, loadOwnerWeekly } from "@/lib/ownerWeekly";
@@ -260,14 +262,19 @@ export async function GET(req: Request) {
         // задачи, где все отчитались и ждут приёмки — не попадала в неё
         // вовсе. Дописывается кодом после модели: цифра и список имён
         // не должны зависеть от того, как их перескажут.
+        //
+        // Своё — пустой `created_by`: принимает работу тот, кто её поручил,
+        // и чужие приёмки (руководителей) здесь были чужими решениями,
+        // которых владелец даже не видит на своей доске (14.10.2026).
         const { data: waiting } = await admin
           .from("tasks")
-          .select("title")
+          .select("title, number")
           .eq("user_id", userId)
+          .is("created_by", null)
           .eq("approval_state", "awaiting_review")
           .is("deleted_at", null)
           .limit(10);
-        const onReview = ((waiting || []) as { title: string }[]).map((t) => t.title);
+        const onReview = ((waiting || []) as { title: string; number: number | null }[]).map((t) => numbered(t));
         if (onReview.length) {
           text =
             (text ? text + "\n\n" : "") +
@@ -294,7 +301,7 @@ export async function GET(req: Request) {
         if (briefUntil) {
           const { data: soonRows } = await admin
             .from("tasks")
-            .select("title, deadline, recur")
+            .select("title, number, deadline, recur")
             .eq("user_id", userId)
             .is("created_by", null)
             .is("deleted_at", null)
@@ -303,12 +310,12 @@ export async function GET(req: Request) {
             .lte("deadline", briefUntil)
             .order("deadline")
             .limit(10);
-          const soon = ((soonRows || []) as { title: string; deadline: string; recur: string | null }[]).filter((t) => (t.recur || "none") === "none");
+          const soon = ((soonRows || []) as { title: string; number: number | null; deadline: string; recur: string | null }[]).filter((t) => (t.recur || "none") === "none");
           if (soon.length) {
             text =
               (text ? text + "\n\n" : "") +
               `⏳ Скоро срок по вашим поручениям (${soon.length}):\n` +
-              soon.map((t) => `• ${t.title} — до ${t.deadline.split("-").reverse().join(".")}`).join("\n");
+              soon.map((t) => `• ${numbered(t)} — до ${t.deadline.split("-").reverse().join(".")}`).join("\n");
           }
         }
 
@@ -340,12 +347,22 @@ export async function GET(req: Request) {
           ),
         ];
         if (discussed.length) {
-          const { data: titles } = await admin.from("tasks").select("title").in("id", discussed.slice(0, 5));
-          const names = ((titles || []) as { title: string }[]).map((t) => `• ${t.title}`);
-          text =
-            (text ? text + "\n\n" : "") +
-            `💬 Писали в обсуждениях (${discussed.length}):\n` +
-            names.join("\n");
+          // Только задачи, которые он видит и в трекере (lib/ownerVisible):
+          // до 14.10.2026 здесь были все переписки пространства, в том
+          // числе по поручениям руководителей, где его нет вовсе.
+          const [{ data: rows }, sight] = await Promise.all([
+            admin.from("tasks").select("id, title, number, created_by").in("id", discussed),
+            ownerSight(admin, userId),
+          ]);
+          const seen = ((rows || []) as { id: string; title: string; number: number | null; created_by: string | null }[]).filter((t) =>
+            ownerSeesTask(sight, t),
+          );
+          if (seen.length) {
+            text =
+              (text ? text + "\n\n" : "") +
+              `💬 Писали в обсуждениях (${seen.length}):\n` +
+              seen.slice(0, 5).map((t) => `• ${numbered(t)}`).join("\n");
+          }
         }
 
         // Под сводкой — кнопки, а не только текст. Сводка перечисляет то,
@@ -363,14 +380,14 @@ export async function GET(req: Request) {
     if (!quiet) {
       const { data: back } = await admin
         .from("tasks")
-        .select("id, title, created_by")
+        .select("id, title, number, created_by")
         .eq("user_id", userId)
         .eq("snoozed_until", today)
         .neq("status", "done")
         .is("deleted_at", null);
-      for (const t of (back || []) as { id: string; title: string; created_by: string | null }[]) {
+      for (const t of (back || []) as { id: string; title: string; number: number | null; created_by: string | null }[]) {
         await onceOnly(admin, { userId, kind: "snooze_back", refId: `${t.id}:${today}`, date: today }, async () => {
-          await notifyAuthor(admin, userId, t.created_by, `⏰ Сегодня вы просили напомнить: «${t.title}» — она снова на доске.`);
+          await notifyAuthor(admin, userId, t.created_by, `⏰ Сегодня вы просили напомнить: ${taskRef(t)} — она снова на доске.`);
         });
       }
     }
@@ -419,6 +436,8 @@ export async function GET(req: Request) {
             await notifyAuthor(admin, userId, task.createdBy, alarmText(task, step, names), {
               kind: "other",
               item: task.title,
+              itemId: task.taskId,
+              num: task.number ?? null,
               who: names.join(", ") || "исполнитель",
               what: "просрочена на " + step + " дн., ответа нет",
             });
@@ -445,13 +464,13 @@ export async function GET(req: Request) {
             .maybeSingle();
           // В отпуске — не теребим: задача дождётся его возвращения.
           if (person && !isAwayOn(person.away_until as string | null, today)) {
-            await sendToPerson(admin, userId, person as ColleagueRow, unacceptedText(w.title), taskButtons(w.taskId, "executor"), { kind: "task", itemId: w.taskId });
+            await sendToPerson(admin, userId, person as ColleagueRow, unacceptedText(w), taskButtons(w.taskId, "executor"), { kind: "task", itemId: w.taskId });
           }
         });
       }
       for (const w of waiting.unreviewed) {
         await onceOnly(admin, { userId, kind: "unreviewed_nudge", refId: w.taskId + ":" + w.since, date: today }, async () => {
-          await notifyAuthor(admin, userId, w.createdBy, unreviewedText(w.title), undefined, briefButtons());
+          await notifyAuthor(admin, userId, w.createdBy, unreviewedText(w), undefined, briefButtons());
         });
       }
     }
