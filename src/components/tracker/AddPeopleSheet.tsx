@@ -7,7 +7,6 @@ import Icon from "./Icon";
 import type { PersonOption } from "@/hooks/useTaskParticipants";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
-import { matchesPerson, SEARCH_FROM } from "@/lib/personSearch";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { colorOf, initialsOf } from "@/lib/personBadge";
@@ -23,9 +22,9 @@ import { colorOf, initialsOf } from "@/lib/personBadge";
 // задаче, окно остаётся открытым для следующего: людей обычно добавляют
 // по двое-трое.
 //
-// Порядок — общий для всех списков людей (lib/peopleOrder). Поиск — с той
-// же границы, что везде (SEARCH_FROM), и списка он не обрезает: обрез в
-// списке ЛЮДЕЙ — всегда ошибка (см. CLAUDE.md, «показывает не всех»).
+// Порядок — общий для всех списков людей (lib/peopleOrder). Список не
+// обрезается: обрез в списке ЛЮДЕЙ — всегда ошибка (см. CLAUDE.md,
+// «показывает не всех»).
 
 const ROLES: { role: TaskParticipantRole; label: string; title: string }[] = [
   { role: "executor", label: "Исполнитель", title: "Отвечает за результат и отчитывается сам" },
@@ -46,9 +45,9 @@ export default function AddPeopleSheet({
   onAddPerson?: () => void;
   onClose: () => void;
 }) {
-  const [query, setQuery] = useState("");
-  // На телефоне — без поиска и без «Нового человека», как и в форме новой
-  // задачи (PeoplePicker, 14.10.2026): только список людей целиком.
+  // Поиска печатанием нет нигде (14.10.2026, «кнопками указывать будем
+  // кого надо») — только список людей целиком. На телефоне нет и «Нового
+  // человека», как в форме новой задачи (PeoplePicker).
   const isMobile = useIsMobile();
   // Только что добавленные исчезают из списка сразу, не дожидаясь, пока
   // строка участия вернётся из базы: иначе второе нажатие по тому же
@@ -56,25 +55,13 @@ export default function AddPeopleSheet({
   const [added, setAdded] = useState<Record<string, TaskParticipantRole>>({});
   const roleWord = (r: TaskParticipantRole) => ROLES.find((x) => x.role === r)!.label.toLowerCase();
 
-  const list = sortByPeopleOrder(people, (p) => p.name).filter((p) => !query.trim() || matchesPerson(p.name, query));
+  const list = sortByPeopleOrder(people, (p) => p.name);
   const justAdded = Object.entries(added);
 
   return (
     <Modal onClose={onClose} className="add-people-overlay">
       <div className="modal add-people" id="addPeopleSheet">
         <ItemModalHead plain title="Добавить в задачу" onClose={onClose} />
-        {!isMobile && people.length >= SEARCH_FROM && (
-          <input
-            className="people-search"
-            type="search"
-            placeholder="Найти человека…"
-            value={query}
-            autoFocus
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Найти человека"
-          />
-        )}
-
         {justAdded.length > 0 && (
           <div className="add-people-done">
             Добавлены:{" "}
@@ -115,7 +102,7 @@ export default function AddPeopleSheet({
               </div>
             ))}
           {list.filter((p) => !added[p.id]).length === 0 && (
-            <div className="add-people-empty">{query.trim() ? "Никого не нашлось." : "Все уже на задаче."}</div>
+            <div className="add-people-empty">Все уже на задаче.</div>
           )}
         </div>
 

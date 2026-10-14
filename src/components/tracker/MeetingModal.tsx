@@ -34,7 +34,6 @@ import ExpandableText from "./ExpandableText";
 import MeetingAgenda from "./MeetingAgenda";
 import type { AgendaItem } from "@/hooks/useMeetingAgenda";
 import { WORKDAY_SLOTS, busyPeople, defaultMeetingStart, startsInPast } from "@/lib/meetingTime";
-import { SEARCH_FROM, matchesPerson } from "@/lib/personSearch";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel, authorRawName } from "@/lib/authorName";
 import { isCurrent, voteTally, withOrganizer } from "@/lib/meetingVotes";
@@ -244,7 +243,6 @@ export default function MeetingModal({
   // кнопке времени говорила это только тому, кто навёл на неё мышь, и
   // только про другие слоты — про выбранный она молчала.
   const busyNow = new Set(time ? busyNamesAt(time) : []);
-  const [peopleQuery, setPeopleQuery] = useState("");
 
   // Esc закрывает окно — как и любое другое окно трекера.
 
@@ -815,31 +813,10 @@ export default function MeetingModal({
                   purpose (he runs the meetings, so he is never the one being
                   picked); if he is already listed on an existing meeting that
                   stays untouched — see save(). */}
-              {selectableAssignees.length >= SEARCH_FROM && (
-                <input
-                  className="people-search"
-                  type="search"
-                  placeholder="Найти человека…"
-                  value={peopleQuery}
-                  onChange={(e) => setPeopleQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    // Enter не сохраняет встречу из поля поиска; один найденный —
-                    // выбирается им.
-                    if (e.key !== "Enter") return;
-                    e.preventDefault();
-                    const found = selectableAssignees.filter((n) => !participants.includes(n) && matchesPerson(n, peopleQuery));
-                    if (found.length === 1) {
-                      toggleParticipant(found[0]);
-                      setPeopleQuery("");
-                    }
-                  }}
-                  aria-label="Найти человека"
-                />
-              )}
+              {/* Поля поиска над людьми нет (14.10.2026, «кнопками указывать
+                  будем кого надо») — вся команда видна разом. */}
               <div className="participant-grid" id="mParticipants">
-                {selectableAssignees
-                  .filter((name) => participants.includes(name) || matchesPerson(name, peopleQuery))
-                  .map((name) => (
+                {selectableAssignees.map((name) => (
                   <button
                     key={name}
                     type="button"

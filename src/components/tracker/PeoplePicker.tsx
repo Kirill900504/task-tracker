@@ -7,7 +7,6 @@ import type { PersonOption } from "@/hooks/useTaskParticipants";
 import { withoutSelfMark } from "@/lib/actorName";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { SEARCH_FROM, matchesPerson } from "@/lib/personSearch";
 import { useColleagues } from "@/hooks/useColleagues";
 import { awayMark, awayPhrase, isAwayOn } from "@/lib/away";
 import { todayStr } from "@/lib/taskDisplay";
@@ -107,22 +106,17 @@ export default function PeoplePicker({
   };
   const pickedAway = picked.map((p) => ({ p, away: awayOf(p.id) })).filter((x) => x.away);
 
-  // На телефоне — весь список сразу, без поиска и без «Ещё N».
+  // Весь список сразу, без поиска и без «Ещё N» — и на телефоне, и на
+  // компьютере.
   //
-  // 14.10.2026, словами Кирилла: «убери в мобильной версии поиск человека
-  // печатанием и оставь только развернутый список конкретных людей». Список
-  // свёрнутым до шести (21.09.2026) и поле поиска экономили место, но
-  // каждое прятало людей за лишним действием: набирать имя пальцем дольше,
-  // чем найти кнопку глазами, а «Ещё 9» — это ещё одно нажатие перед
-  // каждой задачей. Пятнадцать имён в сетке занимают меньше экрана, чем
-  // клавиатура, которую вызывал поиск.
-  // На компьютере поиск остаётся (lib/personSearch): там клавиатура уже
-  // под рукой, а набрать «нод» быстрее, чем вести мышь.
+  // 14.10.2026 Кирилл сперва убрал поиск печатанием с телефона, а тем же
+  // днём и отовсюду: «убери это поле ручного поиска в создании задач и
+  // встреч, кнопками указывать будем кого надо». Пятнадцать имён в сетке
+  // видны разом, и найти кнопку глазами быстрее, чем перевести руку на
+  // клавиатуру; строка поиска над ними была ещё одним полем, которое
+  // читается как обязательное.
   const isMobile = useIsMobile();
-  const [query, setQuery] = useState("");
-  const searchable = !isMobile && people.length >= SEARCH_FROM;
-  const searching = searchable && !!query.trim();
-  const visiblePeople = searching ? people.filter((p) => !!roleOf(p.id) || matchesPerson(p.name, query)) : people;
+
 
   return (
     <div className="field people-field">
@@ -134,29 +128,8 @@ export default function PeoplePicker({
           </span>
         )}
       </label>
-      {searchable && (
-        <input
-          className="people-search"
-          type="search"
-          placeholder="Найти человека…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          // Enter в поле поиска не должен отправлять форму задачи: когда
-          // найден ровно один, Enter выбирает его — так быстрее, чем мышью.
-          onKeyDown={(e) => {
-            if (e.key !== "Enter") return;
-            e.preventDefault();
-            const only = visiblePeople.filter((p) => !roleOf(p.id));
-            if (only.length === 1) {
-              const el = document.querySelector<HTMLElement>(`#fPeople [data-person="${only[0].id}"]`);
-              if (el) setMenuFor({ person: only[0], anchor: el.getBoundingClientRect() });
-            }
-          }}
-          aria-label="Найти человека"
-        />
-      )}
       <div className="participant-grid" id="fPeople">
-        {visiblePeople.map((person) => {
+        {people.map((person) => {
           const role = roleOf(person.id);
           return (
             <button
@@ -187,9 +160,6 @@ export default function PeoplePicker({
             </button>
           );
         })}
-        {searching && visiblePeople.every((p) => !!roleOf(p.id)) && (
-          <span className="people-search-empty">Никого не нашёл по «{query.trim()}»</span>
-        )}
         {/* Завести нового человека с телефона нельзя (14.10.2026, его
             слова: «завести в трекер нового человека тоже убери возможность
             через мобильную версию»): новый человек появляется у всех
