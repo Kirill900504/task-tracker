@@ -2,7 +2,19 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { closedReply, itemClosed, taskRowClosed } from "@/lib/closedItem";
 import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
-import { encodeCallback, findColleagueByChat, findOwnerSelfByChat, meetingButtons, rescheduleButtons, RESCHEDULE_OPTIONS, taskButtons } from "@/lib/colleagues";
+import {
+  encodeCallback,
+  findColleagueByChat,
+  findOwnerSelfByChat,
+  meetingButtons,
+  rescheduleButtons,
+  RESCHEDULE_OPTIONS,
+  selfRescheduleButtons,
+  selfTaskButtons,
+  shiftedDeadline,
+  taskButtons,
+} from "@/lib/colleagues";
+import { selfTaskIds } from "@/lib/selfTaskServer";
 import { choiceOf, lockedTaskText, lockedVoteText, openTaskChoices, openVoteChoices, voteVerdict, type VoteChoice } from "@/lib/answerRules";
 import { withoutSelfMark } from "@/lib/actorName";
 import { recordEvent } from "@/lib/itemHistory";
@@ -108,6 +120,13 @@ async function aimReply(
 
   // Сообщение не переписывается: под ним остаются кнопки задачи, и человек,
   // передумавший писать, ничего не теряет.
+  // У своей задачи читатель обсуждения — он сам: это заметка, а не реплика.
+  if (kind === "task" && (await selfTaskIds(admin, item.user_id, [itemId])).has(itemId)) {
+    return {
+      toast: "Пишите — сохраню заметкой",
+      say: `📝 Следующее сообщение станет заметкой к задаче «${item.title}» — она ляжет в её обсуждение.`,
+    };
+  }
   return {
     toast: "Пишите — отправлю в обсуждение",
     say: `💬 Следующее сообщение уйдёт в обсуждение ${kind === "task" ? "задачи" : "встречи"} «${item.title}».\nЕго увидят все участники.`,
@@ -218,7 +237,7 @@ async function colleagueCallback(
   if (action.kind === "task") {
     const { data: task } = await admin
       .from("tasks")
-      .select("id, title, number, assignee, user_id, status, created_by, approval_state")
+      .select("id, title, number, assignee, user_id, status, created_by, approval_state, deadline")
       .eq("id", action.id)
       .is("deleted_at", null)
       .maybeSingle();
@@ -253,6 +272,15 @@ async function colleagueCallback(
     // в сообщении сколько угодно.
     if (participant && participant.role === "watcher") {
       return { toast: "Вы на этой задаче наблюдатель — отвечать не нужно" };
+    }
+
+    // Своя задача — своя дорога, и она проверяется раньше правил «ответ
+    // даётся один раз»: те правила про разговор с постановщиком, а здесь
+    // говорить не с кем. Своя ли она — по базе, в момент нажатия: кнопка
+    // могла прийти, пока на задаче был кто-то ещё.
+    if (participant && (await selfTaskIds(admin, task.user_id, [task.id])).has(task.id)) {
+      const own = await selfTaskAction(admin, task, colleague, participant.id, action.action);
+      if (own) return own;
     }
 
     // Ответ даётся один раз (lib/answerRules) — правило то же, что в
@@ -639,6 +667,75 @@ async function colleagueCallback(
   // нажатие доходит сюда (см. lib/botCallback).
 
   return { toast: "Это действие больше не доступно" };
+}
+
+// Нажатие под своей задачей (colleagues.selfTaskButtons). null — нажатие
+// не из её набора (старое сообщение с «Принял»): разбирается как обычно.
+//
+// Никому ничего не пишется: постановщик здесь тот, кто нажал. Хроника
+// пишется — история задачи одна, откуда бы ни нажимали.
+async function selfTaskAction(
+  admin: SupabaseClient,
+  task: { id: string; title: string; number?: number | null; user_id: string; status: string | null; created_by: string | null; deadline: string | null },
+  colleague: { id: string; name: string; user_id: string },
+  participantId: string,
+  act: string,
+): Promise<CallbackOutcome | null> {
+  const who = { label: withoutSelfMark(colleague.name), userId: task.created_by || task.user_id };
+  const closedNow = { toast: "Задача уже закрыта", rewriteTo: `📋 ${numbered(task)}\n\n✅ Задача закрыта.`, rewriteButtons: [] };
+
+  // «Готово» закрывает сразу — так же, как галочка своей задачи в трекере:
+  // ни отчёта, ни приёмки у самого себя. Отчёт в строку участия НЕ
+  // пишется нарочно: «сделал» без слов — это незакрытый вопрос (openRows),
+  // и следующая фраза человека, поручение кому-то, легла бы в эту задачу
+  // отчётом.
+  if (act === "done" || act === "dpart" || act === "dall") {
+    if (task.status === "done") return closedNow;
+    const res = await applyReview(admin, task, "approve", "", who, true);
+    if (!res.ok) return { toast: res.error || "Не получилось закрыть" };
+    return { toast: "Готово", rewriteTo: `📋 ${numbered(task)}\n\n✅ Готово — задача закрыта.`, rewriteButtons: [] };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (act === "mv") {
+    if (task.status === "done") return closedNow;
+    return {
+      toast: "На сколько сдвинуть?",
+      say: `📅 ${taskRef(task)}\nСейчас срок: ${task.deadline ? fmtDate(task.deadline) : "не назначен"}. На сколько сдвинуть?\nСогласовывать не с кем — срок сдвинется сразу.`,
+      sayButtons: selfRescheduleButtons(task.id, task.deadline, today),
+    };
+  }
+
+  const shift = RESCHEDULE_OPTIONS.find((o) => act === "mv" + o.days);
+  if (shift) {
+    if (task.status === "done") return closedNow;
+    const next = shiftedDeadline(task.deadline, today, shift.days);
+    // Срок — колонка движка синхронизации, но писать её с сервера можно:
+    // открытая вкладка сольёт строку базы со своей (mergeIncoming), как
+    // при «продлить» у постановщика в боте (ownerReplies).
+    const { error } = await admin.from("tasks").update({ deadline: next }).eq("id", task.id);
+    if (error) return { toast: "Не получилось сохранить срок" };
+    // Просьба о переносе, начатая прежней кнопкой «Прошу перенос», снимается:
+    // без причины она — незакрытый вопрос, и следующая фраза ушла бы в неё.
+    await admin
+      .from("task_participants")
+      .update({ reschedule_requested_at: null, reschedule_to: null, reschedule_reason: null })
+      .eq("id", participantId);
+    const from = task.deadline ? `с ${fmtDate(task.deadline)} на ` : "на ";
+    await recordEvent(admin, {
+      actorUserId: who.userId,
+      userId: task.user_id,
+      kind: "task",
+      itemId: task.id,
+      text: `📅 ${who.label} перенёс срок ${from}${fmtDate(next)}`,
+    });
+    return {
+      toast: "Срок перенесён",
+      rewriteTo: `📋 ${numbered(task)}\n\n📅 Срок перенесён ${from}${fmtDate(next)}.`,
+      rewriteButtons: selfTaskButtons(task.id),
+    };
+  }
+  return null;
 }
 
 // Все ли исполнители ОТВЕТИЛИ — и если да, задача уходит на приёмку.

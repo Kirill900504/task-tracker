@@ -9,6 +9,7 @@ import { actorName } from "@/lib/actorName";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import type { BotChannelConfig } from "@/lib/botTransport";
 import { rememberSent } from "@/lib/botMirror";
+import { selfTaskIds } from "@/lib/selfTaskServer";
 
 // Sending a task, a meeting or a thought to the colleague it concerns.
 //
@@ -160,13 +161,21 @@ export async function POST(req: Request) {
       roleOf.set(r.assignee_id, r.role);
     }
 
+    // Задача, которую руководитель поставил самому себе, сюда доходит:
+    // правило «себе не пишут» выше узнаёт только строку владельца «(я)». И
+    // это оставлено нарочно — для того, кто работает из мессенджера, это
+    // его напоминание о собственном деле. Но приходит оно своей формой:
+    // «Личная задача» и «Готово / Перенести срок» вместо «Задача от
+    // <он сам>» и ответов постановщику (14.10.2026, Михаил Котов).
+    const own = (await selfTaskIds(admin, ownerId, [task.id as string])).has(task.id as string);
+
     // Всем адресатам — одновременно, а не по очереди: каждая отправка — это
     // полёт до Telegram или (из Франкфурта) до MAX в России, и задача на
     // шестерых ждала шесть таких полётов подряд, пока кнопка «крутилась»
     // (07.10.2026). Итог раскладывается в исходном порядке людей.
     const results = await Promise.all(
       linked.map((person) =>
-        deliver(person, taskMessage(task, from), taskButtons(task.id as string, roleOf.get(person.id) || "executor"), {
+        deliver(person, taskMessage(task, own ? null : from), taskButtons(task.id as string, roleOf.get(person.id) || "executor", undefined, own), {
           admin,
           spaceId: ownerId,
           kind: "task",

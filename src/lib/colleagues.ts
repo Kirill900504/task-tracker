@@ -92,12 +92,14 @@ export function screenButtons(rows: BotButton[][]): BotButton[][] {
 
 export function taskMessage(
   task: { title: string; description?: string; deadline?: string | null; priority?: string; number?: number | null },
-  from: string,
+  // null — задача, поставленная самому себе: «Задача от Михаил Котов»
+  // Михаилу Котову читается как поручение от двойника.
+  from: string | null,
 ): string {
   // Номер (миграция 0045) — тот же, что на карточке: по нему задачу
   // называют в ответ, и «#42» в трекере ищется поиском.
   const num = task.number != null ? ` #${task.number}` : "";
-  const lines = [`📋 Задача${num} от ${from}:`, "", task.title];
+  const lines = [from === null ? `📋 Личная задача${num}:` : `📋 Задача${num} от ${from}:`, "", task.title];
   if (task.description) lines.push("", task.description);
   const bits: string[] = [];
   if (task.deadline) bits.push("срок: " + fmtDate(task.deadline));
@@ -138,7 +140,10 @@ export function taskButtons(
   taskId: string,
   role: "executor" | "coexecutor" | "watcher" = "executor",
   open: TaskChoices = { accept: true, done: true, decline: true, move: true },
+  // Задача самому себе (lib/selfTaskServer) — своя, облегчённая дорога.
+  self = false,
 ): BotButton[][] {
+  if (self) return selfTaskButtons(taskId);
   // Наблюдателя не спрашивают — его поставили знать, а не отвечать. Кнопка
   // «Сделал» у него означала бы отчёт, которого от него никто не ждёт, и
   // постановщик получил бы сообщение, будто работу сделал человек, которого
@@ -177,6 +182,40 @@ export function taskButtons(
   return rows.map((r) => r.filter((b): b is BotButton => !!b)).filter((r) => r.length);
 }
 
+// Своя задача — две двери, а не четыре (14.10.2026, просьба Михаила
+// Котова, переданная Кириллом: «если ставишь сам на себя — логика должна
+// быть упрощена под личную работу со своей задачей»). «Принял», «Не могу» и
+// «Прошу перенос» — слова, обращённые к постановщику, а здесь постановщик
+// и есть тот, кто читает: принимать у себя нечего, отказываться не перед
+// кем, просить перенос не у кого. Остаётся то, что в трекере у своей
+// задачи и так единственное (lib/selfTask): закрыть одним нажатием и
+// сдвинуть срок самому — «если я сам переношу, то согласование не
+// требуется». «Ответить» становится заметкой: читатель обсуждения — он
+// сам.
+// Коды кнопок те же («done», «mv», «msg»): разбирает их одна ветка, а
+// своя ли это задача, она проверяет по базе в момент нажатия, а не верит
+// кнопке.
+export function selfTaskButtons(taskId: string): BotButton[][] {
+  return [
+    [
+      { text: "✅ Готово", data: encodeCallback("task", "done", taskId) },
+      { text: "📅 Перенести срок", data: encodeCallback("task", "mv", taskId) },
+    ],
+    [{ text: "📝 Заметка", data: encodeCallback("task", "msg", taskId) }],
+  ];
+}
+
+// Новый срок своей задачи. От прежнего срока, если он ещё впереди, — «на
+// неделю» у задачи на пятницу значит следующую пятницу; от сегодня, если
+// срок прошёл или его не было, — иначе «на день» у просроченной на неделю
+// задачи оставил бы её просроченной.
+export function shiftedDeadline(deadline: string | null | undefined, today: string, days: number): string {
+  const base = deadline && deadline > today ? deadline : today;
+  const d = new Date(base + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 // На сколько переносим — кнопками, а не датой словами.
 //
 // Разобрать «до конца следующей недели» можно только моделью, а модель в
@@ -195,6 +234,21 @@ export function rescheduleButtons(taskId: string): BotButton[][] {
   return [
     RESCHEDULE_OPTIONS.slice(0, 2).map((o) => ({ text: o.label, data: encodeCallback("task", "mv" + o.days, taskId) })),
     RESCHEDULE_OPTIONS.slice(2).map((o) => ({ text: o.label, data: encodeCallback("task", "mv" + o.days, taskId) })),
+    [{ text: "← Отмена", data: encodeCallback("task", "show", taskId) }],
+  ];
+}
+
+// Кнопки переноса своей задачи — с датой, в которую она уедет: двигает
+// срок сам человек, сразу, и видеть, куда, ему нужно до нажатия, а не
+// после.
+export function selfRescheduleButtons(taskId: string, deadline: string | null | undefined, today: string): BotButton[][] {
+  const opt = (o: { days: number; label: string }) => {
+    const [, m, d] = shiftedDeadline(deadline, today, o.days).split("-");
+    return { text: `${o.label} → ${d}.${m}`, data: encodeCallback("task", "mv" + o.days, taskId) };
+  };
+  return [
+    RESCHEDULE_OPTIONS.slice(0, 2).map(opt),
+    RESCHEDULE_OPTIONS.slice(2).map(opt),
     [{ text: "← Отмена", data: encodeCallback("task", "show", taskId) }],
   ];
 }

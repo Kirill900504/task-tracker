@@ -11,6 +11,7 @@ import { fmtDate } from "@/lib/taskDisplay";
 import { isDueToday, moscowNow, overdueOn, type TaskRow as LogicRow } from "@/lib/taskLogic";
 import { withoutSelfMark } from "@/lib/actorName";
 import { numbered } from "@/lib/taskRef";
+import { selfTaskIds } from "@/lib/selfTaskServer";
 
 // О чём коллега может спросить бота.
 //
@@ -458,10 +459,14 @@ export async function taskCard(
   const task = row?.tasks;
   if (!row || !task || task.deleted_at || task.user_id !== colleague.user_id) return null;
 
+  // Своя задача — без ответов постановщику (colleagues.selfTaskButtons).
+  const own = (await selfTaskIds(admin, task.user_id, [taskId])).has(taskId);
+
   const lines = [`📋 ${numbered(task)}`];
   if (task.description) lines.push("", task.description);
 
   const meta: string[] = [];
+  if (own) meta.push("личная задача");
   if (task.deadline) {
     meta.push(overdueOn(task, today) ? "⚠ просрочено: " + fmtDate(task.deadline) : "срок: " + fmtDate(task.deadline));
   }
@@ -471,14 +476,16 @@ export async function taskCard(
 
   // Состояние — словами, а не значком: человек открыл карточку именно
   // затем, чтобы понять, чего от него ждут сейчас.
-  if (task.approval_state === "returned") lines.push("", `↩ Вернули на доработку: ${task.approval_comment || "без комментария"}`);
+  if (own) {
+    if (task.status === "done") lines.push("", "✅ Задача закрыта");
+  } else if (task.approval_state === "returned") lines.push("", `↩ Вернули на доработку: ${task.approval_comment || "без комментария"}`);
   else if (row.done_at) lines.push("", `🏁 Вы отчитались${row.done_comment ? ": " + row.done_comment : " — комментарий не написан"}`);
   else if (row.declined_at) lines.push("", `⛔ Вы отказались${row.decline_reason ? ": " + row.decline_reason : " — причина не написана"}`);
   else if (row.accepted_at) lines.push("", "✅ Принято в работу");
-  if (row.reschedule_to) lines.push(`📅 Просили перенос на ${fmtDate(row.reschedule_to)}${row.reschedule_reason ? ": " + row.reschedule_reason : ""}`);
+  if (row.reschedule_to && !own) lines.push(`📅 Просили перенос на ${fmtDate(row.reschedule_to)}${row.reschedule_reason ? ": " + row.reschedule_reason : ""}`);
   // Без этой строки второй исполнитель задачи, сданной целиком другим,
   // видел карточку без единой кнопки ответа и без объяснения почему.
-  if (task.approval_state === "awaiting_review" && task.status !== "done") lines.push("", "🔍 Задача на приёмке у постановщика — ответы больше не меняются, написать можно через «Ответить».");
+  if (!own && task.approval_state === "awaiting_review" && task.status !== "done") lines.push("", "🔍 Задача на приёмке у постановщика — ответы больше не меняются, написать можно через «Ответить».");
 
   // Закрытая задача кнопок ответа не получает — отвечать по ней уже не за
   // что; слово сказать всё равно можно.
@@ -492,7 +499,9 @@ export async function taskCard(
     reschedulePending: !!row.reschedule_to && !!row.reschedule_reason,
     onReview: task.approval_state === "awaiting_review",
   });
-  const actions = done ? [[{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }]] : taskButtons(taskId, row.role, open);
+  const actions = done
+    ? [[{ text: own ? "📝 Заметка" : "💬 Ответить", data: encodeCallback("task", "msg", taskId) }]]
+    : taskButtons(taskId, row.role, open, own);
   return { text: lines.join("\n"), buttons: withNav ? [...actions, ...navButtons()] : actions };
 }
 

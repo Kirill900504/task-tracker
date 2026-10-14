@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { encodeCallback, decodeCallback, screenButtons, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, rescheduleButtons, chatsFor, findOwnerSelfByChat } from "@/lib/colleagues";
+import { encodeCallback, decodeCallback, screenButtons, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, rescheduleButtons, selfRescheduleButtons, shiftedDeadline, chatsFor, findOwnerSelfByChat } from "@/lib/colleagues";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
 
@@ -247,5 +247,33 @@ describe("номер задачи в сообщении", () => {
   it("стоит в первой строке, если он есть", () => {
     expect(taskMessage({ title: "Смета", number: 42 }, "Кирилл").split("\n")[0]).toBe("📋 Задача #42 от Кирилл:");
     expect(taskMessage({ title: "Смета" }, "Кирилл").split("\n")[0]).toBe("📋 Задача от Кирилл:");
+  });
+});
+
+// Своя задача (14.10.2026, Михаил Котов): ни «Принял», ни «Не могу», ни
+// «Прошу перенос» — просить не у кого, срок он двигает сам.
+describe("своя задача в мессенджере", () => {
+  it("две двери вместо четырёх, и перенос назван тем, что делает", () => {
+    const flat = taskButtons("t42", "executor", undefined, true).flat();
+    expect(flat.map((b) => b.text)).toEqual(["✅ Готово", "📅 Перенести срок", "📝 Заметка"]);
+    expect(flat.map((b) => b.data)).toEqual(["t:done:t42", "t:mv:t42", "t:msg:t42"]);
+    expect(flat.some((b) => /Принял|Не могу|Прошу/.test(b.text))).toBe(false);
+  });
+
+  it("называется личной, а не «задачей от» самого себя", () => {
+    expect(taskMessage({ title: "Долг", number: 124 }, null).split("\n")[0]).toBe("📋 Личная задача #124:");
+  });
+
+  it("срок сдвигается от прежнего, если он впереди, и от сегодня, если прошёл", () => {
+    expect(shiftedDeadline("2026-10-15", "2026-10-14", 3)).toBe("2026-10-18");
+    expect(shiftedDeadline("2026-10-01", "2026-10-14", 1)).toBe("2026-10-15");
+    expect(shiftedDeadline(null, "2026-10-14", 7)).toBe("2026-10-21");
+    expect(shiftedDeadline("2026-10-30", "2026-10-14", 7)).toBe("2026-11-06");
+  });
+
+  it("кнопка переноса заранее показывает, куда уедет срок", () => {
+    const texts = selfRescheduleButtons("t42", "2026-10-15", "2026-10-14").flat().map((b) => b.text);
+    expect(texts).toContain("на 3 дня → 18.10");
+    expect(texts).toContain("← Отмена");
   });
 });
