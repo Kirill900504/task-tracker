@@ -338,7 +338,9 @@ try {
   const { data: peek } = await mgrA.db.from("tasks").select("id").eq("id", privateId).maybeSingle();
   check("чужая задача не видна другому руководителю", !peek, peek);
   const { data: ownerPeek } = await owner.db.from("tasks").select("id").eq("id", privateId).maybeSingle();
-  check("но владелец видит всё", ownerPeek?.id === privateId, ownerPeek);
+  // С миграции 0057 владелец — один из равных и в чтении: чужое поручение,
+  // где его нет, база ему не отдаёт (до неё отдавала всё пространство).
+  check("и владелец её тоже не видит", !ownerPeek, ownerPeek);
 
   // ── Свой мессенджер ────────────────────────────────────────────────────
   section("Руководитель подключает себе мессенджер");
@@ -525,10 +527,18 @@ try {
 
   // ── Обсуждение ─────────────────────────────────────────────────────────
   section("Обсуждение внутри задачи");
+  // Своя ОТКРЫТАЯ задача: основную к этому шагу уже приняли, а в закрытое
+  // с миграции 0056 не пишут.
+  const discId = randomUUID();
+  await admin.from("tasks").insert({ id: discId, user_id: owner.id, title: "Сверка по Керчи", deadline: soon, status: "in_progress" });
+  await admin.from("task_participants").insert([
+    { user_id: owner.id, task_id: discId, assignee_id: personA.id, role: "executor" },
+    { user_id: owner.id, task_id: discId, assignee_id: personB.id, role: "executor" },
+  ]);
   const { error: commentError } = await mgrA.db.from("item_comments").insert({
     user_id: owner.id,
     item_kind: "task",
-    item_id: taskId,
+    item_id: discId,
     author_user_id: mgrA.id,
     author_assignee_id: personA.id,
     body: "Цифры по Керчи подтянул",
@@ -536,16 +546,16 @@ try {
   });
   check("участник пишет в обсуждение", !commentError, commentError?.message);
 
-  const { data: seenByB } = await mgrB.db.from("item_comments").select("body").eq("item_id", taskId).eq("system", false);
+  const { data: seenByB } = await mgrB.db.from("item_comments").select("body").eq("item_id", discId).eq("system", false);
   check("второй участник его видит", (seenByB || []).length === 1, seenByB);
 
-  const { data: seenByOwner } = await owner.db.from("item_comments").select("body").eq("item_id", taskId).eq("system", false);
+  const { data: seenByOwner } = await owner.db.from("item_comments").select("body").eq("item_id", discId).eq("system", false);
   check("владелец видит обсуждение", (seenByOwner || []).length === 1, seenByOwner);
 
   const { error: forgeError } = await mgrB.db.from("item_comments").insert({
     user_id: owner.id,
     item_kind: "task",
-    item_id: taskId,
+    item_id: discId,
     author_user_id: mgrA.id,
     author_assignee_id: personA.id,
     body: "подпись подделана",
@@ -632,12 +642,24 @@ try {
   // Реплика владельца в задаче руководителя: постановщик не участник
   // собственной задачи, и раньше она не доходила до него ни сразу, ни
   // сводкой — двое переписывались, и один об этом не знал.
+  // В открытой задаче: ту, что выше, постановщик уже принял.
+  const replyTaskId = randomUUID();
+  await admin.from("tasks").insert({
+    id: replyTaskId,
+    user_id: owner.id,
+    title: "Открыть счёт в банке",
+    assignee: "Тест Владелец (я)",
+    deadline: soon,
+    created_by: mgrA.id,
+    status: "in_progress",
+  });
+  await admin.from("task_participants").insert({ user_id: owner.id, task_id: replyTaskId, assignee_id: selfRow.id, role: "executor" });
   const replyId = randomUUID();
   await owner.db.from("item_comments").insert({
     id: replyId,
     user_id: owner.id,
     item_kind: "task",
-    item_id: toOwnerId,
+    item_id: replyTaskId,
     author_user_id: owner.id,
     author_assignee_id: selfRow.id,
     body: "Банк просит ещё один документ",
