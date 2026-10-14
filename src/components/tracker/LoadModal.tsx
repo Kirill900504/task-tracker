@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Task } from "@/types/tracker";
+import type { TaskParticipant } from "@/lib/taskProgress";
 import { peopleLoad } from "@/lib/peoplePanel";
 import { withoutSelfMark } from "@/lib/actorName";
 import Modal from "./Modal";
@@ -35,6 +36,7 @@ export default function LoadModal({
   selected,
   onSelect,
   onClose,
+  partsOf,
 }: {
   tasks: Task[];
   assignees: string[];
@@ -42,8 +44,11 @@ export default function LoadModal({
   selected: string;
   onSelect: (name: string) => void;
   onClose: () => void;
+  // Ответы исполнителей — чтобы «ждёт приёмки» и «молчит» считались как
+  // на доске (peoplePanel.peopleLoad).
+  partsOf?: (taskId: string) => TaskParticipant[];
 }) {
-  const rows = useMemo(() => peopleLoad(tasks, assignees), [tasks, assignees]);
+  const rows = useMemo(() => peopleLoad(tasks, assignees, partsOf), [tasks, assignees, partsOf]);
   const [showAll, setShowAll] = useState(false);
 
   // «Есть о чём говорить» — просрочено, молчит или ждёт приёмки. Просто

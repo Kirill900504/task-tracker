@@ -1,4 +1,6 @@
 import type { Task } from "@/types/tracker";
+import type { TaskParticipant } from "@/lib/taskProgress";
+import { columnOf } from "@/lib/kanban";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { isOverdue } from "@/lib/taskDisplay";
 
@@ -32,7 +34,13 @@ export type PersonLoad = {
   review: number;
 };
 
-export function peopleLoad(tasks: Task[], names: string[]): PersonLoad[] {
+// `partsOf` — строки участия задачи. С ними «ждёт приёмки» и «молчит»
+// считаются тем же правилом, что столбец доски (kanban.columnOf) и ответы
+// исполнителей, а не по полям самой задачи (`approvalState`,
+// `acceptedAt`): те — вторая правда об одном факте, и в этом проекте такие
+// пары расходились трижды (CLAUDE.md, аудит 15.09.2026). Без них — как
+// раньше, для тех, у кого строк под рукой нет.
+export function peopleLoad(tasks: Task[], names: string[], partsOf?: (taskId: string) => TaskParticipant[]): PersonLoad[] {
   const byName = new Map<string, PersonLoad>();
   const ensure = (name: string) => {
     let row = byName.get(name);
@@ -48,7 +56,9 @@ export function peopleLoad(tasks: Task[], names: string[]): PersonLoad[] {
     if (!name) continue;
     if (task.status === "done") continue;
     const row = ensure(name);
-    if (task.approvalState === "awaiting_review") {
+    const parts = partsOf?.(task.id);
+    const awaiting = parts ? columnOf(task, parts) === "review" : task.approvalState === "awaiting_review";
+    if (awaiting) {
       // Сданное не «в работе»: оно ждёт не его, а Кирилла, и складывать
       // одно с другим значит показать человеку долг, которого у него нет.
       row.review++;
@@ -56,7 +66,10 @@ export function peopleLoad(tasks: Task[], names: string[]): PersonLoad[] {
     }
     row.open++;
     if (isOverdue(task)) row.overdue++;
-    if (!task.acceptedAt) row.silent++;
+    const answered = parts
+      ? parts.some((p) => p.role === "executor" && (p.acceptedAt || p.doneAt || p.declinedAt))
+      : !!task.acceptedAt;
+    if (!answered) row.silent++;
   }
 
   // Люди без единой открытой задачи в панели не нужны: она отвечает на

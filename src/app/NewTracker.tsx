@@ -884,7 +884,7 @@ export default function NewTracker() {
               // Только когда есть кому быть загруженным: строка меню,
               // открывающая окно со словами «никому ничего не поручено», —
               // это строка, после которой ничего не произошло.
-              ...(peopleLoad(tasks, assignees).length > 0
+              ...(peopleLoad(tasks, assignees, participants.forTask).length > 0
                 ? [{ id: "load", label: "Загрузка — у кого что горит", icon: "users" as const, onSelect: () => setLoadOpen(true) }]
                 : []),
               // Разбор фразы голосом — то, ради чего у быстрого ввода была
@@ -1005,6 +1005,7 @@ export default function NewTracker() {
             <LoadModal
               tasks={tasks}
               assignees={assignees}
+              partsOf={participants.forTask}
               selected={filterAssignee}
               onSelect={setFilterAssignee}
               onClose={() => setLoadOpen(false)}

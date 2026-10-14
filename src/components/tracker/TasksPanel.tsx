@@ -305,7 +305,7 @@ export default function TasksPanel({
   // показывать ли вообще кнопку и какую цифру на ней писать. Цифра — это
   // число тех, у кого есть о чём говорить (горит, молчит или ждёт
   // приёмки), а не число людей: «14» на кнопке не новость, «2» — новость.
-  const load = useMemo(() => peopleLoad(allTasks ?? tasks, assignees), [allTasks, tasks, assignees]);
+  const load = useMemo(() => peopleLoad(allTasks ?? tasks, assignees, participants.forTask), [allTasks, tasks, assignees, participants.forTask]);
   const peopleWithWork = load.length;
   const hotPeople = load.filter((p) => p.overdue > 0 || p.silent > 0 || p.review > 0).length;
 
@@ -1005,6 +1005,7 @@ export default function TasksPanel({
         <LoadModal
           tasks={allTasks ?? tasks}
           assignees={assignees}
+          partsOf={participants.forTask}
           selected={filterAssignee}
           onSelect={onFilterAssigneeChange}
           onClose={() => setLoadOpen(false)}

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { peopleLoad } from "./peoplePanel";
 import type { Task } from "@/types/tracker";
+import type { TaskParticipant } from "@/lib/taskProgress";
 
 function task(patch: Partial<Task>): Task {
   return {
@@ -79,5 +80,35 @@ describe("панель «Люди»", () => {
 
   it("задача без исполнителя не приписывается никому", () => {
     expect(peopleLoad([task({ assignee: "" }), task({ assignee: "   " })], NAMES)).toEqual([]);
+  });
+});
+
+// С ответами исполнителей «Загрузка» считает как доска (kanban.columnOf), а
+// не по полям самой задачи — второй правде об одном факте (14.10.2026).
+describe("«Загрузка» по ответам исполнителей", () => {
+  const part = (patch: Partial<TaskParticipant>): TaskParticipant => ({
+    assigneeId: "a",
+    name: "Аня",
+    role: "executor",
+    acceptedAt: null,
+    doneAt: null,
+    doneComment: null,
+    declinedAt: null,
+    declineReason: null,
+    ...patch,
+  });
+
+  it("все исполнители ответили — ждёт приёмки, даже без отметки", () => {
+    const t = task({ assignee: "Аня" });
+    const [row] = peopleLoad([t], ["Аня"], () => [part({ acceptedAt: "x", doneAt: "x" })]);
+    expect(row.review).toBe(1);
+    expect(row.open).toBe(0);
+  });
+
+  it("принял сам исполнитель — не молчит, хотя поле задачи пустое", () => {
+    const t = task({ assignee: "Аня" });
+    const [row] = peopleLoad([t], ["Аня"], () => [part({ acceptedAt: "x" })]);
+    expect(row.silent).toBe(0);
+    expect(row.open).toBe(1);
   });
 });
