@@ -325,6 +325,26 @@ export default function MeetingsPanel({
     return withOrganizer(votes.forMeeting(m.id), names, authorRawName(m.createdBy, authors, names), m.voteRound || 1);
   }
 
+  // Кто встаёт на задачу, заведённую по итогу встречи или из её повестки:
+  // те, кто был на встрече. 14.10.2026, его словами: «тут лучше сразу
+  // проставлять участников задачи, как во встрече автоматом» — форма
+  // открывалась пустой, и пятнадцать имён приходилось перебирать заново,
+  // хотя кто договаривался, уже записано. Организатор входит тоже (его
+  // может не быть в составе — withOrganizer считает его «буду» отдельно),
+  // а тот, кто ставит задачу, — нет: он постановщик, а не исполнитель
+  // собственного поручения. Все исполнителями: роли на встрече нет, а
+  // снять лишнего или сделать соисполнителем — одно нажатие в форме.
+  // Отказавшиеся («не смогу») не исключаются: решение встречи могло лечь
+  // и на них, а угадать это код не вправе.
+  function meetingPeopleForTask(m: Meeting): NonNullable<TaskPrefill["people"]> {
+    const names = sanitizeAssigneeList(m.participants);
+    const organizer = authorRawName(m.createdBy, authors, assignees);
+    const me = authorRawName(myUserId, authors, assignees);
+    const out: string[] = [];
+    for (const name of [organizer, ...names]) if (name && name !== me && !out.includes(name)) out.push(name);
+    return out.map((name) => ({ name, role: "executor" as const }));
+  }
+
   // Мой голос по встрече — с учётом переноса: ответ о прежнем времени
   // считается неданным (lib/answerRules), и выбор открывается заново.
   function myVoteOf(m: Meeting) {
@@ -419,6 +439,7 @@ export default function MeetingsPanel({
           title: said ? (said.length > 120 ? said.slice(0, 119) + "…" : said) : "",
           desc: `По итогам встречи «${m.title}» (${fmtDate(m.date)}${m.time ? ", " + m.time : ""})${said ? ": " + said : ""}`,
           deadline: "",
+          people: meetingPeopleForTask(m),
         });
       })();
     }
@@ -731,6 +752,7 @@ export default function MeetingsPanel({
                     title: item.text.length > 120 ? item.text.slice(0, 119) + "…" : item.text,
                     desc: `Из повестки встречи «${m.title}» (${fmtDate(m.date)}${m.time ? ", " + m.time : ""})${item.note ? ". Решили: " + item.note : ""}`,
                     deadline: "",
+                    people: meetingPeopleForTask(m),
                   });
                 }
               : undefined
