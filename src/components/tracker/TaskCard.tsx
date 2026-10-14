@@ -264,13 +264,12 @@ export default function TaskCard({
         {/* Кто поручил → кому. Своя задача говорит о себе одним словом:
             постановщик и исполнитель там один и тот же человек, и стрелка
             от себя к себе читалась бы опечаткой. */}
-        {kind === "self" ? (
-          <div className="task-people">
-            <span className="task-self-tag">
-              <Icon name="user" size={12} /> Личная задача
-            </span>
-          </div>
-        ) : (
+        {/* Своя задача строки людей не имеет: постановщик и исполнитель
+            там один и тот же человек. Её отметка «Личная задача» стоит
+            внизу справа, вместе с «Помогаю» и «Наблюдаю» (14.10.2026: «все
+            маркеры со значками должны располагаться в правом нижнем
+            углу»). */}
+        {kind === "self" ? null : (
           (authorName || executors.length > 0 || fallbackName) && (
             <div className="task-people" title={authorName ? `${authorName} → ${executors.map((p) => withoutSelfMark(p.name)).join(", ") || fallbackName || "не назначен"}` : undefined}>
               {authorName && <span className="task-from">{authorName}</span>}
@@ -288,7 +287,7 @@ export default function TaskCard({
           )
         )}
 
-        {(due || recurLabel(task) || stage === "blocked" || refused || stage === "returned" || awaitingReschedule || !!unreadCount || kind === "watch" || kind === "co") && (
+        {(due || recurLabel(task) || stage === "blocked" || refused || stage === "returned" || awaitingReschedule || !!unreadCount || kind === "watch" || kind === "co" || kind === "self") && (
           <div className="task-foot">
             {due && (
               <span className={"task-due-pill tone-" + (dimOverdue && due.tone !== "late" ? "normal" : due.tone)} title={due.title}>
@@ -318,17 +317,23 @@ export default function TaskCard({
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
-              {/* Помогаю и смотрю — значком, а не цветом: «менее выражено,
-                  с отличительным маркером внешним, например лёгкий
-                  красивый значок глаза». */}
-              {kind === "watch" && (
-                <span className="task-mark kind-mark" title="Вы наблюдатель">
-                  <Icon name="eye" size={13} />
+              {/* Отметки отношения ко мне — цветным значком со словом, в
+                  правом нижнем углу (14.10.2026: «глаз цветной, более
+                  выразительный и чуть больше… и справа надпись
+                  „Наблюдаю“»; у соисполнителя — «Помогаю»). */}
+              {kind === "self" && (
+                <span className="kind-tag kind-tag-self" title="Ваша личная задача">
+                  <Icon name="user" size={15} /> Личная задача
                 </span>
               )}
               {kind === "co" && (
-                <span className="task-mark kind-mark" title="Вы соисполнитель">
-                  <Icon name="users" size={13} />
+                <span className="kind-tag kind-tag-co" title="Вы соисполнитель">
+                  <Icon name="users" size={15} /> Помогаю
+                </span>
+              )}
+              {kind === "watch" && (
+                <span className="kind-tag kind-tag-watch" title="Вы наблюдатель">
+                  <Icon name="eye" size={15} /> Наблюдаю
                 </span>
               )}
             </span>

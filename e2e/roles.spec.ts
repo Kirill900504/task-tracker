@@ -25,9 +25,6 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SU
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-async function roleBar(card: Locator): Promise<string> {
-  return card.locator(".task-role-bar").evaluate((el) => getComputedStyle(el).backgroundColor);
-}
 const background = (card: Locator) => card.evaluate((el) => getComputedStyle(el).backgroundColor);
 
 test("моё поручение, моя личная, поручили мне, помогаю, смотрю — пять разных видов", async ({ page }) => {
@@ -116,23 +113,29 @@ test("моё поручение, моя личная, поручили мне, �
       await expect(card(k)).toHaveAttribute("data-kind", k, { timeout: 30_000 });
     }
 
-    // Пять разных корешков: «сколько меня в этой задаче и чья она».
-    const bars = await Promise.all((["self", "outgoing", "incoming", "co", "watch"] as const).map((k) => roleBar(card(k))));
-    expect(new Set(bars).size, `цвета корешка совпали: ${JSON.stringify(bars)}`).toBe(5);
+    // Пять разных корешков: «сколько меня в этой задаче и чья она». У
+    // «Помогаю» и моих поручений цвет один, фирменный, — отличает их
+    // ширина: у «Помогаю» и у личной полоса жирная (14.10.2026).
+    const barOf = (c: Locator) =>
+      c.locator(".task-role-bar").evaluate((el) => getComputedStyle(el).backgroundColor + " " + getComputedStyle(el).width);
+    const bars = await Promise.all((["self", "outgoing", "incoming", "co", "watch"] as const).map((k) => barOf(card(k))));
+    expect(new Set(bars).size, `корешки совпали: ${JSON.stringify(bars)}`).toBe(5);
 
-    // Фон: свой тон у трёх видов — мои поручения, моя личная, поручили
-    // мне; «помогаю» и «смотрю» — обычной карточкой, одинаково.
+    // Заливку носит ОДИН вид — мои поручения. Личная и «поручили мне» —
+    // без заливки (его слова 14.10.2026: «заливка напрягает», «лаванда не
+    // нравится»), «поручили мне» узнаётся фирменной рамкой.
     const [bgSelf, bgOut, bgIn, bgCo, bgWatch] = await Promise.all(
       (["self", "outgoing", "incoming", "co", "watch"] as const).map((k) => background(card(k))),
     );
-    expect(bgCo, "у «помогаю» и «смотрю» фон должен совпадать").toBe(bgWatch);
-    expect(new Set([bgSelf, bgOut, bgIn, bgCo]).size, `фоны совпали: ${JSON.stringify({ bgSelf, bgOut, bgIn, bgCo })}`).toBe(4);
+    expect(new Set([bgSelf, bgIn, bgCo, bgWatch]).size, `у видов без заливки фон разный: ${JSON.stringify({ bgSelf, bgIn, bgCo, bgWatch })}`).toBe(1);
+    expect(bgOut, "моим поручениям положена фирменная заливка").not.toBe(bgSelf);
+    const border = (c: Locator) => c.evaluate((el) => getComputedStyle(el).borderTopColor);
+    expect(await border(card("incoming")), "«поручили мне» — своя рамка").not.toBe(await border(card("co")));
 
-    // Наблюдатель и соисполнитель — значком в углу, а не цветом.
-    await expect(card("watch").locator(".kind-mark")).toBeVisible();
-    await expect(card("co").locator(".kind-mark")).toBeVisible();
-    // Своя — подписью «Личная задача» вместо стрелки от себя к себе.
-    await expect(card("self").locator(".task-self-tag")).toBeVisible();
+    // Метки — словами, в правом нижнем углу.
+    await expect(card("self").locator(".kind-tag-self")).toHaveText("Личная задача");
+    await expect(card("co").locator(".kind-tag-co")).toHaveText("Помогаю");
+    await expect(card("watch").locator(".kind-tag-watch")).toHaveText("Наблюдаю");
 
     // Просрочка — два разных сигнала (выбор Кирилла 21.09.2026). Своё
     // горящее (я исполнитель) краснеет целиком; моё поручение другому —
@@ -140,9 +143,34 @@ test("моё поручение, моя личная, поручили мне, �
     await expect(card("lateMine")).toHaveClass(/overdue/, { timeout: 30_000 });
     await expect(card("lateOut")).not.toHaveClass(/overdue/);
     expect(await background(card("lateOut"))).toBe(bgOut);
-    expect(await roleBar(card("lateOut"))).not.toBe(bars[1]);
+    expect(await barOf(card("lateOut"))).not.toBe(bars[1]);
     // Срок пилюлей словами — красной у всех, кому он виден.
     await expect(card("lateOut").locator(".task-due-pill.tone-late")).toBeVisible();
+
+    // Фильтры «Я поручил · Мне · Помогаю» — нажимаются и отжимаются,
+    // складываются и переживают перезапуск (14.10.2026).
+    const btn = (key: string) => page.locator(`.view-switch [data-filter="${key}"]`);
+    const shown = async () => {
+      const out: string[] = [];
+      for (const k of ["self", "outgoing", "incoming", "co", "watch"] as const) if (await card(k).isVisible()) out.push(k);
+      return out.join(",");
+    };
+    await btn("helping").click();
+    await expect.poll(shown).toBe("co,watch");
+    await btn("helping").click();
+    await expect.poll(shown).toBe("self,outgoing,incoming,co,watch");
+    await btn("assigned").click();
+    await btn("mine").click();
+    await expect.poll(shown).toBe("self,outgoing,incoming");
+    await page.reload();
+    await expect(btn("assigned")).toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
+    await expect(btn("mine")).toHaveAttribute("aria-pressed", "true");
+    await expect(card("outgoing")).toBeVisible({ timeout: 30_000 });
+    await expect.poll(shown, { timeout: 30_000 }).toBe("self,outgoing,incoming");
+    // Сброс — теми же кнопками; следующие тесты ждут полную доску.
+    await btn("assigned").click();
+    await btn("mine").click();
+    await expect.poll(shown).toBe("self,outgoing,incoming,co,watch");
 
     await admin.from("tasks").delete().in("id", Object.values(ids));
   } finally {

@@ -49,6 +49,7 @@ import { isSelfTask } from "@/lib/selfTask";
 import { useAsk } from "@/components/Ask";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole, MEMBER_ROLE_LABELS } from "@/hooks/useWorkspaceRole";
+import { useSavedSetting } from "@/hooks/useSavedSetting";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { withoutSelfMark } from "@/lib/actorName";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
@@ -246,7 +247,8 @@ export default function NewTracker() {
   // Четвёртый столбец доски — «Завершённые». Раньше этот же флаг
   // подмешивал закрытые встречи и вычеркнутые мысли в их панели; теперь у
   // каждой из них своя иконка и своё окно, а здесь остался ровно столбец.
-  const [showDone, setShowDone] = useState(false);
+  // Запоминается между запусками, как и фильтры доски (useSavedSetting).
+  const [showDone, setShowDone] = useSavedSetting("board.showDone", false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [openTaskRequest, setOpenTaskRequest] = useState<TaskPrefill | null>(null);
   const [openMeetingRequest, setOpenMeetingRequest] = useState<MeetingPrefill | null>(null);
@@ -292,7 +294,7 @@ export default function NewTracker() {
   });
   // Один фильтр на панель задач и панель «Люди»: нажатие на человека и
   // выбор в списке — это один и тот же вопрос, заданный двумя способами.
-  const [filterAssignee, setFilterAssignee] = useState("all");
+  const [filterAssignee, setFilterAssignee] = useSavedSetting("board.person", "all");
   // Кто сейчас смотрит на трекер — своя строка в шапке, с меню личного
   // кабинета. Слова Кирилла 23.09.2026: «чтоб каждый видел, что они сидят
   // под личным аккаунтом в системе». Без этого экран у всех четырнадцати

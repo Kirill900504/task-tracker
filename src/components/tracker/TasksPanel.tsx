@@ -13,7 +13,9 @@ import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isOverdue, isTaskDueOnDate, taskSortFn, todayStr } from "@/lib/taskDisplay";
 import { isSnoozed } from "@/lib/snooze";
 import { KANBAN_COLUMNS, columnOf, moveBetween, type KanbanColumn } from "@/lib/kanban";
-import { matchesView, myRoleOn, showsOverdue, type BoardView } from "@/lib/myRole";
+import { myRoleOn, showsOverdue } from "@/lib/myRole";
+import { BOARD_FILTERS, cleanBoardFilter, matchesBoardFilter, toggleBoardFilter } from "@/lib/boardFilter";
+import { useSavedSetting } from "@/hooks/useSavedSetting";
 import { moveWithin } from "@/lib/dndOrder";
 import { useDropHandler, type DropTarget } from "./dnd/TrackerDnd";
 import { SortableTask, TaskColumnBody } from "./dnd/SortableTask";
@@ -163,10 +165,13 @@ export default function TasksPanel({
 }) {
   // «Просрочено» — не сортировка и не раздел, а вопрос «что горит»: он
   // задаётся чаще всех прочих фильтров вместе взятых.
-  const [onlyOverdue, setOnlyOverdue] = useState(false);
+  // Фильтры доски запоминаются между запусками, у каждого входа свои
+  // (14.10.2026, «чтоб у всех пользователей запоминались автоматически их
+  // фильтры» — см. useSavedSetting).
+  const [onlyOverdue, setOnlyOverdue] = useSavedSetting("board.onlyOverdue", false);
   // Показать отложенные (миграция 0049). Отложенное уходит с доски автора
   // до своего дня, а кнопка с числом — единственный путь к нему раньше.
-  const [showSnoozed, setShowSnoozed] = useState(false);
+  const [showSnoozed, setShowSnoozed] = useSavedSetting("board.showSnoozed", false);
   // Чьи задачи показывает доска: то, что ждут от меня, то, что поручил я,
   // или всё сразу.
   //
@@ -175,8 +180,13 @@ export default function TasksPanel({
   // покажет, — а у владельца доска, открывшаяся на «Мне», спрятала бы
   // всё, что он поручил другим. Сужают взгляд по необходимости, а не по
   // умолчанию.
-  const [view, setView] = useState<BoardView>("all");
-  const [filterSection, setFilterSection] = useState("all");
+  //
+  // С 14.10.2026 это не переключатель из трёх, а три кнопки-фильтра
+  // «Я поручил · Мне · Помогаю», которые нажимаются и отжимаются и
+  // складываются (lib/boardFilter). Ни одна не нажата — «все», как и было.
+  const [savedFilter, setSavedFilter] = useSavedSetting<unknown>("board.filter", []);
+  const boardFilter = cleanBoardFilter(savedFilter);
+  const [filterSection, setFilterSection] = useSavedSetting("board.section", "all");
   // Окно «Разделы»: названия, ответственные, удаление. Только у админа.
   const [sectionsOpen, setSectionsOpen] = useState(false);
   // Окно «Загрузка»: кто чем занят и у кого горит. Раньше стояло панелью в
@@ -318,7 +328,7 @@ export default function TasksPanel({
     if (!showSnoozed && snoozedMine(t)) return false;
     if (filterAssignee !== "all" && t.assignee !== filterAssignee) return false;
     if (onlyOverdue && !isOverdue(t)) return false;
-    if (sharedBoard && !matchesView(view, t, roleOn(t), myUserId)) return false;
+    if (sharedBoard && !isMobile && !matchesBoardFilter(boardFilter, t, roleOn(t), myUserId)) return false;
     if (filterSection !== "all" && (t.sectionId || "") !== filterSection) return false;
     if (calendarFilterDate && !isTaskDueOnDate(t, new Date(calendarFilterDate + "T00:00:00"))) return false;
     return true;
@@ -721,7 +731,7 @@ export default function TasksPanel({
                       unreadCount={unread[t.id] || 0}
                       role={role}
                       kind={kindOf(t)}
-                      dimOverdue={!showsOverdue(role, !sharedBoard || view === "assigned")}
+                      dimOverdue={!showsOverdue(role, !sharedBoard || (boardFilter.length === 1 && boardFilter[0] === "assigned"))}
                       onToggleDone={() => void quickDone(t)}
                       // Галочка — право постановщика: закрыть задачу
                       // значит сказать «принято», а это его слово.
@@ -835,28 +845,27 @@ export default function TasksPanel({
                 доска сама разошлась на три раздела («Задачи», «В работе»,
                 «Приёмка»), различать «чьё» внутри каждого уже незачем, а
                 сама кнопка «Я поручил» потеряла смысл вопроса, на который
-                отвечала. `view` при этом остаётся «all» и не трогается: та
+                отвечала. Фильтры на телефоне не применяются вовсе (см. filtered): та
                 же логика фильтрации продолжает работать на компьютере. */}
             {sharedBoard && !isMobile && (
-              <div className="view-switch" role="group" aria-label="Чьи задачи показывать">
-                {(
-                  [
-                    ["all", "Все"],
-                    ["mine", "Мне"],
-                    ["assigned", "Я поручил"],
-                  ] as [BoardView, string][]
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={"view-switch-btn" + (view === id ? " active" : "")}
-                    aria-pressed={view === id}
-                    onClick={() => setView(id)}
-                  >
-                    {label}
-                    {id === "assigned" && assignedOverdue > 0 && <span className="filter-pill-count">{assignedOverdue}</span>}
-                  </button>
-                ))}
+              <div className="view-switch" role="group" aria-label="Чьи задачи показывать — можно нажать несколько">
+                {BOARD_FILTERS.map((f) => {
+                  const on = boardFilter.includes(f.key);
+                  return (
+                    <button
+                      key={f.key}
+                      type="button"
+                      data-filter={f.key}
+                      className={"view-switch-btn" + (on ? " active" : "")}
+                      aria-pressed={on}
+                      title={f.title + (on ? " — нажмите ещё раз, чтобы снять" : "")}
+                      onClick={() => setSavedFilter((prev: unknown) => toggleBoardFilter(cleanBoardFilter(prev), f.key))}
+                    >
+                      {f.label}
+                      {f.key === "assigned" && assignedOverdue > 0 && <span className="filter-pill-count">{assignedOverdue}</span>}
+                    </button>
+                  );
+                })}
               </div>
             )}
             {/* Две кнопки вместо списка приоритетов и галочки.
@@ -878,7 +887,7 @@ export default function TasksPanel({
               className={"filter-pill overdue" + (onlyOverdue ? " active" : "")}
               id="filterOverdueBtn"
               aria-pressed={onlyOverdue}
-              onClick={() => setOnlyOverdue((v) => !v)}
+              onClick={() => setOnlyOverdue(!onlyOverdue)}
               title="Только просроченные"
               aria-label="Только просроченные"
             >
@@ -900,7 +909,7 @@ export default function TasksPanel({
                 id="showSnoozedBtn"
                 aria-pressed={showSnoozed}
                 title="Задачи, которые вы отложили до другого дня"
-                onClick={() => setShowSnoozed((v) => !v)}
+                onClick={() => setShowSnoozed(!showSnoozed)}
               >
                 <Icon name="clock" size={14} />
                 {!isMobile && " Отложено"}
@@ -982,11 +991,13 @@ export default function TasksPanel({
       {isMobile ? (
         <div className="columns columns-single">{renderColumn(mobileColumn ?? "new")}</div>
       ) : (
-        <div className={"columns" + (showDone ? " with-done" : "")}>
+        <div className={"columns" + (showDone && !isMobile ? " with-done" : "")}>
           {renderColumn("new")}
           {renderColumn("work")}
           {renderColumn("review")}
-          {showDone && renderColumn("done")}
+          {/* Запомненный с компьютера флаг (useSavedSetting) не открывает
+              завершённое на телефоне — там его нет нигде (docs/mobile.md). */}
+          {showDone && !isMobile && renderColumn("done")}
         </div>
       )}
 
@@ -1162,16 +1173,26 @@ export default function TasksPanel({
           }}
           onReturnWork={async (comment) => {
             if (!modalTask) return;
-            try {
-              await participants.returnForRework(modalTask.id, comment);
-            } catch (e) {
-              toasts.showToast(humanError(e, "Не получилось вернуть на доработку"));
-              return;
-            }
+            // Возврат виден в ту же секунду, а не после ответа сервера.
+            // 14.10.2026: задача после возврата оставалась «На приёмке»,
+            // а карточка — с кнопкой «Вернуть», и её нажали ещё дважды.
+            // Приёмка — колонка сервера (taskToRow её не пишет), так что
+            // отсюда в базу она не уедет: это только экран, и эхо подписки
+            // скажет то же самое. Отказ сервера возвращает прежнее.
+            const current = (allTasks ?? tasks).find((x) => x.id === modalTask.id) || modalTask;
+            const before = { approvalState: current.approvalState, approvalComment: current.approvalComment };
+            actions.saveTask({ ...current, approvalState: "returned", approvalComment: comment });
             // Возврат — тоже решение, после которого делать в карточке
             // нечего: задача уходит обратно в свой столбец и ждёт человека,
             // а не вас.
             closeModal();
+            try {
+              await participants.returnForRework(modalTask.id, comment);
+            } catch (e) {
+              const now = (allTasks ?? tasks).find((x) => x.id === modalTask.id) || current;
+              actions.saveTask({ ...now, ...before });
+              toasts.showToast(humanError(e, "Не получилось вернуть на доработку"));
+            }
           }}
           onReturnOne={async (participantId, comment) => {
             if (!modalTask) return;

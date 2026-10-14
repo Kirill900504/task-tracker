@@ -25,6 +25,11 @@ import type { MyRole } from "@/lib/myRole";
 //   co       — помогаю;
 //   watch    — смотрю;
 //   none     — вижу, но ни при чём (встречается редко: видимость личная).
+//
+// Как каждый вид выглядит, решено вторым кругом 14.10.2026 (task-ui.css):
+// заливка только у outgoing; self — жирная тёплая полоса и «Личная задача»;
+// incoming — фирменная рамка без заливки; co — жирная фирменная полоса и
+// «Помогаю»; watch — цветной глаз и «Наблюдаю». Метки — в правом нижнем углу.
 export type CardKind = "self" | "outgoing" | "incoming" | "co" | "watch" | "none";
 
 export function cardKind(opts: { authored: boolean; selfTask: boolean; role: MyRole }): CardKind {

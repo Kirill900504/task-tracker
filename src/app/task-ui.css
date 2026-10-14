@@ -16,23 +16,27 @@
    «менее выраженно… лёгкий красивый значок глаза, а на соисполнении более
    мягкий тон». И отдельно: «чтоб не раздражало и каши/светофора не было».
 
-   Поэтому свой тон получают ТРИ вида — мои поручения (фирменный), мои
-   личные (тёплый песочный) и поручение мне (лавандовый: тем же цветом
-   трекер давно пишет имена исполнителей, то есть «лаванда = исполнитель»
-   уже выучена глазом). Каждый — корешком, рамкой и лёгким тоном фона,
-   чтобы узнавался, а не сравнивался.
-   Помогаю и смотрю — без заливки, тише всех, со значком в углу.
+   Второй круг, 14.10.2026, его же правкой первого: заливку носит ОДИН вид
+   — мои поручения (фирменный). Личная — жирной тёплой полосой и меткой
+   «Личная задача» без заливки («заливка напрягает»). Поручили мне — без
+   цвета, выразительной фирменной рамкой («лаванда не нравится»).
+   Помогаю — жирной фирменной полосой и меткой «Помогаю», наблюдаю —
+   цветным глазом и «Наблюдаю». Все три метки — в правом нижнем углу.
    Срок по-прежнему сильнее всего (правила ниже повторяют tracker.css,
    потому что этот файл подключён позже и иначе перебил бы их). */
 :root{
   --kind-out:#3E8AA8;
   --kind-out-bg:#24404B;
-  --kind-in:#A58BD6;
-  --kind-in-bg:#2D2B3A;
+  /* 14.10.2026, его правка первого варианта: лаванда у «поручили мне»
+     «не нравится — оставить без цвета, но выразительней в фирменной
+     расцветке рамку»; заливка у личной «напрягает» — полоса, фигурка и
+     тёплый цвет остаются. Заливку теперь носит ОДИН вид — мои поручения. */
+  --kind-in:#4FA8D8;
   --kind-self:#C9B48A;
-  --kind-self-bg:#322F28;
-  --kind-co:#7D6BA3;
-  --kind-watch:#5C6B73;
+  --kind-co:#3E8AA8;
+  --kind-watch:#8FB3C2;
+  --kind-co-ink:#6FC2E3;
+  --kind-watch-ink:#B9A0DE;
   --fin:#E3BE52;
 }
 /* Прежняя заливка «я исполнитель» снята: её получали прежде всего задачи
@@ -40,9 +44,10 @@
    нужно постановщику. */
 .task.role-executor{border-color:var(--line-soft); background:var(--paper);}
 .task.kind-outgoing{border-color:rgba(62,138,168,.7); background:var(--kind-out-bg);}
-.task.kind-incoming{border-color:rgba(165,139,214,.42); background:var(--kind-in-bg);}
-.task.kind-self{border-color:rgba(201,180,138,.34); background:var(--kind-self-bg);}
-.task.kind-co{border-color:rgba(165,139,214,.2);}
+/* Поручили мне — без заливки, рамка фирменным голубым и чуть толще, с
+   лёгким свечением: видно издалека, но доску не красит. */
+.task.kind-incoming{border:1.5px solid var(--kind-in); box-shadow:0 0 0 1px rgba(79,168,216,.18), var(--edge);}
+.task.kind-self{border-color:rgba(201,180,138,.28);}
 .task.kind-watch .task-title{color:var(--ink-soft);}
 .task.overdue{border-color:var(--high); background:var(--overdue-bg);}
 .task.due-today{border-color:var(--today); background:var(--today-bg);}
@@ -50,9 +55,13 @@
 
 .rb-outgoing{background:var(--kind-out);}
 .rb-incoming{background:var(--kind-in);}
+/* «Жирная вертикальная полоска» — у личной и у «Помогаю»: их узнают по
+   краю, раз заливки нет. */
+.rb-self, .rb-co{width:6px;}
 .rb-self{background:var(--kind-self);}
 .rb-co{background:var(--kind-co);}
-.rb-watch{background:var(--kind-watch);}
+.rb-watch{background:rgba(255,255,255,.07);}
+.task.kind-self, .task.kind-co{padding-left:16px;}
 
 /* ---------- Кубик: три строки ------------------------------------------
    «Квадратик принудительного закрытия должен быть в правом верхнем углу, а
@@ -77,7 +86,7 @@
   -webkit-line-clamp:3; line-clamp:3;
 }
 .task.kind-outgoing .task-top .task-title{border-color:rgba(62,138,168,.35);}
-.task.kind-incoming .task-top .task-title{border-color:rgba(165,139,214,.3);}
+.task.kind-incoming .task-top .task-title{border-color:rgba(79,168,216,.35);}
 .task.kind-self .task-top .task-title{border-color:rgba(201,180,138,.28);}
 .task-top .check{margin-top:3px;}
 @media (max-width:800px){
@@ -90,7 +99,6 @@
 .task-people{display:flex; flex-wrap:wrap; align-items:center; gap:5px 6px; margin-top:8px; font-size:11.5px; min-width:0;}
 .task-people .task-from{color:var(--ink-soft); font-weight:600;}
 .task-people .task-arrow{color:var(--ink-soft); opacity:.7;}
-.task-self-tag{display:inline-flex; align-items:center; gap:5px; color:var(--kind-self); font-weight:700; letter-spacing:.01em;}
 
 /* Человек — кружок с буквами; этап — значком в его углу (PersonBadge).
    «Ещё не приступал» — пунктирное кольцо и приглушённый кружок, без
@@ -145,7 +153,13 @@
 .task-due-pill.tone-today{color:#0B2833; background:var(--today); border-color:var(--today);}
 .task-due-pill.tone-late{color:#2A130D; background:var(--high); border-color:var(--high);}
 .task-due-pill.tone-today .icon, .task-due-pill.tone-late .icon{opacity:1;}
-.task-mark.kind-mark{color:var(--ink-soft); width:18px; height:18px;}
+/* Метки отношения ко мне — правый нижний угол, цветной значок со словом.
+   Значок крупнее остальных значков угла: его ищут глазом по доске. */
+.kind-tag{display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; white-space:nowrap; letter-spacing:.01em;}
+.kind-tag .icon{stroke-width:2;}
+.kind-tag-self{color:var(--kind-self);}
+.kind-tag-co{color:var(--kind-co-ink);}
+.kind-tag-watch{color:var(--kind-watch-ink);}
 
 /* Полное название поверх доски — по наведению на длинное. */
 .task-peek{
@@ -245,7 +259,7 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .add-people-name{display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px; min-width:0;}
 .add-people-roles{display:inline-flex; gap:6px; flex-wrap:wrap;}
 .add-people-roles .participant-chip{padding:5px 10px; font-size:12px;}
-.role-pick-executor:hover{border-color:var(--kind-in); color:var(--kind-in);}
+.role-pick-executor:hover{border-color:var(--accent); color:var(--accent);}
 .add-people-empty{padding:14px 8px; color:var(--ink-soft); font-size:13px;}
 .add-people-done{font-size:12.5px; color:var(--success); margin-bottom:8px;}
 .add-people-new{margin-top:10px;}
@@ -294,16 +308,16 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
    «Подумай, какие аспекты текущих исправлений и в какой форме натянуть на
    работу со встречами» (13.10.2026). Перенесено то, что значит то же
    самое: название в рамке, своя встреча — фирменным краем, встреча, куда
-   позвали, — лавандовым, участники в окне — фишками целиком, со своим
+   позвали, — фирменной рамкой без заливки, участники в окне — фишками целиком, со своим
    откликом. Заливки нет: фон карточки встречи уже занят выбранным днём. */
 .meeting-chip .mtitle{
   padding:3px 8px; border-radius:8px; font-weight:700;
   background:rgba(0,0,0,.16); border:1px solid rgba(255,255,255,.07);
 }
 .meeting-chip.kind-outgoing{border-color:rgba(62,138,168,.5);}
-.meeting-chip.kind-incoming{border-color:rgba(165,139,214,.34);}
+.meeting-chip.kind-incoming{border-color:rgba(79,168,216,.6);}
 .meeting-chip.kind-outgoing .mtitle{border-color:rgba(62,138,168,.3);}
-.meeting-chip.kind-incoming .mtitle{border-color:rgba(165,139,214,.25);}
+.meeting-chip.kind-incoming .mtitle{border-color:rgba(79,168,216,.3);}
 .meeting-chip.selected-day{border-color:var(--today);}
 .meeting-chip:hover:not(.dragging){border-color:var(--today);}
 .meeting-chip .mtime{
