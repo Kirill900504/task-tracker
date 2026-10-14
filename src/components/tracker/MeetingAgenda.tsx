@@ -69,7 +69,10 @@ export default function MeetingAgenda({
                 <div className="agenda-text">{item.text}</div>
                 {item.note && <div className="agenda-note">Решили: {item.note}</div>}
                 <div className="agenda-actions">
-                  {isOrganizer && (
+                  {/* У встречи с исходом итог пункта уже сказан — только
+                      просмотр (14.10.2026). «В задачу» остаётся: это новая
+                      задача, а не правка встречи. */}
+                  {isOrganizer && !closed && (
                     <button type="button" className="btn btn-small" onClick={() => void editNote(item)}>
                       {item.note ? "Изменить итог" : "Итог"}
                     </button>

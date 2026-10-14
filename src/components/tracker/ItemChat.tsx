@@ -204,9 +204,15 @@ export default function ItemChat({
   itemId,
   mentionCandidates = [],
   onAcceptProposal,
+  readOnly = false,
 }: {
   kind: ItemKind;
   itemId: string;
+  // Закрытое событие (14.10.2026, «запрети любые изменения или дополнения
+  // уже закрытых событий. Только просмотр»): ленту читают, но не пишут в
+  // неё, не правят и не убирают сказанное и не ставят реакций. Меню по
+  // правой кнопке остаётся — с одним «Копировать текст».
+  readOnly?: boolean;
   // Кого можно тегнуть — участники этого же элемента. Пусто — подсказка и
   // подсветка просто не появляются, форма ввода при этом работает как раньше.
   mentionCandidates?: string[];
@@ -214,7 +220,10 @@ export default function ItemChat({
   // предложил участник, — одним нажатием на самом предложении.
   onAcceptProposal?: (proposal: { date: string; time: string; reason: string; by: string }) => void;
 }) {
-  const { comments, loading, send, edit, remove, react } = useItemComments(kind, itemId);
+  const { comments, loading, send, edit, remove, react: reactRaw } = useItemComments(kind, itemId);
+  // Одна заглушка на все двери реакции — кнопки под сообщением, двойное
+  // нажатие, предложение времени: забыть одну из них проще, чем эту строку.
+  const react: typeof reactRaw = readOnly ? async () => {} : reactRaw;
   // Имя владельца — для старых строк хроники, записанных словом «Владелец»
   // (lib/actorName.nameLegacyRole). Его строка в общем списке людей помечена «(я)».
   const { colleagues } = useColleagues();
@@ -445,7 +454,7 @@ export default function ItemChat({
         if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
       }}
       onDrop={(e) => {
-        if (!e.dataTransfer?.files?.length) return;
+        if (readOnly || !e.dataTransfer?.files?.length) return;
         e.preventDefault();
         pickFiles(e.dataTransfer.files);
       }}
@@ -553,6 +562,7 @@ export default function ItemChat({
                               key={r.emoji}
                               type="button"
                               className={"chat-reaction" + (r.mine ? " mine" : "")}
+                              disabled={readOnly}
                               title={(c.reactors?.[r.emoji]?.join(", ") || "") + (r.mine ? " · нажмите, чтобы убрать" : "") || "Поддержать"}
                               onClick={() => void react(c.id, r.emoji, !r.mine)}
                             >
@@ -677,7 +687,7 @@ export default function ItemChat({
                                     {no.length > 0 && <span className="no">Не подходит: {no.join(", ")}</span>}
                                     {!yes.length && !no.length && <span className="none">Пока никто не ответил</span>}
                                   </div>
-                                  {!c.sending && (
+                                  {!c.sending && !readOnly && (
                                     <div className="chat-proposal-actions">
                                       {!c.mine && (
                                         <>
@@ -724,7 +734,7 @@ export default function ItemChat({
                               (как в Slack и Telegram Desktop). На телефоне
                               наведения нет, там то же самое делает долгое
                               нажатие с полным набором. */}
-                          {!c.sending && !c.proposal && (
+                          {!c.sending && !c.proposal && !readOnly && (
                             <div className="chat-quick" onClick={(e) => e.stopPropagation()}>
                               {QUICK_REACTIONS.map((emoji) => {
                                 const on = c.reactions.some((r) => r.emoji === emoji && r.mine);
@@ -783,6 +793,7 @@ export default function ItemChat({
                                   key={r.emoji}
                                   type="button"
                                   className={"chat-reaction" + (r.mine ? " mine" : "")}
+                              disabled={readOnly}
                                   title={(c.reactors?.[r.emoji]?.join(", ") || "") + (r.mine ? " · нажмите, чтобы убрать" : "") || "Поддержать"}
                                   onClick={() => void react(c.id, r.emoji, !r.mine)}
                                 >
@@ -822,11 +833,13 @@ export default function ItemChat({
         // подписью: «authorName» у системной строки — служебное значение
         // (см. itemHistory.ts, автора у неё нет), и в цитате оно не
         // должно читаться как «это сказал Кирилл».
-        actions.push({
-          id: "reply",
-          label: "Ответить",
-          onSelect: () => setReplyTo(c.system ? { ...c, authorName: "Событие" } : c),
-        });
+        if (!readOnly) {
+          actions.push({
+            id: "reply",
+            label: "Ответить",
+            onSelect: () => setReplyTo(c.system ? { ...c, authorName: "Событие" } : c),
+          });
+        }
         if (c.body) {
           actions.push({
             id: "copy",
@@ -834,14 +847,14 @@ export default function ItemChat({
             onSelect: () => void navigator.clipboard?.writeText(c.body).catch(() => {}),
           });
         }
-        if (c.mine) {
+        if (c.mine && !readOnly) {
           actions.push({ id: "edit", label: "Изменить", onSelect: () => startEdit(c) });
           actions.push({ id: "remove", label: "Убрать", danger: true, onSelect: () => void handleRemove(c.id) });
         }
         return (
           <ChatMessageMenu
             at={menuFor.at}
-            emojis={REACTIONS}
+            emojis={readOnly ? [] : REACTIONS}
             activeEmojis={c.reactions.filter((r) => r.mine).map((r) => r.emoji)}
             onPickEmoji={(emoji) => {
               const already = c.reactions.find((r) => r.emoji === emoji)?.mine || false;
@@ -889,6 +902,14 @@ export default function ItemChat({
         </div>
       )}
 
+      {/* Закрытое — только для чтения: на месте поля строка о том, почему
+          писать нельзя и как это изменить. Без неё пропавшее поле
+          читается как поломка. */}
+      {readOnly ? (
+        <div className="chat-closed" id="chatClosedNote">
+          Обсуждение закрыто вместе с событием — только просмотр.
+        </div>
+      ) : (
       <div className="chat-composer">
         {/* Подсказка @упоминания всплывает над полем поверх ленты, как в
             Telegram. В общем столбце между лентой и полем она в окне
@@ -1057,6 +1078,7 @@ export default function ItemChat({
           <Icon name="send" size={18} />
         </button>
       </div>
+      )}
     </div>
   );
 }

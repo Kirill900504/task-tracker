@@ -27,7 +27,7 @@ import ResultFiles from "./ResultFiles";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { withoutSelfMark } from "@/lib/actorName";
-import { fmtDate, todayStr } from "@/lib/taskDisplay";
+import { fmtDate, isClosed, todayStr } from "@/lib/taskDisplay";
 import { isSnoozed, snoozeChoices } from "@/lib/snooze";
 import { answerWithFiles } from "@/lib/answerFiles";
 import { isSelfTask } from "@/lib/selfTask";
@@ -294,6 +294,14 @@ export default function TaskModal({
   // задаче», только теперь в сводке (ItemFacts): Кирилл 22.09.2026 попросил
   // перенести его туда, «в такой же аккуратной форме».
   const stage = task ? taskStage(participants, task.approvalState || "open") : null;
+  // Закрытая задача — только просмотр (14.10.2026, «запрети любые
+  // изменения или дополнения уже закрытых событий. Только просмотр»).
+  // Ни срока, ни состава, ни описания, ни «Отложить» и «Удалить», и
+  // обсуждение без поля ввода. Остаются «Повторить» (это новая задача, а
+  // не правка этой) и у постановщика «Открыть заново» — единственный выход
+  // обратно, событие с причиной и строкой в хронике.
+  const closed = !!task && isClosed(task);
+  const editable = canEdit && !closed;
 
   // Кто сейчас на задаче — одинаково для новой и для сохранённой, чтобы
   // поле людей было одно и то же в обоих случаях. У новой это набранный
@@ -659,7 +667,7 @@ export default function TaskModal({
                     Принудительное закрытие
                   </button>
                 )}
-                {canEdit && task.status !== "done" && (
+                {editable && (
                   <button
                     type="button"
                     className={"item-head-icon" + (isSnoozed(task.snoozedUntil, todayStr()) ? " on" : "")}
@@ -714,7 +722,7 @@ export default function TaskModal({
                     «Удалить / Сохранить / Отмена» снизу, а удалить задачу
                     всё равно иногда нужно. Спрашивается и отменяется
                     уведомлением, как всё разрушительное. */}
-                {canEdit && (
+                {editable && (
                   <button
                     type="button"
                     className="item-head-icon danger"
@@ -767,6 +775,7 @@ export default function TaskModal({
                   onReturnWork={onReturnWork}
                   onReopenWork={onReopenWork}
                   onCloseUnfulfilled={onForceCloseWork}
+                  closed={closed}
                   onAcceptReschedule={onAcceptReschedule}
                   onRejectReschedule={onRejectReschedule}
                 />
@@ -795,7 +804,7 @@ export default function TaskModal({
               {/* Своя задача: вместо ответов — срок, и только он. Двигается
                   сразу, без просьбы и решения: просить и решать здесь один и
                   тот же человек. Закрывают её галочкой на карточке. */}
-              {selfTask && (
+              {selfTask && !closed && (
                 <div className="field self-deadline" id="selfDeadline">
                   <label>Срок</label>
                   <div className="deadline-row">
@@ -840,9 +849,9 @@ export default function TaskModal({
                     taskId={task.id}
                     participants={participants}
                     availablePeople={availablePeople}
-                    canEdit={canEdit}
+                    canEdit={editable}
                     selfTask={selfTask}
-                    closed={stage === "done"}
+                    closed={closed || stage === "done"}
                     onAdd={addToTask}
                     onSetRole={setRoleOnTask}
                     onRemove={removeFromTask}
@@ -859,7 +868,7 @@ export default function TaskModal({
                 taskId={task.id}
                 desc={descNow.desc}
                 files={descNow.files}
-                canEdit={canEdit}
+                canEdit={editable}
                 onSave={(desc, files) => {
                   setDescNow({ desc, files });
                   patchTask({ desc, descFiles: files });
@@ -885,7 +894,7 @@ export default function TaskModal({
                 </div>
               )}
 
-              {!canEdit && (
+              {!canEdit && !closed && (
                 <div className="task-card-note">
                   Эту задачу поставил не вы — менять её может только постановщик. Написать в обсуждение можно.
                 </div>
@@ -899,6 +908,7 @@ export default function TaskModal({
               <ItemChat
                 kind="task"
                 itemId={task.id}
+                readOnly={closed}
                 mentionCandidates={mentionPeople([
                   authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name)),
                   ...participants.map((p) => p.name),

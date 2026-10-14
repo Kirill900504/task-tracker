@@ -131,7 +131,10 @@ function lastDayBefore(ref: Date, day: number, month: number | null): string | n
 // accepted before the review route started writing `status: done` together
 // with the acceptance still carry `in_progress` — 13.10.2026 such a task
 // (№50, accepted 18.09) sat on the phone as «просрочено 14 дн.».
-function isClosed(task: Task): boolean {
+// Exported for the card: a closed task is read-only there (14.10.2026,
+// «запрети любые изменения или дополнения уже закрытых событий»), and
+// "closed" has to mean the same thing on the board and in the card.
+export function isClosed(task: Pick<Task, "status" | "recur" | "approvalState">): boolean {
   return task.status === "done" || (task.recur === "none" && task.approvalState === "accepted");
 }
 

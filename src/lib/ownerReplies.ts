@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { closedReply, itemClosed } from "@/lib/closedItem";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { encodeCallback, type CallbackAction, type ColleagueRow } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
@@ -382,6 +383,9 @@ export async function handleOwnerCallback(
       .maybeSingle();
     const item = data as { id: string; title: string } | null;
     if (!item) return { toast: action.kind === "task" ? "Эта задача не найдена" : "Эта встреча не найдена" };
+    // Закрытое — только просмотр (lib/closedItem): адрес для реплики не
+    // запоминается вовсе, иначе следующий текст ушёл бы в закрытое.
+    if (await itemClosed(admin, action.kind, item.id)) return { toast: "Уже закрыта", say: closedReply(action.kind, item.title) };
     return {
       toast: "Пишите — отправлю в обсуждение",
       say: `💬 Следующее сообщение уйдёт в обсуждение ${action.kind === "task" ? "задачи" : "встречи"} «${item.title}».\nЕго увидят все участники.`,

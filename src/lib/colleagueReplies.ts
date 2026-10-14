@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { closedReply, itemClosed, taskRowClosed } from "@/lib/closedItem";
 import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
 import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, rescheduleButtons, RESCHEDULE_OPTIONS, taskButtons } from "@/lib/colleagues";
@@ -962,6 +963,10 @@ export async function handleColleagueFile(
   const aim = await takeAim(admin, colleague.id);
   const target = aim ?? (await guessOpenTask(admin, colleague));
   if (!target) return null;
+  // Закрытое — только просмотр, файл туда не кладётся (lib/closedItem).
+  if (await itemClosed(admin, target.kind, target.id)) {
+    return { reply: closedReply(target.kind, await titleOf(admin, target.kind, target.id)) };
+  }
 
   // Путь начинается с пространства: по первому сегменту права корзины и
   // решают, чей это файл (миграция 0020).
@@ -1008,15 +1013,16 @@ async function guessOpenTask(
 ): Promise<{ kind: "task"; id: string } | null> {
   const { data } = await admin
     .from("task_participants")
-    .select("task_id, created_at, tasks(status, deleted_at)")
+    .select("task_id, created_at, tasks(status, recur, approval_state, deleted_at)")
     .eq("assignee_id", colleague.id)
     .eq("user_id", colleague.user_id)
     .order("created_at", { ascending: false })
     .limit(10);
-  type Row = { task_id: string; tasks: { status: string | null; deleted_at: string | null } | { status: string | null; deleted_at: string | null }[] | null };
+  type T = { status: string | null; recur: string | null; approval_state: string | null; deleted_at: string | null };
+  type Row = { task_id: string; tasks: T | T[] | null };
   for (const r of ((data as unknown as Row[]) || [])) {
     const t = Array.isArray(r.tasks) ? r.tasks[0] : r.tasks;
-    if (t && !t.deleted_at && t.status !== "done") return { kind: "task", id: r.task_id };
+    if (t && !t.deleted_at && !taskRowClosed(t)) return { kind: "task", id: r.task_id };
   }
   return null;
 }
@@ -1039,6 +1045,9 @@ async function writeToDiscussion(
   const table = kind === "task" ? "tasks" : "meetings";
   const { data: item } = await admin.from(table).select("title").eq("id", itemId).maybeSingle();
   const title = (item as { title: string } | null)?.title || "";
+  // Закрытое — только просмотр (lib/closedItem): бот пишет служебным
+  // ключом, и политика базы его не остановит.
+  if (await itemClosed(admin, kind, itemId)) return { reply: closedReply(kind, title) };
 
   const { data: inserted, error } = await admin
     .from("item_comments")

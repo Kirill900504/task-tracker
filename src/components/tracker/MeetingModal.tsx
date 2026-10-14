@@ -623,7 +623,7 @@ export default function MeetingModal({
                             <span className="fact-note meeting-recur-note">
                               {" "}
                               · {RECUR_LABELS[meeting.recur].toLowerCase()}
-                              {canEdit && (
+                              {canEdit && !resolved && (
                                 <button
                                   type="button"
                                   className="link-btn"
@@ -704,6 +704,10 @@ export default function MeetingModal({
                 itemId={meeting.id}
                 mentionCandidates={mentionPeople([organizer, ...participants])}
                 onAcceptProposal={canEdit && !resolved ? onAcceptProposal : undefined}
+                // Встреча с исходом — только просмотр, и обсуждение тоже
+                // (14.10.2026, как у закрытой задачи). Назад её возвращает
+                // «Вернуть в план» у организатора.
+                readOnly={!!resolved}
               />
             </div>
           </div>

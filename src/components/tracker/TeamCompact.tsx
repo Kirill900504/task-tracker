@@ -37,6 +37,7 @@ export default function TeamCompact({
   onCloseUnfulfilled,
   onAcceptReschedule,
   onRejectReschedule,
+  closed = false,
 }: {
   // Нужен документам к решению: они ложатся в обсуждение задачи
   // (lib/answerFiles).
@@ -52,6 +53,9 @@ export default function TeamCompact({
   onCloseUnfulfilled: (comment: string) => void | Promise<void>;
   onAcceptReschedule: (participantId: string, date: string) => void;
   onRejectReschedule: (participantId: string) => void;
+  // Закрытая задача — только просмотр: просьба о переносе срока у неё уже
+  // ни о чём, остаётся одно «Открыть заново».
+  closed?: boolean;
 }) {
   const ask = useAsk();
   const identity = useWorkspaceRole();
@@ -156,7 +160,7 @@ export default function TeamCompact({
     }
   }
 
-  const asks = participants.filter((p) => p.rescheduleTo || p.rescheduleReason);
+  const asks = closed ? [] : participants.filter((p) => p.rescheduleTo || p.rescheduleReason);
   // Своя задача: единственный исполнитель — тот, кто её поставил. Приёмки у
   // самого себя нет — сервер закрывает такую задачу сам, как только пришёл
   // отчёт (closeIfEveryoneReported). Но строки участия доезжают сюда раньше,

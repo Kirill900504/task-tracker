@@ -72,6 +72,9 @@ export default function ChatMessageMenu({
         // мерить), но невидимо — иначе виден прыжок из угла на место.
         style={pos ? { left: pos.left, top: pos.top } : { left: 0, top: 0, visibility: "hidden" }}
       >
+        {/* Без набора реакций (закрытое обсуждение) строки нет вовсе:
+            пустая полоса над «Копировать» читается как недогруженная. */}
+        {emojis.length > 0 && (
         <div className="chat-menu-emojis">
           {emojis.map((emoji) => (
             <button
@@ -88,6 +91,7 @@ export default function ChatMessageMenu({
             </button>
           ))}
         </div>
+        )}
         {actions.length > 0 && (
           <div className="chat-menu-actions">
             {actions.map((a) => (

@@ -3169,6 +3169,14 @@
   .chat-menu-item.danger:hover{background:var(--high-bg); color:var(--high);}
 
   .chat-composer{display:flex; gap:8px; align-items:flex-end; margin-top:12px; position:relative;}
+  /* Закрытое событие: на месте поля — строка, а не пустота (ItemChat readOnly). */
+  .chat-closed{
+    margin-top:12px; padding:10px 14px; border-radius:12px;
+    border:1px dashed var(--line-soft); color:var(--ink-soft);
+    font-size:13px; text-align:center;
+  }
+  .chat-reaction:disabled{cursor:default;}
+  .chat-reaction:disabled:not(.mine):hover{border-color:var(--line-soft);}
   .chat-composer textarea{
     flex:1; min-height:42px; resize:vertical; padding:10px 12px; font-size:13.5px;
     font-family:var(--sans); color:var(--ink); background:var(--bg);
