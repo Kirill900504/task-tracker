@@ -1118,6 +1118,43 @@ test("закрытие встречи из списка спрашивает и�
   await expect(page.locator("#mResult")).toHaveCount(0);
 });
 
+// Задача по итогам встречи открывается с теми, кто был на встрече
+// (14.10.2026: «тут лучше сразу проставлять участников задачи, как во
+// встрече автоматом»). Форма открывалась пустой, и людей перебирали заново.
+// Тот, кто ставит задачу, на неё не встаёт — он постановщик.
+test("задача по итогам встречи приходит с участниками встречи", async ({ page }) => {
+  const title = `E2E встреча-люди ${Date.now()}`;
+
+  await login(page);
+  await page.click("#addMeetingBtn");
+  await page.fill("#mTitle", title);
+  // Не своя строка «(я)»: себя на задачу по итогу не ставят, и проверка
+  // смотрела бы на человека, которого там и не должно быть.
+  const pick = page.locator("#mParticipants .participant-chip", { hasNotText: "(я)" }).first();
+  await expect(pick).toBeVisible({ timeout: 20_000 });
+  const participant = (await pick.textContent())?.trim() || "";
+  expect(participant).not.toBe("");
+  await pick.click();
+  await expect(pick).toHaveClass(/selected/);
+  await pickFreeSlot(page);
+  await page.click("#meetingSaveBtn");
+  const chip = page.locator(".meeting-chip", { hasText: title });
+  await expect(chip).toBeVisible();
+  await waitForSaved(page);
+
+  await chip.locator(".meeting-act.success").click();
+  await page.fill("#askInput", "Договорились, делаем");
+  await page.click("#askOkBtn");
+  await expect(page.locator(".ask-modal")).toContainText("Поставить задачу по итогам встречи?");
+  await page.click("#askOkBtn");
+
+  const person = page.locator("#fPeople .participant-chip", { hasText: participant });
+  await expect(person).toHaveClass(/selected/, { timeout: 10_000 });
+  await expect(person).toHaveClass(/role-executor/);
+  await expect(page.locator("#fPeople .participant-chip.selected", { hasText: "(я)" })).toHaveCount(0);
+  await page.click("#cancelBtn");
+});
+
 // Люди в задаче: нажал — выбрал роль, нажал второй раз — снял.
 //
 // Так же, как у участников встречи, где кнопка просто включает и выключает
