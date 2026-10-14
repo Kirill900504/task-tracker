@@ -256,14 +256,25 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .tperson.role-watcher .pbadge-name{color:var(--ink-soft); font-weight:600;}
 
 /* Окно «Добавить в задачу» поверх окна задачи. */
-.modal.add-people{max-width:560px;}
+/* Wide enough that the longest name and all three roles share one line:
+   with 560px a long surname («Витковский», «Мамакова») pushed the roles
+   onto a second line, and the list read as broken. The row is a grid, not
+   flex-wrap, so a name that still does not fit is cut with an ellipsis
+   instead of tearing the row (same rule as .team-row). */
+.modal.add-people{max-width:700px;}
 .add-people-hint{margin:-6px 0 10px;}
 .add-people .people-search{width:100%; margin-bottom:10px;}
 .add-people-list{display:flex; flex-direction:column; gap:4px; max-height:min(52vh, 460px); overflow-y:auto; overscroll-behavior:contain; margin:0 -6px; padding:0 6px;}
-.add-people-row{display:flex; align-items:center; gap:10px; justify-content:space-between; padding:6px 8px; border-radius:10px; flex-wrap:wrap;}
+.add-people-row{display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:6px 8px; border-radius:10px;}
 .add-people-row:hover{background:rgba(255,255,255,.03);}
-.add-people-name{display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px; min-width:0;}
-.add-people-roles{display:inline-flex; gap:6px; flex-wrap:wrap;}
+.add-people-name{display:flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px; min-width:0; white-space:nowrap;}
+.add-people-label{overflow:hidden; text-overflow:ellipsis;}
+.add-people-name .pbadge-dot{flex:none;}
+.add-people-roles{display:inline-flex; gap:6px; flex-wrap:nowrap;}
+@media (max-width:799px){
+  .add-people-row{grid-template-columns:1fr;}
+  .add-people-roles{flex-wrap:wrap;}
+}
 .add-people-roles .participant-chip{padding:5px 10px; font-size:12px;}
 .role-pick-executor:hover{border-color:var(--accent); color:var(--accent);}
 .add-people-empty{padding:14px 8px; color:var(--ink-soft); font-size:13px;}

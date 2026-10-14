@@ -100,7 +100,7 @@ export default function AddPeopleSheet({
                   <span className="pbadge-dot" style={{ background: colorOf(withoutSelfMark(p.name)) }} aria-hidden>
                     {initialsOf(p.name)}
                   </span>
-                  {withoutSelfMark(p.name)}
+                  <span className="add-people-label">{withoutSelfMark(p.name)}</span>
                 </span>
                 <span className="add-people-roles">
                   {ROLES.map((r) => (
