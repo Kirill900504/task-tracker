@@ -1,10 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { ownerMenu, ownerNav, peopleLoadReply, type OwnerTaskRow } from "./ownerQueries";
+import { effectiveApproval, ownerMenu, ownerNav, peopleLoadReply, type OwnerTaskRow } from "./ownerQueries";
 import { addDays, EXTEND_OPTIONS, extendButtons } from "./ownerReplies";
 import { resolveWhen, startNewTask, whenButtons } from "./ownerNewTask";
 
-function task(extra: Partial<OwnerTaskRow> = {}): OwnerTaskRow {
-  return { id: "t1", title: "Задача", assignee: "Аня", deadline: null, status: "in_progress", approvalState: "open", priority: "med", ...extra };
+function task(extra: Partial<OwnerTaskRow> & { recurKind?: string } = {}): OwnerTaskRow {
+  const { recurKind = "none", ...rest } = extra;
+  const merged = { id: "t1", title: "Задача", assignee: "Аня", deadline: null as string | null, status: "in_progress", approvalState: "open", priority: "med", ...rest };
+  return {
+    ...merged,
+    row: rest.row ?? {
+      id: merged.id, title: merged.title, assignee: merged.assignee, status: merged.status || "", deadline: merged.deadline,
+      recur: recurKind, recur_weekday: null, recur_weekdays: null, recur_monthday: null, recur_year_day: null, recur_year_month: null,
+    },
+  };
 }
 
 describe("меню владельца", () => {
@@ -108,5 +116,32 @@ describe("мастер «Поручить»", () => {
     expect(labels).toContain("Сегодня");
     expect(labels).toContain("До пятницы");
     expect(labels).toContain("Без срока");
+  });
+});
+
+// Повторяющаяся задача не бывает просроченной — ни на доске, ни в боте
+// (taskLogic.overdueOn). 14.10.2026 ежедневная #75 с датой первого круга
+// 24.09 висела в боте «просроченной», а на доске — нет.
+describe("просрочка в боте — по правилу доски", () => {
+  it("ежедневная задача с давней датой не просрочена", () => {
+    const reply = peopleLoadReply([task({ deadline: "2026-09-24", recurKind: "daily" })], "2026-10-14");
+    expect(reply.text).not.toContain("просроч");
+  });
+  it("разовая с прошедшим сроком — просрочена", () => {
+    const reply = peopleLoadReply([task({ deadline: "2026-09-24" })], "2026-10-14");
+    expect(reply.text).toContain("просроч");
+  });
+});
+
+describe("«на приёмке» в боте — по правилу доски", () => {
+  it("ответили все исполнители — приёмка, даже без отметки", () => {
+    expect(effectiveApproval("open", [{ role: "executor", done_at: "x", declined_at: null }, { role: "coexecutor", done_at: null, declined_at: null }])).toBe("awaiting_review");
+  });
+  it("ответили не все — нет", () => {
+    expect(effectiveApproval("open", [{ role: "executor", done_at: "x", declined_at: null }, { role: "executor", done_at: null, declined_at: null }])).toBe("open");
+  });
+  it("возвращённая остаётся в работе, исполнителей нет — нет", () => {
+    expect(effectiveApproval("returned", [{ role: "executor", done_at: "x", declined_at: null }])).toBe("returned");
+    expect(effectiveApproval("open", [])).toBe("open");
   });
 });

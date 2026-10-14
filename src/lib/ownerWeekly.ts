@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { withoutSelfMark } from "@/lib/actorName";
 import { sortNames } from "@/lib/peopleOrder";
-import { dateStr } from "@/lib/taskLogic";
+import { dateStr, overdueOn } from "@/lib/taskLogic";
 
 // Пятничный отчёт владельцу: неделя всего пространства, по людям.
 //
@@ -39,6 +39,8 @@ export type WTask = {
   updatedAt: string;
   status: string;
   deadline: string;
+  // Повтор — ради правила просрочки доски (taskLogic.overdueOn).
+  recur?: string;
   completedAt: string | null;
 };
 
@@ -280,7 +282,7 @@ export function buildOwnerWeekly(input: WeeklyInput, now: Date): OwnerWeekly {
       active: active.length,
       created: input.tasks.filter((t) => inWeek(t.createdAt)).length,
       closed: closedThisWeek.length,
-      overdue: active.filter((t) => t.deadline && t.deadline < today).length,
+      overdue: active.filter((t) => overdueOn(t, today)).length,
       meetingsHeld: held.length,
       meetingsNoRecap: noRecap.length,
       ideas: ideasThisWeek.length,
@@ -429,7 +431,7 @@ export async function loadOwnerWeekly(admin: SupabaseClient, ownerId: string): P
     admin.from("workspace_members").select("member_id, assignee_id").eq("owner_id", ownerId),
     admin
       .from("tasks")
-      .select("id, title, created_by, created_at, updated_at, status, deadline, completed_at")
+      .select("id, title, created_by, created_at, updated_at, status, deadline, completed_at, recur")
       .eq("user_id", ownerId)
       .is("deleted_at", null),
     admin
@@ -484,6 +486,7 @@ export async function loadOwnerWeekly(admin: SupabaseClient, ownerId: string): P
     status: string | null;
     deadline: string | null;
     completed_at: string | null;
+    recur: string | null;
   };
   type PartRow = {
     task_id: string;
@@ -507,6 +510,7 @@ export async function loadOwnerWeekly(admin: SupabaseClient, ownerId: string): P
       updatedAt: t.updated_at || t.created_at,
       status: t.status || "in_progress",
       deadline: t.deadline || "",
+      recur: t.recur || "none",
       completedAt: t.completed_at,
     })),
     parts: ((parts.data || []) as PartRow[])

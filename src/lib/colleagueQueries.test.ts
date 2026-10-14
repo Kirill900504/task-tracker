@@ -136,3 +136,16 @@ describe("меню по роли", () => {
     expect(actions(reply)).not.toContain("olist");
   });
 });
+
+describe("справка по роли", () => {
+  function adminWith(member: { status: string; member_id: string | null } | null) {
+    const chain = { select: () => chain, eq: () => chain, maybeSingle: async () => ({ data: member, error: null }) };
+    return { from: () => chain } as unknown as Parameters<typeof replyForColleague>[0];
+  }
+  it("постановщику — его справка, получателю — своя", async () => {
+    const boss = await replyForColleague(adminWith({ status: "active", member_id: "u" }), { id: "a", name: "Михаил Котов" }, "help", TODAY);
+    const plain = await replyForColleague(adminWith(null), { id: "a", name: "Юрий Черкашин" }, "help", TODAY);
+    expect(boss.text).not.toBe(plain.text);
+    expect((boss.buttons || []).flat().map((b) => decodeCallback(b.data)?.action)).toContain("omenu");
+  });
+});

@@ -3,7 +3,7 @@ import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { encodeCallback, type CallbackAction, type ColleagueRow } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
 import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
-import { ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, personReply, type OwnerReply } from "@/lib/ownerQueries";
+import { effectiveApproval, ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, personReply, type OwnerReply } from "@/lib/ownerQueries";
 import { applyReview } from "@/lib/reviewWork";
 import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
@@ -183,7 +183,12 @@ export async function ownerTaskCard(admin: SupabaseClient, actor: BotActor, task
   const declined = people.filter((p) => p.declinedAt && !p.doneAt);
   for (const p of declined) lines.push(`⛔ ${p.name} не может: ${p.declineReason || "без причины"}`);
 
-  const waiting = task.approval_state === "awaiting_review";
+  // Тем же правилом, что доска и списки бота (ownerQueries.effectiveApproval).
+  const waiting =
+    effectiveApproval(
+      task.approval_state,
+      people.map((p) => ({ role: p.role, done_at: p.doneAt, declined_at: p.declinedAt })),
+    ) === "awaiting_review";
   if (waiting) lines.push("", "Отчитались все — задача ждёт вашего решения.");
 
   // Закрытая задача отвечает на другой вопрос, и кнопки у неё другие.

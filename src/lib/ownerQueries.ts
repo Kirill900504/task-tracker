@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
+import { isDueToday, moscowNow, overdueOn, type TaskRow } from "@/lib/taskLogic";
 import { actorScope, authorFilter, type BotActor } from "@/lib/botActor";
 import { botMenu, navRow } from "@/lib/botMenu";
 
@@ -41,6 +42,10 @@ export type OwnerTaskRow = {
   status: string | null;
   approvalState: string | null;
   priority: string | null;
+  // Повтор — ради одного правила просрочки и «сегодня» с трекером
+  // (taskLogic.overdueOn / isDueToday): без него ежедневная задача с
+  // давней датой первого круга читалась бы просроченной.
+  row: TaskRow;
 };
 
 type TaskRaw = {
@@ -51,12 +56,35 @@ type TaskRaw = {
   status: string | null;
   approval_state: string | null;
   priority: string | null;
+  recur: string | null;
+  recur_weekday: number | null;
+  recur_weekdays: number[] | null;
+  recur_monthday: number | null;
+  recur_year_day: number | null;
+  recur_year_month: number | null;
+  task_participants?: { role: string; done_at: string | null; declined_at: string | null }[] | null;
 };
+
+// «На приёмке» — тем же правилом, что столбец доски (lib/kanban.columnOf):
+// отметка постановщика ИЛИ «ответили все исполнители». Только отметки
+// мало: её ставит ответ через маршрут, а исполнителя, который так и не
+// ответил, можно снять с задачи — остальные тогда «ответили все», доска
+// показывает приёмку, а бот её не видел. Принятая и возвращённая задачи
+// своё слово уже сказали.
+export function effectiveApproval(
+  approval: string | null,
+  parts: { role: string; done_at: string | null; declined_at: string | null }[],
+): string | null {
+  if (approval === "awaiting_review" || approval === "accepted" || approval === "returned") return approval;
+  const executors = parts.filter((p) => p.role === "executor");
+  if (executors.length && executors.every((p) => p.done_at || p.declined_at)) return "awaiting_review";
+  return approval;
+}
 
 export async function ownerTasks(admin: SupabaseClient, actor: BotActor): Promise<OwnerTaskRow[]> {
   const { data } = await admin
     .from("tasks")
-    .select("id, title, assignee, deadline, status, approval_state, priority")
+    .select("id, title, assignee, deadline, status, approval_state, priority, recur, recur_weekday, recur_weekdays, recur_monthday, recur_year_day, recur_year_month, task_participants(role, done_at, declined_at)")
     .match(actorScope(actor)).or(authorFilter(actor))
     .is("deleted_at", null)
     .neq("status", "done")
@@ -67,8 +95,21 @@ export async function ownerTasks(admin: SupabaseClient, actor: BotActor): Promis
     assignee: t.assignee || "",
     deadline: t.deadline,
     status: t.status,
-    approvalState: t.approval_state,
+    approvalState: effectiveApproval(t.approval_state, t.task_participants || []),
     priority: t.priority,
+    row: {
+      id: t.id,
+      title: t.title,
+      assignee: t.assignee || "",
+      status: t.status || "",
+      deadline: t.deadline,
+      recur: t.recur || "none",
+      recur_weekday: t.recur_weekday,
+      recur_weekdays: t.recur_weekdays,
+      recur_monthday: t.recur_monthday,
+      recur_year_day: t.recur_year_day,
+      recur_year_month: t.recur_year_month,
+    },
   }));
 }
 
@@ -141,9 +182,15 @@ export function assignerHelp(): string {
 
 function mark(t: OwnerTaskRow, today: string): string {
   if (t.approvalState === "awaiting_review") return "🔍";
-  if (t.deadline && t.deadline < today) return "⚠";
-  if (t.deadline === today) return "📌";
+  if (overdueOn(t.row, today)) return "⚠";
+  if (dueToday(t, today)) return "📌";
   return "•";
+}
+
+// «На сегодня» — разовая с этим сроком или повторяющаяся, чей день сегодня;
+// тем же правилом, что трекер (taskLogic.isDueToday).
+function dueToday(t: OwnerTaskRow, today: string): boolean {
+  return isDueToday(t.row, moscowNow(), today);
 }
 
 function short(title: string, limit = 28): string {
@@ -156,7 +203,7 @@ function taskList(title: string, tasks: OwnerTaskRow[], today: string, empty: st
   const lines = shown.map((t) => {
     const bits: string[] = [];
     if (t.assignee) bits.push(t.assignee);
-    if (t.deadline) bits.push((t.deadline < today ? "просрочено " : "до ") + fmtDate(t.deadline));
+    if (t.deadline && t.row.recur === "none") bits.push((overdueOn(t.row, today) ? "просрочено " : "до ") + fmtDate(t.deadline));
     return `${mark(t, today)} ${t.title}${bits.length ? "\n   " + bits.join(" · ") : ""}`;
   });
   const more = tasks.length > PAGE ? `\n\nИ ещё ${tasks.length - PAGE} — они в трекере.` : "";
@@ -180,7 +227,7 @@ export function peopleLoadReply(tasks: OwnerTaskRow[], today: string, ids: Recor
     if (t.approvalState === "awaiting_review") row.review++;
     else {
       row.open++;
-      if (t.deadline && t.deadline < today) row.overdue++;
+      if (overdueOn(t.row, today)) row.overdue++;
     }
     byName.set(name, row);
   }
@@ -231,7 +278,7 @@ export async function ownerListReply(
   ]);
 
   if (which === "today") {
-    const due = tasks.filter((t) => t.deadline && t.deadline <= today);
+    const due = tasks.filter((t) => overdueOn(t.row, today) || dueToday(t, today));
     const meetings = todayMeetings.filter((m) => m.date === today);
     const reply = taskList("📌 На сегодня", due, today, "На сегодня ничего не назначено 🎉");
     if (!meetings.length) return reply;
@@ -239,7 +286,7 @@ export async function ownerListReply(
     return { text: reply.text + `\n\nВстречи сегодня:\n${lines.join("\n")}`, buttons: reply.buttons };
   }
   if (which === "overdue") {
-    return taskList("⚠ Просрочено", tasks.filter((t) => t.deadline && t.deadline < today), today, "Просроченного нет 👍");
+    return taskList("⚠ Просрочено", tasks.filter((t) => overdueOn(t.row, today)), today, "Просроченного нет 👍");
   }
   if (which === "review") {
     // Самое ценное для постановщика: по этим задачам от него ждут решения,

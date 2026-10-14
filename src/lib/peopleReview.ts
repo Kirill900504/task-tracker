@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { overdueOn } from "@/lib/taskLogic";
 
 // Понедельничная сводка по людям, а не по задачам.
 //
@@ -20,7 +21,7 @@ import { isSelfAssignee } from "@/lib/trackerRows";
 export async function buildParticipation(admin: SupabaseClient, userId: string): Promise<ParticipationRow[]> {
   const { data: rows } = await admin
     .from("task_participants")
-    .select("created_at, accepted_at, done_at, declined_at, assignees(name), tasks(deadline, status, deleted_at)")
+    .select("created_at, accepted_at, done_at, declined_at, assignees(name), tasks(deadline, status, deleted_at, recur)")
     .eq("user_id", userId)
     .eq("role", "executor");
 
@@ -30,7 +31,7 @@ export async function buildParticipation(admin: SupabaseClient, userId: string):
     done_at: string | null;
     declined_at: string | null;
     assignees: { name: string } | { name: string }[] | null;
-    tasks: { deadline: string | null; status: string | null; deleted_at: string | null } | null;
+    tasks: { deadline: string | null; status: string | null; deleted_at: string | null; recur: string | null } | null;
   };
 
   const { data: members } = await admin
@@ -65,6 +66,7 @@ export async function buildParticipation(admin: SupabaseClient, userId: string):
         declinedAt: r.declined_at,
         deadline: r.tasks!.deadline || "",
         status: r.tasks!.status || "in_progress",
+        recur: r.tasks!.recur || "none",
       };
     });
 }
@@ -80,6 +82,8 @@ export type ParticipationRow = {
   // Срок самой задачи и её состояние.
   deadline: string;
   status: string;
+  // Повтор — ради правила просрочки доски (taskLogic.overdueOn).
+  recur?: string;
 };
 
 export type PersonStats = {
@@ -150,7 +154,7 @@ export function personStats(rows: ParticipationRow[], now: Date): PersonStats[] 
       name,
       direction: list.find((r) => r.direction)?.direction || "",
       open: openRows.length,
-      overdue: openRows.filter((r) => r.deadline && r.deadline < today).length,
+      overdue: openRows.filter((r) => overdueOn(r, today)).length,
       silent: openRows.filter(
         (r) => !r.acceptedAt && !r.declinedAt && Date.parse(r.createdAt) < now.getTime() - DAY,
       ).length,

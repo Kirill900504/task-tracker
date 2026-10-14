@@ -2,11 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { signInLink } from "@/lib/recoveryLink";
 import { miniAppUrl, trackerUrl } from "@/lib/trackerUrl";
 import { ensureCabinet } from "@/lib/cabinet";
+import { assignerHelp } from "@/lib/ownerQueries";
 import type { BotButton } from "@/lib/botTransport";
 import { encodeCallback, meetingButtons, taskButtons } from "@/lib/colleagues";
 import { openTaskChoices, openVoteChoices } from "@/lib/answerRules";
 import { botMenu, navRow } from "@/lib/botMenu";
 import { fmtDate } from "@/lib/taskDisplay";
+import { isDueToday, moscowNow, overdueOn, type TaskRow as LogicRow } from "@/lib/taskLogic";
 import { withoutSelfMark } from "@/lib/actorName";
 
 // О чём коллега может спросить бота.
@@ -88,6 +90,12 @@ type TaskRow = {
     approval_state: string | null;
     approval_comment: string | null;
     deleted_at: string | null;
+    recur: string | null;
+    recur_weekday: number | null;
+    recur_weekdays: number[] | null;
+    recur_monthday: number | null;
+    recur_year_day: number | null;
+    recur_year_month: number | null;
   } | null;
 };
 
@@ -104,6 +112,9 @@ export type MyTask = {
   declinedAt: string | null;
   approvalState: string;
   approvalComment: string;
+  // Повтор — ради того же правила просрочки и «сегодня», что у доски
+  // (taskLogic). Без строки задача считается разовой.
+  row?: LogicRow;
 };
 
 // Открытые задачи этого человека. «Открытая» — та, что ещё чего-то от него
@@ -114,7 +125,7 @@ export async function myTasks(admin: SupabaseClient, assigneeId: string): Promis
     .from("task_participants")
     .select(
       "id, role, accepted_at, done_at, declined_at, " +
-        "tasks(id, title, description, deadline, priority, status, approval_state, approval_comment, deleted_at)",
+        "tasks(id, title, description, deadline, priority, status, approval_state, approval_comment, deleted_at, recur, recur_weekday, recur_weekdays, recur_monthday, recur_year_day, recur_year_month)",
     )
     .eq("assignee_id", assigneeId);
 
@@ -133,6 +144,19 @@ export async function myTasks(admin: SupabaseClient, assigneeId: string): Promis
       declinedAt: r.declined_at,
       approvalState: r.tasks!.approval_state || "open",
       approvalComment: r.tasks!.approval_comment || "",
+      row: {
+        id: r.tasks!.id,
+        title: r.tasks!.title,
+        assignee: "",
+        status: r.tasks!.status || "",
+        deadline: r.tasks!.deadline,
+        recur: r.tasks!.recur || "none",
+        recur_weekday: r.tasks!.recur_weekday,
+        recur_weekdays: r.tasks!.recur_weekdays,
+        recur_monthday: r.tasks!.recur_monthday,
+        recur_year_day: r.tasks!.recur_year_day,
+        recur_year_month: r.tasks!.recur_year_month,
+      },
     }))
     .sort((a, b) => (a.deadline || "9999-99-99").localeCompare(b.deadline || "9999-99-99"));
 }
@@ -185,12 +209,21 @@ function taskButton(t: MyTask, mark: string): BotButton {
 // Значок состояния. Экспортирован вместе со сборкой списка ниже: вся
 // логика «что человек увидит» проверяется на голых данных, без базы — тот
 // же приём, что у экрана руководителя.
+// Просрочка и «сегодня» — правилом доски (taskLogic), а не голой датой:
+// повторяющаяся задача не бывает просроченной.
+function myOverdue(t: MyTask, today: string): boolean {
+  return overdueOn({ deadline: t.deadline, recur: t.row?.recur }, today);
+}
+function myDueToday(t: MyTask, today: string): boolean {
+  return t.row ? isDueToday(t.row, moscowNow(), today) : t.deadline === today;
+}
+
 export function markFor(t: MyTask, today: string): string {
   if (t.declinedAt) return "⛔";
   if (t.approvalState === "returned") return "↩";
   if (t.doneAt) return "🏁";
-  if (t.deadline && t.deadline < today) return "⚠";
-  if (t.deadline === today) return "●";
+  if (myOverdue(t, today)) return "⚠";
+  if (myDueToday(t, today)) return "●";
   if (t.acceptedAt) return "•";
   return "🆕";
 }
@@ -205,7 +238,7 @@ export function listReply(title: string, tasks: MyTask[], today: string, empty: 
   const shown = tasks.slice(0, PAGE);
   const lines = shown.map((t) => {
     const bits: string[] = [];
-    if (t.deadline) bits.push(t.deadline < today ? "просрочено " + fmtDate(t.deadline) : "до " + fmtDate(t.deadline));
+    if (t.deadline && (t.row?.recur ?? "none") === "none") bits.push(myOverdue(t, today) ? "просрочено " + fmtDate(t.deadline) : "до " + fmtDate(t.deadline));
     if (t.role === "coexecutor") bits.push("соисполнитель");
     if (t.role === "watcher") bits.push("наблюдатель");
     if (t.approvalState === "returned") bits.push("вернули на доработку");
@@ -301,7 +334,13 @@ export async function replyForColleague(
   today: string,
 ): Promise<BotReply> {
   if (kind === "menu") return botMenu((await canAssign(admin, colleague)) ? "assigner" : "recipient");
-  if (kind === "help") return { text: colleagueCommandsHelp(colleague.name), buttons: navButtons() };
+  // Справка — тоже по человеку, а не по кнопке: «❓ Помощь» получателя
+  // нажимают и постановщики, и им нужна своя справка с «Поручить», «Люди»
+  // и приёмкой (см. canAssign выше).
+  if (kind === "help") {
+    if (await canAssign(admin, colleague)) return { text: assignerHelp(), buttons: navRow("assigner") };
+    return { text: colleagueCommandsHelp(colleague.name), buttons: navButtons() };
+  }
   if (kind === "enter") return signInReply(admin, colleague.id);
   if (kind === "app") return appReply();
 
@@ -332,7 +371,7 @@ export async function replyForColleague(
   const tasks = await myTasks(admin, colleague.id);
 
   if (kind === "today") {
-    const due = tasks.filter((t) => t.deadline && t.deadline <= today && !t.doneAt && !t.declinedAt);
+    const due = tasks.filter((t) => (myOverdue(t, today) || myDueToday(t, today)) && !t.doneAt && !t.declinedAt);
     const meetings = await myMeetings(admin, colleague.id, today);
     const todayMeetings = meetings.filter((m) => m.date === today);
     if (!due.length && !todayMeetings.length) return { text: "На сегодня за вами ничего не числится 🎉", buttons: navButtons() };
@@ -346,7 +385,7 @@ export async function replyForColleague(
   }
 
   if (kind === "overdue") {
-    const overdue = tasks.filter((t) => t.deadline && t.deadline < today && !t.doneAt && !t.declinedAt);
+    const overdue = tasks.filter((t) => myOverdue(t, today) && !t.doneAt && !t.declinedAt);
     return listReply("⚠ Просрочено", overdue, today, "Просроченного за вами нет 👍");
   }
 
@@ -380,7 +419,7 @@ export async function taskCard(
 ): Promise<BotReply | null> {
   const { data } = await admin
     .from("task_participants")
-    .select("role, accepted_at, done_at, done_comment, declined_at, decline_reason, reschedule_to, reschedule_reason, tasks(id, title, description, deadline, priority, status, approval_state, approval_comment, deleted_at, user_id)")
+    .select("role, accepted_at, done_at, done_comment, declined_at, decline_reason, reschedule_to, reschedule_reason, tasks(id, title, description, deadline, priority, status, approval_state, approval_comment, deleted_at, user_id, recur)")
     .eq("assignee_id", colleague.id)
     .eq("task_id", taskId)
     .maybeSingle();
@@ -404,6 +443,7 @@ export async function taskCard(
       approval_comment: string | null;
       deleted_at: string | null;
       user_id: string;
+      recur: string | null;
     } | null;
   };
 
@@ -416,7 +456,7 @@ export async function taskCard(
 
   const meta: string[] = [];
   if (task.deadline) {
-    meta.push(task.deadline < today && task.status !== "done" ? "⚠ просрочено: " + fmtDate(task.deadline) : "срок: " + fmtDate(task.deadline));
+    meta.push(overdueOn(task, today) ? "⚠ просрочено: " + fmtDate(task.deadline) : "срок: " + fmtDate(task.deadline));
   }
   if (row.role === "coexecutor") meta.push("вы соисполнитель");
   if (row.role === "watcher") meta.push("вы наблюдатель");

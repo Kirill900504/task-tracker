@@ -49,8 +49,23 @@ export function isDueToday(t: TaskRow, now: Date, today: string): boolean {
 }
 
 export function isOverdue(t: TaskRow, today: string): boolean {
+  return overdueOn(t, today);
+}
+
+// Просрочена ли задача — одно правило на трекер, бот, сводки и отчёты, и
+// оно же у доски (taskDisplay.isOverdue). Повторяющаяся задача
+// просроченной не бывает: её срок — дата первого круга, а не обещание.
+// 14.10.2026 нашлось, что бот, недельный отчёт и «Люди» считали просрочку
+// голым «срок раньше сегодня»: ежедневная задача #75 висела у них
+// «просроченной» с 24.09, а на доске — нет. Две правды об одном факте
+// разошлись, как расходятся всегда (CLAUDE.md). Принимает только три
+// поля, чтобы годиться любой выборке, а не одной TaskRow.
+export function overdueOn(
+  t: { status?: string | null; recur?: string | null; deadline?: string | null },
+  today: string,
+): boolean {
   if (t.status === "done") return false;
-  if (t.recur !== "none") return false;
+  if (t.recur && t.recur !== "none") return false;
   if (!t.deadline) return false;
-  return t.deadline < today;
+  return t.deadline.slice(0, 10) < today;
 }
