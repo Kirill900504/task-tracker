@@ -96,7 +96,8 @@ describe("один человек по одной задаче — одна ст
 
   it("подпись к документам ответа читается как «приложены документы»", () => {
     const text = composeDigest([r("declined", "Нет данных"), r("comment", "Документы к отказу")]);
-    expect(text).toContain("📎 приложены документы");
+    expect(text).toContain("   📎 приложены документы");
+    expect(text).not.toContain("💬 📎");
     expect(text).not.toContain("Документы к отказу");
   });
 

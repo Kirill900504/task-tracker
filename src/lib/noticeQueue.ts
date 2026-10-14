@@ -188,7 +188,8 @@ function line(entry: DigestEntry): string {
   const who = entry.who || "Кто-то";
   const item = entry.item ? ` — ${taskRef({ title: entry.item, number: entry.item_number }, TITLE_LIMIT)}` : "";
   const what = entry.what ? `: ${clip(entry.what, WHAT_LIMIT)}` : "";
-  const notes = entry.notes.map((n) => `\n   💬 ${clip(n, WHAT_LIMIT)}`).join("");
+  // У документов свой значок, и «💬 📎» подряд читалось как два события.
+  const notes = entry.notes.map((n) => `\n   ${n.startsWith("📎") ? "" : "💬 "}${clip(n, WHAT_LIMIT)}`).join("");
   return `• ${who}${item}${what}${notes}`;
 }
 
