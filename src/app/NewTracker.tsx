@@ -52,6 +52,7 @@ import { useSavedSetting } from "@/hooks/useSavedSetting";
 import { defaultDeadline } from "@/lib/newTask";
 import { OPEN_TASK_NUMBER_EVENT } from "@/lib/chatText";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
+import { useBusySlots } from "@/hooks/useBusySlots";
 import { withoutSelfMark } from "@/lib/actorName";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import MessengerLink from "@/components/tracker/MessengerLink";
@@ -109,6 +110,11 @@ export default function NewTracker() {
   );
   const { loading, fresh, loadError, tasks, meetings, ideas, sections, assignees, syncStatus, offline, actions } =
     useTrackerData({ enabled: ready, workspace });
+  // Для проверки занятости: мои встречи плюс чужие, сведённые базой к
+  // «кто занят и когда» (useBusySlots, миграция 0057). Чужих встреч
+  // целиком браузер больше не получает — ни у кого, у владельца тоже.
+  const busySlots = useBusySlots();
+  const busyMeetings = useMemo(() => [...meetings, ...busySlots], [meetings, busySlots]);
   // Мысль — личная заметка, а не общий поток: 23.09.2026 Кирилл сказал
   // прямо, что видеть чужие задачи и встречи никто не должен, «чтобы не
   // засорялся эфир» — и мысли этому правилу не следовали вовсе. `useTrackerData`
@@ -700,7 +706,7 @@ export default function NewTracker() {
           <CalendarPanel
             tasks={visibleTasks}
             meetings={visibleMeetings}
-            allMeetings={meetings}
+            allMeetings={busyMeetings}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             onRequestNewTask={(date) => setOpenTaskRequest({ deadline: date })}
@@ -727,7 +733,7 @@ export default function NewTracker() {
             meetings={visibleMeetings}
             // Только для проверки занятости слотов в форме встречи — см.
             // комментарий у пропа в самом MeetingsPanel.tsx.
-            allMeetings={meetings}
+            allMeetings={busyMeetings}
             assignees={assignees}
             selectedDay={selectedDate}
             actions={actions}

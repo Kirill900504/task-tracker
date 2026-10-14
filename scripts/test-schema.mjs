@@ -105,7 +105,7 @@ async function main() {
 
   console.log("\nЛюди и задача:");
   const { rows: assignees } = await db.query(
-    `insert into public.assignees (user_id, name) values ($1,'Аня'), ($1,'Борис'), ($1,'Вера')
+    `insert into public.assignees (user_id, name) values ($1,'Аня'), ($1,'Борис'), ($1,'Вера'), ($1,'Кирилл (я)')
      returning id, name`,
     [OWNER],
   );
@@ -203,6 +203,13 @@ async function main() {
     `insert into public.tasks (id, user_id, title, assignee, created_by) values ($1,$2,'Согласовать скидку','Кирилл (я)',$3)`,
     [keptId, OWNER, MANAGER_A],
   );
+  // Строку исполнителя-владельца заводит код поручения (assignWork):
+  // триггер 0024 строку «(я)» пропускает нарочно. Видит он задачу по ней —
+  // с 0057 у владельца нет «вижу всё пространство».
+  await db.query(
+    "insert into public.task_participants (user_id, task_id, assignee_id, role) values ($1,$2,$3,'executor')",
+    [OWNER, keptId, byName["Кирилл (я)"]],
+  );
   await as(db, OWNER, async () => {
     const { rows } = await db.query("select id from public.tasks where id = $1", [keptId]);
     check("владелец видит задачу, поставленную руководителем", rows.length === 1);
@@ -286,6 +293,63 @@ async function main() {
   await as(db, MANAGER_A, async () => {
     const { rows } = await db.query("select id from public.item_comments where item_id = $1", [authoredId]);
     check("а тот, кто ни автор, ни участник, — по-прежнему нет", rows.length === 0);
+  });
+
+  // 0057: владелец пространства — один из равных и в ЧТЕНИИ. До неё
+  // `user_id = auth.uid()` пускало его ко всему пространству целиком.
+  console.log("\nКаждый видит только своё (0057):");
+  await as(db, OWNER, async () => {
+    const { rows } = await db.query("select id from public.tasks where id = $1", [authoredId]);
+    check("владелец НЕ видит задачу, где он ни автор, ни участник", rows.length === 0);
+    const { rows: talk } = await db.query("select id from public.item_comments where item_id = $1", [authoredId]);
+    check("и переписку по ней не читает", talk.length === 0);
+    const { rows: parts } = await db.query("select id from public.task_participants where task_id = $1", [authoredId]);
+    check("и состав её не видит", parts.length === 0);
+  });
+
+  await db.query("insert into storage.buckets (id, name) values ('item-files','item-files') on conflict do nothing");
+  await db.query(
+    `insert into storage.objects (bucket_id, name, owner) values
+       ('item-files', $1, $3), ('item-files', $2, $4)`,
+    [`${OWNER}/task/${authoredId}/akt.pdf`, `${OWNER}/task/${taskId}/foto.jpg`, MANAGER_B, OWNER],
+  );
+  const filesAs = (who) =>
+    as(db, who, async () =>
+      (await db.query("select name from storage.objects where bucket_id = 'item-files'")).rows.map((r) => r.name.split("/")[2]),
+    );
+  const seenByA = await filesAs(MANAGER_A);
+  check("участник видит файлы своей задачи и не видит чужих", seenByA.length === 1 && seenByA[0] === taskId);
+  const seenByOwner = await filesAs(OWNER);
+  check("владелец — тоже только своих", seenByOwner.length === 1 && seenByOwner[0] === taskId);
+  const seenByB = await filesAs(MANAGER_B);
+  check("автор видит файл своей задачи", seenByB.includes(authoredId));
+
+  await as(db, MANAGER_A, async () => {
+    let denied = false;
+    try {
+      await db.query("savepoint s");
+      await db.query("select pending_action from public.assignees limit 1");
+    } catch {
+      denied = true;
+      await db.query("rollback to savepoint s");
+    }
+    check("недоговорённое с ботом в списке людей из браузера не читается", denied);
+    const { rows } = await db.query("select id, name from public.assignees");
+    check("а сам список людей читается", rows.length > 0);
+  });
+
+  await db.query(
+    `insert into public.meetings (id, user_id, title, date, time, participants, status, created_by)
+     values ('mtg_test_secret', $1, 'Секретный разговор', '2099-01-05', '15:00', array['Вера'], 'planned', $2)`,
+    [OWNER, MANAGER_B],
+  );
+  await as(db, MANAGER_A, async () => {
+    const { rows } = await db.query("select id from public.meetings where id = 'mtg_test_secret'");
+    check("чужую встречу не видно", rows.length === 0);
+    const { rows: busy } = await db.query("select * from public.busy_slots()");
+    const hit = busy.find((b) => b.person === "Вера");
+    check("но занятость человека видна — кто и когда", !!hit && hit.time === "15:00");
+    check("без названия встречи", !JSON.stringify(busy).includes("Секретный"));
   });
 
   console.log("\nОтключённый доступ:");

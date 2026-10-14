@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { moscowNow, dateStr, isDueToday, isOverdue, type TaskRow } from "@/lib/taskLogic";
+import { involvedFilter } from "@/lib/telegramQueries";
 
 // Builds the compact snapshot of a user's tracker that the assistant reads
 // before answering a free-form question ("что горит?", "сколько висит на
@@ -49,21 +50,29 @@ export async function buildTrackerContext(admin: SupabaseClient, userId: string)
   const now = moscowNow();
   const today = dateStr(now);
 
+  // Только то, что касается его самого: своё и то, где он участник; мысли —
+  // только свои. До 14.10.2026 ассистент владельца собирал всё пространство
+  // — чужие поручения, чужие встречи и чужие мысли — и отдавал это модели,
+  // то есть отвечал ему о том, чего он в трекере не видит, и увозил это во
+  // внешний сервис. Тот же фильтр, что у поиска в боте (lib/trackerSearch).
+  const [taskScope, meetingScope] = await Promise.all([involvedFilter(admin, userId, "task"), involvedFilter(admin, userId, "meeting")]);
   const [taskRes, meetingRes, ideaRes] = await Promise.all([
     admin
       .from("tasks")
       .select("id,title,assignee,status,deadline,priority,term,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month,completed_at")
       .eq("user_id", userId)
+      .or(taskScope)
       .is("deleted_at", null),
     admin
       .from("meetings")
       .select("title,date,time,participants,status,moved_to_date")
       .eq("user_id", userId)
+      .or(meetingScope)
       .is("deleted_at", null)
       .gte("date", shiftIso(now, -MEETING_WINDOW_PAST_DAYS))
       .lte("date", shiftIso(now, MEETING_WINDOW_FUTURE_DAYS))
       .order("date", { ascending: true }),
-    admin.from("ideas").select("text,important,done").eq("user_id", userId).is("deleted_at", null).order("created_at", { ascending: false }).limit(MAX_IDEAS),
+    admin.from("ideas").select("text,important,done").eq("user_id", userId).is("created_by", null).is("deleted_at", null).order("created_at", { ascending: false }).limit(MAX_IDEAS),
   ]);
 
   const allTasks = (taskRes.data || []) as (TaskRow & { priority?: string; term?: string; completed_at?: string | null })[];

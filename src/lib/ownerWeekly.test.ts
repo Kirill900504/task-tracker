@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOwnerWeekly, composeOwnerWeekly, ownerWeeklyIsEmpty, type WeeklyInput, type WPart, type WTask } from "./ownerWeekly";
+import { buildOwnerWeekly, composeOwnerWeekly, ownerWeeklyIsEmpty, staleByAuthor, type WeeklyInput, type WPart, type WTask } from "./ownerWeekly";
 
 const NOW = new Date("2026-10-09T15:00:00Z"); // пятница, 18:00 по Москве
 
@@ -139,6 +139,21 @@ describe("пятничный отчёт владельцу — цифры", () =
       NOW,
     );
     expect(w.stale.map((s) => s.title)).toEqual(["Забытая"]);
+    // В сам отчёт название чужой задачи не попадает — только число по
+    // постановщику (приватность, 14.10.2026).
+    const text = composeOwnerWeekly(w).join("\n");
+    expect(text).toContain("Без движения 7+ дней (1)");
+    expect(text).not.toContain("Забытая");
+  });
+
+  it("забытое складывается по постановщику: число и самая старая", () => {
+    expect(
+      staleByAuthor([
+        { title: "x", author: "Игорь", days: 9 },
+        { title: "y", author: "Аня", days: 20 },
+        { title: "z", author: "Игорь", days: 12 },
+      ]),
+    ).toEqual(["• Аня — 1, самая старая 20 дн", "• Игорь — 2, самая старая 12 дн"]);
   });
 
   it("сданная на неделе работа по старой задаче — тоже контакт с постановщиком", () => {

@@ -3,6 +3,7 @@ import { gigaChatComplete } from "@/lib/gigachat/client";
 import { moscowNow, dateStr, isOverdue, type TaskRow } from "@/lib/taskLogic";
 import { rewriteIsFaithful } from "@/lib/factGuard";
 import { tasksWord } from "@/lib/plural";
+import { involvedFilter } from "@/lib/telegramQueries";
 
 // Weekly review: the patterns you don't notice day to day — who is carrying
 // too much, what has been sitting untouched for weeks, which meeting keeps
@@ -40,13 +41,17 @@ export async function buildWeeklyFacts(admin: SupabaseClient, userId: string): P
   const today = dateStr(now);
   const weekAgoIso = new Date(nowMs - 7 * 86400000).toISOString();
 
+  // Своё и то, где он участник (как в его трекере): до 14.10.2026 обзор
+  // недели считал и пересказывал всё пространство, чужие поручения тоже.
+  const [taskScope, meetingScope] = await Promise.all([involvedFilter(admin, userId, "task"), involvedFilter(admin, userId, "meeting")]);
   const [taskRes, meetingRes] = await Promise.all([
     admin
       .from("tasks")
       .select("id,title,assignee,status,deadline,priority,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month,updated_at,created_at,completed_at")
       .eq("user_id", userId)
+      .or(taskScope)
       .is("deleted_at", null),
-    admin.from("meetings").select("title,date,status,moved_to_date").eq("user_id", userId).is("deleted_at", null),
+    admin.from("meetings").select("title,date,status,moved_to_date").eq("user_id", userId).or(meetingScope).is("deleted_at", null),
   ]);
 
   const all = (taskRes.data || []) as TaskFull[];

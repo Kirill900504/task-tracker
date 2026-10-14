@@ -325,6 +325,21 @@ export function ownerWeeklyIsEmpty(w: OwnerWeekly): boolean {
 // человек раздел «по людям» один занимает пару тысяч.
 const PART_LIMIT = 3500;
 
+// «Забытое» одной строкой на постановщика: сколько и сколько дней самая
+// старая. Порядок — по самой старой, как и прежний список.
+export function staleByAuthor(stale: OwnerWeekly["stale"]): string[] {
+  const by = new Map<string, { n: number; oldest: number }>();
+  for (const s of stale) {
+    const e = by.get(s.author) || { n: 0, oldest: 0 };
+    e.n++;
+    e.oldest = Math.max(e.oldest, s.days);
+    by.set(s.author, e);
+  }
+  return [...by]
+    .sort((a, b) => b[1].oldest - a[1].oldest)
+    .map(([author, e]) => `• ${author} — ${e.n}, самая старая ${e.oldest} дн`);
+}
+
 export function composeOwnerWeekly(w: OwnerWeekly): string[] {
   if (ownerWeeklyIsEmpty(w)) return [];
   const s = w.snapshot;
@@ -388,9 +403,14 @@ export function composeOwnerWeekly(w: OwnerWeekly): string[] {
     const [a, b, c, d] = w.aging;
     const lines = ["⏳ Возраст задач в работе", `0–2 дн: ${a} · 3–7: ${b} · 8–14: ${c} · 15+: ${d}`];
     if (w.stale.length) {
+      // Числом по постановщику, а не названиями. До 14.10.2026 здесь стояли
+      // заголовки чужих поручений — задач, которых владелец не видит в
+      // трекере (видимость своя у каждого, его включительно), то есть отчёт
+      // выносил содержание чужой работы туда, куда трекер его не пускает.
+      // «У кого застряло и насколько давно» — вопрос владельца; «что именно»
+      // — вопрос к постановщику.
       lines.push("", `Без движения 7+ дней (${w.stale.length}):`);
-      for (const t of w.stale.slice(0, 10)) lines.push(`• ${t.title} — ${t.author}, ${t.days} дн`);
-      if (w.stale.length > 10) lines.push(`…и ещё ${w.stale.length - 10}`);
+      for (const line of staleByAuthor(w.stale)) lines.push(line);
     }
     sections.push(lines.join("\n"));
   }

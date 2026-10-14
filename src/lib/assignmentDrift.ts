@@ -25,6 +25,10 @@ export async function findAssignmentDrift(admin: SupabaseClient, userId: string)
     .from("tasks")
     .select("id, title, assignee")
     .eq("user_id", userId)
+    // Только его собственные поручения: о чужих «назначено на словах»
+    // должен узнать их постановщик, а владельцу их названия видеть незачем
+    // (видимость своя у каждого, 14.10.2026).
+    .is("created_by", null)
     .neq("status", "done")
     .is("deleted_at", null);
 

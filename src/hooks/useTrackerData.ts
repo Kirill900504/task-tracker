@@ -661,7 +661,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
           db.from("meetings").select("*").is("deleted_at", null).retry(retry),
           db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }).retry(retry),
           // Убранных из команды (миграция 0055) в списке выбора нет.
-          db.from("assignees").select("*").is("archived_at", null).order("created_at", { ascending: true }).retry(retry),
+          db.from("assignees").select("name, created_at").is("archived_at", null).order("created_at", { ascending: true }).retry(retry),
           db.from("sections").select("*").order("sort_order", { ascending: true }).retry(retry),
         ]),
         ms,

@@ -3,9 +3,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTelegramDocument, sendTelegramMessage } from "@/lib/telegram";
 import { sendMaxDocument, sendMaxMessage } from "@/lib/max";
 import { groupBackupTargets, type BackupDestination } from "@/lib/backupTargets";
+import { involvedFilter } from "@/lib/telegramQueries";
 
 // Weekly backup: everyone who has linked a messenger gets their own tasks/
-// meetings/ideas/assignees as a JSON file. Runs off Vercel's own (free,
+// meetings/ideas/assignees as a JSON file.
+//
+// "Their own" is meant literally since 14.10.2026. The file used to carry the
+// whole space — every manager's tasks, meetings and private thoughts, deleted
+// ones included — to the owner's chat, while the tracker itself shows each
+// person (the owner too) only what they set or take part in. A backup is the
+// same data in a more portable shape, so it follows the same rule: what he
+// set (`created_by` empty), what he is on, his own thoughts. Runs off Vercel's own (free,
 // once-a-day-granularity) cron — see vercel.json — since once a week
 // comfortably fits that granularity, unlike the reminders cron which needed
 // an external 5-minute pinger.
@@ -50,11 +58,14 @@ export async function GET(req: Request) {
   let sent = 0;
   let failed = 0;
   for (const [userId, destinations] of byUser) {
+    const [taskScope, meetingScope] = await Promise.all([involvedFilter(admin, userId, "task"), involvedFilter(admin, userId, "meeting")]);
     const [tasks, meetings, ideas, assignees] = await Promise.all([
-      admin.from("tasks").select("*").eq("user_id", userId),
-      admin.from("meetings").select("*").eq("user_id", userId),
-      admin.from("ideas").select("*").eq("user_id", userId),
-      admin.from("assignees").select("*").eq("user_id", userId),
+      admin.from("tasks").select("*").eq("user_id", userId).or(taskScope),
+      admin.from("meetings").select("*").eq("user_id", userId).or(meetingScope),
+      admin.from("ideas").select("*").eq("user_id", userId).is("created_by", null),
+      // The people list without the bot's half-finished conversations
+      // (`pending_action` can hold a manager's dictated task before «да»).
+      admin.from("assignees").select("id, name, created_at, archived_at, away_until, away_kind").eq("user_id", userId),
     ]);
 
     const broken = [tasks, meetings, ideas, assignees].find((r) => r.error);
@@ -92,13 +103,14 @@ export async function GET(req: Request) {
     // Soft-deleted (spec-audit #4) rows older than 30 days are purged for
     // real — but only *after* a backup that still includes them has actually
     // arrived somewhere, so nothing is ever truly gone without a last copy
-    // existing. Before, this ran whether or not the send worked.
+    // existing. Before, this ran whether or not the send worked. And only
+    // what the file actually carried: other people's rows are not in it.
     if (!delivered) continue;
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     await Promise.all([
-      admin.from("tasks").delete().eq("user_id", userId).lt("deleted_at", cutoff),
-      admin.from("meetings").delete().eq("user_id", userId).lt("deleted_at", cutoff),
-      admin.from("ideas").delete().eq("user_id", userId).lt("deleted_at", cutoff),
+      admin.from("tasks").delete().eq("user_id", userId).or(taskScope).lt("deleted_at", cutoff),
+      admin.from("meetings").delete().eq("user_id", userId).or(meetingScope).lt("deleted_at", cutoff),
+      admin.from("ideas").delete().eq("user_id", userId).is("created_by", null).lt("deleted_at", cutoff),
     ]);
   }
 
