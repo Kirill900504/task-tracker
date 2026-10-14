@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig, BotTransport } from "@/lib/botTransport";
+import { closedReply, itemClosed } from "@/lib/closedItem";
 import { answerOwnOpenQuestion, colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
 import { appReply, matchColleagueCommand, navButtons, signInReply } from "@/lib/colleagueQueries";
 import { encodeCallback, findColleagueByChat, findOwnerSelfByChat } from "@/lib/colleagues";
@@ -116,6 +117,10 @@ async function writeOwnerComment(
   aim: OwnerReplyPending,
   body: string,
 ): Promise<string> {
+  // «Ответить» могли нажать, пока событие было открыто, а написать — уже
+  // после закрытия: адрес помнится два часа. Закрытое — только просмотр
+  // (lib/closedItem), а служебный ключ политику базы не спрашивает.
+  if (await itemClosed(ctx.admin, aim.replyKind, aim.itemId)) return closedReply(aim.replyKind, aim.title);
   const { data: inserted, error } = await ctx.admin
     .from("item_comments")
     .insert({
