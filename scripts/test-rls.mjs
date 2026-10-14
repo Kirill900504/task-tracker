@@ -44,14 +44,16 @@ async function cleanupUser(userId) {
   await admin.auth.admin.deleteUser(userId);
 }
 
-async function testTable(table, rowFor, key = "id") {
+// `cols` — что просить обратно. У `assignees` служебные столбцы бота закрыты
+// от браузера правами (миграция 0057), и `select()` целиком там — отказ.
+async function testTable(table, rowFor, key = "id", cols = "*") {
   console.log(`\n${table}:`);
   const a = await makeUser("a");
   const b = await makeUser("b");
 
   try {
     const row = rowFor(a.id);
-    const { data: inserted, error: insErr } = await a.client.from(table).insert(row).select().single();
+    const { data: inserted, error: insErr } = await a.client.from(table).insert(row).select(cols).single();
     check("A can insert their own row", !insErr && inserted);
     if (insErr) {
       console.log("    insert error:", insErr.message);
@@ -65,10 +67,10 @@ async function testTable(table, rowFor, key = "id") {
     const { data: bReadsA } = await b.client.from(table).select(key).eq(key, rowId);
     check("B cannot see A's row (select returns empty, not an error)", (bReadsA || []).length === 0);
 
-    const { data: bUpdateA } = await b.client.from(table).update({ ...row, [key]: rowId }).eq(key, rowId).select();
+    const { data: bUpdateA } = await b.client.from(table).update({ ...row, [key]: rowId }).eq(key, rowId).select(cols);
     check("B's update against A's row affects 0 rows", (bUpdateA || []).length === 0);
 
-    const { data: bDeleteA } = await b.client.from(table).delete().eq(key, rowId).select();
+    const { data: bDeleteA } = await b.client.from(table).delete().eq(key, rowId).select(cols);
     check("B's delete against A's row affects 0 rows", (bDeleteA || []).length === 0);
 
     const { data: stillThere } = await a.client.from(table).select(key).eq(key, rowId);
@@ -163,7 +165,7 @@ async function main() {
 
   await testTable("assignees", () => ({
     name: "RLS Тестовый " + Math.random().toString(36).slice(2),
-  }));
+  }), "id", "id, user_id, name");
 
   await testTable("sync_errors", () => ({
     message: "rls test sync error",
