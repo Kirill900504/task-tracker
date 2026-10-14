@@ -218,6 +218,11 @@ export default function AskProvider({ children }: { children: ReactNode }) {
     const frame = requestAnimationFrame(() => {
       const el = document.getElementById("askInput") as HTMLInputElement | HTMLTextAreaElement | null;
       if (!el) return;
+      // Только если курсор там, где его оставил браузер, — в начале и без
+      // выделения. Если человек (или e2e-шный fill) уже выделил текст, чтобы
+      // заменить его, перенос курсора в конец снимал выделение, и набранное
+      // ДОПИСЫВАЛОСЬ к старому: «КириллКирилл Тестовый» (14.10.2026).
+      if (el.selectionStart !== 0 || el.selectionEnd !== 0) return;
       el.focus();
       el.setSelectionRange(el.value.length, el.value.length);
     });

@@ -34,7 +34,15 @@ test("строка подключённого человека остаётся 
   await page.click('button[type="submit"]');
   await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
 
-  const { data: people } = await db.from("assignees").select("id, name").eq("user_id", userId).limit(3);
+  // Не своя строка: «(я)» в «Команде» не показывается, и тест искал бы
+  // имя, которого на экране нет. И не убранный — его там нет вовсе.
+  const { data: people } = await db
+    .from("assignees")
+    .select("id, name")
+    .eq("user_id", userId)
+    .is("archived_at", null)
+    .not("name", "ilike", "%(я)%")
+    .limit(3);
   const person = (people || [])[1];
   test.skip(!person, "у аккаунта ещё нет людей");
 
