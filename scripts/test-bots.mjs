@@ -757,6 +757,43 @@ try {
     : { data: null };
   check("«Взять в работу → Себе» заводит задачу на нажавшего", selfTask?.assignee === "Проверочный Коллега", { selfRec, selfTask });
 
+  // Своя задача в мессенджере — «Готово / Перенести срок» (14.10.2026,
+  // Михаил Котов: «если я сам переношу, то согласование не требуется»).
+  // Задача из мысли выше — НЕ своя: постановщик у неё автор мысли. Своя —
+  // поставил руководитель, и на ней только он.
+  const ownId = "own" + Math.random().toString(36).slice(2, 10);
+  await admin.from("tasks").insert({
+    id: ownId,
+    user_id: userId,
+    title: "Проверка своей задачи",
+    assignee: "Проверочный Коллега",
+    created_by: memberUser.user.id,
+    deadline: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+    status: "in_progress",
+  });
+  await admin
+    .from("task_participants")
+    .upsert({ task_id: ownId, assignee_id: assignee.id, role: "executor" }, { onConflict: "task_id,assignee_id", ignoreDuplicates: true });
+  const ownBefore = (await admin.from("tasks").select("deadline").eq("id", ownId).maybeSingle()).data;
+  await mgrPress("ownmv", "t:mv3:" + ownId);
+  const ownMoved = (await admin.from("tasks").select("deadline").eq("id", ownId).maybeSingle()).data;
+  const ownPart = (await admin.from("task_participants").select("reschedule_requested_at, done_at").eq("task_id", ownId).maybeSingle()).data;
+  check(
+    "своя задача: «Перенести срок» двигает срок сразу, а не просит",
+    !!ownMoved?.deadline && ownMoved.deadline !== ownBefore?.deadline && !ownPart?.reschedule_requested_at,
+    { ownBefore, ownMoved, ownPart },
+  );
+  await mgrPress("owndone", "t:done:" + ownId);
+  const ownClosed = (await admin.from("tasks").select("status, approval_state").eq("id", ownId).maybeSingle()).data;
+  const ownPartDone = (await admin.from("task_participants").select("done_at").eq("task_id", ownId).maybeSingle()).data;
+  // Отчёт без слов в строке участия — незакрытый вопрос, и следующая фраза
+  // человека легла бы в него. Поэтому его нет.
+  check(
+    "своя задача: «Готово» закрывает сразу, без приёмки и без вопроса «что сделано»",
+    ownClosed?.status === "done" && ownClosed?.approval_state !== "awaiting_review" && !ownPartDone?.done_at,
+    { ownClosed, ownPartDone },
+  );
+
   const { data: third } = await admin.from("assignees").insert({ user_id: userId, name: "Проверочный Третий" }).select("id").single();
   const otherIdea = await sentIdea("Мысль коллеге в работу");
   const ref = third.id.slice(0, 8);
