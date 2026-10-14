@@ -130,10 +130,14 @@
   display:flex; align-items:center; justify-content:center; border:1.5px solid var(--paper);
 }
 .pbadge-state .icon{stroke-width:2.6;}
-.ps-done .pbadge-state{background:var(--fin); color:#0E2430; width:17px; height:17px; right:-6px; bottom:-6px;}
-/* Клетки флага — заливкой, контур полотнища тоньше общего 2.6: толстая
-   рамка на 11 px съедает клетки. */
-.ps-done .pbadge-state .icon{stroke-width:1.8;}
+/* «Закончил» — флаг 🏁 без кружка-подложки (PersonBadge.FinishFlag): он
+   сам чёрно-белый и читается на любом цвете кружка, а тень отделяет его от
+   букв под ним. */
+.pbadge-state.pbadge-finish{
+  background:none; border:none; width:17px; height:17px; right:-8px; bottom:-7px;
+  filter:drop-shadow(0 0 1.2px rgba(0,0,0,.85));
+}
+.pbadge-finish .finish-flag{display:block;}
 .ps-working .pbadge-state{background:var(--success); color:#0D2416;}
 .ps-declined .pbadge-state{background:var(--high); color:#2A130D;}
 .ps-unreachable .pbadge-state{background:var(--paper-soft); color:var(--ink-soft);}
