@@ -495,6 +495,10 @@ try {
   // не в таблице аккаунтов, — до 20.09.2026 этот путь для него не
   // существовал вовсе.
   await admin.from("tasks").update({ status: "in_progress", approval_state: "awaiting_review" }).eq("id", mgrTask);
+  // Вернуть можно только сданное (reviewWork, e1adc2d): без отчёта
+  // возврат честно отвечает «ждём нового отчёта», и проверка ловила бы
+  // правило, а не кнопку. Так же, как ниже у владельца.
+  await admin.from("task_participants").update({ done_at: new Date().toISOString(), done_comment: "готово" }).eq("task_id", mgrTask);
   await mgrPress("mgr6", "t:back:" + mgrTask);
   const { data: mgrWaiting } = await admin.from("assignees").select("pending_action").eq("id", assignee.id).maybeSingle();
   check("«Вернуть» ждёт причину на строке человека", mgrWaiting?.pending_action?.kind === "review_return", mgrWaiting);
