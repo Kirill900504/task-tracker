@@ -98,6 +98,11 @@ describe("columnOf", () => {
     expect(columnOf(task({ approvalState: "returned" }), [person({ acceptedAt: "x" })])).toBe("work");
   });
 
+  it("после возврата все отчитались заново — сразу «На приёмке», не дожидаясь колонки сервера", () => {
+    // 14.10.2026: «Сделал» после возврата — карточка стояла в «В работе» до F5.
+    expect(columnOf(task({ approvalState: "returned" }), [person({ acceptedAt: "x", doneAt: "y" })])).toBe("review");
+  });
+
   it("принятая и закрытая задача — «Завершённые»", () => {
     expect(columnOf(task({ status: "done" }), [])).toBe("done");
     expect(columnOf(task({ approvalState: "accepted" }), [person({ doneAt: "x" })])).toBe("done");

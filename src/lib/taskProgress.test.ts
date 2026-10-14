@@ -123,8 +123,17 @@ describe("the stage a card shows", () => {
   });
 
   it("goes back to work when the result was returned", () => {
-    const list = [person("Аня", { doneAt: t, doneComment: "ок" })];
+    // Возврат снимает отчёты (applyReview), поэтому у возвращённой задачи
+    // ответов нет.
+    const list = [person("Аня", { acceptedAt: t })];
     expect(taskStage(list, "returned")).toBe("returned");
+  });
+
+  it("is on review again once everyone reported after the return", () => {
+    // 14.10.2026: «Сделал» после возврата держало карточку «на доработке»
+    // до F5 — строка участия пришла, колонка приёмки ещё нет.
+    const list = [person("Аня", { doneAt: t, doneComment: "переделал" })];
+    expect(taskStage(list, "returned")).toBe("awaiting_review");
   });
 
   // 23.09.2026: participant rows went empty locally (a sync race) while the

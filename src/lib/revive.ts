@@ -72,6 +72,16 @@ function onVisible() {
   if (document.visibilityState === "visible") fire("visible");
 }
 
+// Переключение на окно — тоже возврат. visibilitychange его не видит:
+// два окна рядом на одном экране оба «видимы», и окно, в которое человек
+// вернулся из соседнего (другой аккаунт, мессенджер, настольное
+// приложение рядом с браузером), так и стояло на прежнем кадре.
+// 14.10.2026 Кирилл отвечал «Сделал» в одном окне и ждал карточку на
+// приёмке в другом — до F5.
+function onFocus() {
+  fire("visible");
+}
+
 function onOnline() {
   fire("online");
 }
@@ -87,6 +97,7 @@ function wire() {
   if (timer || typeof window === "undefined") return;
   document.addEventListener("visibilitychange", onVisible);
   window.addEventListener("online", onOnline);
+  window.addEventListener("focus", onFocus);
   window.addEventListener("pageshow", onPageShow);
   timer = setInterval(() => fire("timer"), TICK_MS);
 }
@@ -95,6 +106,7 @@ function unwire() {
   if (!timer) return;
   document.removeEventListener("visibilitychange", onVisible);
   window.removeEventListener("online", onOnline);
+  window.removeEventListener("focus", onFocus);
   window.removeEventListener("pageshow", onPageShow);
   clearInterval(timer);
   timer = null;
@@ -105,7 +117,10 @@ export function onRevive(fn: () => void, opts: { everyMs?: number | (() => numbe
   const w: Watcher = {
     fn,
     everyMs: typeof every === "function" ? every : () => every,
-    minGapMs: opts.minGapMs ?? 5_000,
+    // Две секунды: браузер шлёт focus и visibilitychange парой, и вторая
+    // половина пары не должна читать всё второй раз. Пять было много —
+    // переключиться туда-обратно за пять секунд обычное дело.
+    minGapMs: opts.minGapMs ?? 2_000,
     // Считаем от подписки, а не от нуля: хук только что прочитал всё сам.
     last: Date.now(),
   };

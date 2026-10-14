@@ -864,7 +864,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       setFresh(true);
       setLoadError(null);
       setLoading(false);
-      subscribeRealtime(uid);
+      subscribeRealtime();
       persistAllRef.current(); // sync seeded/back-filled assignees and any offline work
       // Now that the tracker has loaded for real, keep a copy of its shell for
       // the next start without a connection.
@@ -1054,17 +1054,28 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     // ---- Realtime: merge changes from another tab/device into both the
     // live list and a CLONED copy in shadow (never the same object
     // reference — see snapshotList()'s doc comment for why).
-    function subscribeRealtime(uid: string) {
+    function subscribeRealtime() {
       if (realtimeReadyRef.current) return;
-      // On a network that cannot reach Supabase directly the tracker runs
-      // over our own origin instead (see src/lib/supabase/client.ts) — and a
-      // websocket is the one thing that cannot go that way. Not subscribing
-      // is what already happens there; doing it deliberately just saves the
-      // radio a reconnection attempt every few seconds for nothing.
-      if (isRoutedThroughProxy()) return;
-
+      // Подписка ставится и в режиме обходного маршрута (/sb). Раньше здесь
+      // стоял выход: «websocket туда не проложить». Но websocket и не идёт
+      // через /sb — он идёт напрямую, а обходной маршрут включается от ОДНОЙ
+      // неудачной выборки и запоминается до следующего запуска. Человек с
+      // живым соединением до Supabase оставался без подписки на задачи на
+      // весь день, и чужое «Сделал» доезжало до его доски только по F5
+      // (14.10.2026). Где сокета действительно нет, он просто не поднимется:
+      // realtimeDownRef это заметит, и догон пойдёт чаще.
       realtimeReadyRef.current = true;
-      const filter = `user_id=eq.${uid}`;
+      // Без фильтра по user_id — ровно как и загрузка (fetch выше читает
+      // «всё, что разрешают права»), и права базы так же решают, какие
+      // события сюда придут.
+      //
+      // Фильтр был `user_id=eq.<мой id>`, а у задач пространства user_id —
+      // id ВЛАДЕЛЬЦА. Значит, у каждого, кроме Кирилла, подписка на задачи,
+      // встречи, мысли, людей и разделы молчала всегда: возврат на
+      // доработку, приёмка, новая задача от коллеги — всё приходило только
+      // минутным догоном или по F5. Владелец этого не видел никогда: у него
+      // его id и есть id пространства. Замер scripts/realtime-latency.mjs —
+      // события доходят до обеих сторон за полсекунды, если их слушать.
       // Имя канала — своё на каждую подписку, и это не украшение.
       //
       // 21.09.2026 трекер упал у руководителя словами «cannot add
@@ -1083,7 +1094,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
       // каждая навигация оставляет за собой живой websocket.
       channelRef.current = db
         .channel("tracker-sync:" + Math.random().toString(36).slice(2))
-        .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter }, (payload) => {
+        .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, (payload) => {
           if (payload.eventType === "DELETE" || (payload.new as { deleted_at?: string })?.deleted_at) {
             const id = (payload.old as { id: string })?.id ?? (payload.new as { id: string }).id;
             liveRef.current.tasks = removeById(liveRef.current.tasks, id);
@@ -1098,7 +1109,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
           }
           setTasks(liveRef.current.tasks);
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "meetings", filter }, (payload) => {
+        .on("postgres_changes", { event: "*", schema: "public", table: "meetings" }, (payload) => {
           if (payload.eventType === "DELETE" || (payload.new as { deleted_at?: string })?.deleted_at) {
             const id = (payload.old as { id: string })?.id ?? (payload.new as { id: string }).id;
             liveRef.current.meetings = removeById(liveRef.current.meetings, id);
@@ -1111,7 +1122,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
           }
           setMeetings(liveRef.current.meetings);
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "ideas", filter }, (payload) => {
+        .on("postgres_changes", { event: "*", schema: "public", table: "ideas" }, (payload) => {
           if (payload.eventType === "DELETE" || (payload.new as { deleted_at?: string })?.deleted_at) {
             const id = (payload.old as { id: string })?.id ?? (payload.new as { id: string }).id;
             liveRef.current.ideas = removeById(liveRef.current.ideas, id);
@@ -1124,7 +1135,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
           }
           setIdeas(liveRef.current.ideas);
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "assignees", filter }, (payload) => {
+        .on("postgres_changes", { event: "*", schema: "public", table: "assignees" }, (payload) => {
           if (payload.eventType === "DELETE") {
             const name = (payload.old as { name: string }).name;
             liveRef.current.assignees = liveRef.current.assignees.filter((a) => a !== name);
@@ -1136,7 +1147,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
           }
           setAssignees(liveRef.current.assignees);
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "sections", filter }, (payload) => {
+        .on("postgres_changes", { event: "*", schema: "public", table: "sections" }, (payload) => {
           if (payload.eventType === "DELETE") {
             const id = (payload.old as { id: string }).id;
             liveRef.current.sections = removeById(liveRef.current.sections, id);

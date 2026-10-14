@@ -119,7 +119,13 @@ export function taskStage(participants: TaskParticipant[], approval: ApprovalSta
   // Acceptance is the owner's word and outranks everything the executors
   // have or have not pressed — including a task closed over their heads.
   if (approval === "accepted") return "done";
-  if (approval === "returned") return "returned";
+  // Ответили все ПОСЛЕ возврата (он снимает ответы) — это новая сдача, и
+  // решение снова за постановщиком, не дожидаясь, пока сервер перепишет
+  // колонку приёмки (см. columnOf в lib/kanban).
+  if (approval === "returned") {
+    const p = taskProgress(participants);
+    return p.total > 0 && p.allAnswered ? "awaiting_review" : "returned";
+  }
   // 23.09.2026: a task got stuck with no button that could close it. The
   // server had already written approval_state = "awaiting_review" (every
   // executor had reported), but the participant rows the card was reading

@@ -167,7 +167,7 @@ export default function TeamCompact({
     executorsNow.length === 1 &&
     (identity.assigneeId ? executorsNow[0].assigneeId === identity.assigneeId : isSelfAssignee(executorsNow[0].name || ""));
   const closingOwn = selfOnly && progress.doneCount === 1 && progress.declined.length === 0;
-  const returned = approvalState === "returned" && !!approvalComment;
+  const returned = stage === "returned" && !!approvalComment;
   const nothingHandedIn = progress.total > 0 && progress.doneCount === 0 && progress.declined.length === 0;
 
   if (!asks.length && !returned && stage !== "awaiting_review" && stage !== "done") return null;

@@ -52,11 +52,16 @@ export function columnOf(task: Task, participants: TaskParticipant[], self = fal
   if (task.approvalState === "accepted" && task.recur === "none") return "done";
   // Приёмка — слово постановщика, и оно старше того, что нажали исполнители.
   if (task.approvalState === "awaiting_review") return "review";
+  const progress = taskProgress(participants);
   // Возврат на доработку — это снова работа, а не «новая задача»: человек
   // уже брался за неё и знает, о чём речь.
-  if (task.approvalState === "returned") return "work";
-
-  const progress = taskProgress(participants);
+  //
+  // Но возврат снимает ВСЕ ответы, а значит «ответили все» после него —
+  // это новые ответы, и задача снова на приёмке. Колонку приёмки сервер
+  // перепишет следом, но доска не должна его ждать: 14.10.2026 исполнитель
+  // нажал «Сделал», а карточка стояла «на доработке» до F5 — строка участия
+  // уже пришла, строка задачи ещё нет.
+  if (task.approvalState === "returned") return progress.total > 0 && progress.allAnswered ? "review" : "work";
   // «На приёмке» — это «ответили все», а не «сделали все». Отказ тоже
   // ответ: после него ждут не исполнителя, а решения постановщика (см.
   // taskProgress.allAnswered и слова Кирилла 21.09.2026 про отказ).
