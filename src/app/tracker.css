@@ -521,13 +521,33 @@
     display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;
   }
   .section-title:hover{color:var(--ink);}
-  .section-title .count{
-    background:var(--accent-soft); color:var(--accent); border-radius:999px; padding:2px 8px; font-size:11.5px;
-    font-weight:700; font-variant-numeric:tabular-nums; line-height:1.4; min-width:22px; text-align:center;
+  /* Число в шапке блока и столбца — заливка фирменным цветом и светлая
+     цифра. Было тёмно-синей плашкой с синей цифрой (#24404B под #3E8AA8),
+     то есть почти фоном: 14.10.2026 Кирилл назвал это «либо убери, либо
+     сделай выразительнее». Ноль гаснет до контура — «пусто» не должно
+     звучать так же громко, как «здесь пять задач». Одна плашка на
+     столбцы, панели и окна: цифра одного смысла выглядит везде одинаково. */
+  .section-title .count, .panel-title .count{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:24px; height:22px; padding:0 7px; border-radius:999px;
+    background:var(--accent); color:#F3F8FA; border:1px solid var(--accent);
+    font-family:var(--display); font-size:13px; font-weight:800; letter-spacing:0;
+    font-variant-numeric:tabular-nums; line-height:1; text-transform:none;
   }
+  .panel-title .count{margin-left:6px; vertical-align:1px;}
+  .section-title .count.zero, .panel-title .count.zero{
+    background:transparent; color:var(--ink-soft); border-color:var(--line);
+  }
+  /* Сворачивание столбца — кнопка со значком, а не символ «▾» в 10px:
+     тот был мельче буквы и читался как соринка. Круг с рамкой говорит
+     «это нажимается», шеврон — что именно произойдёт. */
   .section-title .collapse-arrow{
-    margin-left:auto; font-size:10px; color:var(--ink-soft); transition:transform .15s ease; flex:none;
+    margin-left:auto; flex:none; display:inline-flex; align-items:center; justify-content:center;
+    width:26px; height:26px; border-radius:999px; border:1px solid var(--line);
+    color:var(--ink-label); background:transparent;
+    transition:transform .15s ease, color .15s ease, border-color .15s ease;
   }
+  .section-title:hover .collapse-arrow{color:var(--accent); border-color:var(--accent);}
   .column.collapsed .section-title .collapse-arrow{transform:rotate(-90deg);}
   .column.collapsed > div:not(.section-title){display:none;}
 
@@ -537,7 +557,7 @@
      остаётся в потоке: `margin-left:auto` растолкал бы название влево, и
      «посередине» получилось бы только у столбца без стрелки.
      Отступы по краям одинаковые — иначе центр смещён на ширину стрелки. */
-  .column .section-title{justify-content:center; position:relative; padding:0 18px;}
+  .column .section-title{justify-content:center; position:relative; padding:0 32px; min-height:26px;}
   .column .section-title .collapse-arrow{
     position:absolute; right:0; top:50%; margin-left:0; transform:translateY(-50%);
   }
@@ -1033,8 +1053,8 @@
      часть названия. */
   .modal h2 .count{
     display:inline-block; margin-left:8px; vertical-align:2px;
-    background:var(--accent-soft); color:var(--accent); border-radius:999px; padding:2px 9px;
-    font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.4;
+    background:var(--accent); color:#F3F8FA; border-radius:999px; padding:2px 9px;
+    font-size:13px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1.4;
   }
   /* Описание заведённой задачи — текст, а не поле: править его там уже
      нечего (см. TaskModal). Переносы сохраняются, потому что их писали. */
@@ -1750,7 +1770,7 @@
   .dd-trigger.open{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft), var(--edge);}
   .dd-value{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .dd-arrow{
-    flex:none; font-size:10px; line-height:1; color:var(--ink-soft);
+    flex:none; display:inline-flex; line-height:1; color:var(--ink-label);
     transition:transform .15s ease, color .15s ease;
   }
   .dd-trigger.open .dd-arrow{transform:rotate(180deg); color:var(--accent);}

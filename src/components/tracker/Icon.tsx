@@ -34,6 +34,7 @@ export type IconName =
   | "mic"
   | "send"
   | "check"
+  | "chevron"
   | "close"
   | "clip"
   | "ban"
@@ -162,6 +163,9 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+  // Свернуть/развернуть. Вместо символа «▾»: тот рисуется шрифтом, в 10px
+  // и читался как соринка («хрен поймёшь, что это за треугольнички»).
+  chevron: <path d="m6 9.5 6 6 6-6" />,
   clip: <path d="M20 11.5 12.2 19.3a4.5 4.5 0 0 1-6.4-6.4l7.8-7.8a3 3 0 0 1 4.3 4.3l-7.8 7.8a1.5 1.5 0 0 1-2.2-2.2l7.1-7.1" />,
   reply: <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v5" />,
   ban: (

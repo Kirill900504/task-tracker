@@ -693,8 +693,10 @@ export default function TasksPanel({
     return (
       <div className={"column col-" + column + (collapsed ? " collapsed" : "")} id={"col-" + column} key={column}>
         <div className="section-title" onClick={() => toggleCollapsed(column)}>
-          {meta.title} <span className="count">{list.length}</span>
-          <span className="collapse-arrow">▾</span>
+          {meta.title} <span className={"count" + (list.length === 0 ? " zero" : "")}>{list.length}</span>
+          <span className="collapse-arrow" title={collapsed ? "Развернуть столбец" : "Свернуть столбец"}>
+            <Icon name="chevron" size={16} />
+          </span>
         </div>
         <TaskColumnBody column={column} ids={list.map((t) => t.id)} empty={list.length === 0}>
           {list.length === 0 ? (

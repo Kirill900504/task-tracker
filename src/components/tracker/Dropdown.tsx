@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Icon from "./Icon";
 
 // Выпадающий список, нарисованный трекером.
 //
@@ -73,7 +74,7 @@ export default function Dropdown({
       >
         <span className="dd-value">{current?.label ?? ""}</span>
         <span className="dd-arrow" aria-hidden="true">
-          ▾
+          <Icon name="chevron" size={14} />
         </span>
       </button>
       {open && (
