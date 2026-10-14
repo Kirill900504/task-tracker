@@ -115,6 +115,21 @@ export default function TaskAnswer({
     }
   }
 
+  // «Принял» — мимо общего флага занятости. Кнопка исчезает сразу (экран
+  // меняется раньше сервера, lib/answerPatch), а ответ маршрута приходит
+  // через секунды: пока флаг держался, следующая форма — «Прошу перенос»,
+  // открытая следом, — стояла с «Отправляю…» на кнопке и погасшими
+  // готовыми фразами, то есть выглядела сломанной (поймано e2e 14.10.2026).
+  // Не ушло — кнопка вернётся с перечитыванием, а причина встанет над рядом.
+  async function accept() {
+    setFailed("");
+    try {
+      await onAccept();
+    } catch (e) {
+      setFailed(humanError(e, "Не получилось отправить ответ"));
+    }
+  }
+
   const reported = !!me.doneAt;
   const declined = !!me.declinedAt && !me.doneAt;
   // Ответ даётся один раз (lib/answerRules). До 06.10.2026 после «Не могу»
@@ -208,11 +223,10 @@ export default function TaskAnswer({
               кнопка „принял“ не должна высвечиваться при дальнейших
               манипуляциях с задачей». Что задача принята, и так видно —
               она стоит в «В работе», а у исполнителя на кубике галочка.
-              Пока ответ идёт — а это до нескольких секунд, — на кнопке
-              написано, что он идёт. */}
+              Исчезает она сразу, не дожидаясь сервера (см. accept выше). */}
           {open.accept && (
-            <button type="button" className="btn btn-small btn-primary" disabled={busy} onClick={() => void run(onAccept)}>
-              <Icon name="check" size={14} /> {busy ? "Отправляю…" : "Принял"}
+            <button type="button" className="btn btn-small btn-primary" onClick={() => void accept()}>
+              <Icon name="check" size={14} /> Принял
             </button>
           )}
           {/* Флажка 🏁 здесь больше нет: соседние три кнопки нарисованы

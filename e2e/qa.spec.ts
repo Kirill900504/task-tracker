@@ -154,6 +154,7 @@ test("владелец не распоряжается задачей, кото�
 // До этого на её месте стояла плашка «Принято» — ради того, чтобы ряд не
 // перестраивался (QA 06.10.2026); Кирилл решил, что лишняя плашка хуже.
 test("после «Принял» остаётся «Сделал», а сама «Принял» исчезает", async ({ page, browser }) => {
+  test.setTimeout(120_000);
   const title = `QA ряд ${Date.now()}`;
   await login(page);
   await page.click("#newTaskBtn");
@@ -181,6 +182,26 @@ test("после «Принял» остаётся «Сделал», а сама
     await expect(modal.getByRole("button", { name: "Принял" })).toHaveCount(0, { timeout: 15_000 });
     await expect(modal.getByText("Принято", { exact: true })).toHaveCount(0);
     await expect(done).toBeVisible();
+
+    // Просьба о переносе (14.10.2026). Новый срок — календарём-шторкой,
+    // который открывается нажатием на САМУ строку даты, а не на значок у
+    // края, как у системного «дд.мм.гггг».
+    await modal.getByRole("button", { name: "Прошу перенос" }).click({ timeout: 15_000 });
+    await modal.locator("#myWorkMove-date .mini-cal-trigger").click({ timeout: 15_000 });
+    const sheet = fresh.locator(".cal-sheet");
+    await expect(sheet).toBeVisible();
+    await sheet.locator(".mini-cal-day:not([disabled])").last().click({ timeout: 15_000 });
+    await expect(sheet).toHaveCount(0);
+    await modal.locator("#myWorkMove").fill("Нужно ещё немного времени");
+    await modal.getByRole("button", { name: "Попросить перенос" }).click({ timeout: 15_000 });
+    // После просьбы остаётся одна дверь — «Успел выполнить»: ни «Не могу»,
+    // ни второй просьбы.
+    await expect(modal.getByRole("button", { name: "Успел выполнить" })).toBeVisible({ timeout: 15_000 });
+    await expect(modal.getByRole("button", { name: "Не могу" })).toHaveCount(0);
+    await expect(modal.getByRole("button", { name: "Прошу перенос" })).toHaveCount(0);
+    // А на кубике — словом, а не значком в углу.
+    await fresh.keyboard.press("Escape");
+    await expect(card.locator(".task-chip.reschedule")).toHaveText("Просит перенести", { timeout: 20_000 });
     await fresh.context().close();
   } finally {
     await handed.done();
