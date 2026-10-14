@@ -325,10 +325,10 @@ export async function POST(req: Request) {
   if (!body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
   const { data: row } = await admin
     .from("task_participants")
-    .select("id, assignee_id, task_id, accepted_at, done_at, declined_at, reschedule_requested_at, reschedule_reason, tasks(title, number, created_by)")
+    .select("id, assignee_id, task_id, accepted_at, done_at, declined_at, reschedule_requested_at, reschedule_reason, tasks(title, number, created_by, approval_state)")
     .eq("id", body.participantId)
     .maybeSingle();
-  type TaskRef = { title: string; number: number | null; created_by: string | null };
+  type TaskRef = { title: string; number: number | null; created_by: string | null; approval_state: string | null };
   const part = row as {
     id: string;
     assignee_id: string;
@@ -346,19 +346,22 @@ export async function POST(req: Request) {
   // окончательны, пока постановщик не вернёт задачу на доработку; «Принял»
   // и просьба о переносе не повторяются. Окно эти кнопки уже прячет, но
   // старая кнопка под сообщением бота и вторая вкладка — нет.
+  const taskRef = Array.isArray(part.tasks) ? part.tasks[0] : part.tasks;
   const myPart = {
     acceptedAt: part.accepted_at,
     doneAt: part.done_at,
     declinedAt: part.declined_at,
     reschedulePending: !!part.reschedule_requested_at && !!part.reschedule_reason,
+    // На приёмке ответы заморожены у всех исполнителей — в том числе у
+    // того, кто ещё ничего не нажимал (задачу целиком сдал другой).
+    onReview: taskRef?.approval_state === "awaiting_review",
   };
   const open = openTaskChoices(myPart);
   const allowed =
     body.action === "accept" ? open.accept : body.action === "done" ? open.done : body.action === "decline" ? open.decline : body.action === "reschedule" ? open.move : true;
   // Второе «Принял» — не ошибка, а эхо первого: отвечаем «да» и молчим.
-  if (!allowed && body.action === "accept" && !myPart.doneAt && !myPart.declinedAt) return NextResponse.json({ ok: true });
+  if (!allowed && body.action === "accept" && myPart.acceptedAt && !myPart.doneAt && !myPart.declinedAt) return NextResponse.json({ ok: true });
   if (!allowed) return NextResponse.json({ error: lockedTaskText(myPart) }, { status: 409 });
-  const taskRef = Array.isArray(part.tasks) ? part.tasks[0] : part.tasks;
   const title = taskRef?.title || "";
   // «#12 «Смета»» — номер для ориентира (lib/taskRef), и он же в сводке.
   const named = taskLabel({ title, number: taskRef?.number });
@@ -396,6 +399,10 @@ export async function POST(req: Request) {
     // самое, что «не трогать»: отчёт, отправленный второй раз без файлов,
     // не должен таскать за собой вложения первого.
     const files = body.attachments || [];
+    // «Сдал целиком»: задача уходит на приёмку, не дожидаясь остальных
+    // исполнителей (closeIfEveryoneReported). Соисполнитель сюда не доходит
+    // ни из одной двери — «Сделал» ему не даётся (TaskAnswer, taskButtons).
+    const whole = !!body.whole;
     await admin
       .from("task_participants")
       .update({
@@ -423,16 +430,16 @@ export async function POST(req: Request) {
       itemId: part.task_id,
       // Файл в хронике называется числом, а не именем: имён бывает три, и
       // строка события — это отметка на полях, а не список вложений.
-      text: `🏁 ${myName} отчитался: ${comment}` + (files.length ? ` (📎 ${files.length})` : ""),
+      text: `🏁 ${myName} ${whole ? "сдал задачу целиком" : "отчитался"}: ${comment}` + (files.length ? ` (📎 ${files.length})` : ""),
     });
-    const everyone = await closeIfEveryoneReported(admin, part.task_id);
+    const everyone = await closeIfEveryoneReported(admin, part.task_id, whole);
     // Про файлы в мессенджере говорится словами, но не ссылкой: ссылка на
     // файл из закрытой корзины живёт час, а сообщение — навсегда, и через
     // сутки она читалась бы как сломанная.
     const attached = files.length ? `\n📎 Приложено файлов: ${files.length} — смотреть в задаче.` : "";
     await tell(
       everyone
-        ? `🏁 ${myName} по задаче ${named}: ${comment}${attached}\n\nОтчитались все — задача ждёт вашей приёмки.`
+        ? `🏁 ${myName} по задаче ${named}: ${comment}${attached}\n\n${whole ? "Сдал задачу целиком" : "Отчитались все"} — задача ждёт вашей приёмки.`
         : `🏁 ${myName} по задаче ${named}: ${comment}${attached}`,
       { kind: everyone ? "reported_all" : "reported", ...ref, what: comment },
     );

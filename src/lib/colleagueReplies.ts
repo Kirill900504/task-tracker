@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { closedReply, itemClosed, taskRowClosed } from "@/lib/closedItem";
 import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
-import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, rescheduleButtons, RESCHEDULE_OPTIONS, taskButtons } from "@/lib/colleagues";
+import { encodeCallback, findColleagueByChat, findOwnerSelfByChat, meetingButtons, rescheduleButtons, RESCHEDULE_OPTIONS, taskButtons } from "@/lib/colleagues";
 import { choiceOf, lockedTaskText, lockedVoteText, openTaskChoices, openVoteChoices, voteVerdict, type VoteChoice } from "@/lib/answerRules";
 import { withoutSelfMark } from "@/lib/actorName";
 import { recordEvent } from "@/lib/itemHistory";
@@ -218,7 +218,7 @@ async function colleagueCallback(
   if (action.kind === "task") {
     const { data: task } = await admin
       .from("tasks")
-      .select("id, title, number, assignee, user_id, status, created_by")
+      .select("id, title, number, assignee, user_id, status, created_by, approval_state")
       .eq("id", action.id)
       .is("deleted_at", null)
       .maybeSingle();
@@ -267,11 +267,17 @@ async function colleagueCallback(
           doneAt: participant.done_at,
           declinedAt: participant.declined_at,
           reschedulePending: !!participant.reschedule_requested_at && !!participant.reschedule_reason,
+          // На приёмке исполнители больше ничего не меняют — та же
+          // заморозка, что в /api/workspace/report.
+          onReview: task.approval_state === "awaiting_review",
         }
       : null;
     const open = openTaskChoices(myPart);
+    // «dpart» / «dall» — тот же «Сделал», с уже сделанным выбором «свою
+    // часть» или «всю задачу» (см. развилку ниже).
+    const isDone = action.action === "done" || action.action === "dpart" || action.action === "dall";
     const wants =
-      action.action === "acc" ? open.accept : action.action === "done" ? open.done : action.action === "no" ? open.decline : action.action.startsWith("mv") ? open.move : true;
+      action.action === "acc" ? open.accept : isDone ? open.done : action.action === "no" ? open.decline : action.action.startsWith("mv") ? open.move : true;
     if (participant && myPart && !wants) {
       return {
         toast: lockedTaskText(myPart),
@@ -307,7 +313,38 @@ async function colleagueCallback(
       };
     }
 
-    if (action.action === "done") {
+    // Исполнителей несколько, и кто-то ещё не ответил: «Сделал» сперва
+    // спрашивает, за что отчитываются (14.10.2026, слова Кирилла: «ему
+    // должен даваться выбор — или выполнил свою часть, или выполнил задачу
+    // полностью»). Свою часть — ждём остальных; всю задачу — она уходит на
+    // приёмку сразу. Ни с одним исполнителем, ни когда остальные уже
+    // ответили, вопроса нет: обе кнопки сделали бы одно и то же.
+    if (action.action === "done" && participant?.role === "executor") {
+      const { data: others } = await admin
+        .from("task_participants")
+        .select("id")
+        .eq("task_id", task.id)
+        .eq("role", "executor")
+        .neq("id", participant.id)
+        .is("done_at", null)
+        .is("declined_at", null);
+      if (others?.length) {
+        return {
+          toast: "Свою часть или всю задачу?",
+          rewriteTo: `📋 ${numbered(task)}\n\nНа задаче не один исполнитель. Вы сделали свою часть — или задачу целиком?\n• Свою часть — задача ждёт отчёта остальных.\n• Всю задачу — она сразу уходит постановщику на приёмку.`,
+          rewriteButtons: [
+            [
+              { text: "🏁 Свою часть", data: encodeCallback("task", "dpart", task.id) },
+              { text: "🏁 Всю задачу", data: encodeCallback("task", "dall", task.id) },
+            ],
+            [{ text: "💬 Ответить", data: encodeCallback("task", "msg", task.id) }],
+          ],
+        };
+      }
+    }
+
+    if (isDone) {
+      const whole = action.action === "dall";
       if (participant) {
         // done_comment stays empty on purpose: it is what the next message
         // from this person fills (see handleColleagueText). An unfinished
@@ -327,14 +364,22 @@ async function colleagueCallback(
             reschedule_reason: null,
           })
           .eq("id", participant.id);
-        const closed = await closeIfEveryoneReported(admin, task.id);
+        const closed = await closeIfEveryoneReported(admin, task.id, whole);
+        if (whole) {
+          await recordEvent(admin, {
+            userId: task.user_id,
+            kind: "task",
+            itemId: task.id,
+            text: `🏁 ${withoutSelfMark(colleague.name)} сдал задачу целиком`,
+          });
+        }
         return {
           toast: "Отмечено",
-          rewriteTo: `📋 ${numbered(task)}\n\n🏁 Отмечено выполненным.\nНапишите одним сообщением, что именно сделано — это увидит постановщик.`,
+          rewriteTo: `📋 ${numbered(task)}\n\n🏁 ${whole ? "Задача сдана целиком — она у постановщика на приёмке." : "Отмечено выполненным."}\nНапишите одним сообщением, что именно сделано — это увидит постановщик.`,
           notifyTo: task.created_by,
           notice: { kind: closed ? "reported_all" : "reported", item: task.title, itemId: task.id, num: task.number ?? null, who: withoutSelfMark(colleague.name) },
           notifyOwner: closed
-            ? `🏁 ${withoutSelfMark(colleague.name)} выполнил: ${taskRef(task)} — отчитались все, задача ждёт вашей приёмки`
+            ? `🏁 ${withoutSelfMark(colleague.name)} выполнил: ${taskRef(task)} — ${whole ? "сдал задачу целиком" : "отчитались все"}, задача ждёт вашей приёмки`
             : `🏁 ${withoutSelfMark(colleague.name)} выполнил свою часть: ${taskRef(task)}`,
         };
       }
@@ -616,7 +661,16 @@ async function colleagueCallback(
 // обе половины обязаны говорить одно: разойдись они — карточка стояла бы в
 // «На приёмке», а approval_state молчал бы, и утренняя сводка постановщика
 // об этой задаче не сказала бы ничего.
-export async function closeIfEveryoneReported(admin: SupabaseClient, taskId: string): Promise<boolean> {
+//
+// `whole` — исполнитель сдал задачу ЦЕЛИКОМ, а не свою часть (14.10.2026,
+// слова Кирилла: «если один исполнитель жмёт „выполнил задачу полностью“ —
+// задача сразу улетает на приёмку»). Работу на двоих нередко доделывает
+// один, и ждать отчёта второго, которому делать уже нечего, значило держать
+// сданное в «В работе» до тех пор, пока тот не догадается нажать «Сделал»
+// за чужую работу. Остальные ответы при этом не выдумываются: строки
+// второго исполнителя остаются как были, а «на приёмке» держит колонка —
+// taskStage и columnOf доверяют ей раньше, чем строкам участия.
+export async function closeIfEveryoneReported(admin: SupabaseClient, taskId: string, whole = false): Promise<boolean> {
   const { data } = await admin
     .from("task_participants")
     .select("role, done_at, done_comment, declined_at")
@@ -626,7 +680,8 @@ export async function closeIfEveryoneReported(admin: SupabaseClient, taskId: str
   // Отказ, отменённый собственным отчётом, отказом больше не считается —
   // то же правило, что в hasDeclined: отчёт новее.
   const answered = (p: Row) => !!p.done_at || !!p.declined_at;
-  if (!executors.length || executors.some((p) => !answered(p))) return false;
+  if (!executors.length) return false;
+  if (!(whole && executors.some((p) => !!p.done_at)) && executors.some((p) => !answered(p))) return false;
   // Своя задача — без приёмки у самого себя. Отзыв Витовского 25.09.2026:
   // «когда ставишь самому себе задачу, она всё равно проходит через
   // приёмку… пусть сразу закрывается». Он прав: приёмка — это слово

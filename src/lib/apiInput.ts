@@ -50,6 +50,9 @@ export const reportInput = z.object({
   taskId: ID.optional(),
   meetingId: ID.optional(),
   comment: z.string().max(4000).optional(),
+  // «Сделал» за всю задачу, а не за свою часть: она уходит на приёмку, не
+  // дожидаясь остальных исполнителей (closeIfEveryoneReported).
+  whole: z.boolean().optional(),
   date: ISO_DATE.optional(),
   response: z.enum(["yes", "no", "late"]).optional(),
   round: z.number().int().nonnegative().optional(),

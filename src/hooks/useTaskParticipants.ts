@@ -550,9 +550,10 @@ export function useTaskParticipants() {
   // отчёт не уходит вовсе: отчёт без обещанного акта хуже, чем повторная
   // попытка, потому что постановщик прочитает его как полный.
   const reportWork = useCallback(
-    async (participantId: string, comment: string, files: File[] = []) => {
+    async (participantId: string, comment: string, files: File[] = [], whole = false) => {
       const attachments = files.length ? await uploadResultFiles(taskIdOf(participantId), files) : [];
-      return answer({ action: "done", participantId, comment, attachments });
+      // whole — «сдал задачу целиком»: на приёмку, не дожидаясь остальных.
+      return answer({ action: "done", participantId, comment, attachments, ...(whole ? { whole: true } : {}) });
     },
     [answer, taskIdOf],
   );

@@ -476,6 +476,9 @@ export async function taskCard(
   else if (row.declined_at) lines.push("", `⛔ Вы отказались${row.decline_reason ? ": " + row.decline_reason : " — причина не написана"}`);
   else if (row.accepted_at) lines.push("", "✅ Принято в работу");
   if (row.reschedule_to) lines.push(`📅 Просили перенос на ${fmtDate(row.reschedule_to)}${row.reschedule_reason ? ": " + row.reschedule_reason : ""}`);
+  // Без этой строки второй исполнитель задачи, сданной целиком другим,
+  // видел карточку без единой кнопки ответа и без объяснения почему.
+  if (task.approval_state === "awaiting_review" && task.status !== "done") lines.push("", "🔍 Задача на приёмке у постановщика — ответы больше не меняются, написать можно через «Ответить».");
 
   // Закрытая задача кнопок ответа не получает — отвечать по ней уже не за
   // что; слово сказать всё равно можно.
@@ -487,6 +490,7 @@ export async function taskCard(
     doneAt: row.done_at,
     declinedAt: row.declined_at,
     reschedulePending: !!row.reschedule_to && !!row.reschedule_reason,
+    onReview: task.approval_state === "awaiting_review",
   });
   const actions = done ? [[{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }]] : taskButtons(taskId, row.role, open);
   return { text: lines.join("\n"), buttons: withNav ? [...actions, ...navButtons()] : actions };

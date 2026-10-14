@@ -37,7 +37,11 @@
   --kind-watch:#8FB3C2;
   --kind-co-ink:#6FC2E3;
   --kind-watch-ink:#B9A0DE;
-  --fin:#E3BE52;
+  /* Финиш — фирменным голубым (14.10.2026, его слова: «маркерную надпись
+     не оранжевого цвета, а фирменного»). Светлый тон бренда, а не
+     --accent: тот на тёмной фишке почти не читается словом. */
+  --fin:#4FA8D8;
+  --fin-ink:#7FC6E6;
 }
 /* Прежняя заливка «я исполнитель» снята: её получали прежде всего задачи
    самому себе, а поручения другим стояли серыми — ровно наоборот тому, что
@@ -115,9 +119,10 @@
 .pbadge.ps-waiting .pbadge-dot{filter:saturate(.35) brightness(.72); box-shadow:0 0 0 1.5px var(--paper), 0 0 0 2.5px rgba(255,255,255,.28);}
 .pbadge.ps-unreachable .pbadge-dot{filter:saturate(.2) brightness(.6);}
 .pbadge.ps-declined .pbadge-dot{box-shadow:0 0 0 2px var(--high);}
-/* «Взял в работу» — зелёная галочка, «закончил» — флаг финиша (его
-   слова 13.10.2026). Флаг — золотом: финиш отличается от «работает» с
-   первого взгляда, а два зелёных пришлось бы сравнивать. */
+/* «Взял в работу» — зелёная галочка, «закончил» — клетчатый флаг финиша
+   (его слова 13.10.2026 и 14.10.2026). Флаг — фирменным голубым: финиш
+   отличается от «работает» с первого взгляда, а два зелёных пришлось бы
+   сравнивать. Золото было до 14.10.2026 и читалось оранжевым. */
 .pbadge.ps-done .pbadge-dot{box-shadow:0 0 0 2px var(--fin);}
 .pbadge.ps-working .pbadge-dot{box-shadow:0 0 0 2px var(--success);}
 .pbadge-state{
@@ -125,7 +130,10 @@
   display:flex; align-items:center; justify-content:center; border:1.5px solid var(--paper);
 }
 .pbadge-state .icon{stroke-width:2.6;}
-.ps-done .pbadge-state{background:var(--fin); color:#2B2207;}
+.ps-done .pbadge-state{background:var(--fin); color:#0E2430; width:17px; height:17px; right:-6px; bottom:-6px;}
+/* Клетки флага — заливкой, контур полотнища тоньше общего 2.6: толстая
+   рамка на 11 px съедает клетки. */
+.ps-done .pbadge-state .icon{stroke-width:1.8;}
 .ps-working .pbadge-state{background:var(--success); color:#0D2416;}
 .ps-declined .pbadge-state{background:var(--high); color:#2A130D;}
 .ps-unreachable .pbadge-state{background:var(--paper-soft); color:var(--ink-soft);}
@@ -133,7 +141,7 @@
 .pbadge.ps-waiting .pbadge-name, .pbadge.ps-unreachable .pbadge-name{color:var(--ink-soft);}
 .pbadge-word{font-size:11.5px; font-weight:600; color:var(--ink-soft); white-space:nowrap;}
 .ps-working .pbadge-word{color:#7FD3A0;}
-.ps-done .pbadge-word{color:var(--fin);}
+.ps-done .pbadge-word{color:var(--fin-ink);}
 .ps-declined .pbadge-word{color:var(--high);}
 .pbadge-more{
   display:inline-flex; align-items:center; justify-content:center; min-width:21px; height:21px; padding:0 5px;

@@ -59,4 +59,11 @@ describe("ответ на задачу даётся один раз", () => {
   it("просьба о переносе ждёт решения — остаётся одно «успел выполнить»", () => {
     expect(openTaskChoices({ acceptedAt: "x", reschedulePending: true })).toEqual({ accept: false, done: true, decline: false, move: false });
   });
+
+  // Второй исполнитель задачи, которую первый сдал целиком: он ещё ничего
+  // не нажимал, но ответов у него уже нет — решение за постановщиком.
+  it("на приёмке исполнителю не даётся ничего, даже «Принял»", () => {
+    expect(openTaskChoices({ onReview: true })).toEqual({ accept: false, done: false, decline: false, move: false });
+    expect(openTaskChoices({ acceptedAt: "x", onReview: true })).toEqual({ accept: false, done: false, decline: false, move: false });
+  });
 });

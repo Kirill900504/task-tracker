@@ -31,11 +31,14 @@ import { openTaskChoices } from "@/lib/answerRules";
 //                            откажет, обманывает молча;
 //   постановщик            — приёмку, но она живёт в TaskParticipants.
 
-type Pending = "done" | "decline" | "move" | null;
+// «doneAll» — тот же отчёт, но за всю задачу, а не за свою часть.
+type Pending = "done" | "doneAll" | "decline" | "move" | null;
 
 export default function TaskAnswer({
   me,
   closed,
+  onReview,
+  othersPending = 0,
   deadline,
   returnedComment,
   onAccept,
@@ -50,6 +53,14 @@ export default function TaskAnswer({
   // больше не по чему, и кнопка «Сделал» на закрытой задаче — это
   // предложение сделать то, о чём уже договорились.
   closed?: boolean;
+  // Задача на приёмке: исполнители больше ничего не меняют, остаётся
+  // обсуждение (14.10.2026, его слова: «на стадии приёмки ничего в задаче
+  // не может меняться исполнителями, возможно только использование чата»).
+  onReview?: boolean;
+  // Сколько ДРУГИХ исполнителей ещё не ответили. Больше нуля — «Сделал»
+  // распадается на два: свою часть (ждём остальных) и всю задачу (сразу на
+  // приёмку). При нуле обе кнопки сделали бы одно и то же.
+  othersPending?: number;
   deadline: string;
   // Комментарий постановщика, если задачу вернули на доработку: это первое,
   // что человек должен прочитать, открыв её снова.
@@ -57,7 +68,7 @@ export default function TaskAnswer({
   onAccept: () => Promise<void>;
   // Отчёт может нести документы: «покажи, что сделал» — это чаще всего акт
   // или фотография (миграция 0039).
-  onReport: (comment: string, files: File[]) => Promise<void>;
+  onReport: (comment: string, files: File[], whole?: boolean) => Promise<void>;
   // Документы — у любого ответа, не только у отчёта (06.10.2026). Куда их
   // положить, решает окно задачи (lib/answerFiles).
   onDecline: (reason: string, files: File[]) => Promise<void>;
@@ -136,7 +147,9 @@ export default function TaskAnswer({
   // здесь оставалась «Сделал», то есть отказ можно было тут же перекрыть
   // отчётом, а отчёт — снова отказом через бота. Открывает ответ заново
   // только постановщик, возвратом на доработку.
-  const open = openTaskChoices({ acceptedAt: me.acceptedAt, doneAt: me.doneAt, declinedAt: me.declinedAt, reschedulePending: !!me.rescheduleTo });
+  const open = openTaskChoices({ acceptedAt: me.acceptedAt, doneAt: me.doneAt, declinedAt: me.declinedAt, reschedulePending: !!me.rescheduleTo, onReview });
+  const split = othersPending > 0;
+  const doneWord = me.rescheduleTo && !open.move ? "Успел выполнить" : "Сделал";
 
   return (
     <div className="my-work">
@@ -169,19 +182,25 @@ export default function TaskAnswer({
         </div>
       )}
 
+      {/* Второй исполнитель задачи, которую сдал целиком первый: кнопок у
+          него нет, и без этой строки было бы непонятно почему. */}
+      {onReview && !closed && !reported && !declined && (
+        <div className="my-work-said">Задача на приёмке у постановщика — отвечать больше не нужно. Написать можно в обсуждении.</div>
+      )}
+
       {failed && <div className="ms-answer-error">{failed}</div>}
 
-      {pending === "done" && (
+      {(pending === "done" || pending === "doneAll") && (
         <AnswerForm
           id="myWorkDone"
-          question="Что именно сделано?"
+          question={pending === "doneAll" ? "Задача сделана целиком — что именно готово?" : split ? "Что именно сделано в вашей части?" : "Что именно сделано?"}
           placeholder="Коротко: что готово и где смотреть"
           emptyHint="Отчёт без слов — это не отчёт: постановщику нечего принимать."
           submitLabel="Отправить отчёт"
           quick={["Готово, проверьте", "Сделано, результат во вложении", "Сделано, подробности в обсуждении"]}
           withFiles
           busy={busy}
-          onSubmit={(text, _when, files) => void run(() => onReport(text, files), true)}
+          onSubmit={(text, _when, files) => void run(() => onReport(text, files, pending === "doneAll"), true)}
           onCancel={() => setPending(null)}
         />
       )}
@@ -235,9 +254,24 @@ export default function TaskAnswer({
               исполнителя выглядела сломанной. Осмотр 21.09.2026.
               После просьбы о переносе она остаётся одна и называется тем,
               что значит (lib/answerRules). */}
-          <button type="button" className="btn btn-small btn-primary" onClick={() => setPending("done")}>
-            <Icon name="flag" size={14} /> {me.rescheduleTo && !open.move ? "Успел выполнить" : "Сделал"}
-          </button>
+          {/* Исполнителей несколько и не все ответили — «Сделал» двумя
+              кнопками (14.10.2026, его слова: «должен даваться выбор — или
+              выполнил свою часть, или выполнил задачу полностью»). Своя
+              часть ждёт остальных; вся задача уходит на приёмку сразу. */}
+          {split ? (
+            <>
+              <button type="button" className="btn btn-small btn-primary" id="myWorkDonePart" onClick={() => setPending("done")}>
+                <Icon name="finish" size={14} /> {doneWord}: свою часть
+              </button>
+              <button type="button" className="btn btn-small btn-primary" id="myWorkDoneAll" onClick={() => setPending("doneAll")}>
+                <Icon name="finish" size={14} /> {doneWord}: всю задачу
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn btn-small btn-primary" onClick={() => setPending("done")}>
+              <Icon name="finish" size={14} /> {doneWord}
+            </button>
+          )}
           {open.decline && (
             <button type="button" className="btn btn-small" onClick={() => setPending("decline")}>
               <Icon name="ban" size={14} /> Не могу

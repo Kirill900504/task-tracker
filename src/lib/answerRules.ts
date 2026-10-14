@@ -104,11 +104,19 @@ export type MyTaskPart = {
   // (дату выбрали, причину ещё не написали) сюда НЕ считается: человек
   // вправе передумать о дате, пока не объяснил её.
   reschedulePending?: boolean;
+  // Задача на приёмке. 14.10.2026, слова Кирилла: «на стадии приёмки
+  // ничего в задаче не может меняться исполнителями, возможно только
+  // использование чата». До этого второй исполнитель задачи, которую
+  // первый сдал целиком, мог нажать «Не могу» поверх решения постановщика,
+  // а наблюдатель за приёмкой видел, как она расползается. Это свойство
+  // ЗАДАЧИ, а не строки человека, поэтому приходит отдельным флагом.
+  onReview?: boolean;
 };
 
 export type TaskChoices = { accept: boolean; done: boolean; decline: boolean; move: boolean };
 
 export function openTaskChoices(p: MyTaskPart | null | undefined): TaskChoices {
+  if (p?.onReview) return { accept: false, done: false, decline: false, move: false };
   const answered = !!p?.doneAt || !!p?.declinedAt;
   return {
     accept: !answered && !p?.acceptedAt,
@@ -119,6 +127,7 @@ export function openTaskChoices(p: MyTaskPart | null | undefined): TaskChoices {
 }
 
 export function lockedTaskText(p: MyTaskPart): string {
+  if (p.onReview) return "Задача на приёмке у постановщика — ответы больше не меняются. Написать можно в обсуждении.";
   if (p.doneAt) return "Вы уже отчитались по этой задаче — решение за постановщиком.";
   if (p.declinedAt) return "Вы уже отказались от этой задачи — решение за постановщиком.";
   if (p.reschedulePending) return "Просьба о переносе уже у постановщика — ждём его решения.";

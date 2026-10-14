@@ -189,7 +189,7 @@ export default function TaskModal({
   onAcceptWork?: (participantId: string) => Promise<void>;
   // Отчёт вместе с документами: файлы грузит хук, маршрут получает их
   // описания (см. lib/resultFiles и миграцию 0039).
-  onReportWork?: (participantId: string, comment: string, files: File[]) => Promise<void>;
+  onReportWork?: (participantId: string, comment: string, files: File[], whole?: boolean) => Promise<void>;
   onDeclineWork?: (participantId: string, reason: string) => Promise<void>;
   onAskReschedule?: (participantId: string, to: string, reason: string) => Promise<void>;
 }) {
@@ -787,10 +787,12 @@ export default function TaskModal({
                 <TaskAnswer
                   me={myPart}
                   closed={task.status === "done" || task.approvalState === "accepted"}
+                  onReview={stage === "awaiting_review"}
+                  othersPending={progressNow.pendingNames.length - (myPart.role === "executor" && !myPart.doneAt && !myPart.declinedAt ? 1 : 0)}
                   deadline={task.deadline || ""}
                   returnedComment={task.approvalState === "returned" ? task.approvalComment || "" : ""}
                   onAccept={() => onAcceptWork?.(myPart.id) ?? Promise.resolve()}
-                  onReport={(comment, files) => onReportWork?.(myPart.id, comment, files) ?? Promise.resolve()}
+                  onReport={(comment, files, whole) => onReportWork?.(myPart.id, comment, files, whole) ?? Promise.resolve()}
                   onDecline={(reason, files) =>
                     answerWithFiles({ kind: "task", id: task.id }, files, "Документы к отказу", () => onDeclineWork?.(myPart.id, reason) ?? Promise.resolve())
                   }

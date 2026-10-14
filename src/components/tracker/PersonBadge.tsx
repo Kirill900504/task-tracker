@@ -14,7 +14,7 @@ import { withoutSelfMark } from "@/lib/actorName";
 // пунктирное кольцо говорят это тише всех, и так и должно быть — это
 // состояние по умолчанию.
 const STATE_ICON: Partial<Record<PersonState, IconName>> = {
-  done: "flag",
+  done: "finish",
   working: "check",
   declined: "ban",
   unreachable: "mailbox",
@@ -50,7 +50,7 @@ export default function PersonBadge({
         {initialsOf(full)}
         {icon && (
           <span className="pbadge-state">
-            <Icon name={icon} size={9} />
+            <Icon name={icon} size={icon === "finish" ? 11 : 9} />
           </span>
         )}
       </span>

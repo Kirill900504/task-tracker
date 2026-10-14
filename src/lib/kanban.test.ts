@@ -226,3 +226,18 @@ describe("задача самому себе — без приёмки", () => {
     expect(columnOf(task(), [person({ doneAt: "2026-10-07" })])).toBe("review");
   });
 });
+
+// 14.10.2026: «если один исполнитель жмёт „выполнил задачу полностью“ —
+// задача сразу улетает на приёмку». Второй исполнитель при этом ничего не
+// нажимал, и строки участия по-прежнему говорят «ответили не все» — на
+// приёмке задачу держит колонка, и доска обязана верить ей.
+describe("columnOf — задача, сданная целиком одним из исполнителей", () => {
+  it("стоит «На приёмке», хотя второй исполнитель молчит", () => {
+    const parts = [person({ assigneeId: "a", acceptedAt: "x", doneAt: "y" }), person({ assigneeId: "b" })];
+    expect(columnOf(task({ approvalState: "awaiting_review" }), parts)).toBe("review");
+  });
+  it("без «целиком» та же пара остаётся «В работе»", () => {
+    const parts = [person({ assigneeId: "a", acceptedAt: "x", doneAt: "y" }), person({ assigneeId: "b" })];
+    expect(columnOf(task({ approvalState: "open" }), parts)).toBe("work");
+  });
+});

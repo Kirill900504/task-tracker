@@ -221,7 +221,12 @@ export default function TeamCompact({
       {stage === "awaiting_review" && !closingOwn && !nothingHandedIn && (
         <div className="tp-review">
           <div className="tp-review-text">
-            {progress.declined.length === 0
+            {/* Кто-то ещё не ответил, а задача на приёмке — значит, её сдали
+                целиком (закрытие «за всех», closeIfEveryoneReported). Писать
+                здесь «все отчитались» было бы неправдой о тех, кто молчит. */}
+            {progress.declined.length === 0 && progress.pendingNames.length > 0
+              ? `Задачу целиком сдал${progress.doneNames.length > 1 ? "и" : ""}: ${progress.doneNames.map(shown).join(", ")}. Принимаете работу?`
+              : progress.declined.length === 0
               ? "Все исполнители отчитались. Принимаете работу?"
               : progress.doneCount === 0
                 ? `Работу не сделают: ${progress.declined.map((d) => shown(d.name)).join(", ")}. Решать вам — вернуть с объяснением или закрыть невыполненной.`
