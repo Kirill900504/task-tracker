@@ -35,7 +35,7 @@ export type ConfirmResult = { confirmed: boolean; title?: string };
 export async function confirmIfEveryoneAgreed(admin: SupabaseClient, meetingId: string): Promise<ConfirmResult> {
   const { data: row } = await admin
     .from("meetings")
-    .select("id, title, date, time, user_id, status, vote_round, created_by, participants")
+    .select("id, title, date, time, user_id, status, vote_round, created_by, participants, slot_options")
     .eq("id", meetingId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -50,11 +50,15 @@ export async function confirmIfEveryoneAgreed(admin: SupabaseClient, meetingId: 
         vote_round: number | null;
         created_by: string | null;
         participants: string[] | null;
+        slot_options: unknown;
       }
     | null;
   // Только предложенная: назначенную подтверждать нечем, а закрытую —
   // незачем.
   if (!meeting || meeting.status !== "proposed") return { confirmed: false };
+  // Встречу-опрос назначает выбор варианта (lib/meetingPoll), а не «буду»:
+  // согласие на одно время из трёх — не ответ на опрос.
+  if (Array.isArray(meeting.slot_options) && meeting.slot_options.length >= 2) return { confirmed: false };
 
   const { data: rows } = await admin
     .from("meeting_participants")

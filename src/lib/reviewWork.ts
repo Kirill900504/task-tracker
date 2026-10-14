@@ -267,4 +267,27 @@ async function tellExecutors(
   await Promise.all(
     ((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, task.user_id, person, text, buttons, { kind: "task", itemId: task.id })),
   );
+  if (action === "approve" || action === "force") await tellUnblocked(admin, task, named);
+}
+
+// Задачи, которые ждали эту (миграция 0061), — их исполнителям «можно
+// начинать». Ради этого зависимость и заводилась: исполнитель сметы узнаёт,
+// что прайс готов, не из того, что заглянул в трекер, а сразу.
+async function tellUnblocked(admin: SupabaseClient, task: { id: string; user_id: string }, named: string): Promise<void> {
+  const { data: waiting } = await admin
+    .from("tasks")
+    .select("id, title, number, user_id")
+    .eq("blocked_by", task.id)
+    .neq("status", "done")
+    .is("deleted_at", null);
+  for (const w of (waiting || []) as { id: string; title: string; number: number | null; user_id: string }[]) {
+    const { data: parts } = await admin.from("task_participants").select("assignee_id").eq("task_id", w.id).in("role", ["executor", "coexecutor"]);
+    const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
+    if (!ids.length) continue;
+    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+    const text = `🟢 Можно начинать: ${taskRef({ title: w.title, number: w.number })}\n\nЗадача, которую она ждала, закрыта: ${named}.`;
+    await Promise.all(
+      ((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, w.user_id, person, text, taskButtons(w.id, "executor"), { kind: "task", itemId: w.id })),
+    );
+  }
 }

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { ideaButtons, ideaMessage, ideaShareMessage, meetingButtons, meetingMessage, taskButtons, taskMessage, type ColleagueRow } from "@/lib/colleagues";
+import { isPoll, pollButtons, type SlotOption } from "@/lib/meetingPoll";
 import { sendToColleague } from "@/lib/botDelivery";
 import { chatsForPerson } from "@/lib/reach";
 import { actorName } from "@/lib/actorName";
@@ -191,7 +192,7 @@ export async function POST(req: Request) {
   }
 
   if (kind === "meeting") {
-    const { data: meeting } = await supabase.from("meetings").select("id, title, date, time, participants").eq("id", id).maybeSingle();
+    const { data: meeting } = await supabase.from("meetings").select("id, title, date, time, participants, status, slot_options").eq("id", id).maybeSingle();
     if (!meeting) return NextResponse.json({ error: "Встреча не найдена" }, { status: 404 });
     const names = to.length ? to : ((meeting.participants as string[]) || []);
     const { linked, unlinked, self } = await recipientsByName(supabase, admin, names, user.id);
@@ -201,7 +202,15 @@ export async function POST(req: Request) {
     }
     const results = await Promise.all(
       linked.map((person) =>
-        deliver(person, meetingMessage(meeting, from), meetingButtons(meeting.id as string), {
+        // Встреча-опрос (миграция 0062): вместо «буду / не смогу» — варианты
+        // времени кнопками, отмечает человек те, что подходят.
+        deliver(
+          person,
+          isPoll(meeting)
+            ? `📅 Встреча от ${from}:\n\n${meeting.title}\n\nВремя ещё выбирается — отметьте все варианты, которые вам подходят:`
+            : meetingMessage(meeting, from),
+          isPoll(meeting) ? pollButtons(meeting.id as string, (meeting.slot_options as SlotOption[]) || [], []) : meetingButtons(meeting.id as string),
+          {
           admin,
           spaceId: ownerId,
           kind: "meeting",

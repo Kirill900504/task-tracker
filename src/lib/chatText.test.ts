@@ -23,6 +23,16 @@ describe("splitLinks", () => {
   it("makes www. clickable", () => {
     expect(splitLinks("www.rokas.ru")).toEqual([{ url: "https://www.rokas.ru", text: "www.rokas.ru" }]);
   });
+  // «#107» — ссылка на задачу (14.10.2026, предложение 8).
+  it("turns #107 into a task link", () => {
+    expect(splitLinks("см. #107, там всё")).toEqual(["см. ", { taskNumber: 107, text: "#107" }, ", там всё"]);
+    expect(splitLinks("#5")).toEqual([{ taskNumber: 5, text: "#5" }]);
+  });
+  it("leaves a hash inside a word or a link alone", () => {
+    expect(splitLinks("abc#12")).toEqual(["abc#12"]);
+    expect(splitLinks("https://x.ru/a#12")).toEqual([{ url: "https://x.ru/a#12", text: "https://x.ru/a#12" }]);
+    expect(splitLinks("#")).toEqual(["#"]);
+  });
 });
 
 describe("nearBottom", () => {

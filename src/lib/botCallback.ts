@@ -7,7 +7,7 @@ import { sendToPerson } from "@/lib/reach";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
 import { handleOwnerCallback } from "@/lib/ownerReplies";
 import { findActorByChat, type BotActor } from "@/lib/botActor";
-import { createTaskFromBot, resolveWhen } from "@/lib/ownerNewTask";
+import { createTaskFromBot, nextNewTaskStep, resolveWhen } from "@/lib/ownerNewTask";
 import { ownerNav } from "@/lib/ownerQueries";
 import type { CallbackOutcome } from "@/lib/colleagueReplies";
 import { handleIdeaInbox, isIdeaInboxAction } from "@/lib/ideaInbox";
@@ -94,6 +94,17 @@ async function routeBotCallback(
 
   const actor = await findActorByChat(admin, chatId, channel);
   if (actor) {
+    // «Без описания» в мастере «Поручить»: следующий шаг зависит от того,
+    // что лежит в памяти мастера (выбран ли уже человек), а память читает
+    // только этот файл — поэтому кнопка разбирается здесь, до общего
+    // разбора постановщицких кнопок.
+    if (action.kind === "task" && action.action === "ndesc") {
+      const pending = (await pendingOf(admin, actor, channel, chatId)) as Record<string, unknown> | null;
+      if (!pending || pending.kind !== "new_task" || !pending.title) return { toast: "Начните заново: «Поручить»" };
+      const step = await nextNewTaskStep(admin, actor.spaceId, { ...pending, description: "" });
+      await remember(admin, actor, channel, chatId, step.pending);
+      return { toast: "Без описания", rewriteTo: step.text, rewriteButtons: step.buttons };
+    }
     const today = new Date().toISOString().slice(0, 10);
     const outcome = await handleOwnerCallback(admin, actor, action, today);
     if (!outcome) {
@@ -129,7 +140,11 @@ async function routeBotCallback(
     // Шаг мастера «Поручить»: кому выбрали — помним до выбора срока.
     if (outcome.setPending) {
       const previous = await pendingOf(admin, actor, channel, chatId);
+      // Детали задачи (шаг после названия) едут дальше вместе с мастером:
+      // кнопка «кому» и «по разделу» о них не знает.
+      const prevDescription = (previous as { kind?: string; description?: string } | null)?.kind === "new_task" ? (previous as { description?: string }).description : undefined;
       await remember(admin, actor, channel, chatId, {
+        ...(prevDescription ? { description: prevDescription } : {}),
         ...outcome.setPending,
         // Название спросили на первом шаге; на втором его несёт память, а
         // не кнопка — в 64 байта callback_data оно не поместилось бы.
@@ -145,6 +160,7 @@ async function routeBotCallback(
             title?: string;
             people?: { name: string; role: "executor" | "coexecutor" | "watcher" }[];
             fromIdea?: string;
+            description?: string;
           }
         | null;
       if (!pending || pending.kind !== "new_task" || !pending.title || !pending.people?.length) {
@@ -161,6 +177,7 @@ async function routeBotCallback(
         pending.people,
         resolveWhen(outcome.finishNewTask),
         actor.isOwner ? null : actor.userId,
+        pending.description || "",
       );
       // Мысль, ставшая задачей, уходит из ящика — но только теперь, когда
       // задача действительно заведена. Мастер, брошенный на полпути, не

@@ -13,6 +13,7 @@ import { isCurrent, type MeetingVote } from "@/lib/meetingVotes";
 import { openVoteChoices, type VoteChoice } from "@/lib/answerRules";
 import { prefetchComments } from "@/hooks/useItemComments";
 import { useAsk } from "@/components/Ask";
+import { isPoll } from "@/lib/meetingPollRules";
 
 // Карточка встречи в списке — устроена как карточка задачи.
 //
@@ -112,7 +113,10 @@ export default function MeetingChip({
   // прямоугольничках». Ряд тот же, что у организатора («Успех / Провал /
   // Перенос»): у карточки один ряд действий, а чьи это действия, решает
   // то, кто на неё смотрит. Прошедшей встрече отвечать уже не о чем.
-  const canVote = !!onVote && !!myVote && myVote.role !== "watcher" && live && !waitingRecap && !showQuickActions;
+  // Встреча-опрос (миграция 0062): отвечают вариантами в окне встречи, а
+  // не «буду» в списке.
+  const poll = isPoll(meeting);
+  const canVote = !!onVote && !!myVote && myVote.role !== "watcher" && live && !waitingRecap && !showQuickActions && !poll;
   const choices: VoteChoice[] = canVote ? openVoteChoices(myVote, round) : [];
   const mySaid = canVote && myVote && myVote.response !== "none" && isCurrent(myVote, round) ? myVote : null;
 
@@ -253,7 +257,7 @@ export default function MeetingChip({
               {votes && votes.no.length > 0 && <span className="mpeople-no"> · {votes.no.length} не смогут</span>}
             </span>
           )}
-          {proposed && <span className="pill pill-proposed">Предложена</span>}
+          {proposed && <span className="pill pill-proposed">{poll ? "Опрос времени" : "Предложена"}</span>}
           {waitingRecap && <span className="pill pill-recap">Нужен итог</span>}
         </div>
 

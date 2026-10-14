@@ -40,6 +40,7 @@ import { isCurrent, voteTally, withOrganizer } from "@/lib/meetingVotes";
 import { awaitsRecap } from "@/lib/calendarLogic";
 import { markTaskCommentsRead } from "@/hooks/useUnreadTaskComments";
 import ItemModalHead from "./ItemModalHead";
+import MeetingPoll from "./MeetingPoll";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS = WORKDAY_SLOTS;
@@ -94,6 +95,7 @@ export default function MeetingModal({
   votes = [],
   onAnswer,
   onAcceptProposal,
+  onRecapTasks,
 }: {
   meeting: Meeting | null;
   prefill?: MeetingPrefill;
@@ -136,6 +138,11 @@ export default function MeetingModal({
   // Организатор переносит встречу на время, предложенное участником
   // (кнопка на самом предложении в обсуждении).
   onAcceptProposal?: (proposal: { date: string; time: string; reason: string; by: string }) => void;
+  // «Поручения из итога» (MeetingTasksSheet): итог успешной встречи —
+  // задачами по пунктам. Это НОВОЕ, а не правка закрытого, поэтому кнопка
+  // есть и у закрытой встречи (правило «Закрытое событие — только
+  // просмотр» оставляет такие выходы, как «В задачу»).
+  onRecapTasks?: (meeting: Meeting, result: string) => void;
 }) {
   const isEditing = !!meeting;
   // Новой встрече без заданного времени — первый ещё не начавшийся слот, а
@@ -205,6 +212,9 @@ export default function MeetingModal({
   // Повтор (миграция 0046): каждое повторение — отдельная встреча, следующую
   // заводит крон в день текущей и зовёт тех же людей (lib/meetingRepeat).
   const [recur, setRecur] = useState<MeetingRecur>(meeting?.recur ?? prefill?.recur ?? "none");
+  // Опрос времени (миграция 0062): кроме выбранного — ещё варианты. Есть хоть
+  // один — встреча заводится предложением, и участники отмечают удобные.
+  const [extraSlots, setExtraSlots] = useState<{ date: string; time: string }[]>([]);
   // Кого в день встречи не будет (миграция 0047) — по самой дате встречи,
   // а не по сегодняшней: отпуск до пятницы встрече в понедельник не мешает.
   const { colleagues: team } = useColleagues();
@@ -304,6 +314,22 @@ export default function MeetingModal({
     // закрывает: человека добавили ПОСЛЕ выбора времени, или его встречу
     // назначили, пока форма была открыта. Назначенной встрече проверка не
     // нужна — её время и состав здесь не меняются.
+    // Варианты опроса проверяются тем же правилом занятости: вариант, на
+    // который кто-то из позванных уже занят, назначиться не сможет.
+    // Вариант, совпавший с выбранным временем, вариантом не считается.
+    const pollSlots = extraSlots.filter((o) => !(o.date === date && o.time === time));
+    if (!isEditing && pollSlots.length) {
+      for (const o of pollSlots) {
+        const clash = busyPeople(dayMeetings, { date: o.date, time: o.time, durationMin, people: participants, ignore: [] });
+        if (startsInPast(o.date, o.time) || clash.length) {
+          await ask.say({
+            title: "Вариант не подходит",
+            question: `${fmtDate(o.date)}, ${o.time} — ${clash.length ? "уже на другой встрече: " + clash.map(withoutSelfMark).join(", ") : "это время уже прошло"}. Уберите этот вариант.`,
+          });
+          return;
+        }
+      }
+    }
     if (!isEditing && busyNow.size > 0) {
       await ask.say({
         title: "Это время уже занято",
@@ -340,7 +366,10 @@ export default function MeetingModal({
       participants: isEditing ? meeting.participants : sanitizeAssigneeList(participants),
       // Новая встреча — назначенная, всегда (см. комментарий про «Как
       // собираем» выше). У сохранённой статус остаётся её собственный.
-      status: meeting?.status ?? "planned",
+      // Опрос — предложение с вариантами: время ничьё не занимает, пока не
+      // выбрано (миграция 0062, lib/meetingPoll).
+      status: meeting?.status ?? (pollSlots.length ? "proposed" : "planned"),
+      slotOptions: meeting ? meeting.slotOptions || [] : pollSlots.length ? [{ date, time }, ...pollSlots] : [],
       result: meeting ? result.trim() : "",
       movedToDate: meeting?.movedToDate ?? "",
       resolvedAt: meeting?.resolvedAt ?? "",
@@ -423,13 +452,26 @@ export default function MeetingModal({
   // (встреча прошла — awaitsRecap) или он уже дан: у будущей встречи
   // пустое поле итога над сводкой отодвинуло бы вниз то, ради чего её
   // открывают, — когда и кто. Разметка одна, место — одно из двух.
+  const pollOptions = meeting?.slotOptions || [];
   const decisionBlocks = meeting ? (
     <>
           {/* Предложенную встречу назначает тот, кто её собрал: право
               занимать чужое время у него ровно такое же, как у всех. До
               этого она видна, по ней можно ответить, но ни в календарь,
               ни в напоминания она не попадает. */}
-          {proposed && canConfirm && (
+          {/* Опрос времени: варианты с отметками вместо «Назначить». */}
+          {proposed && pollOptions.length >= 2 && (
+            <MeetingPoll
+              meetingId={meeting.id}
+              options={pollOptions}
+              myAssigneeId={myVote?.assigneeId || ""}
+              canVote={!!myVote && myVote.role !== "watcher"}
+              isOrganizer={canConfirm}
+              names={Object.fromEntries(votes.map((v) => [v.assigneeId, v.name]))}
+              onScheduled={(when) => void ask.say({ title: "Встреча назначена", question: `Ответили все — назначена на ${when}.` }).then(onClose)}
+            />
+          )}
+          {proposed && canConfirm && pollOptions.length < 2 && (
             <div className="field proposed-row">
               <div className="proposed-text">
                 Пока это предложение: время ни у кого не занято и напоминаний нет. Когда ответят все, встреча
@@ -440,7 +482,7 @@ export default function MeetingModal({
               </button>
             </div>
           )}
-          {proposed && !canConfirm && (
+          {proposed && !canConfirm && pollOptions.length < 2 && (
             <div className="field proposed-row">
               <div className="proposed-text">
                 {/* Ни имени, ни должности: эту строку читают четырнадцать
@@ -473,6 +515,11 @@ export default function MeetingModal({
                     <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => void setStatus("planned")}>
                       <Icon name="reset" size={15} /> Вернуть в план
                     </button>
+                    {meeting.status === "success" && result.trim() && onRecapTasks && (
+                      <button type="button" className="btn btn-small btn-primary" id="recapTasksBtn" onClick={() => onRecapTasks(meeting, result)}>
+                        <Icon name="tasks" size={15} /> Поручения из итога
+                      </button>
+                    )}
                   </div>
                 </>
               ) : (
@@ -586,7 +633,7 @@ export default function MeetingModal({
         {meeting ? (
           <div className="modal-split">
             <div className="modal-main">
-              {myVote && onAnswer && !resolved && (
+              {myVote && onAnswer && !resolved && pollOptions.length < 2 && (
                 <MeetingAnswer
                   me={myVote}
                   onAnswer={(response, reason, files) =>
@@ -804,6 +851,40 @@ export default function MeetingModal({
                   </button>
                 )}
               </div>
+              {/* Опрос времени (предложение 9 от 13.10.2026): не знаете,
+                  когда удобно всем, — добавьте ещё варианты. Участники
+                  отметят удобные, и встреча назначится на лучший сама. */}
+              {!isMove && (
+                <div className="poll-form" id="pollForm">
+                  {extraSlots.map((o, i) => (
+                    <span className="participant-chip selected poll-extra" key={o.date + o.time}>
+                      {fmtDate(o.date)}, {o.time}
+                      <button type="button" className="chat-mini" aria-label="Убрать вариант" onClick={() => setExtraSlots((l) => l.filter((_, j) => j !== i))}>
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    className="btn btn-small"
+                    id="addSlotBtn"
+                    disabled={!date || !time || extraSlots.length >= 4}
+                    title="Выберите другую дату или время выше и нажмите — вариант добавится к опросу"
+                    onClick={() => {
+                      if (extraSlots.some((o) => o.date === date && o.time === time)) return;
+                      setExtraSlots((l) => [...l, { date, time }]);
+                    }}
+                  >
+                    + Вариант {date && time ? `${fmtDate(date)}, ${time}` : ""}
+                  </button>
+                  {extraSlots.length > 0 && (
+                    <div className="field-hint">
+                      Опрос: участники отметят удобные варианты, и встреча назначится на тот, что подходит большинству. Первым вариантом
+                      пойдёт время, выбранное выше в момент сохранения.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="field participants-field" id="participantsField">

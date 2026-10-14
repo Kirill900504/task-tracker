@@ -17,10 +17,10 @@ import { findMeetingForNotes } from "@/lib/meetingLink";
 import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
 import { attachExecutors, attachMeetingParticipants, assignNote, selfAssigneeName } from "@/lib/assignExecutors";
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
-import { newTaskRow } from "@/lib/newTask";
+import { deadlineNote, newTaskRow } from "@/lib/newTask";
 import { ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav } from "@/lib/ownerQueries";
 import { botMenu } from "@/lib/botMenu";
-import { whenButtons, whoButtons, type NewTaskPending } from "@/lib/ownerNewTask";
+import { DESC_QUESTION, descButtons, nextNewTaskStep, whoButtons, type NewTaskPending } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
 import { deliverComment } from "@/lib/commentDelivery";
@@ -198,6 +198,10 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
 
     const lines = [`✓ Задача: ${taskRef({ title: row.title as string, number: inserted?.number ?? null })}`];
     if (row.deadline) lines.push("Срок: " + fmtDate(row.deadline as string));
+    // Срок не назвали — его поставил сервер (lib/newTask.defaultDeadline),
+    // и человек должен это знать, а не узнать через неделю.
+    const dueNote = deadlineNote(input.deadline as string | undefined);
+    if (dueNote) lines.push(dueNote);
     // Множественное число не украшение: «Исполнитель: Игорь» под задачей,
     // которая стоит на двоих, — это и есть «я думал, что поручил обоим».
     //
@@ -716,21 +720,21 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
       await say(ctx, "Пустое название — не задача. Напишите, что поручить.");
       return true;
     }
-    // Человек мог быть выбран заранее — «Поручить ему» из его карточки.
-    // Тогда шаг «кому» уже пройден, и спрашивать его второй раз значит
-    // переспрашивать то, что человек только что нажал.
+    // Дальше — детали (14.10.2026, «мастер „Поручить“ не спрашивает
+    // описание»). Человек, выбранный заранее («Поручить ему» из его
+    // карточки), едет дальше в памяти шага: «кому» второй раз не спросят.
     const chosen = (waiting as { people?: { name: string; role: "executor" | "coexecutor" | "watcher" }[] }).people;
-    if (chosen?.length) {
-      await rememberFor(ctx, actor, { kind: "new_task", stage: "when", title, people: chosen });
-      await ctx.transport.send(ctx.chatId, `«${title}» — ${chosen.map((x) => x.name).join(", ")}. На когда?`, {
-        buttons: whenButtons(),
-      });
-      return true;
-    }
-    await rememberFor(ctx, actor, { kind: "new_task", stage: "who", title });
-    await ctx.transport.send(ctx.chatId, `«${title}»\n\nКому поручить?`, {
-      buttons: await whoButtons(ctx.admin, actor.spaceId),
-    });
+    await rememberFor(ctx, actor, { kind: "new_task", stage: "desc", title, ...(chosen?.length ? { people: chosen } : {}) });
+    await ctx.transport.send(ctx.chatId, `«${title}»\n\n${DESC_QUESTION}`, { buttons: descButtons() });
+    return true;
+  }
+
+  // Шаг «детали»: пришёл текст — это описание, и мастер идёт дальше тем же
+  // путём, что и после кнопки «Без описания» (nextNewTaskStep).
+  if ((waiting as NewTaskPending).kind === "new_task" && (waiting as NewTaskPending).stage === "desc") {
+    const step = await nextNewTaskStep(ctx.admin, actor.spaceId, { ...(waiting as Record<string, unknown>), description: trimmed.slice(0, 4000) });
+    await rememberFor(ctx, actor, step.pending);
+    await ctx.transport.send(ctx.chatId, step.text, { buttons: step.buttons });
     return true;
   }
 

@@ -16,7 +16,27 @@ export function insertAt(value: string, start: number, end: number, insert: stri
 // на /a, а не на /a.
 const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
 
-export type TextPart = string | { url: string; text: string };
+export type TextPart = string | { url: string; text: string } | { taskNumber: number; text: string };
+
+// «#107» в реплике — ссылка на задачу с этим номером (предложение 8 от
+// 13.10.2026, одобрено 14.10.2026: «см. #107» нажимается и открывает ту
+// задачу, как в Linear и Jira). Номер — сразу после «#», до шести цифр, и
+// «#» не внутри слова: «abc#12» ссылкой не становится, а якорь в адресе
+// сюда не доходит вовсе — ссылки разбираются раньше и целиком.
+const TASK_RE = /(^|[^\p{L}\p{N}_&/])#(\d{1,6})(?!\d)/gu;
+
+function splitTaskNumbers(text: string): TextPart[] {
+  const parts: TextPart[] = [];
+  let last = 0;
+  for (const m of text.matchAll(TASK_RE)) {
+    const at = (m.index ?? 0) + m[1].length;
+    if (at > last) parts.push(text.slice(last, at));
+    parts.push({ taskNumber: Number(m[2]), text: "#" + m[2] });
+    last = at + 1 + m[2].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
 
 export function splitLinks(text: string): TextPart[] {
   const parts: TextPart[] = [];
@@ -26,13 +46,19 @@ export function splitLinks(text: string): TextPart[] {
     const trail = raw.match(/[.,!?;:)\]»]+$/);
     if (trail) raw = raw.slice(0, -trail[0].length);
     const at = m.index ?? 0;
-    if (at > last) parts.push(text.slice(last, at));
+    if (at > last) parts.push(...splitTaskNumbers(text.slice(last, at)));
     parts.push({ url: raw.startsWith("www.") ? "https://" + raw : raw, text: raw });
     last = at + raw.length;
   }
-  if (last < text.length) parts.push(text.slice(last));
+  if (last < text.length) parts.push(...splitTaskNumbers(text.slice(last)));
   return parts;
 }
+
+// Как «#107» открывает задачу. Лента обсуждения живёт внутри окна задачи и
+// о списке задач ничего не знает, поэтому нажатие — событие окна, а
+// открывает задачу корень трекера (NewTracker), где есть видимые задачи:
+// чужую, невидимую мне задачу номер не откроет.
+export const OPEN_TASK_NUMBER_EVENT = "rokas:open-task-number";
 
 // Прокручена ли лента к низу — с запасом, потому что «почти внизу» для
 // глаза то же самое, а дробные пиксели прокрутки бывают у всех.

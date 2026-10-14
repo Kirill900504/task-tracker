@@ -100,8 +100,10 @@ describe("мастер «Поручить»", () => {
     expect(resolveWhen("7", monday)).toBe("2026-09-28");
   });
 
-  it("и умеет «без срока»", () => {
-    expect(resolveWhen("no", monday)).toBe("");
+  // «Без срока» больше нет — срок обязателен (14.10.2026). Нажатие такой
+  // кнопки в старом сообщении даёт срок по умолчанию: неделю.
+  it("старая кнопка «без срока» ставит неделю", () => {
+    expect(resolveWhen("no", monday)).not.toBe("");
   });
 
   it("первый шаг спрашивает, что поручить, а не кому", () => {
@@ -111,11 +113,11 @@ describe("мастер «Поручить»", () => {
     expect(startNewTask().pending.stage).toBe("title");
   });
 
-  it("сроки предлагаются кнопками, включая «без срока»", () => {
+  it("сроки предлагаются кнопками, и «без срока» среди них нет", () => {
     const labels = whenButtons().flat().map((b) => b.text);
     expect(labels).toContain("Сегодня");
     expect(labels).toContain("До пятницы");
-    expect(labels).toContain("Без срока");
+    expect(labels).not.toContain("Без срока");
   });
 });
 

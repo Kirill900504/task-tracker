@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
+import { ensureDeadline } from "./helpers";
 
 // Присланная мысль — в самом трекере, и кому ушла своя (07.10.2026).
 //
@@ -202,6 +203,8 @@ test("присланную мысль принимают в трекере, а �
   const toTask = block.locator(`[data-incoming-idea="${toTaskId}"]`);
   await toTask.getByRole("button", { name: "В работу" }).click();
   await expect(page.locator("#fTitle")).toHaveValue(toTaskText);
+  // Срок обязателен (14.10.2026) — форма без него не сохранит.
+  await ensureDeadline(page);
   await page.click("#saveTaskBtn");
   await expect(toTask).toHaveCount(0);
   await expect(page.locator(".task", { hasText: toTaskText })).toBeVisible();

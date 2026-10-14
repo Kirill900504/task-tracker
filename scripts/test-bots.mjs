@@ -673,12 +673,22 @@ try {
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: wizardWho } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
-  check("название запомнено, спрашивает кому", wizardWho?.pending_action?.title === wizardTitle, wizardWho);
+  // С 14.10.2026 после названия мастер спрашивает детали (описание).
+  check("название запомнено, спрашивает детали", wizardWho?.pending_action?.title === wizardTitle && wizardWho?.pending_action?.stage === "desc", wizardWho);
+  const wizardDesc = "Детали из мастера: смета на трёх листах";
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: wizardDesc } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: wizardAfterDesc } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
+  check("детали запомнены, спрашивает кому", wizardAfterDesc?.pending_action?.stage === "who" && wizardAfterDesc?.pending_action?.description === wizardDesc, wizardAfterDesc);
 
   await pressOwner("own7", "t:nwho:" + assignee.id);
   await pressOwner("own8", "t:nwhen1:x");
-  const { data: created } = await admin.from("tasks").select("id, assignee, deadline").eq("title", wizardTitle).maybeSingle();
+  const { data: created } = await admin.from("tasks").select("id, assignee, deadline, description").eq("title", wizardTitle).maybeSingle();
   check("задача заведена на выбранного человека и срок", !!created && created.assignee === "Проверочный Коллега" && !!created.deadline, created);
+  check("и с деталями из мастера", created?.description === wizardDesc, created);
   const { data: createdParts } = await admin.from("task_participants").select("role").eq("task_id", created?.id || "нет");
   check("и он стоит исполнителем", (createdParts || []).some((r) => r.role === "executor"), createdParts);
 

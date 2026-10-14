@@ -38,6 +38,9 @@ import { humanError } from "@/lib/humanError";
 import ItemModalHead from "./ItemModalHead";
 import TaskPeople from "./TaskPeople";
 import TaskDescription from "./TaskDescription";
+import TaskChecklist from "./TaskChecklist";
+import TaskWaitsFor, { type WaitOption } from "./TaskWaitsFor";
+import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import AttachFiles from "./AttachFiles";
 
 // Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
@@ -104,6 +107,7 @@ export default function TaskModal({
   prefill,
   onSave,
   onPatch,
+  waitOptions = [],
   onDelete,
   onClose,
   onAddAssignee,
@@ -140,6 +144,8 @@ export default function TaskModal({
   // старым: срок сдвинули, задачу приняли, и запись всего снимка вернула
   // бы прежнее молча.
   onPatch?: (patch: Partial<Task>) => void;
+  // Открытые задачи с номером — из них выбирают «ждёт задачу» (миграция 0061).
+  waitOptions?: WaitOption[];
   onDelete: () => void;
   onClose: () => void;
   onAddAssignee: (name: string) => void;
@@ -265,6 +271,16 @@ export default function TaskModal({
   const [newDescFiles, setNewDescFiles] = useState<File[]>([]);
   const [newDescError, setNewDescError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Приёмка по выбору (миграция 0060): «Без приёмки» — отчёт всех
+  // исполнителей закрывает задачу сам. Выбирается только при постановке.
+  const [needsReview, setNeedsReview] = useState(() => task?.needsReview !== false);
+  // Зависимость (миграция 0061): своя копия, как у срока, — снимок задачи у
+  // открытого окна не обновляется.
+  const [blockedBy, setBlockedBy] = useState(() => task?.blockedBy || "");
+  const waitChoices = waitOptions.filter((o) => o.id !== task?.id);
+  // Выбор нужен, только когда работу делает кто-то кроме меня: свою задачу
+  // и так закрывает собственный отчёт (closeIfEveryoneReported).
+  const othersExecute = pending.some((p) => p.role === "executor" && p.assigneeId !== myAssigneeId);
   // Принудительное закрытие — один запрос за раз (тот же приём, что busy
   // у приёмки в TeamCompact).
   const [closingBusy, setClosingBusy] = useState(false);
@@ -301,6 +317,8 @@ export default function TaskModal({
   // не правка этой) и у постановщика «Открыть заново» — единственный выход
   // обратно, событие с причиной и строкой в хронике.
   const closed = !!task && isClosed(task);
+  // Кто я — чтобы чек-лист знал, какие шаги мои (их убрать может автор).
+  const checklistUserId = useWorkspaceRole().userId;
   const editable = canEdit && !closed;
 
   // Кто сейчас на задаче — одинаково для новой и для сохранённой, чтобы
@@ -453,6 +471,20 @@ export default function TaskModal({
       }).then(() => focusField("fPeople"));
       return;
     }
+    // Срок обязателен — у любой задачи, своей тоже (14.10.2026: «запрети
+    // ставить задачи без срока даже самому себе, срок обязателен»). Без
+    // срока не работают ни напоминания, ни ступени просрочки, ни «скоро
+    // срок» в сводке, и проверка 13.10 нашла двадцать таких открытых задач,
+    // о которых трекер не говорил ни разу. Исключение одно — повторяющаяся
+    // задача: её срок каждый раз считает сам повтор.
+    if (!form.deadline && form.recur === "none") {
+      void ask.say({
+        title: "Нужен срок",
+        question: "Укажите, до какого дня задача должна быть сделана.",
+        note: "Кнопки «Сегодня», «Завтра», «Через неделю» — рядом с календарём.",
+      }).then(() => focusField("fDeadline"));
+      return;
+    }
     // Срок в прошлом — только тот, что уже стоял (задача просрочена и её
     // открыли). Новый срок раньше сегодняшнего дня не ставится: календарь
     // такие дни гасит, а эта проверка ловит полночь, пережитую открытой
@@ -496,6 +528,8 @@ export default function TaskModal({
       lastCompletedOn: task?.lastCompletedOn ?? "",
       manualOrder: task?.manualOrder ?? null,
       completedAt: task?.completedAt ?? "",
+      needsReview: task ? task.needsReview !== false : !othersExecute || needsReview,
+      blockedBy: task ? task.blockedBy || "" : blockedBy,
     };
     // Файлы к описанию новой задачи — в корзину ДО сохранения: задача,
     // чей обещанный макет не загрузился, ушла бы исполнителю без него, и
@@ -572,17 +606,14 @@ export default function TaskModal({
           английское слово в подписи поля читается как чужое — та же
           причина, по которой из трекера ушёл моноширинный шрифт. Косая
           черта с двумя названиями к тому же спрашивала дважды об одном. */}
-      {/* Подсказка у метки, а не окно-вопрос при сохранении: половина
-          открытых задач стояла без срока (07.10.2026), а без срока не
-          работают ни «скоро срок» в сводке, ни ступени просрочки. Окно на
-          каждую такую задачу раздражало бы и ломало ход «назвал — назначил —
-          сохранил»; слова у поля говорят то же, ничего не останавливая.
-          У повторяющейся задачи срок считает сам повтор. */}
+      {/* С 14.10.2026 срок обязателен (см. save): «Нужен срок» у метки
+          говорит об этом заранее, а не только в момент отказа. У
+          повторяющейся задачи срок считает сам повтор. */}
       <label>
         Срок
         {form.recur === "none" && (
           <span className={"field-req" + (form.deadline ? " met" : "")}>
-            {form.deadline ? "Срок стоит" : "Без срока — не напомним"}
+            {form.deadline ? "Срок стоит" : "Нужен срок"}
           </span>
         )}
       </label>
@@ -603,7 +634,7 @@ export default function TaskModal({
           id="fDeadline"
           value={form.deadline}
           onChange={(iso) => setForm((f) => ({ ...f, deadline: iso }))}
-          clearable
+          // Без «убрать срок»: срок обязателен (14.10.2026).
           // Срок в прошлом не ставится (07.10.2026, «запрети создавать
           // любые события в прошедшем времени»): задача, рождённая
           // просроченной, с первой секунды шлёт ступени просрочки.
@@ -653,7 +684,7 @@ export default function TaskModal({
             вместо «Отмены» внизу, как у всех окон (14.10.2026). */}
         {isEditing && task ? (
           <ItemModalHead
-            kicker={task.number != null ? <>Задача #{task.number}</> : "Задача"}
+            kicker={<>{task.number != null ? `Задача #${task.number}` : "Задача"}{task.needsReview === false && <span className="kicker-note"> · без приёмки — закроется отчётом</span>}</>}
             title={form.title || "Задача"}
             titleId="modalTitle"
             closeId="cancelBtn"
@@ -810,7 +841,7 @@ export default function TaskModal({
                 <div className="field self-deadline" id="selfDeadline">
                   <label>Срок</label>
                   <div className="deadline-row">
-                    <MiniCalendar popover id="selfDeadlineCal" value={selfDeadline} onChange={moveOwnDeadline} clearable minDate={isoInDays(0)} />
+                    <MiniCalendar popover id="selfDeadlineCal" value={selfDeadline} onChange={moveOwnDeadline} minDate={isoInDays(0)} />
                     {QUICK_DEADLINES.map((q) => (
                       <button
                         key={q.label}
@@ -840,7 +871,22 @@ export default function TaskModal({
                   {
                     left: {
                       label: "Крайний срок",
-                      value: selfDeadline ? fmtDate(selfDeadline) : "Без срока",
+                      // Сколько раз переносили и какой был первым (миграция
+                      // 0058) — тут же, мелко: это половина ответа на «почему
+                      // она до сих пор не сделана».
+                      value: selfDeadline ? (
+                        <>
+                          {fmtDate(selfDeadline)}
+                          {!!task.deadlineMoves && (
+                            <span className="fact-note" id="deadlineMoves">
+                              {" "}
+                              · переносили {task.deadlineMoves}×{task.firstDeadline ? `, изначально ${fmtDate(task.firstDeadline)}` : ""}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        "Без срока"
+                      ),
                       muted: !selfDeadline,
                     },
                     right: selfTask || !progressText ? undefined : { label: "Ход работы", value: progressText },
@@ -875,6 +921,27 @@ export default function TaskModal({
                   setDescNow({ desc, files });
                   patchTask({ desc, descFiles: files });
                 }}
+              />
+
+              {/* Чек-лист — под описанием (миграция 0059): описание говорит,
+                  ЧТО сделать, шаги — из чего это состоит. Ведут постановщик,
+                  исполнители и соисполнители. */}
+              <TaskWaitsFor
+                value={blockedBy}
+                options={waitChoices}
+                editable={canEdit && !closed}
+                onChange={(id) => {
+                  setBlockedBy(id);
+                  patchTask({ blockedBy: id });
+                }}
+              />
+
+              <TaskChecklist
+                taskId={task.id}
+                canWork={canEdit || myPart?.role === "executor" || myPart?.role === "coexecutor"}
+                isAuthor={canEdit}
+                myUserId={checklistUserId}
+                closed={closed}
               />
 
               {/* Результат — то, ради чего приёмку вообще открывают. */}
@@ -1001,6 +1068,24 @@ export default function TaskModal({
             (lib/kanban). */}
 
         {deadlineField}
+
+        {/* Поля нет, пока ждать нечего: лишнее поле в форме — лишнее. */}
+        {waitChoices.length > 0 && <TaskWaitsFor value={blockedBy} options={waitChoices} editable onChange={setBlockedBy} />}
+
+        {othersExecute && (
+          <div className="field" id="fReviewField">
+            <label>Приёмка</label>
+            <ChipChoice
+              id="fReview"
+              value={needsReview ? "yes" : "no"}
+              onSelect={(v) => setNeedsReview(v === "yes")}
+              options={[
+                { value: "yes", label: "Принимаю сам" },
+                { value: "no", label: "Без приёмки", title: "Когда все исполнители отчитаются, задача закроется сама" },
+              ]}
+            />
+          </div>
+        )}
 
         <div className="field">
           <label>Повторение задачи</label>

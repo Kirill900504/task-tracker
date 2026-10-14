@@ -284,9 +284,12 @@ export async function resolvePendingAction(
       ...lines,
       ...rows.map((r) => {
         const who = assigned.get(r.id) || [];
-        return `• ${r.title}${who.length ? " — " + who.join(", ") : ""}`;
+        return `• ${r.title}${who.length ? " — " + who.join(", ") : ""}${r.deadline ? " · до " + r.deadline.split("-").reverse().join(".") : ""}`;
       }),
       ...notes,
+      // Пункты без названного срока получили неделю (lib/newTask) — сказать
+      // об этом одной строкой на весь список, а не на каждый пункт.
+      ...(pending.tasks.some((t) => !t.deadline) ? ["Где срок не назвали — поставил через неделю; поменять можно в карточке задачи."] : []),
     ].join("\n");
   }
 

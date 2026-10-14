@@ -28,7 +28,7 @@ import DashboardLayout from "@/components/tracker/DashboardLayout";
 import TrackerDnd from "@/components/tracker/dnd/TrackerDnd";
 import TaskCard from "@/components/tracker/TaskCard";
 import type { DragPayload } from "@/components/tracker/dnd/TrackerDnd";
-import { pad, todayStr } from "@/lib/taskDisplay";
+import { fmtDate, pad, todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import { assignExecutorsByName } from "@/lib/assignWork";
 import { formatIdeaCreatedAt } from "@/lib/trackerRows";
@@ -49,6 +49,8 @@ import { useAsk } from "@/components/Ask";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useWorkspaceRole, MEMBER_ROLE_LABELS } from "@/hooks/useWorkspaceRole";
 import { useSavedSetting } from "@/hooks/useSavedSetting";
+import { defaultDeadline } from "@/lib/newTask";
+import { OPEN_TASK_NUMBER_EVENT } from "@/lib/chatText";
 import { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { withoutSelfMark } from "@/lib/actorName";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
@@ -290,6 +292,20 @@ export default function NewTracker() {
     showToast: toasts.showToast,
     openItem: (kind, id) => (kind === "task" ? setOpenExistingTaskId(id) : setOpenExistingMeetingId(id)),
   });
+  // «#107» в обсуждении открывает задачу с этим номером (lib/chatText,
+  // предложение 8 от 13.10.2026). Ищется среди ВИДИМЫХ: номер, набранный
+  // руками, не должен открывать то, чего человеку видеть не положено, — и
+  // об этом говорится словами, а не молчанием.
+  useEffect(() => {
+    function open(e: Event) {
+      const n = Number((e as CustomEvent<number>).detail);
+      const found = visibleTasks.find((t) => t.number === n);
+      if (found) setOpenExistingTaskId(found.id);
+      else toasts.showToast(`Задачи #${n} у вас нет`, "Её нет среди задач, которые вы видите.");
+    }
+    window.addEventListener(OPEN_TASK_NUMBER_EVENT, open);
+    return () => window.removeEventListener(OPEN_TASK_NUMBER_EVENT, open);
+  }, [visibleTasks, toasts]);
   // Один фильтр на панель задач и панель «Люди»: нажатие на человека и
   // выбор в списке — это один и тот же вопрос, заданный двумя способами.
   const [filterAssignee, setFilterAssignee] = useSavedSetting("board.person", "all");
@@ -498,6 +514,36 @@ export default function NewTracker() {
     setTimeout(() => setHighlightIdeaId((cur) => (cur === result.id ? null : cur)), 1600);
   }
 
+  // Поручения из итога встречи (MeetingTasksSheet): каждая — обычная
+  // задача, тем же путём, что и строка быстрого ввода: запись движком
+  // синхронизации и назначение человека с сообщением ему.
+  function createTasksFromMeeting(list: { title: string; assignee: string; deadline: string }[], m: Meeting) {
+    const where = `По итогам встречи «${m.title}» (${fmtDate(m.date)}${m.time ? ", " + m.time : ""})`;
+    for (const item of list) {
+      const id = uid();
+      actions.saveTask({
+        id,
+        title: item.title,
+        desc: where,
+        assignee: item.assignee,
+        sectionId: "",
+        priority: "med",
+        term: "short",
+        status: "in_progress",
+        deadline: item.deadline || defaultDeadline(),
+        recur: "none",
+        recurWeekday: "1",
+        recurMonthday: "",
+        recurYearDay: "",
+        recurYearMonth: "1",
+        lastCompletedOn: "",
+        manualOrder: null,
+        completedAt: "",
+      });
+      void assignExecutorsByName(id, [item.assignee]);
+    }
+  }
+
   const quickAddProvider: QuickAddProvider = {
     getAssignees: () => assignees,
     prefillNewTask: (f) =>
@@ -522,7 +568,9 @@ export default function NewTracker() {
         priority: "med",
         term: f.term,
         status: "in_progress",
-        deadline: f.deadline,
+        // Срок обязателен (14.10.2026): фраза его не назвала — неделя, то же
+        // правило, что у бота (lib/newTask.defaultDeadline).
+        deadline: f.deadline || defaultDeadline(),
         recur: "none",
         recurWeekday: "1",
         recurMonthday: "",
@@ -702,6 +750,7 @@ export default function NewTracker() {
             onTaskDropped={(id) => taskDroppedOnDate(id, selectedDate ?? todayStr())}
             justCreatedId={justCreatedMeetingId}
             onTaskFromMeeting={(prefill) => setOpenTaskRequest(prefill)}
+            onCreateTasks={createTasksFromMeeting}
           />
         ),
         // Общие пропы панели задач — одни на все три монтирования: полную

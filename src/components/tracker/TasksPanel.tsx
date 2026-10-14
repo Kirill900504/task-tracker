@@ -10,12 +10,13 @@
 // панель только показывает его и разбирает перетаскивание.
 import { useMemo, useState } from "react";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
-import { isOverdue, isTaskDueOnDate, taskSortFn, todayStr } from "@/lib/taskDisplay";
+import { isClosed, isOverdue, isTaskDueOnDate, taskSortFn, todayStr } from "@/lib/taskDisplay";
 import { isSnoozed } from "@/lib/snooze";
 import { KANBAN_COLUMNS, columnOf, moveBetween, type KanbanColumn } from "@/lib/kanban";
 import { myRoleOn, showsOverdue } from "@/lib/myRole";
 import { BOARD_FILTERS, cleanBoardFilter, matchesBoardFilter, toggleBoardFilter } from "@/lib/boardFilter";
 import { useSavedSetting } from "@/hooks/useSavedSetting";
+import { useChecklistCounts } from "@/hooks/useTaskChecklist";
 import { moveWithin } from "@/lib/dndOrder";
 import { useDropHandler, type DropTarget } from "./dnd/TrackerDnd";
 import { SortableTask, TaskColumnBody } from "./dnd/SortableTask";
@@ -248,8 +249,12 @@ export default function TasksPanel({
   const requestedTask = openExistingTaskId ? (tasks.find((t) => t.id === openExistingTaskId) ?? null) : null;
 
   const modalOpen = modalState.open || openTaskRequest !== null || requestedTask !== null;
-  const modalTask = modalState.open ? modalState.task : requestedTask;
-  const modalPrefill = modalState.open ? modalState.prefill : (openTaskRequest ?? undefined);
+  // Запрошенная задача сильнее уже открытой: «#107» в обсуждении одной
+  // задачи открывает другую (lib/chatText, 14.10.2026) — окно переключается
+  // на неё, а не остаётся на прежней. Ключ окна — id задачи, поэтому
+  // переключение — это новое окно, а не правка открытого.
+  const modalTask = requestedTask ?? (modalState.open ? modalState.task : null);
+  const modalPrefill = requestedTask ? undefined : modalState.open ? modalState.prefill : (openTaskRequest ?? undefined);
   function closeModal() {
     setModalState({ open: false, task: null });
     if (openTaskRequest !== null) onOpenTaskHandled();
@@ -320,6 +325,19 @@ export default function TasksPanel({
   const hotPeople = load.filter((p) => p.overdue > 0 || p.silent > 0 || p.review > 0).length;
 
   const sectionById = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections]);
+  // «3/5» шагов чек-листа на кубике (миграция 0059) — одна выборка на доску.
+  const checklistCounts = useChecklistCounts();
+  // Открытые задачи с номером — для «ждёт задачу» (миграция 0061) и для
+  // отметки «Ждёт #N» на кубике: ждать можно только открытую.
+  const boardTasks = allTasks ?? tasks;
+  const openById = new Map(boardTasks.filter((t) => t.number != null && !isClosed(t)).map((t) => [t.id, t]));
+  const waitOptions = [...openById.values()]
+    .sort((a, b) => (b.number || 0) - (a.number || 0))
+    .map((t) => ({ id: t.id, number: t.number as number, title: t.title }));
+  const waitsFor = (t: Task) => {
+    const b = t.blockedBy ? openById.get(t.blockedBy) : undefined;
+    return b ? { number: b.number as number, title: b.title } : undefined;
+  };
 
   const today = todayStr();
   const snoozedMine = (t: Task) => authored(t) && t.status !== "done" && isSnoozed(t.snoozedUntil, today);
@@ -746,6 +764,8 @@ export default function TasksPanel({
                       menuItems={isMobile ? menuItemsFor(t) : undefined}
                       authorName={authorOf(t)}
                       people={participants.forTask(t.id)}
+                      checklist={checklistCounts[t.id]}
+                      waitsFor={waitsFor(t)}
                     />
                   )}
                 </SortableTask>
@@ -1096,6 +1116,7 @@ export default function TasksPanel({
           }}
           // Правка открытой задачи — поверх ТЕКУЩЕЙ строки списка, а не
           // снимка, с которым открыли окно (см. TaskModal.onPatch).
+          waitOptions={waitOptions}
           onPatch={(patch) => {
             if (!modalTask) return;
             const current = (allTasks ?? tasks).find((x) => x.id === modalTask.id) || modalTask;

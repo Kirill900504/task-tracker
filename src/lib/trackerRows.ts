@@ -43,6 +43,13 @@ export type TaskRow = {
   // массивом, потому что пачка PostgREST не подставляет значения по
   // умолчанию и пропущенный ключ стал бы NULL в not null колонке.
   desc_files?: { path: string; name: string; size: number; type: string }[];
+  // История срока (миграция 0058) — пишет только триггер базы.
+  first_deadline?: string | null;
+  deadline_moves?: number | null;
+  // Приёмка по выбору (миграция 0060). Пишет синхронизация — всегда.
+  needs_review?: boolean;
+  // Зависимость (миграция 0061). Пишет синхронизация — всегда.
+  blocked_by?: string | null;
 };
 
 export type MeetingRow = {
@@ -64,6 +71,8 @@ export type MeetingRow = {
   created_at?: string | null;
   // Written by the bot only, like TaskRow.accepted_at.
   confirmed_by?: string[] | null;
+  // Варианты времени опроса (миграция 0062). Пишет синхронизация — всегда.
+  slot_options?: { date: string; time: string }[];
 };
 
 export type IdeaRow = {
@@ -125,6 +134,8 @@ export function taskToRow(t: Task): TaskRow {
     completed_at: t.completedAt || null,
     snoozed_until: t.snoozedUntil || null,
     desc_files: t.descFiles || [],
+    needs_review: t.needsReview !== false,
+    blocked_by: t.blockedBy || null,
     // deleted_at is deliberately NOT part of this row — see softDeleteRow()/
     // restoreRow() in useTrackerData.ts for why an ordinary upsert must
     // never touch it.
@@ -159,6 +170,10 @@ export function taskFromRow(r: TaskRow): Task {
     ...(r.number != null ? { number: r.number } : {}),
     snoozedUntil: r.snoozed_until || "",
     descFiles: Array.isArray(r.desc_files) ? r.desc_files : [],
+    firstDeadline: r.first_deadline || "",
+    deadlineMoves: r.deadline_moves ?? 0,
+    needsReview: r.needs_review !== false,
+    blockedBy: r.blocked_by || "",
   };
 }
 
@@ -176,6 +191,7 @@ export function meetingToRow(m: Meeting): MeetingRow {
     duration_min: normalizeDuration(m.durationMin),
     from_task_id: m.fromTaskId || null,
     recur: m.recur || "none",
+    slot_options: m.slotOptions || [],
   };
 }
 
@@ -197,6 +213,7 @@ export function meetingFromRow(r: MeetingRow): Meeting {
     voteRound: r.vote_round ?? 1,
     createdBy: r.created_by || "",
     createdAt: r.created_at || "",
+    slotOptions: Array.isArray(r.slot_options) ? r.slot_options : [],
   };
 }
 

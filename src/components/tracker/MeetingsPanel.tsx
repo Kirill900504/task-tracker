@@ -30,6 +30,8 @@ import { busyPeople } from "@/lib/meetingTime";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useDropHandler } from "./dnd/TrackerDnd";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import MeetingTasksSheet, { type RecapTask } from "./MeetingTasksSheet";
+import { recapItems } from "@/lib/recapItems";
 
 export default function MeetingsPanel({
   myUserId = "",
@@ -49,6 +51,7 @@ export default function MeetingsPanel({
   onIdeaDropped,
   onTaskDropped,
   onTaskFromMeeting,
+  onCreateTasks,
   justCreatedId,
 }: {
   // Свой auth-id: чужую встречу видно, потому что тебя на неё позвали, но
@@ -98,6 +101,9 @@ export default function MeetingsPanel({
   onTaskDropped: (taskId: string) => void;
   // Открыть форму новой задачи, заполненную по итогу встречи.
   onTaskFromMeeting?: (prefill: TaskPrefill) => void;
+  // Завести сразу несколько задач — поручения из итога встречи
+  // (MeetingTasksSheet, предложение 4 от 13.10.2026).
+  onCreateTasks?: (tasks: RecapTask[], meeting: Meeting) => void;
   justCreatedId?: string | null;
 }) {
   // Голосование по встречам — один слой на всю панель, как участники у
@@ -126,6 +132,12 @@ export default function MeetingsPanel({
   const movedSavedRef = useRef(false);
   // Окно с прошедшими встречами.
   const [doneOpen, setDoneOpen] = useState(false);
+  // Окно «Поручения из итога»: по какой встрече и какие пункты.
+  const [recapSheet, setRecapSheet] = useState<{ meeting: Meeting; items: string[] } | null>(null);
+  function openRecapTasks(m: Meeting, result: string) {
+    const items = recapItems(result);
+    setRecapSheet({ meeting: m, items: items.length ? items : [result.trim()].filter(Boolean) });
+  }
 
   // See TasksPanel's identical pattern: an external open request from a
   // sibling (the calendar's date popover) is treated as an alternate open
@@ -424,6 +436,13 @@ export default function MeetingsPanel({
     // записать это нужно сейчас, пока помнится, кто и что. Только
     // предложение: «просто прошла» — тоже исход, и окно формы без спроса
     // учило бы закрывать его не глядя.
+    // Итог из нескольких пунктов — сразу окно поручений по пунктам
+    // (предложение 4): договорились о трёх делах — три задачи, а не одна с
+    // итогом целиком в названии.
+    if (status === "success" && onCreateTasks && recapItems(resultText).length >= 2) {
+      openRecapTasks(m, resultText);
+      return;
+    }
     if (status === "success" && onTaskFromMeeting) {
       void (async () => {
         const yes = await ask.confirm({
@@ -549,6 +568,7 @@ export default function MeetingsPanel({
     reschedule(m, result.date, result.time, m.result);
   }
 
+  const recapPeople = recapSheet ? meetingPeopleForTask(recapSheet.meeting).map((p) => p.name) : [];
   return (
     <div className="panel dash-panel" id="meetingsPanel" data-panel-id="meetingsPanel" ref={setMeetingsDropRef}>
       {/* На телефоне этой строки нет вовсе.
@@ -780,6 +800,20 @@ export default function MeetingsPanel({
                 }
               : undefined
           }
+          onRecapTasks={onCreateTasks ? (m, result) => openRecapTasks(m, result) : undefined}
+        />
+      )}
+
+      {recapSheet && onCreateTasks && (
+        <MeetingTasksSheet
+          meetingTitle={recapSheet.meeting.title}
+          items={recapSheet.items}
+          people={recapPeople}
+          onCreate={(tasks) => {
+            onCreateTasks(tasks, recapSheet.meeting);
+            toasts.showToast(`Поставлено задач: ${tasks.length}`, `По итогам встречи «${recapSheet.meeting.title}»`);
+          }}
+          onClose={() => setRecapSheet(null)}
         />
       )}
     </div>

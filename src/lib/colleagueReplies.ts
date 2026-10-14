@@ -16,9 +16,10 @@ import {
 } from "@/lib/colleagues";
 import { selfTaskIds } from "@/lib/selfTaskServer";
 import { choiceOf, lockedTaskText, lockedVoteText, openTaskChoices, openVoteChoices, voteVerdict, type VoteChoice } from "@/lib/answerRules";
-import { withoutSelfMark } from "@/lib/actorName";
+import { actorName, withoutSelfMark } from "@/lib/actorName";
 import { recordEvent } from "@/lib/itemHistory";
 import { applyReview } from "@/lib/reviewWork";
+import { isPoll, pollButtons, recordSlotVote, type SlotOption } from "@/lib/meetingPoll";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { deliverComment } from "@/lib/commentDelivery";
 import { confirmIfEveryoneAgreed } from "@/lib/meetingConfirm";
@@ -645,6 +646,28 @@ async function colleagueCallback(
     };
   }
 
+  // Опрос времени (миграция 0062): нажатие варианта — «подходит / уже не
+  // подходит». Голос пишет то же правило, что маршрут трекера
+  // (lib/meetingPoll), и когда ответили все — встреча назначается сама.
+  if (action.kind === "meeting" && action.action === "slot") {
+    const [meetingId, idxRaw] = action.id.split(".");
+    const idx = Number(idxRaw);
+    const { data: mrow } = await admin.from("meetings").select("id, title, status, slot_options").eq("id", meetingId).maybeSingle();
+    const m = mrow as { id: string; title: string; status: string; slot_options: SlotOption[] | null } | null;
+    if (!m || !isPoll(m)) return { toast: "Опрос уже закрыт", rewriteButtons: [] };
+    const { data: prev } = await admin.from("meeting_slot_votes").select("slots").eq("meeting_id", meetingId).eq("assignee_id", colleague.id).maybeSingle();
+    const before = ((prev as { slots: number[] } | null)?.slots || []) as number[];
+    const next = before.includes(idx) ? before.filter((x) => x !== idx) : [...before, idx];
+    const res = await recordSlotVote(admin, meetingId, colleague.id, next);
+    if (!res.ok) return { toast: res.error };
+    if (res.scheduled) return { toast: "Встреча назначена", rewriteTo: `📅 ${m.title}\n\n✅ Ответили все — встреча назначена на ${res.scheduled}.`, rewriteButtons: [] };
+    return {
+      toast: "Отмечено",
+      rewriteTo: `📅 ${m.title}\n\nОтметьте варианты, которые вам подходят (можно несколько):`,
+      rewriteButtons: pollButtons(meetingId, m.slot_options || [], res.slots),
+    };
+  }
+
   // «Кто идёт» — тот же расклад, что видит карточка в трекере.
   if (action.kind === "meeting" && action.action === "who") {
     const roster = await meetingRoster(admin, colleague, action.id);
@@ -791,6 +814,21 @@ export async function closeIfEveryoneReported(admin: SupabaseClient, taskId: str
     const self = await selfTaskOf(admin, taskId);
     if (self) {
       await applyReview(admin, self.task, "approve", executors[0].done_comment || "", self.who, true);
+      return false;
+    }
+  }
+  // Приёмка по выбору (миграция 0060): постановщик сказал при постановке,
+  // что принимать не будет, — отчитались все, задача закрывается сама, теми
+  // же словами, что написали исполнители. Только если отказов нет: отказ —
+  // вопрос к постановщику, и решать его ему, а не серверу.
+  if (!executors.some((p) => !!p.declined_at && !p.done_at)) {
+    const { data: t } = await admin.from("tasks").select("id, title, user_id, status, created_by, needs_review").eq("id", taskId).maybeSingle();
+    const task = t as { id: string; title: string; user_id: string; status: string | null; created_by: string | null; needs_review: boolean | null } | null;
+    if (task && task.needs_review === false) {
+      const author = task.created_by || task.user_id;
+      const label = await actorName(admin, task.user_id, author);
+      const words = executors.map((p) => p.done_comment || "").filter(Boolean).join("; ");
+      await applyReview(admin, task, "approve", words ? `Без приёмки — закрыто отчётом: ${words}` : "Без приёмки — закрыто отчётом", { label, userId: author });
       return false;
     }
   }

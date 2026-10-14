@@ -518,3 +518,77 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .team-archived{margin-top:14px; padding-top:12px; border-top:1px solid var(--line-soft);}
 .team-archived .team-list{margin-top:8px;}
 .team-archived .team-name{color:var(--ink-soft);}
+
+/* Сколько раз переносили срок — рядом с пилюлей срока (миграция 0058).
+   Тихо, пока переносов один-два; с трёх — тёплым, это уже повод спросить. */
+.task-moves{display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; color:var(--ink-soft); white-space:nowrap;}
+.task-moves.many{color:var(--med);}
+
+/* «#107» в переписке — ссылка на задачу (lib/chatText). Кнопкой, а не <a>:
+   адреса у неё нет, её открывает сам трекер. Выглядит как ссылка в тексте —
+   фирменным цветом и подчёркиванием пунктиром, без рамки кнопки. */
+.chat-task-link{
+  display:inline; padding:0; margin:0; border:0; background:none; cursor:pointer;
+  font:inherit; font-weight:700; color:var(--today);
+  text-decoration:underline dotted; text-underline-offset:2px;
+}
+.chat-task-link:hover{color:var(--ink); text-decoration-style:solid;}
+
+/* ---------- Чек-лист задачи (миграция 0059) ---------- */
+.checklist-block{
+  margin:0 0 10px; padding:10px 13px 12px; border-radius:var(--radius-md);
+  background:var(--paper-soft); border:1px solid var(--line-soft); box-shadow:var(--edge);
+}
+.checklist-count{font-size:12px; font-weight:700; color:var(--ink-soft); font-variant-numeric:tabular-nums;}
+.checklist-count.all{color:var(--success);}
+.checklist-bar{height:4px; border-radius:2px; background:rgba(255,255,255,.07); margin:0 0 8px; overflow:hidden;}
+.checklist-bar span{display:block; height:100%; background:var(--success); transition:width .2s ease;}
+.checklist-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px;}
+.checklist-item{display:flex; align-items:flex-start; gap:9px; padding:4px 2px; border-radius:8px;}
+.checklist-item:hover{background:rgba(255,255,255,.03);}
+.checklist-item .check{margin-top:1px; padding:0;}
+.checklist-item .check:disabled{cursor:default; opacity:.8;}
+.checklist-text{flex:1; min-width:0; font-size:13.5px; line-height:1.45; color:var(--ink); overflow-wrap:anywhere;}
+.checklist-item.done .checklist-text{color:var(--ink-soft); text-decoration:line-through;}
+.checklist-del{flex:none; width:24px; height:24px; border:0; background:none; color:var(--ink-soft); cursor:pointer; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; opacity:.6;}
+.checklist-del:hover{opacity:1; color:var(--high); background:var(--high-bg);}
+.checklist-add{
+  width:100%; margin-top:6px; padding:8px 11px; border-radius:var(--radius-sm);
+  background:var(--bg); border:1px solid var(--line-soft); color:var(--ink); font:inherit; font-size:13.5px;
+}
+.checklist-add:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
+@media (max-width:800px){ .checklist-add{font-size:16px;} }
+/* «3/5» на кубике. */
+.task-checklist{display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:700; color:var(--ink-soft); white-space:nowrap; font-variant-numeric:tabular-nums;}
+.task-checklist.all{color:var(--success);}
+
+.kicker-note{font-weight:600; color:var(--ink-soft);}
+
+/* «Ждёт #12» на кубике и «Ждёт задачу» в окне (миграция 0061). */
+.task-waits{display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; color:var(--med); white-space:nowrap;}
+.waits-line{margin:0 0 10px; font-size:13px;}
+
+/* ---------- Поручения из итога встречи (MeetingTasksSheet) ---------- */
+.modal.recap-tasks{max-width:640px;}
+.recap-rows{display:flex; flex-direction:column; gap:8px;}
+.recap-row{display:flex; gap:10px; align-items:flex-start; padding:9px 10px; border-radius:12px; background:var(--paper-soft); border:1px solid var(--line-soft);}
+.recap-row.off{opacity:.55;}
+.recap-row .check{margin-top:8px; padding:0;}
+.recap-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:7px;}
+.recap-title{width:100%; padding:8px 10px; border-radius:var(--radius-sm); background:var(--bg); border:1px solid var(--line-soft); color:var(--ink); font:inherit; font-size:13.5px; font-weight:600;}
+.recap-title:focus{outline:none; border-color:var(--accent);}
+.recap-meta{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
+.recap-meta .participant-chip{padding:5px 10px; font-size:12px;}
+@media (max-width:800px){ .recap-title{font-size:16px;} }
+
+/* ---------- Опрос времени встречи (миграция 0062) ---------- */
+.poll-block{margin:0 0 12px; padding:10px 13px 12px; border-radius:var(--radius-md); background:var(--paper-soft); border:1px solid rgba(79,168,216,.4); box-shadow:var(--edge);}
+.poll-hint{margin:0 0 8px;}
+.poll-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;}
+.poll-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 8px; border-radius:10px; background:rgba(0,0,0,.14);}
+.poll-when{flex:1; min-width:120px; font-weight:700; font-variant-numeric:tabular-nums;}
+.poll-fits{display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; color:var(--ink-soft);}
+.poll-pick{padding:5px 11px; font-size:12.5px;}
+.poll-none{margin-top:8px;}
+.poll-form{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px;}
+.poll-extra{display:inline-flex; align-items:center; gap:6px;}

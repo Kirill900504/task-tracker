@@ -12,6 +12,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // сначала ставит на неё человека; раньше этого шага не было, потому что и
 // правила не было.
 //
+// Срок у задачи обязателен с 14.10.2026 («запрети ставить задачи без срока
+// даже самому себе»). Тестам, которым срок безразличен, он ставится здесь —
+// «Через неделю», и только если тест не выбрал свой до этого: проверки
+// сроков (просрочка, «завтра») ставят его сами и после этого шага.
+export async function ensureDeadline(page: Page) {
+  const req = page.locator(".field-req", { hasText: "Нужен срок" });
+  if (!(await req.isVisible().catch(() => false))) return;
+  await page.locator(".deadline-row .participant-chip", { hasText: "Через неделю" }).first().click();
+  await expect(req).toHaveCount(0);
+}
+
 // Берётся первый попавшийся человек: кто именно — этим тестам безразлично,
 // а список у свежего тестового аккаунта заполняется значениями по умолчанию
 // (DEFAULT_ASSIGNEES) и заранее не известен. Список читается отдельным
@@ -33,6 +44,7 @@ export async function pickAnyExecutor(page: Page) {
   // и попадает под тот же фильтр.
   await menu.locator(".export-item").filter({ hasText: /^Исполнитель/ }).click();
   await expect(chip).toHaveClass(/role-executor/);
+  await ensureDeadline(page);
 }
 
 
@@ -53,6 +65,7 @@ export async function pickSelfExecutor(page: Page) {
   await expect(menu).toBeVisible();
   await menu.locator(".export-item").filter({ hasText: /^Исполнитель/ }).click();
   await expect(chip).toHaveClass(/role-executor/);
+  await ensureDeadline(page);
 }
 
 // Перетаскивание — настоящими движениями мыши.

@@ -65,6 +65,8 @@ export default function TaskCard({
   refused,
   awaitingReschedule,
   unreadCount,
+  checklist,
+  waitsFor,
 }: {
   task: Task;
   section: Section | null;
@@ -115,6 +117,11 @@ export default function TaskCard({
   // Сколько новых реплик в обсуждении с прошлого открытия этой карточки на
   // этом устройстве (см. useUnreadTaskComments).
   unreadCount?: number;
+  // Сколько шагов чек-листа сделано (миграция 0059). Нет шагов — ничего.
+  checklist?: { done: number; total: number };
+  // Открытая задача, которую эта ждёт (миграция 0061). Закрыли ту — и
+  // отметка уходит сама: ждать больше нечего.
+  waitsFor?: { number: number; title: string };
 }) {
   const isMobile = useIsMobile();
   // Меню карточки: открыто ли и от чего. Якорь нужен только на
@@ -287,7 +294,7 @@ export default function TaskCard({
           )
         )}
 
-        {(due || recurLabel(task) || stage === "blocked" || refused || stage === "returned" || awaitingReschedule || !!unreadCount || kind === "watch" || kind === "co" || kind === "self") && (
+        {(due || !!checklist?.total || !!waitsFor || recurLabel(task) || stage === "blocked" || refused || stage === "returned" || awaitingReschedule || !!unreadCount || kind === "watch" || kind === "co" || kind === "self") && (
           <div className="task-foot">
             {due && (
               <span className={"task-due-pill tone-" + (dimOverdue && due.tone !== "late" ? "normal" : due.tone)} title={due.title}>
@@ -295,10 +302,37 @@ export default function TaskCard({
                 {due.text}
               </span>
             )}
+            {/* Сколько раз срок уже переносили (миграция 0058, предложение 5
+                от 13.10.2026): задача, отложенная трижды, не должна на доске
+                выглядеть поставленной вчера. Число — рядом со сроком, первый
+                срок — в подсказке. */}
+            {!!task.deadlineMoves && task.deadline && (
+              <span
+                className={"task-moves" + (task.deadlineMoves >= 3 ? " many" : "")}
+                title={`Срок переносили ${task.deadlineMoves} раз${task.deadlineMoves % 10 >= 2 && task.deadlineMoves % 10 <= 4 && (task.deadlineMoves < 10 || task.deadlineMoves > 20) ? "а" : ""}${task.firstDeadline ? " — изначально " + task.firstDeadline.split("-").reverse().join(".") : ""}`}
+              >
+                <Icon name="reset" size={11} />
+                {task.deadlineMoves}
+              </span>
+            )}
             {!task.deadline && task.recur !== "none" && isDueTodayHighlight(task) && (
               <span className="task-due-pill tone-today">
                 <Icon name="calendar" size={12} />
                 Сегодня
+              </span>
+            )}
+            {/* «Ждёт #12» — работу пока не начать (миграция 0061). */}
+            {waitsFor && (
+              <span className="task-waits" title={`Ждёт задачу #${waitsFor.number} «${waitsFor.title}»`}>
+                <Icon name="clock" size={12} />
+                Ждёт #{waitsFor.number}
+              </span>
+            )}
+            {/* Шаги чек-листа «3/5» — ход работы без единого сообщения. */}
+            {!!checklist?.total && (
+              <span className={"task-checklist" + (checklist.done === checklist.total ? " all" : "")} title={`Чек-лист: сделано ${checklist.done} из ${checklist.total}`}>
+                <Icon name="check" size={12} />
+                {checklist.done}/{checklist.total}
               </span>
             )}
             {recurLabel(task) && <span className="task-recur">{recurLabel(task)}</span>}

@@ -275,7 +275,6 @@ async function answerIdea(admin: SupabaseClient, me: Receiver | null, action: Ca
       rewriteButtons: [
         [when("0", "Сегодня"), when("1", "Завтра")],
         [when("fri", "До пятницы"), when("7", "Через неделю")],
-        [when("no", "Без срока")],
         [{ text: "← Назад", data: encodeCallback("idea", "task", idea.id) }],
       ],
     };

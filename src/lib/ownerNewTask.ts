@@ -28,9 +28,41 @@ import { taskRef } from "@/lib/taskRef";
 
 export type NewTaskPending = {
   kind: "new_task";
-  stage: "title" | "who";
+  stage: "title" | "desc" | "who";
   title?: string;
+  // Детали к поручению (14.10.2026: «мастер „Поручить“ в боте не
+  // спрашивает описание — исправь»). Шаг идёт сразу за названием: детали
+  // пишут, пока задача ещё в голове, а не после списка людей и сроков.
+  description?: string;
 };
+
+// Вопрос о деталях — одной кнопкой «Без описания», потому что у половины
+// поручений деталей нет, и писать «нет» словом — лишнее движение.
+export const DESC_QUESTION =
+  "Детали к задаче? Напишите одним сообщением или надиктуйте голосом — что важно знать исполнителю. Или нажмите «Без описания».";
+export function descButtons(): BotButton[][] {
+  return [[{ text: "Без описания", data: encodeCallback("task", "ndesc", "x") }]];
+}
+
+// После деталей — «кому», если человека ещё не выбрали («Поручить ему» из
+// его карточки выбирает заранее), иначе сразу «на когда». Один шаг на оба
+// входа: текст с деталями и кнопку «Без описания».
+export async function nextNewTaskStep(
+  admin: SupabaseClient,
+  spaceId: string,
+  pending: Record<string, unknown>,
+): Promise<{ text: string; buttons: BotButton[][]; pending: Record<string, unknown> }> {
+  const title = String(pending.title || "");
+  const people = pending.people as { name: string; role: string }[] | undefined;
+  if (people?.length) {
+    return {
+      text: `«${title}» — ${people.map((x) => withoutSelfMark(x.name)).join(", ")}. На когда?`,
+      buttons: whenButtons(),
+      pending: { ...pending, kind: "new_task", stage: "when" },
+    };
+  }
+  return { text: `«${title}»\n\nКому поручить?`, buttons: await whoButtons(admin, spaceId), pending: { ...pending, kind: "new_task", stage: "who" } };
+}
 
 export function startNewTask(): { text: string; pending: NewTaskPending } {
   return {
@@ -76,14 +108,16 @@ export function whenButtons(): BotButton[][] {
       { text: "До пятницы", data: encodeCallback("task", "nwhenfri", "x") },
       { text: "Через неделю", data: encodeCallback("task", "nwhen7", "x") },
     ],
-    [{ text: "Без срока", data: encodeCallback("task", "nwhenno", "x") }],
+    // «Без срока» здесь больше нет: срок обязателен (14.10.2026).
   ];
 }
 
 export function resolveWhen(code: string, today: Date = new Date()): string {
-  if (code === "no") return "";
   const d = new Date(today);
   d.setHours(0, 0, 0, 0);
+  // «Без срока» из уже отправленных сообщений (кнопки до 14.10.2026) — срок
+  // по умолчанию: задачи без срока больше не бывает (lib/newTask).
+  if (code === "no") return isoDate(workdayIn(d, 7));
   if (code === "fri") {
     // Ближайшая пятница, и никогда не сегодняшняя: «к пятнице», сказанное
     // в пятницу, означает следующую — сегодня уже поздно договариваться.
@@ -108,6 +142,7 @@ export async function createTaskFromBot(
   // notifyAuthor). У руководителя здесь его auth-id: по нему ему придёт
   // отчёт, и по нему же бот потом пустит его к приёмке этой задачи.
   createdBy: string | null = null,
+  description = "",
 ): Promise<{ text: string }> {
   // Ни одного исполнителя (раздел, где закреплены только соисполнители и
   // наблюдатели) — исполнителем становится тот, кто поручает: задачи без
@@ -121,7 +156,7 @@ export async function createTaskFromBot(
   // Номер ставит база (миграция 0045) — он нужен сообщению исполнителю.
   const { data: inserted, error } = await admin
     .from("tasks")
-    .insert(newTaskRow({ id, userId, title, assignee: executors[0] || people[0]?.name || "", deadline: deadline || null, createdBy }))
+    .insert(newTaskRow({ id, userId, title, description, assignee: executors[0] || people[0]?.name || "", deadline: deadline || null, createdBy }))
     .select("number")
     .maybeSingle();
   if (error) return { text: "Не получилось сохранить задачу: " + error.message };
@@ -135,7 +170,7 @@ export async function createTaskFromBot(
     // createdBy передаётся дальше: по нему attachExecutors понимает, значит
     // ли строка «… (я)» в списке «себе» — или это руководитель поручает
     // задачу владельцу, и тому надо сказать, как любому другому.
-    const result = await attachExecutors(admin, userId, { id, title, deadline: deadline || null, number: inserted?.number ?? null }, names, role, createdBy);
+    const result = await attachExecutors(admin, userId, { id, title, description, deadline: deadline || null, number: inserted?.number ?? null }, names, role, createdBy);
     const note = assignNote(result);
     if (note) notes.push(note);
   }

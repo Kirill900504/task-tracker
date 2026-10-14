@@ -13,7 +13,7 @@ import { useColleagues } from "@/hooks/useColleagues";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { ChatMuteButton } from "./AlertsButton";
 import EmojiPicker from "./EmojiPicker";
-import { insertAt, nearBottom, splitLinks } from "@/lib/chatText";
+import { insertAt, nearBottom, OPEN_TASK_NUMBER_EVENT, splitLinks } from "@/lib/chatText";
 
 // Обсуждение задачи там же, где задача.
 //
@@ -124,6 +124,21 @@ function withLinks(text: string, keyBase: string) {
   return parts.map((part, i) =>
     typeof part === "string" ? (
       part
+    ) : "taskNumber" in part ? (
+      // «#107» — ссылка на задачу (lib/chatText, предложение 8). Открывает
+      // её корень трекера по событию окна: лента списка задач не знает.
+      <button
+        key={keyBase + i}
+        type="button"
+        className="chat-task-link"
+        title={`Открыть задачу ${part.text}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          window.dispatchEvent(new CustomEvent(OPEN_TASK_NUMBER_EVENT, { detail: part.taskNumber }));
+        }}
+      >
+        {part.text}
+      </button>
     ) : (
       <a key={keyBase + i} className="chat-link" href={part.url} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>
         {part.text}
