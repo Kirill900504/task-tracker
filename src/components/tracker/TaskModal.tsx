@@ -766,6 +766,7 @@ export default function TaskModal({
                   onApproveWork={onApproveWork}
                   onReturnWork={onReturnWork}
                   onReopenWork={onReopenWork}
+                  onCloseUnfulfilled={onForceCloseWork}
                   onAcceptReschedule={onAcceptReschedule}
                   onRejectReschedule={onRejectReschedule}
                 />

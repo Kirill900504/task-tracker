@@ -34,6 +34,7 @@ export default function TeamCompact({
   onApproveWork,
   onReturnWork,
   onReopenWork,
+  onCloseUnfulfilled,
   onAcceptReschedule,
   onRejectReschedule,
 }: {
@@ -46,6 +47,9 @@ export default function TeamCompact({
   onApproveWork: (comment: string) => void | Promise<void>;
   onReturnWork: (comment: string) => void | Promise<void>;
   onReopenWork: (comment: string) => void | Promise<void>;
+  // Тот же маршрут, что «Принудительное закрытие» в шапке (action force);
+  // сервер сам называет такое закрытие «невыполненной», раз отчётов нет.
+  onCloseUnfulfilled: (comment: string) => void | Promise<void>;
   onAcceptReschedule: (participantId: string, date: string) => void;
   onRejectReschedule: (participantId: string) => void;
 }) {
@@ -102,6 +106,32 @@ export default function TeamCompact({
     setBusy(true);
     try {
       await answerWithFiles({ kind: "task", id: taskId }, answer.files, "Документы к возврату на доработку", () => onReturnWork(comment.trim()));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // «Закрыть невыполненной» — 14.10.2026, его слова: исполнитель сказал «не
+  // могу», и если постановщик «реально понимает, что причина невыполнения
+  // уважительная», он закрывает задачу без результата, и «при закрытии так
+  // же обязателен заключительный комментарий постановщика». Кнопка вверху
+  // окна делала то же самое, но стояла далеко от вопроса и называлась
+  // словом, которое читается как наказание, а не как согласие с причиной.
+  async function handleCloseUnfulfilled() {
+    if (busy) return;
+    const answer = await ask.askWithFiles({
+      title: "Закрыть невыполненной",
+      question: "Заключительный комментарий",
+      note: "Задача закроется без результата. Комментарий увидят исполнители — напишите, почему закрываете.",
+      multiline: true,
+      okText: "Закрыть невыполненной",
+      required: "Без заключительного комментария закрыть нельзя — напишите, почему закрываете.",
+    });
+    if (answer === null || busy) return;
+    const comment = answer.text;
+    setBusy(true);
+    try {
+      await answerWithFiles({ kind: "task", id: taskId }, answer.files, "Документы к закрытию невыполненной", () => onCloseUnfulfilled(comment.trim()));
     } finally {
       setBusy(false);
     }
@@ -190,7 +220,7 @@ export default function TeamCompact({
             {progress.declined.length === 0
               ? "Все исполнители отчитались. Принимаете работу?"
               : progress.doneCount === 0
-                ? `Работу не сделают: ${progress.declined.map((d) => shown(d.name)).join(", ")}. Решать вам — вернуть с объяснением или закрыть принудительно (кнопка вверху).`
+                ? `Работу не сделают: ${progress.declined.map((d) => shown(d.name)).join(", ")}. Решать вам — вернуть с объяснением или закрыть невыполненной.`
                 : `Отчитались не все: ${progress.declined.map((d) => shown(d.name)).join(", ")} не смогут. Решать вам.`}
           </div>
           <div className="tp-review-actions">
@@ -202,6 +232,13 @@ export default function TeamCompact({
             <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleReturn()}>
               {progress.declined.length ? "Вернуть с объяснением" : "Вернуть на доработку"}
             </button>
+            {/* Только когда сдавать нечего: если хоть один отчёт есть, решение
+                — «Принять» (с комментарием о том, кто не смог). */}
+            {progress.declined.length > 0 && progress.doneCount === 0 && (
+              <button className="btn btn-small" type="button" id="closeUnfulfilledBtn" disabled={busy} onClick={() => void handleCloseUnfulfilled()}>
+                Закрыть невыполненной
+              </button>
+            )}
           </div>
         </div>
       )}

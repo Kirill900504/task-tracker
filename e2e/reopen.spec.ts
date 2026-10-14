@@ -208,4 +208,29 @@ test("отказ тоже закрывает карточку и уводит з
       { timeout: 15_000 },
     )
     .toEqual(["pismo-postavshchika.txt"]);
+
+  // «Закрыть невыполненной» (14.10.2026): причина отказа уважительная —
+  // постановщик закрывает задачу без результата, и заключительный
+  // комментарий обязателен.
+  await page.locator("#col-review .task", { hasText: title }).click();
+  const closeBtn = page.locator("#closeUnfulfilledBtn");
+  await expect(closeBtn).toHaveText("Закрыть невыполненной", { timeout: 15_000 });
+  await closeBtn.click();
+  await page.click("#askOkBtn");
+  // Пустое не уходит: окно вопроса остаётся.
+  await expect(page.locator(".ask-problem")).toBeVisible();
+  await page.fill("#askInput", "Смету не дадут до конца года — снимаем");
+  await page.click("#askOkBtn");
+  await expect(page.locator("#col-review .task", { hasText: title })).toHaveCount(0, { timeout: 15_000 });
+
+  // Хроника называет закрытие тем, чем оно было, — спрашивается база.
+  await expect
+    .poll(
+      async () => {
+        const { data } = await admin.from("item_comments").select("body").eq("item_kind", "task").eq("item_id", task!.id).eq("system", true);
+        return (data || []).some((c) => /закрыл задачу невыполненной: Смету не дадут/.test(c.body as string));
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
 });

@@ -60,10 +60,10 @@ export async function applyReview(
   // записано в базу до ответа — это и есть то, что ему нужно знать сразу.
   defer?: (job: () => Promise<void>) => void,
 ): Promise<ReviewResult> {
-  const tell = async (a: ReviewAction, t: string) => {
+  const tell = async (a: ReviewAction, t: string, unfulfilled = false) => {
     if (quiet) return;
-    if (defer) defer(() => tellExecutors(admin, task, a, t));
-    else await tellExecutors(admin, task, a, t);
+    if (defer) defer(() => tellExecutors(admin, task, a, t, unfulfilled));
+    else await tellExecutors(admin, task, a, t, unfulfilled);
   };
   const text = comment.trim();
   if (action === "return" && !text) return { ok: false, error: "Напишите, что доделать" };
@@ -101,6 +101,25 @@ export async function applyReview(
       .or("done_at.not.is.null,declined_at.not.is.null")
       .limit(1);
     if (!answered?.length) return { ok: false, error: "Уже возвращено на доработку — ждём нового отчёта" };
+  }
+
+  // Закрыть задачу, по которой не сдано ни одного отчёта, — это «закрыть
+  // невыполненной» (14.10.2026, его слова: исполнитель сказал «не могу»,
+  // причина уважительная — закрыть без результата, с заключительным
+  // комментарием). Колонки те же, что у принудительного закрытия: новое
+  // состояние было бы третьей правдой о том, что задача закрыта. Разница
+  // только в словах — в хронике и в сообщении исполнителю, чтобы
+  // «закрыта» не читалось как «работу приняли».
+  let unfulfilled = false;
+  if (action === "force") {
+    const { data: reported } = await admin
+      .from("task_participants")
+      .select("id")
+      .eq("task_id", task.id)
+      .eq("role", "executor")
+      .not("done_at", "is", null)
+      .limit(1);
+    unfulfilled = !reported?.length;
   }
 
   const now = new Date().toISOString();
@@ -194,10 +213,12 @@ export async function applyReview(
           ? `✅ ${who.label} принял работу${text ? ": " + text : ""}`
           : action === "reopen"
             ? `🔄 ${who.label} открыл задачу заново${text ? ": " + text : ""}`
-            : `🔒 ${who.label} принудительно закрыл задачу: ${text}`,
+            : unfulfilled
+              ? `🔒 ${who.label} закрыл задачу невыполненной: ${text}`
+              : `🔒 ${who.label} принудительно закрыл задачу: ${text}`,
   });
 
-  await tell(action, text);
+  await tell(action, text, unfulfilled);
   return { ok: true };
 }
 
@@ -208,6 +229,7 @@ async function tellExecutors(
   task: { id: string; title: string; user_id: string },
   action: ReviewAction,
   comment: string,
+  unfulfilled = false,
 ): Promise<void> {
   // Номер спрашивается здесь, а не у вызывающих: зовут сюда пять дверей
   // (трекер, бот, итог встречи…), и каждая знает задачу в своём объёме.
@@ -228,7 +250,7 @@ async function tellExecutors(
         ? `✅ Принято: ${named}${comment ? "\n\n" + comment : ""}`
         : action === "reopen"
           ? `🔄 Задачу открыли заново: ${named}${comment ? "\n\n" + comment : ""}`
-          : `🔒 Задача закрыта: ${named}\n\n${comment}`;
+          : `🔒 Задача закрыта${unfulfilled ? " невыполненной" : ""}: ${named}\n\n${comment}`;
 
   // Под возвратом — кнопки, которыми на него отвечают: сообщение, которым
   // задачу присылали, к этому моменту уже переписано, и отчитаться заново
