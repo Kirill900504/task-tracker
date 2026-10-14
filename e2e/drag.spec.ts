@@ -137,3 +137,53 @@ test("место взятой мысли ничем не закрашено", as
   expect(isTransparent(style.bg), `место взятой мысли залито ${style.bg}`).toBe(true);
   expect(isTransparent(style.border), `у места взятой мысли осталась рамка ${style.border}`).toBe(true);
 });
+
+// 14.10.2026: «когда перетаскиваешь мысль для создания на основании неё
+// задачу в поле колонок новая или в работе, она отбивается назад, а надо
+// чтобы выводило окно создания задачи». Проверяется и сам столбец, и
+// тёмное поле под ним — причина была во втором (см. withColumnBelow в
+// dnd/TrackerDnd.tsx).
+test("мысль, брошенная в столбец задач, открывает новую задачу", async ({ page }) => {
+  test.setTimeout(90_000);
+  const stamp = Date.now().toString(36);
+
+  await page.goto("/login");
+  await page.fill("#email", email);
+  await page.fill("#password", password);
+  await page.click('button[type="submit"]');
+  await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+
+  const texts = [`E2E мысль в столбец ${stamp}`, `E2E мысль на карточку ${stamp}`];
+  const { error } = await admin.from("ideas").insert(
+    texts.map((text, i) => ({ id: `drop-idea-${stamp}-${i}`, user_id: userId, text, important: false, done: false })),
+  );
+  expect(error).toBeNull();
+  await page.reload();
+  await expect(page.locator(".idea-item", { hasText: texts[1] })).toBeVisible({ timeout: 30_000 });
+
+  const targets = [
+    page.locator("#col-new .task-column-body"),
+    page.locator("#col-work .task-column-body"),
+  ];
+  for (const [i, text] of texts.entries()) {
+    const idea = page.locator(".idea-item", { hasText: text });
+    await centerOnScreen(idea);
+    const from = (await idea.boundingBox())!;
+    await page.mouse.move(from.x + 40, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 20, from.y + from.height / 2 + 20, { steps: 5 });
+    // Первая — в сам столбец, вторая — НИЖЕ его последней карточки: туда,
+    // где на снимке Кирилла она и отскакивала (столбец кончается там, где
+    // кончаются карточки, а тёмное поле под ним глаз считает тем же
+    // столбцом).
+    const to = (await targets[i].boundingBox())!;
+    const y = i === 0 ? to.y + Math.min(60, to.height / 2) : to.y + to.height + 120;
+    await page.mouse.move(to.x + to.width / 2, y, { steps: 15 });
+    await page.mouse.up();
+
+    await expect(page.locator("#fTitle")).toHaveValue(text, { timeout: 5_000 });
+    await page.click("#cancelBtn");
+    await expect(page.locator("#fTitle")).toHaveCount(0);
+  }
+});

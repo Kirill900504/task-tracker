@@ -165,9 +165,13 @@ class CardKeyboardSensor extends KeyboardSensor {
 // фактическим (уже сдвинутым) прямоугольникам, и только среди карточек и
 // столбцов — иначе ближайшим центром окажется клетка календаря.
 function trackerCollisions(args: Parameters<typeof pointerWithin>[0]) {
-  const pointer = pointerWithin(args);
+  const raw = pointerWithin(args);
+  const pointer = withColumnBelow(args, raw);
   const payload = payloadOf(args.active.data);
   if (payload?.kind !== "task") return pointer;
+  // Отпущена под последней карточкой — значит, в конец столбца, а не перед
+  // ближайшей к курсору (которой оказалась бы та же последняя).
+  if (!raw.length) return pointer;
 
   // День календаря выигрывает, если курсор прямо над ним: задача,
   // брошенная на дату, становится встречей.
@@ -200,6 +204,42 @@ function trackerCollisions(args: Parameters<typeof pointerWithin>[0]) {
   });
   const nearestCard = cards.length ? closestCenter({ ...args, droppableContainers: cards }) : [];
   return nearestCard.length ? nearestCard : [columnHit];
+}
+
+// Пустое место ПОД столбцом — тоже столбец.
+//
+// 14.10.2026: «когда перетаскиваешь мысль… в поле колонок новая или в
+// работе, она отбивается назад». Столбцы стоят в сетке с
+// `align-items:start`, то есть каждый ровно такой высоты, как его карточки,
+// и зона сброса кончается под последней из них. Ниже — тёмное поле, которое
+// глаз читает как тот же столбец, а для переноса это «нигде»: мысль
+// отпускали туда и получали молчаливый возврат на место. Короткий столбец
+// рядом с длинным — обычное дело, так что промахивался почти каждый.
+//
+// Поэтому, когда под курсором нет ни одной зоны, ищется столбец, над
+// которым курсор стоит по горизонтали и ниже начала которого он опущен.
+// Граница одна: курсор не над другой панелью. При узком окне мысли и
+// календарь стоят ПОД доской в той же полосе, и бросок на панель мыслей не
+// должен заводить задачу.
+function withColumnBelow(args: Parameters<typeof pointerWithin>[0], hits: ReturnType<typeof pointerWithin>) {
+  if (hits.length) return hits;
+  const kind = payloadOf(args.active.data)?.kind;
+  const at = args.pointerCoordinates;
+  if (!at || (kind !== "task" && kind !== "idea")) return hits;
+  const overOtherPanel = Array.from(document.querySelectorAll(".dash-panel")).some((panel) => {
+    if (panel.id === "mainCol") return false;
+    const r = panel.getBoundingClientRect();
+    return at.x >= r.left && at.x <= r.right && at.y >= r.top && at.y <= r.bottom;
+  });
+  if (overOtherPanel) return hits;
+  for (const container of args.droppableContainers) {
+    if (targetOf(container.data)?.kind !== "task-column") continue;
+    const rect = args.droppableRects.get(container.id);
+    if (rect && at.x >= rect.left && at.x <= rect.right && at.y >= rect.top) {
+      return [{ id: container.id, data: { droppableContainer: container, value: 0 } }];
+    }
+  }
+  return hits;
 }
 
 function payloadOf(data: unknown): DragPayload | null {
