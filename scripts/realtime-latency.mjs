@@ -5,7 +5,7 @@
 // нажал „выполнил“, у меня перешло в колонку „на приёмке“ только после F5».
 // route-latency.mjs times the button; this times the echo: a throwaway
 // owner and manager each hold the same realtime subscriptions the tracker
-// holds (tasks by space, task_participants unfiltered), and every step of
+// holds (both tables unfiltered: RLS decides what arrives), and every step of
 // report → return → report is timed from the button to the moment each
 // side hears about it. "—" means the event never came within the wait,
 // which is exactly the case where the screen sits still until a reload.
@@ -56,11 +56,11 @@ async function post(actor, path, body) {
 }
 
 // Every event either side receives, with its arrival time.
-function listen(who, actor, ownerId) {
+function listen(who, actor) {
   const events = [];
   const ch = actor.live
     .channel("rt-" + who + Math.random().toString(36).slice(2))
-    .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `user_id=eq.${ownerId}` }, (p) =>
+    .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, (p) =>
       events.push({ table: "tasks", at: performance.now(), row: p.new }),
     )
     .on("postgres_changes", { event: "*", schema: "public", table: "task_participants" }, (p) =>
@@ -99,8 +99,8 @@ try {
   if (mgrId) created.push(mgrId);
   const mgr = await signIn(mgrEmail, mgrPassword, mgrId);
 
-  const ownerEars = listen("owner", owner, owner.id);
-  const mgrEars = listen("mgr", mgr, owner.id);
+  const ownerEars = listen("owner", owner);
+  const mgrEars = listen("mgr", mgr);
   await Promise.all([ownerEars.ready, mgrEars.ready]);
 
   const taskId = "rt" + Math.random().toString(36).slice(2, 9);
