@@ -6,6 +6,7 @@ import type { TaskParticipant } from "@/lib/taskProgress";
 import { peopleLoad } from "@/lib/peoplePanel";
 import { withoutSelfMark } from "@/lib/actorName";
 import Modal from "./Modal";
+import ItemModalHead from "./ItemModalHead";
 import Icon from "./Icon";
 
 // «Загрузка» — к кому идти первым. Теперь окном, а не панелью.
@@ -72,9 +73,15 @@ export default function LoadModal({
           на этом div. Без него содержимое раскладывается прямо по
           затемнению в строку — заголовок в одном углу, кнопка в другом. */}
       <div className="modal load-modal">
-        <h2>
-          Загрузка <span className="count">{rows.length}</span>
-        </h2>
+        <ItemModalHead
+          plain
+          title={
+            <>
+              Загрузка <span className="count">{rows.length}</span>
+            </>
+          }
+          onClose={onClose}
+        />
 
         {!rows.length && <div className="empty">Никому ничего не поручено.</div>}
 
@@ -125,11 +132,6 @@ export default function LoadModal({
           </button>
         )}
 
-        <div className="modal-actions">
-          <button className="btn" type="button" onClick={onClose}>
-            Закрыть
-          </button>
-        </div>
       </div>
     </Modal>
   );

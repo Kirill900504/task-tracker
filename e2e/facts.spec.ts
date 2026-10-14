@@ -51,7 +51,7 @@ test("карточка задачи говорит, кто поручил, ко�
   // На кубике — «кто поручил → кому» (люди со своим этапом) и срок
   // пилюлей словами (13.10.2026).
   await expect(card.locator(".task-people")).toBeVisible();
-  await expect(card.locator(".task-due-pill")).toContainText(/до |сегодня|завтра|просрочено/);
+  await expect(card.locator(".task-due-pill")).toContainText(/до |сегодня|завтра|просрочено/i);
 
   await card.click();
   const facts = page.locator("#taskFacts");
@@ -116,7 +116,7 @@ test("карточка задачи говорит, кто поручил, ко�
   // не отдельной строкой (24.09.2026: «убрать лишний отступ, который
   // образуется за счёт того, что статус отдельной строкой показывается»).
   const stage = facts.locator(".facts-row.has-badge .tp-stage");
-  await expect(stage).toContainText("на приёмке");
+  await expect(stage).toContainText("на приёмке", { ignoreCase: true });
   await expect(facts.locator(".facts-badge-row")).toHaveCount(0);
   const author = facts.locator(".fact-label", { hasText: "Постановщик" });
   const [stageBox, authorBox, factsBox] = [await stage.boundingBox(), await author.boundingBox(), await facts.boundingBox()];

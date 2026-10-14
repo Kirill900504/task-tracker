@@ -1,6 +1,7 @@
 "use client";
 
 import Modal from "./Modal";
+import ItemModalHead from "./ItemModalHead";
 import Icon from "./Icon";
 import type { Idea } from "@/types/tracker";
 import { stateLabel, type SentTo } from "@/lib/ideaRecipients";
@@ -26,9 +27,15 @@ export default function SentIdeasModal({
   return (
     <Modal onClose={onClose} id="sentIdeasModal">
       <div className="modal done-list-modal">
-        <h2>
-          Отправленные мысли <span className="count">{ideas.length}</span>
-        </h2>
+        <ItemModalHead
+          plain
+          title={
+            <>
+              Отправленные мысли <span className="count">{ideas.length}</span>
+            </>
+          }
+          onClose={onClose}
+        />
 
         {!ideas.length && <div className="empty">Отправленных мыслей нет.</div>}
 
@@ -55,11 +62,6 @@ export default function SentIdeasModal({
           ))}
         </div>
 
-        <div className="modal-actions">
-          <button className="btn" type="button" onClick={onClose}>
-            Закрыть
-          </button>
-        </div>
       </div>
     </Modal>
   );

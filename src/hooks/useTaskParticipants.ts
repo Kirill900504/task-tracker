@@ -173,7 +173,9 @@ export function useTaskParticipants() {
       // The full list, the owner's own row included: work can be put on
       // yourself, and the send menu is the only place that has a reason to
       // leave you out of it.
-      db.from("assignees").select("id, name").order("name"),
+      // Убранные из команды (миграция 0055) сюда не входят: это список
+      // тех, КОГО можно поставить, а имена в участии берутся из самой строки.
+      db.from("assignees").select("id, name").is("archived_at", null).order("name"),
     ]);
 
     const grouped: Record<string, Participant[]> = {};

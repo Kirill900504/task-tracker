@@ -320,7 +320,7 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
       await say(ctx, "Не расслышал итоги встречи — перескажите ещё раз.");
       return;
     }
-    const { data: assigneeRows } = await ctx.admin.from("assignees").select("name").eq("user_id", userId);
+    const { data: assigneeRows } = await ctx.admin.from("assignees").select("name").eq("user_id", userId).is("archived_at", null);
     const known = (assigneeRows || []).map((r) => r.name as string);
     const { summary, tasks } = await extractMeetingNotes(notes, known);
     // Which meeting this recap is about, if any still stands open — matched
@@ -549,7 +549,7 @@ async function offerTask(
   memberId: string,
   text: string,
 ): Promise<boolean> {
-  const { data: assigneeRows } = await ctx.admin.from("assignees").select("name").eq("user_id", colleague.user_id);
+  const { data: assigneeRows } = await ctx.admin.from("assignees").select("name").eq("user_id", colleague.user_id).is("archived_at", null);
   const known = (assigneeRows || []).map((r) => r.name as string);
 
   let items;
@@ -944,7 +944,7 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
   const effectiveText = hadPendingContext ? `${account.pending_context}. Уточнение: ${trimmed}` : trimmed;
   if (hadPendingContext) await remember(ctx, { pending_context: null });
 
-  const { data: assigneeRows } = await ctx.admin.from("assignees").select("name").eq("user_id", account.user_id);
+  const { data: assigneeRows } = await ctx.admin.from("assignees").select("name").eq("user_id", account.user_id).is("archived_at", null);
   const assignees = (assigneeRows || []).map((r) => r.name as string);
 
   try {

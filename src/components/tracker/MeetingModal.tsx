@@ -560,7 +560,7 @@ export default function MeetingModal({
             }
           />
         ) : (
-          <h2 id="meetingModalTitle">{isMove ? "Перенос встречи" : "Новая встреча"}</h2>
+          <ItemModalHead plain title={isMove ? "Перенос встречи" : "Новая встреча"} titleId="meetingModalTitle" closeId="meetingCancelBtn" onClose={onClose} />
         )}
         <input type="hidden" id="meetingId" value={meeting?.id ?? ""} readOnly />
 
@@ -915,9 +915,6 @@ export default function MeetingModal({
           <div className="modal-actions">
             <div className="left" />
             <div className="left">
-              <button className="btn" id="meetingCancelBtn" onClick={onClose}>
-                Отмена
-              </button>
               {canEdit && (
                 <button className="btn btn-primary" id="meetingSaveBtn" onClick={() => void save()}>
                   Сохранить

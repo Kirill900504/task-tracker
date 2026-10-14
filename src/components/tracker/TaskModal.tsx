@@ -649,8 +649,8 @@ export default function TaskModal({
             Новая задача открывается полной формой: пока её никто не видел,
             править в ней можно что угодно. */}
         {/* Шапка заведённой задачи — номер, название в рамке, действия и ×
-            (ItemModalHead). У новой задачи шапка прежняя: это форма, и
-            закрывают её «Отменой». */}
+            (ItemModalHead). У новой задачи — та же шапка без рамки: × в углу
+            вместо «Отмены» внизу, как у всех окон (14.10.2026). */}
         {isEditing && task ? (
           <ItemModalHead
             kicker={task.number != null ? <>Задача #{task.number}</> : "Задача"}
@@ -750,7 +750,7 @@ export default function TaskModal({
             }
           />
         ) : (
-          <h2 id="modalTitle">Новая задача</h2>
+          <ItemModalHead plain title="Новая задача" titleId="modalTitle" closeId="cancelBtn" onClose={onClose} />
         )}
         <input type="hidden" id="taskId" value={task?.id ?? ""} readOnly />
 
@@ -1117,9 +1117,6 @@ export default function TaskModal({
           <div className="modal-actions">
             <div className="left" />
             <div className="left">
-              <button className="btn" id="cancelBtn" onClick={onClose}>
-                Отмена
-              </button>
               {canEdit && (
                 <button className="btn btn-primary" id="saveTaskBtn" disabled={saving} onClick={() => void save()}>
                   {saving ? "Загружаю файлы…" : "Сохранить"}

@@ -40,7 +40,7 @@ export function startNewTask(): { text: string; pending: NewTaskPending } {
 }
 
 export async function whoButtons(admin: SupabaseClient, userId: string): Promise<BotButton[][]> {
-  const { data: people } = await admin.from("assignees").select("id, name").eq("user_id", userId);
+  const { data: people } = await admin.from("assignees").select("id, name").eq("user_id", userId).is("archived_at", null);
   const list = sortByPeopleOrder(((people || []) as { id: string; name: string }[]), (p) => p.name);
 
   const { data: sections } = await admin.from("sections").select("id, name").eq("user_id", userId).order("sort_order");

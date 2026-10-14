@@ -6,6 +6,7 @@
 // to {date, time} on OK, or null on cancel/closing without a date.
 import { useCallback, useEffect, useRef, useState } from "react";
 import MiniCalendar from "@/components/tracker/MiniCalendar";
+import ItemModalHead from "@/components/tracker/ItemModalHead";
 import { defaultMeetingStart, startsInPast } from "@/lib/meetingTime";
 import { withoutSelfMark } from "@/lib/actorName";
 import { dateStr } from "@/lib/taskDisplay";
@@ -73,10 +74,10 @@ export function useDateTimeConfirm() {
       id="confirmDateTimeOverlay"
       // Щелчок мимо окна ничего не отменяет — здесь выбирают дату и время
       // переноса, то есть заполняют форму, пусть и короткую (см. правило
-      // про dismissOnBackdrop в Modal.tsx). Отменяют «Отменой» и Escape.
+      // про dismissOnBackdrop в Modal.tsx). Отменяют × в углу и Escape.
     >
       <div className="modal" style={{ maxWidth: 360 }}>
-        <h2>Подтвердите действие</h2>
+        <ItemModalHead plain title="Подтвердите действие" closeId="confirmDateTimeCancelBtn" onClose={() => finish(null)} />
         <p className="confirm-dt-question" id="confirmDateTimeQuestion">
           {pending.question}
         </p>
@@ -133,9 +134,6 @@ export function useDateTimeConfirm() {
         <div className="modal-actions">
           <div className="left"></div>
           <div className="left">
-            <button className="btn" id="confirmDateTimeCancelBtn" onClick={() => finish(null)}>
-              Отмена
-            </button>
             <button
               className="btn btn-primary"
               id="confirmDateTimeOkBtn"

@@ -127,6 +127,21 @@ export const joinInput = z.object({
 });
 
 export const accessLinkInput = z.object({ assigneeId: UUID });
+
+// Люди в «Команде» (миграция 0055): завести, убрать с передачей дел,
+// вернуть убранного.
+export const personInput = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("add"), name: z.string().trim().min(1, "имя не может быть пустым").max(120) }),
+  z.object({
+    action: z.literal("remove"),
+    assigneeId: UUID,
+    // Кому уходят открытые задачи и встречи. Без него маршрут только
+    // считает, что есть, — и это первый шаг диалога, а не отказ.
+    transferTo: UUID.nullable().optional(),
+    dryRun: z.boolean().optional(),
+  }),
+  z.object({ action: z.literal("restore"), assigneeId: UUID }),
+]);
 export const forgotPasswordInput = z.object({ email: EMAIL });
 
 // Разобрать тело запроса. Ошибка возвращается готовым ответом — с именем

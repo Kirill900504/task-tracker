@@ -221,9 +221,25 @@
 @media (max-width:800px){
   .item-head{flex-wrap:wrap;}
   .item-head-actions{width:100%; justify-content:flex-start;}
-  .item-head-actions .item-head-close{display:none;}
+  /* Только там, где стрелка «назад» есть (её рисует Modal, не у окна
+     вопроса): у остальных × — единственный выход. */
+  dialog.overlay:not(.ask-overlay) .item-head-actions .item-head-close{display:none;}
   .modal .item-head-title{font-size:17px;}
+  /* Служебное окно — название и пара кнопок, переносить их под название
+     незачем: одна строка, как на компьютере. */
+  .item-head.plain-head{flex-wrap:nowrap; align-items:center;}
+  .item-head.plain-head .item-head-actions{width:auto; justify-content:flex-end;}
 }
+/* Шапка служебного окна — та же высота строки, что у прежнего h2: × стоит
+   на уровне названия, а не ниже него. */
+.item-head.plain-head{align-items:center;}
+.modal .item-head-title.plain{font-size:19px; font-family:var(--display);}
+@media (max-width:800px){ .modal .item-head-title.plain{font-size:18px;} }
+.account-close{margin-left:auto; align-self:flex-start;}
+.search-head{display:flex; align-items:center; gap:8px; padding-right:10px; border-bottom:1px solid var(--line);}
+.search-head .search-input{border-bottom:0; flex:1; min-width:0;}
+@media (max-width:800px){ .search-close{display:none;} }
+@media (max-width:800px){ .account-close{display:none;} }
 /* Заведённой задаче нижняя полоса кнопок не нужна — правая колонка
    (обсуждение) получает её высоту. */
 .modal.has-chat .item-head{flex:none;}
@@ -470,3 +486,23 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 @media (max-width:800px){
   .people-search{display:none;}
 }
+
+/* ---------- «Команда»: добавить и убрать человека (14.10.2026) ---------- */
+/* Ответ на «+ Человек» и «Убрать» — строкой под шапкой: что сделано и что
+   дальше. Зелёная рамка, как у «Принудительного закрытия»: это итог, а не
+   ошибка. */
+.team-notice{
+  margin:0 0 12px; padding:9px 12px; border-radius:10px; font-size:13px; line-height:1.45;
+  border:1px solid rgba(63,169,104,.5); background:rgba(63,169,104,.08); color:var(--ink);
+}
+/* Только что добавленный — подсвечен, пока окно открыто: следующий шаг
+   (позвать в мессенджер или в трекер) стоит в его строке. */
+.team-row.just-added{background:var(--accent-soft); border-radius:8px; padding-left:8px; padding-right:4px;}
+.team-remove{border-left-color:var(--high);}
+.team-remove-sample{margin:0 0 8px; padding-left:18px; font-size:12.5px; color:var(--ink); overflow-wrap:anywhere;}
+.team-remove-sample li{margin:2px 0;}
+.team-remove-ask{margin:0 0 6px;}
+.team-remove-actions{margin-top:10px;}
+.team-archived{margin-top:14px; padding-top:12px; border-top:1px solid var(--line-soft);}
+.team-archived .team-list{margin-top:8px;}
+.team-archived .team-name{color:var(--ink-soft);}

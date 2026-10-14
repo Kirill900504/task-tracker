@@ -56,6 +56,9 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
   const { data, error } = await db
     .from("assignees")
     .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username, away_until, away_kind")
+    // Убранные из команды (миграция 0055) — не адресаты и не варианты
+    // выбора; «Команда» показывает их отдельным списком (loadArchived).
+    .is("archived_at", null)
     .order("created_at");
   if (error || !data) return null;
 
@@ -312,10 +315,80 @@ export function useColleagues() {
     [colleagues, reload],
   );
 
+  // Завести человека в команду. Убранный с тем же именем возвращается вместе
+  // со своей историей (см. /api/workspace/person).
+  const addPerson = useCallback(
+    async (name: string): Promise<{ id: string; restored: boolean } | { error: string }> => {
+      try {
+        const data = await personCall({ action: "add", name });
+        if (!data?.ok) return { error: data?.error || "Не получилось добавить" };
+        await reload();
+        return { id: data.id as string, restored: !!data.restored };
+      } catch {
+        return { error: "Не удалось добавить — проверьте связь" };
+      }
+    },
+    [reload],
+  );
+
+  // Убрать из команды. Первый вызов (dryRun) только считает открытые дела —
+  // по ответу окно спрашивает, кому их передать; второй убирает.
+  const previewRemoval = useCallback(
+    async (assigneeId: string): Promise<{ openTasks: number; openMeetings: number; sample: string[] } | { error: string }> => {
+      try {
+        const data = await personCall({ action: "remove", assigneeId, dryRun: true });
+        if (!data?.ok) return { error: data?.error || "Не получилось проверить дела" };
+        return { openTasks: data.openTasks || 0, openMeetings: data.openMeetings || 0, sample: data.sample || [] };
+      } catch {
+        return { error: "Не удалось проверить — проверьте связь" };
+      }
+    },
+    [],
+  );
+
+  const removePerson = useCallback(
+    async (assigneeId: string, transferTo: string | null): Promise<{ archived: boolean } | { error: string }> => {
+      // Строка уходит с экрана сразу; не прошло — вернёт перечитывание.
+      const before = team.snapshot().data;
+      team.update((list) => list.filter((p) => p.id !== assigneeId));
+      try {
+        const data = await personCall({ action: "remove", assigneeId, transferTo });
+        if (!data?.ok) {
+          team.update(() => before);
+          return { error: data?.error || "Не получилось убрать" };
+        }
+        void reload();
+        return { archived: !!data.archived };
+      } catch {
+        team.update(() => before);
+        return { error: "Не удалось убрать — проверьте связь" };
+      }
+    },
+    [reload],
+  );
+
+  const restorePerson = useCallback(
+    async (assigneeId: string): Promise<string> => {
+      try {
+        const data = await personCall({ action: "restore", assigneeId });
+        if (!data?.ok) return data?.error || "Не получилось вернуть";
+        await reload();
+        return "";
+      } catch {
+        return "Не удалось вернуть — проверьте связь";
+      }
+    },
+    [reload],
+  );
+
   return {
     colleagues,
     loading: !loaded,
     reload,
+    addPerson,
+    previewRemoval,
+    removePerson,
+    restorePerson,
     invite,
     inviteToTracker,
     accessLink,
@@ -327,7 +400,30 @@ export function useColleagues() {
   };
 }
 
-export type SendResult = { sentTo: string[]; failed: string[] } | { error: string };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function personCall(body: Record<string, unknown>): Promise<any> {
+  const res = await fetch("/api/workspace/person", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json().catch(() => null);
+}
+
+// Убранные из команды — для списка «Убранные» внизу «Команды», откуда их
+// можно вернуть. Отдельный запрос, а не общий store: он нужен одному окну
+// и только когда его раскрыли.
+export async function loadArchived(): Promise<{ id: string; name: string; archivedAt: string }[]> {
+  const db = createClient();
+  const { data } = await db
+    .from("assignees")
+    .select("id, name, archived_at")
+    .not("archived_at", "is", null)
+    .order("archived_at", { ascending: false });
+  return ((data || []) as { id: string; name: string; archived_at: string }[]).map((r) => ({ id: r.id, name: r.name, archivedAt: r.archived_at }));
+}
+
+export type SendResult ={ sentTo: string[]; failed: string[] } | { error: string };
 
 // Sending is by id: the server reads the item back itself, so nothing about
 // what gets written to a colleague comes from the browser. Which messenger

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Modal from "./Modal";
+import ItemModalHead from "./ItemModalHead";
 import Icon from "./Icon";
 import type { PersonOption } from "@/hooks/useTaskParticipants";
 import type { TaskParticipantRole } from "@/lib/taskProgress";
@@ -61,16 +62,7 @@ export default function AddPeopleSheet({
   return (
     <Modal onClose={onClose} className="add-people-overlay">
       <div className="modal add-people" id="addPeopleSheet">
-        <div className="item-head">
-          <div className="item-head-main">
-            <h2 className="item-head-title plain">Добавить в задачу</h2>
-          </div>
-          <div className="item-head-actions">
-            <button type="button" className="item-head-close" aria-label="Закрыть" title="Готово" onClick={onClose}>
-              <Icon name="close" size={18} />
-            </button>
-          </div>
-        </div>
+        <ItemModalHead plain title="Добавить в задачу" onClose={onClose} />
         {!isMobile && people.length >= SEARCH_FROM && (
           <input
             className="people-search"

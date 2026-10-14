@@ -1,6 +1,7 @@
 "use client";
 
 import Modal from "./Modal";
+import ItemModalHead from "./ItemModalHead";
 import Icon from "./Icon";
 
 // Завершённое — списком в отдельном окне.
@@ -51,9 +52,15 @@ export default function DoneListModal({
           display:flex. Без обёртки содержимое раскладывалось прямо по
           затемнению в строку, и окно выглядело рассыпавшимся. */}
       <div className="modal done-list-modal">
-        <h2>
-          {title} <span className="count">{items.length}</span>
-        </h2>
+        <ItemModalHead
+          plain
+          title={
+            <>
+              {title} <span className="count">{items.length}</span>
+            </>
+          }
+          onClose={onClose}
+        />
 
         {!items.length && <div className="empty">{empty}</div>}
 
@@ -90,11 +97,6 @@ export default function DoneListModal({
           ))}
         </div>
 
-        <div className="modal-actions">
-          <button className="btn" type="button" onClick={onClose}>
-            Закрыть
-          </button>
-        </div>
       </div>
     </Modal>
   );

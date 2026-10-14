@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Idea, Meeting, Task } from "@/types/tracker";
 import { searchAll, KIND_LABELS, type SearchResult } from "@/lib/localSearch";
 import Modal from "./Modal";
+import Icon from "./Icon";
 import { useCommentSearch } from "@/hooks/useCommentSearch";
 
 // Global search: "/" anywhere, type, ↑↓ to pick, Enter to open. Results come
@@ -95,6 +96,8 @@ export default function SearchOverlay({
   return (
     <Modal id="searchOverlay" onClose={onClose}>
       <div className="search-modal" onKeyDown={onKeyDown}>
+        {/* × справа от строки поиска — тот же выход, что у всех окон. */}
+        <div className="search-head">
         <input
           ref={inputRef}
           id="searchInput"
@@ -108,6 +111,10 @@ export default function SearchOverlay({
           }}
           autoComplete="off"
         />
+          <button type="button" className="item-head-close search-close" title="Закрыть (Esc)" aria-label="Закрыть" onClick={onClose}>
+            <Icon name="close" size={18} />
+          </button>
+        </div>
         <div className="search-results" ref={listRef}>
           {!query.trim() && <div className="search-empty">Начните печатать. ↑↓ — выбрать, Enter — открыть, Esc — закрыть.</div>}
           {query.trim() && results.length === 0 && !searching && <div className="search-empty">Ничего не нашлось</div>}

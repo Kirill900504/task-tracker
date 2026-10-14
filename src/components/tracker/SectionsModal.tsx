@@ -8,6 +8,7 @@ import type { PersonOption } from "@/hooks/useTaskParticipants";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
+import ItemModalHead from "./ItemModalHead";
 import PeoplePicker from "./PeoplePicker";
 import { humanError } from "@/lib/humanError";
 
@@ -103,7 +104,7 @@ export default function SectionsModal({
           только затемнённый фон с display:flex, и без обёртки заголовок,
           строки и кнопки раскладывались по нему в строку. */}
       <div className="modal">
-        <h2 id="sectionsTitle">Разделы</h2>
+        <ItemModalHead plain title="Разделы" titleId="sectionsTitle" onClose={onClose} />
         <p className="modal-note">
           Название правится прямо здесь. Левая кнопка по разделу в трекере заводит новую задачу с теми, кто перечислен в нём, правая — отбирает его задачи.
         </p>
@@ -170,11 +171,6 @@ export default function SectionsModal({
           );
         })}
 
-        <div className="modal-actions">
-          <button className="btn" type="button" onClick={onClose}>
-            Закрыть
-          </button>
-        </div>
       </div>
     </Modal>
   );

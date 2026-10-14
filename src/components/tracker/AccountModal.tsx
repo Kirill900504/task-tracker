@@ -111,6 +111,10 @@ export default function AccountModal({
             <h2>{name || "Личный кабинет"}</h2>
             <div className="field-hint account-role">{roleLabel}</div>
           </div>
+          {/* × в правом верхнем углу — как у всех окон (ItemModalHead). */}
+          <button type="button" className="item-head-close account-close" title="Закрыть (Esc)" aria-label="Закрыть" onClick={onClose}>
+            <Icon name="close" size={18} />
+          </button>
         </div>
 
         <section className="account-section">
@@ -212,9 +216,6 @@ export default function AccountModal({
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onSignOut}>
             <Icon name="logout" size={14} /> Выйти
-          </button>
-          <button type="button" className="btn btn-primary" onClick={onClose}>
-            Закрыть
           </button>
         </div>
       </div>

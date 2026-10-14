@@ -2,6 +2,7 @@
 
 import type { Idea } from "@/types/tracker";
 import Modal from "./Modal";
+import ItemModalHead from "./ItemModalHead";
 import Icon from "./Icon";
 
 // Разбор мыслей: по одной, три исхода. Почему без «вычеркнуть» и почему
@@ -33,14 +34,22 @@ export default function IdeaReviewModal({
   return (
     <Modal onClose={onClose} id="ideaReviewModal">
       <div className="modal idea-review">
-        <h2>
-          Разбор мыслей{" "}
-          {idea && (
-            <span className="count">
-              {total - queue.length + 1} из {total}
-            </span>
-          )}
-        </h2>
+        {/* × здесь значит «потом»: разбор не теряется, мысль остаётся в
+            очереди до следующего раза. */}
+        <ItemModalHead
+          plain
+          title={
+            <>
+              Разбор мыслей{" "}
+              {idea && (
+                <span className="count">
+                  {total - queue.length + 1} из {total}
+                </span>
+              )}
+            </>
+          }
+          onClose={onClose}
+        />
         {idea ? (
           <>
             <p className="field-hint">Записано {idea.createdAt}. Что с ней делаем?</p>
@@ -60,11 +69,6 @@ export default function IdeaReviewModal({
         ) : (
           <div className="empty">Всё разобрано. Следующий разбор — в пятницу.</div>
         )}
-        <div className="modal-actions">
-          <button className="btn" type="button" onClick={onClose}>
-            {idea ? "Потом" : "Закрыть"}
-          </button>
-        </div>
       </div>
     </Modal>
   );

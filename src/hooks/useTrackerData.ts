@@ -660,7 +660,8 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
           db.from("tasks").select("*").is("deleted_at", null).retry(retry),
           db.from("meetings").select("*").is("deleted_at", null).retry(retry),
           db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }).retry(retry),
-          db.from("assignees").select("*").order("created_at", { ascending: true }).retry(retry),
+          // Убранных из команды (миграция 0055) в списке выбора нет.
+          db.from("assignees").select("*").is("archived_at", null).order("created_at", { ascending: true }).retry(retry),
           db.from("sections").select("*").order("sort_order", { ascending: true }).retry(retry),
         ]),
         ms,
@@ -1136,8 +1137,13 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
           setIdeas(liveRef.current.ideas);
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "assignees" }, (payload) => {
-          if (payload.eventType === "DELETE") {
-            const name = (payload.old as { name: string }).name;
+          // Убранный из команды (archived_at) уходит из списка выбора так
+          // же, как удалённый. Синхронизация людей только добавляет, поэтому
+          // пропажа имени из списка в базе ничего не стирает.
+          const gone =
+            payload.eventType === "DELETE" || !!(payload.new as { archived_at?: string | null }).archived_at;
+          if (gone) {
+            const name = ((payload.eventType === "DELETE" ? payload.old : payload.new) as { name: string }).name;
             liveRef.current.assignees = liveRef.current.assignees.filter((a) => a !== name);
             shadowRef.current.assignees = shadowRef.current.assignees.filter((a) => a !== name);
           } else {

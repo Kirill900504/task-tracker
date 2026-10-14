@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Modal from "@/components/tracker/Modal";
+import ItemModalHead from "@/components/tracker/ItemModalHead";
 import AttachFiles from "@/components/tracker/AttachFiles";
 
 // Все вопросы трекера — одним окном трекера.
@@ -252,7 +253,12 @@ export default function AskProvider({ children }: { children: ReactNode }) {
           // нечего, там щелчок мимо остаётся отменой.
           <Modal variant="ask-overlay" onClose={cancel} dismissOnBackdrop={pending.kind !== "ask"}>
             <div className="modal ask-modal">
-              <h2>{pending.title || defaultTitle(pending.kind)}</h2>
+              {/* × в углу — отмена, как у всех окон (14.10.2026: «во всех
+                  окнах … кнопки закрыть или отмена по единому формату
+                  крестик в правом верхнем углу»). Кнопка «Отмена» внизу
+                  осталась только там, где у отказа СВОИ слова («Не
+                  отменять», «Не сейчас»): это уже ответ, а не выход. */}
+              <ItemModalHead plain title={pending.title || defaultTitle(pending.kind)} closeId="askCancelBtn" onClose={cancel} />
               <p className="ask-question">{pending.question}</p>
               {pending.note && <p className="ask-note">{pending.note}</p>}
 
@@ -324,15 +330,17 @@ export default function AskProvider({ children }: { children: ReactNode }) {
                         {option.label}
                       </button>
                     ))}
-                    <button className="btn" type="button" onClick={cancel}>
-                      {pending.cancelText || "Отмена"}
-                    </button>
+                    {pending.cancelText && (
+                      <button className="btn" type="button" onClick={cancel}>
+                        {pending.cancelText}
+                      </button>
+                    )}
                   </>
                 ) : (
                   <>
-                    {pending.kind !== "say" && (
-                      <button className="btn" id="askCancelBtn" type="button" onClick={cancel}>
-                        {pending.cancelText || "Отмена"}
+                    {pending.kind !== "say" && pending.cancelText && (
+                      <button className="btn" type="button" onClick={cancel}>
+                        {pending.cancelText}
                       </button>
                     )}
                     <button

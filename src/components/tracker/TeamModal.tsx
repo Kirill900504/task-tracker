@@ -1,7 +1,9 @@
 "use client";
 
 import { Fragment, useCallback, useState } from "react";
-import { useColleagues, type Colleague, type ColleagueChannel } from "@/hooks/useColleagues";
+import { loadArchived, useColleagues, type Colleague, type ColleagueChannel } from "@/hooks/useColleagues";
+import ItemModalHead from "./ItemModalHead";
+import Icon from "./Icon";
 import { MEMBER_ROLE_LABELS, type MemberRole } from "@/hooks/useWorkspaceRole";
 import { useMaxBot } from "@/hooks/useMaxBot";
 import { useAsk } from "@/components/Ask";
@@ -67,8 +69,23 @@ const MEMBER_LABEL: Record<string, string> = {
 };
 
 export default function TeamModal({ onClose }: { onClose: () => void }) {
-  const { colleagues, loading, reload, invite, inviteToTracker, accessLink, setDirection, setMemberRole, setTrackerAccess, unlink, rename } =
-    useColleagues();
+  const {
+    colleagues,
+    loading,
+    reload,
+    invite,
+    inviteToTracker,
+    accessLink,
+    setDirection,
+    setMemberRole,
+    setTrackerAccess,
+    unlink,
+    rename,
+    addPerson,
+    previewRemoval,
+    removePerson,
+    restorePerson,
+  } = useColleagues();
   const maxBot = useMaxBot();
   const ask = useAsk();
   const editAway = useAwayEditor();
@@ -89,6 +106,25 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
   const [menuFor, setMenuFor] = useState<{ id: string; name: string; anchor: DOMRect } | null>(null);
 
   const [copied, setCopied] = useState(false);
+
+  // Только что добавленный человек: его строка подсвечена и прокручена в
+  // видимую область — следующий шаг (позвать в мессенджер или в трекер)
+  // стоит прямо в ней, и искать его в списке из пятнадцати незачем.
+  const [justAdded, setJustAdded] = useState<string | null>(null);
+  // Убрать человека с открытыми делами — это вопрос «кому передать», и он
+  // задаётся под его строкой, а не окном поверх: ответ там, где кнопка.
+  const [removing, setRemoving] = useState<{
+    id: string;
+    name: string;
+    openTasks: number;
+    openMeetings: number;
+    sample: string[];
+    to: string | null;
+    busy: boolean;
+  } | null>(null);
+  // Убранные — список внизу, раскрывается по нажатию: нужен он редко.
+  const [archived, setArchived] = useState<{ id: string; name: string; archivedAt: string }[] | null>(null);
+  const [notice, setNotice] = useState("");
 
   // Esc закрывает — как и любое другое окно трекера. Раньше не закрывал:
   // обработчик каждое окно заводило себе само, и это его не завело.
@@ -263,6 +299,95 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     if (problem) setError({ id: person.id, text: problem });
   }
 
+  async function handleAdd() {
+    setError(null);
+    setNotice("");
+    const name = await ask.ask({
+      title: "Новый человек",
+      question: "Как его записать?",
+      note: "Имя и фамилия — так человека увидят в карточках задач, во встречах и в сообщениях бота.",
+      placeholder: "Имя Фамилия",
+      okText: "Добавить",
+    });
+    if (!name?.trim()) return;
+    const result = await addPerson(name.trim());
+    if ("error" in result) {
+      setError({ id: "add", text: result.error });
+      return;
+    }
+    setJustAdded(result.id);
+    setNotice(
+      result.restored
+        ? `${name.trim()} снова в команде — вместе со всем, что делал раньше. Позовите его в мессенджер или в трекер.`
+        : `${name.trim()} добавлен. Позовите его в мессенджер или в трекер — кнопки в его строке.`,
+    );
+  }
+
+  // Убрать из команды. Сначала маршрут считает, что на человеке открыто:
+  // пусто — хватит подтверждения; есть — под строкой встаёт вопрос «кому
+  // передать», и без ответа убрать нельзя (открытая задача на ушедшем —
+  // ровно та забытая работа, ради которой трекер существует).
+  async function handleRemove(person: Colleague) {
+    setError(null);
+    setNotice("");
+    setRemoving(null);
+    const preview = await previewRemoval(person.id);
+    if ("error" in preview) {
+      setError({ id: person.id, text: preview.error });
+      return;
+    }
+    const shown = withoutSelfMark(person.name);
+    if (!preview.openTasks && !preview.openMeetings) {
+      const yes = await ask.confirm({
+        title: "Убрать из команды",
+        question: `Убрать ${shown} из команды?`,
+        note: "Открытых задач и встреч у него нет. Вход и мессенджер отключатся, а закрытые задачи сохранят его имя. Вернуть можно из списка «Убранные» внизу.",
+        okText: "Убрать",
+        danger: true,
+      });
+      if (!yes) return;
+      await finishRemove(person.id, shown, null);
+      return;
+    }
+    setRemoving({ id: person.id, name: shown, ...preview, to: null, busy: false });
+  }
+
+  async function finishRemove(id: string, name: string, to: string | null) {
+    setRemoving((r) => (r ? { ...r, busy: true } : r));
+    const receiver = to ? withoutSelfMark(colleagues.find((p) => p.id === to)?.name || "") : "";
+    const result = await removePerson(id, to);
+    if ("error" in result) {
+      setRemoving((r) => (r ? { ...r, busy: false } : r));
+      setError({ id, text: result.error });
+      return;
+    }
+    setRemoving(null);
+    setNotice(
+      (receiver ? `${name} убран из команды, открытые дела переданы: ${receiver}.` : `${name} убран из команды.`) +
+        (result.archived ? " Вернуть можно из списка «Убранные» внизу." : ""),
+    );
+    if (archived) setArchived(await loadArchived());
+  }
+
+  async function toggleArchived() {
+    if (archived) {
+      setArchived(null);
+      return;
+    }
+    setArchived(await loadArchived());
+  }
+
+  async function handleRestore(id: string, name: string) {
+    const problem = await restorePerson(id);
+    if (problem) {
+      setError({ id: "archived", text: problem });
+      return;
+    }
+    setArchived(await loadArchived());
+    setJustAdded(id);
+    setNotice(`${withoutSelfMark(name)} снова в команде. Вход и мессенджер подключаются заново — кнопки в его строке.`);
+  }
+
   async function handleRole(person: Colleague) {
     const next = await ask.choose({
       title: "Права",
@@ -353,13 +478,36 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
         onSelect: () => void handleUnlink(person.id, person.name, person.telegram ? "telegram" : "max"),
       });
     }
+    // Последним — как «Удалить» у карточки задачи: самое тяжёлое действие
+    // стоит дальше всех от руки.
+    items.push({ id: "remove", label: "Убрать из команды…", icon: "trash", onSelect: () => void handleRemove(person) });
     return items;
   }
 
   return (
     <Modal id="teamOverlay" onClose={onClose} dismissOnBackdrop={false}>
       <div className="modal">
-        <h2>Команда</h2>
+        <ItemModalHead
+          plain
+          title={
+            <>
+              Команда {!loading && <span className="count">{colleagues.length}</span>}
+            </>
+          }
+          closeId="teamCloseBtn"
+          onClose={onClose}
+          actions={
+            <button type="button" className="item-head-btn" id="addPersonBtn" onClick={() => void handleAdd()}>
+              <Icon name="plus" size={14} /> Человек
+            </button>
+          }
+        />
+        {error?.id === "add" && <div className="team-error team-error-row">{error.text}</div>}
+        {notice && (
+          <div className="team-notice" id="teamNotice" role="status">
+            {notice}
+          </div>
+        )}
 
         {/* Ответ — здесь же, под кнопкой (правило «ответ там, где кнопка»). */}
         {!loading && unreached.length > 0 && (
@@ -406,7 +554,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
 
         {loading && <div className="empty">Загрузка…</div>}
 
-        {!loading && colleagues.length === 0 && <div className="empty">Пока нет исполнителей — добавьте их в карточке задачи.</div>}
+        {!loading && colleagues.length === 0 && <div className="empty">Пока никого нет — добавьте людей кнопкой «+ Человек» вверху.</div>}
 
         {!loading && colleagues.length > 0 && (
           <div className="team-list" id="teamList">
@@ -431,7 +579,11 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                       по ⋮, как у карточки задачи. Ни одно действие не
                       пропало: они делаются раз в квартал, а место занимали в
                       каждой строке. */}
-                  <div className="team-row">
+                  <div
+                    className={"team-row" + (justAdded === person.id ? " just-added" : "")}
+                    data-person={person.id}
+                    ref={justAdded === person.id ? revealInvite : undefined}
+                  >
                     {/* Имя без пометки «(я)»: она часть строки в базе, а не
                         часть имени, и на этом экране отвечает на вопрос
                         «как меня видят остальные» — то есть должна быть
@@ -537,6 +689,58 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                     </div>
                   )}
 
+                  {removing?.id === person.id && (
+                    <div className="team-invite team-remove" id="removeBlock" ref={revealInvite}>
+                      <label>
+                        Убрать {removing.name} из команды. На нём открыто:{" "}
+                        {[
+                          removing.openTasks ? `задач — ${removing.openTasks}` : "",
+                          removing.openMeetings ? `встреч — ${removing.openMeetings}` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(", ")}
+                        .
+                      </label>
+                      {removing.sample.length > 0 && (
+                        <ul className="team-remove-sample">
+                          {removing.sample.map((s) => (
+                            <li key={s}>{s}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="team-hint team-remove-ask">Кому передать? Задачи и встречи перейдут к нему вместе с перепиской.</div>
+                      <div className="chip-row" id="removeReceivers">
+                        {colleagues
+                          .filter((p) => p.id !== removing.id)
+                          .map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className={"participant-chip" + (removing.to === p.id ? " selected" : "")}
+                              aria-pressed={removing.to === p.id}
+                              onClick={() => setRemoving({ ...removing, to: p.id })}
+                            >
+                              {p.isMe ? "Себе" : withoutSelfMark(p.name)}
+                            </button>
+                          ))}
+                      </div>
+                      <div className="outcome-actions team-remove-actions">
+                        <button
+                          type="button"
+                          className="btn btn-small btn-danger"
+                          id="removeConfirmBtn"
+                          disabled={!removing.to || removing.busy}
+                          onClick={() => void finishRemove(removing.id, removing.name, removing.to)}
+                        >
+                          {removing.busy ? "Передаю…" : "Передать и убрать"}
+                        </button>
+                        <button type="button" className="btn btn-small" onClick={() => setRemoving(null)}>
+                          Не убирать
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {error?.id === person.id && <div className="team-error team-error-row">{error.text}</div>}
                 </Fragment>
               );
@@ -578,11 +782,32 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        <div className="modal-actions">
-          <button className="btn" id="teamCloseBtn" onClick={onClose}>
-            Закрыть
-          </button>
-        </div>
+        {/* Убранные — внизу и свёрнуто: нужны, когда человек вернулся или
+            убрали не того. Возврат приносит назад и его историю. */}
+        {!loading && (
+          <div className="team-archived">
+            <button type="button" className="btn btn-small" id="archivedToggle" onClick={() => void toggleArchived()}>
+              {archived ? "Скрыть убранных" : "Убранные из команды"}
+            </button>
+            {archived && archived.length === 0 && <div className="team-hint">Никого не убирали.</div>}
+            {archived && archived.length > 0 && (
+              <div className="team-list" id="archivedList">
+                {archived.map((p) => (
+                  <div key={p.id} className="team-row">
+                    <span className="team-name">{withoutSelfMark(p.name)}</span>
+                    <span className="team-status">убран {new Date(p.archivedAt).toLocaleDateString("ru-RU")}</span>
+                    <div className="team-cell">
+                      <button type="button" className="btn btn-small" onClick={() => void handleRestore(p.id, p.name)}>
+                        Вернуть
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {error?.id === "archived" && <div className="team-error">{error.text}</div>}
+          </div>
+        )}
       </div>
     </Modal>
   );
