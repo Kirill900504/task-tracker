@@ -40,7 +40,12 @@ export default function SendMenu({
   const ask = useAsk();
   // Себе не отправляют — своя строка в списке есть (её видно в «Команде»),
   // но адресатом быть не может.
-  const linked = colleagues.filter((c) => c.linked && !c.isMe).map((c) => c.name);
+  // Мысль — всем: она доходит и в список мыслей получателя в трекере, а не
+  // только в мессенджер (api/telegram/send, 14.10.2026 — «почему не полный
+  // список возможных адресатов?»). Задача и встреча по-прежнему уходят
+  // сообщением, и предлагать их тому, до кого сообщение не дойдёт, значило
+  // бы обещать доставку, которой не будет.
+  const linked = colleagues.filter((c) => (kind === "idea" || c.linked) && !c.isMe).map((c) => c.name);
   const targets = sendTargets(linked, concerns);
   const suggested = targets.filter((t) => t.suggested).map((t) => t.name);
   const missing = unreachableNames(linked, concerns);

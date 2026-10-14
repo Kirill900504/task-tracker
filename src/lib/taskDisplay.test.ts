@@ -44,6 +44,13 @@ describe("isOverdue", () => {
     expect(isOverdue(baseTask({ deadline: "2026-08-01", recur: "daily" }), new Date(2026, 8, 2))).toBe(false);
     expect(isOverdue(baseTask({}), new Date(2026, 8, 2))).toBe(false);
   });
+  // №50: принята 18.09, но status остался in_progress — и висела на
+  // телефоне «просрочено 14 дн.». Закрыта приёмкой — значит закрыта.
+  it("is false for an accepted one-off task even if its status was never set to done", () => {
+    const now = new Date(2026, 9, 13);
+    expect(isOverdue(baseTask({ deadline: "2026-09-29", approvalState: "accepted" }), now)).toBe(false);
+    expect(isDueTodayHighlight(baseTask({ deadline: "2026-10-13", approvalState: "accepted" }), now)).toBe(false);
+  });
 });
 
 describe("isDueToday / isDueTodayHighlight", () => {

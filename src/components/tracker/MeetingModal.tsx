@@ -501,7 +501,6 @@ export default function MeetingModal({
                     />
                     <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
                   </div>
-                  <div className="field-hint">Enter — завершить успешно, Shift+Enter — новая строка.</div>
                   <AttachFiles files={recapFiles} onChange={setRecapFiles} onError={setRecapError} />
                   {recapError && <div className="ms-answer-error">{recapError}</div>}
                   <div className="outcome-actions">
@@ -562,11 +561,6 @@ export default function MeetingModal({
           />
         ) : (
           <h2 id="meetingModalTitle">{isMove ? "Перенос встречи" : "Новая встреча"}</h2>
-        )}
-        {isMove && (
-          <p className="field-hint meeting-move-hint">
-            Прежняя встреча закроется как перенесённая, когда вы сохраните эту. Время и состав можно поправить здесь.
-          </p>
         )}
         <input type="hidden" id="meetingId" value={meeting?.id ?? ""} readOnly />
 
@@ -728,7 +722,7 @@ export default function MeetingModal({
               <div className="input-with-mic">
                 <AutoGrowTextarea
                   id="mTitle"
-                  placeholder="Например: Совещание по опту"
+                  placeholder="О чём встреча"
                   value={title}
                   onChange={setTitle}
                   singleLine
@@ -898,11 +892,6 @@ export default function MeetingModal({
                   })(),
                 ]}
               />
-              <div className="field-hint">
-                {durationMin === 60
-                  ? "Час выпадает из дня у всех, кого зовёте: другие встречи на это время им уже не поставят незаметно."
-                  : "Полчаса — обычная планёрка. Занятое время видно остальным при выборе."}
-              </div>
             </div>
 
             <div className="field">
@@ -913,11 +902,6 @@ export default function MeetingModal({
                 onSelect={(v) => setRecur(v as MeetingRecur)}
                 options={(Object.keys(RECUR_LABELS) as MeetingRecur[]).map((value) => ({ value, label: RECUR_LABELS[value] }))}
               />
-              {recur !== "none" && (
-                <div className="field-hint">
-                  Следующая встреча заведётся сама в день этой — с тем же временем и составом, и людям придёт приглашение.
-                </div>
-              )}
             </div>
 
           </>

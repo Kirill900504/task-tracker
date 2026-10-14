@@ -126,15 +126,24 @@ function lastDayBefore(ref: Date, day: number, month: number | null): string | n
   return null;
 }
 
+// Closed means closed by EITHER truth: the status, or an accepted review on
+// a one-off task (exactly how lib/kanban puts it in «Завершённые»). Tasks
+// accepted before the review route started writing `status: done` together
+// with the acceptance still carry `in_progress` — 13.10.2026 such a task
+// (№50, accepted 18.09) sat on the phone as «просрочено 14 дн.».
+function isClosed(task: Task): boolean {
+  return task.status === "done" || (task.recur === "none" && task.approvalState === "accepted");
+}
+
 export function isOverdue(task: Task, now: Date = new Date()): boolean {
-  if (task.status === "done") return false;
+  if (isClosed(task)) return false;
   if (task.recur !== "none") return false;
   if (!task.deadline) return false;
   return task.deadline < todayStr(now);
 }
 
 export function isDueTodayHighlight(task: Task, now: Date = new Date()): boolean {
-  if (task.status === "done") return false;
+  if (isClosed(task)) return false;
   if (task.recur === "none") return task.deadline === todayStr(now);
   return isDueToday(task, now);
 }

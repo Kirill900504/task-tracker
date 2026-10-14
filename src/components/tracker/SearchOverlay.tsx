@@ -100,7 +100,7 @@ export default function SearchOverlay({
           id="searchInput"
           type="text"
           className="search-input"
-          placeholder="Поиск по задачам, встречам и мыслям…"
+          placeholder="Поиск"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);

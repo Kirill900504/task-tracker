@@ -6,7 +6,7 @@
 // #fTitle, #saveTaskBtn, etc.) so the existing e2e patterns keep working
 // against the new UI with minimal changes.
 import { useEffect, useState } from "react";
-import type { RecurKind, Section, Task, TaskPrefill } from "@/types/tracker";
+import type { RecurKind, Task, TaskPrefill } from "@/types/tracker";
 import { markTaskCommentsRead } from "@/hooks/useUnreadTaskComments";
 import { uid } from "@/lib/uid";
 import TeamCompact from "./TeamCompact";
@@ -102,14 +102,11 @@ function emptyForm(task: Task | null, prefill?: TaskPrefill) {
 export default function TaskModal({
   task,
   prefill,
-  sections,
   onSave,
   onPatch,
   onDelete,
   onClose,
   onAddAssignee,
-  onAddSection,
-  onRemoveSection,
   participants,
   availablePeople,
   onAddParticipant,
@@ -134,7 +131,6 @@ export default function TaskModal({
 }: {
   task: Task | null;
   prefill?: TaskPrefill;
-  sections: Section[];
   onSave: (task: Task, pendingParticipants: PendingParticipant[]) => void;
   // Правка заведённой задачи — кусок, который ложится поверх ТЕКУЩЕЙ
   // строки, а не поверх снимка, с которым окно открыли. Кнопки
@@ -147,8 +143,6 @@ export default function TaskModal({
   onDelete: () => void;
   onClose: () => void;
   onAddAssignee: (name: string) => void;
-  onAddSection: (section: Section) => void;
-  onRemoveSection: (id: string) => void;
   participants: Participant[];
   availablePeople: PersonOption[];
   onAddParticipant: (assigneeId: string, role: TaskParticipantRole) => void | Promise<string | void>;
@@ -528,50 +522,6 @@ export default function TaskModal({
     // Кнопка с его именем должна появиться сразу: список людей в поле —
     // строки таблицы, а заводит их движок синхронизации своим ходом.
     await onPersonAdded?.(name);
-  }
-
-  async function handleAddSection() {
-    const v = await ask.ask({
-      title: "Новый раздел",
-      question: "Как назовём раздел?",
-      placeholder: "Например: Сервис",
-      okText: "Дальше",
-      required: "У раздела должно быть название.",
-    });
-    if (!v) return;
-    const name = v.trim();
-    if (!name) return;
-    // Раньше это спрашивалось как «ОК — личный, Отмена — рабочий»: вопрос, в
-    // котором ответ спрятан в названиях чужих кнопок, и отменить его было
-    // нельзя вовсе. Теперь обе возможности названы своими словами.
-    const kind = await ask.choose({
-      title: "Какой это раздел",
-      question: `«${name}» — рабочий или личный?`,
-      note: "Личные разделы не попадают в сводки и отчёты по работе.",
-      options: [
-        { value: "work", label: "Рабочий" },
-        { value: "personal", label: "Личный" },
-      ],
-    });
-    if (kind === null) return;
-    const section: Section = { id: uid(), name, kind: kind === "personal" ? "personal" : "work", sortOrder: sections.length };
-    onAddSection(section);
-    setForm((f) => ({ ...f, sectionId: section.id }));
-  }
-
-  async function handleRemoveSection() {
-    const section = sections.find((s) => s.id === form.sectionId);
-    if (!section) return;
-    const yes = await ask.confirm({
-      question: `Удалить раздел «${section.name}»?`,
-      note: "Задачи в нём останутся, но без раздела.",
-      okText: "Удалить",
-      danger: true,
-    });
-    if (yes) {
-      onRemoveSection(section.id);
-      setForm((f) => (f.sectionId === section.id ? { ...f, sectionId: "" } : f));
-    }
   }
 
   async function handleStopRecur() {
@@ -962,7 +912,7 @@ export default function TaskModal({
               <div className="input-with-mic">
                 <AutoGrowTextarea
                   id="fTitle"
-                  placeholder="Например: Согласовать прайс с поставщиком"
+                  placeholder="Что нужно сделать"
                   value={form.title}
                   onChange={(text) => setForm((f) => ({ ...f, title: text }))}
                   singleLine
@@ -1013,53 +963,18 @@ export default function TaskModal({
           </>
         )}
 
-        {/* Раздел, приоритет, срочность и повторение — только у новой
+        {/* Повторение — только у новой
             задачи. У заведённой их правка ни до кого не доходит: человеку
             уже отправили задачу такой, какая она есть, и менять её у себя в
             окне значит развести то, что записано, и то, что он видел. То же
             решение, что у назначенной встречи, и по той же причине. */}
         {!isEditing && (
         <>
-        <div className="field">
-          <label>Раздел</label>
-          <ChipChoice
-            id="fSection"
-            value={form.sectionId}
-            options={[{ value: "", label: "Без раздела" }, ...sections.map((s) => ({ value: s.id, label: s.name }))]}
-            onSelect={(id) => setForm((f) => ({ ...f, sectionId: id }))}
-            extra={
-              <>
-                {/* Завести и удалить раздел может только администратор:
-                    разделы — структура пространства, общая на всех, и
-                    база откажет остальным (миграция 0031). Кнопка,
-                    ведущая к молчаливому отказу, хуже отсутствующей. */}
-                {isAdmin && (
-                  <button
-                    type="button"
-                    className="participant-chip chip-add"
-                    id="addSectionBtn"
-                    title="Добавить раздел"
-                    onClick={() => void handleAddSection()}
-                  >
-                    + раздел
-                  </button>
-                )}
-                {isAdmin && form.sectionId && (
-                  <button
-                    type="button"
-                    className="participant-chip chip-del"
-                    id="removeSectionBtn"
-                    title="Удалить выбранный раздел"
-                    onClick={() => void handleRemoveSection()}
-                  >
-                    ✕
-                  </button>
-                )}
-              </>
-            }
-          />
-        </div>
-
+        {/* Поля «Раздел» здесь больше нет (14.10.2026, «убери из создания
+            задачи выбор отдела, это на мой взгляд лишнее»). Раздел у задачи
+            остаётся: его ставит кнопка раздела над доской (SectionTabs) —
+            задача заводится уже в нём и с его людьми.
+            Заводят и удаляют разделы в окне «Разделы». */}
         {/* Ни «Приоритета», ни «Срочности» здесь больше нет — оба поля
             ушли по одной и той же причине и по прямым словам Кирилла:
             «долгосрочные и краткосрочные задачи соединить просто в

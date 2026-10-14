@@ -61,7 +61,6 @@ export default function PeoplePicker({
   onRemove,
   onAddPerson,
   label = "Кто на задаче",
-  hint,
   requireExecutor = true,
 }: {
   people: PersonOption[];
@@ -72,13 +71,12 @@ export default function PeoplePicker({
   // рядом с выпадающим списком.
   onAddPerson?: () => void;
   // Тот же вопрос задают в двух местах: кто на задаче и кто отвечает за
-  // раздел. Поле одно на оба — меняются только подпись, пояснение и то,
+  // раздел. Поле одно на оба — меняются только подпись и то,
   // обязателен ли исполнитель. Второй такой список писать нельзя: в этом
   // проекте вторая копия расходилась с первой трижды, а здесь у первой
   // копии был ещё и обрез на двенадцати людях, который просто прятал
   // четырнадцатого.
   label?: string;
-  hint?: string;
   requireExecutor?: boolean;
 }) {
   const [menuFor, setMenuFor] = useState<{ person: PersonOption; anchor: DOMRect } | null>(null);
@@ -109,31 +107,22 @@ export default function PeoplePicker({
   };
   const pickedAway = picked.map((p) => ({ p, away: awayOf(p.id) })).filter((x) => x.away);
 
-  // На телефоне список свёрнут, пока его не раскроют.
+  // На телефоне — весь список сразу, без поиска и без «Ещё N».
   //
-  // Осмотр 21.09.2026: четырнадцать имён — это семь рядов кнопок, то есть
-  // ПОЛ-ЭКРАНА телефона в форме новой задачи, и срок с разделом лежат под
-  // ними. Поставить задачу с телефона значило пролистать всю команду.
-  // Поэтому видны первые шестеро, все уже выбранные и своя строка — а
-  // остальные за кнопкой «Ещё N», одно нажатие.
-  // Свою видно всегда нарочно: задачу себе ставят чаще, чем кому бы то ни
-  // было, а по фамилии она может оказаться и последней (порядок людей
-  // общий на весь трекер, см. lib/peopleOrder, и менять его здесь нельзя).
+  // 14.10.2026, словами Кирилла: «убери в мобильной версии поиск человека
+  // печатанием и оставь только развернутый список конкретных людей». Список
+  // свёрнутым до шести (21.09.2026) и поле поиска экономили место, но
+  // каждое прятало людей за лишним действием: набирать имя пальцем дольше,
+  // чем найти кнопку глазами, а «Ещё 9» — это ещё одно нажатие перед
+  // каждой задачей. Пятнадцать имён в сетке занимают меньше экрана, чем
+  // клавиатура, которую вызывал поиск.
+  // На компьютере поиск остаётся (lib/personSearch): там клавиатура уже
+  // под рукой, а набрать «нод» быстрее, чем вести мышь.
   const isMobile = useIsMobile();
-  const [expanded, setExpanded] = useState(false);
-  const COLLAPSED_COUNT = 6;
-  // Поиск — когда людей больше, чем видно одним взглядом (lib/personSearch).
-  // Выбранные остаются на виду при любом запросе: снять человека с задачи
-  // должно быть можно, не стирая того, что набрано в поле.
   const [query, setQuery] = useState("");
-  const searchable = people.length >= SEARCH_FROM;
+  const searchable = !isMobile && people.length >= SEARCH_FROM;
   const searching = searchable && !!query.trim();
-  const matched = searching ? people.filter((p) => !!roleOf(p.id) || matchesPerson(p.name, query)) : people;
-  const collapsed = !searching && isMobile && !expanded && people.length > COLLAPSED_COUNT + 2;
-  const visiblePeople = collapsed
-    ? people.filter((p, i) => i < COLLAPSED_COUNT || !!roleOf(p.id) || p.name.trim().endsWith("(я)"))
-    : matched;
-  const hiddenCount = searching ? 0 : people.length - visiblePeople.length;
+  const visiblePeople = searching ? people.filter((p) => !!roleOf(p.id) || matchesPerson(p.name, query)) : people;
 
   return (
     <div className="field people-field">
@@ -157,7 +146,7 @@ export default function PeoplePicker({
           onKeyDown={(e) => {
             if (e.key !== "Enter") return;
             e.preventDefault();
-            const only = matched.filter((p) => !roleOf(p.id));
+            const only = visiblePeople.filter((p) => !roleOf(p.id));
             if (only.length === 1) {
               const el = document.querySelector<HTMLElement>(`#fPeople [data-person="${only[0].id}"]`);
               if (el) setMenuFor({ person: only[0], anchor: el.getBoundingClientRect() });
@@ -201,34 +190,28 @@ export default function PeoplePicker({
         {searching && visiblePeople.every((p) => !!roleOf(p.id)) && (
           <span className="people-search-empty">Никого не нашёл по «{query.trim()}»</span>
         )}
-        {hiddenCount > 0 && (
-          <button type="button" className="participant-chip chip-more" id="morePeopleBtn" onClick={() => setExpanded(true)}>
-            Ещё {hiddenCount}
-          </button>
-        )}
-        {onAddPerson && (
+        {/* Завести нового человека с телефона нельзя (14.10.2026, его
+            слова: «завести в трекер нового человека тоже убери возможность
+            через мобильную версию»): новый человек появляется у всех
+            пятнадцати, и это решение принимается за компьютером. */}
+        {onAddPerson && !isMobile && (
           <button type="button" className="participant-chip chip-add" id="addAssigneeBtn" onClick={onAddPerson}>
             + человек
           </button>
         )}
       </div>
 
-      {/* На телефоне пояснение короткое: полный текст — четыре строки,
-          и в форме, где до срока и так надо долистать, они читаются один
-          раз в жизни, а место занимают всегда. Смысл при этом не теряется:
-          что делает второе нажатие, сказано и здесь. */}
       {pickedAway.length > 0 && (
         <div className="field-hint away-hint">
           {pickedAway.map(({ p, away }) => `${shown(p.name)} ${awayPhrase(away!.awayKind, away!.awayUntil)}`).join("; ")} — поручить
           можно, но ответа до возвращения не ждите.
         </div>
       )}
-      <div className="tp-hint">
-        {hint ||
-          (isMobile
-            ? "Нажмите человека и выберите роль; второе нажатие снимает его с задачи."
-            : "Нажмите на человека и выберите роль; нажали второй раз — он снят с задачи. Исполнителей может быть несколько — задача закроется, когда отчитается каждый. Соисполнитель помогает, наблюдатель только видит.")}
-      </div>
+      {/* Строки-пояснения «нажмите человека и выберите роль…» здесь
+          больше нет — ни на телефоне, ни на компьютере (14.10.2026: «убери
+          по всему трекеру… эти подсказки описания»). Роль спрашивает само
+          меню, которое открывается нажатием, а снять человека — то же
+          нажатие ещё раз, как у участников встречи. */}
 
       {menuFor && (
         <ActionMenu

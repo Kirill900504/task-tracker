@@ -8,6 +8,7 @@ import type { TaskParticipantRole } from "@/lib/taskProgress";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { matchesPerson, SEARCH_FROM } from "@/lib/personSearch";
 import { withoutSelfMark } from "@/lib/actorName";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { colorOf, initialsOf } from "@/lib/personBadge";
 
 // «+» в сводке задачи: кого добавить и кем.
@@ -45,6 +46,9 @@ export default function AddPeopleSheet({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  // На телефоне — без поиска и без «Нового человека», как и в форме новой
+  // задачи (PeoplePicker, 14.10.2026): только список людей целиком.
+  const isMobile = useIsMobile();
   // Только что добавленные исчезают из списка сразу, не дожидаясь, пока
   // строка участия вернётся из базы: иначе второе нажатие по тому же
   // человеку выглядело бы как «не сработало».
@@ -67,9 +71,7 @@ export default function AddPeopleSheet({
             </button>
           </div>
         </div>
-        <p className="field-hint add-people-hint">Нажмите роль напротив человека — он сразу появится в задаче и получит её.</p>
-
-        {people.length >= SEARCH_FROM && (
+        {!isMobile && people.length >= SEARCH_FROM && (
           <input
             className="people-search"
             type="search"
@@ -125,7 +127,7 @@ export default function AddPeopleSheet({
           )}
         </div>
 
-        {onAddPerson && (
+        {onAddPerson && !isMobile && (
           <button type="button" className="btn btn-small add-people-new" onClick={onAddPerson}>
             <Icon name="plus" size={14} /> Новый человек
           </button>

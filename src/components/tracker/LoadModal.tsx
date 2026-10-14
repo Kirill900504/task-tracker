@@ -75,7 +75,6 @@ export default function LoadModal({
         <h2>
           Загрузка <span className="count">{rows.length}</span>
         </h2>
-        <p className="field-hint">Кто чем занят и у кого горит. Нажмите на человека — доска покажет только его задачи.</p>
 
         {!rows.length && <div className="empty">Никому ничего не поручено.</div>}
 

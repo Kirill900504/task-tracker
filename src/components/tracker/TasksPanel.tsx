@@ -1046,7 +1046,6 @@ export default function TasksPanel({
           task={modalTask}
           prefill={modalPrefill}
           onRepeat={(prefill) => setModalState({ open: true, task: null, prefill })}
-          sections={sections}
           onSave={(t, pending) => {
             // Срок — из текущего списка, а не из снимка окна: у своей задачи его
             // двигают прямо в открытой карточке, и не раз (см. TaskModal.selfTask).
@@ -1113,8 +1112,6 @@ export default function TasksPanel({
           onDelete={() => modalTask && deleteTask(modalTask)}
           onClose={closeModal}
           onAddAssignee={actions.addAssignee}
-          onAddSection={actions.saveSection}
-          onRemoveSection={removeSection}
           myAssigneeId={myMemberAssigneeId}
           onAcceptWork={participants.acceptWork}
           onReportWork={participants.reportWork}

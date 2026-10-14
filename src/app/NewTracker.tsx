@@ -42,7 +42,6 @@ import LoadModal from "@/components/tracker/LoadModal";
 import { peopleLoad } from "@/lib/peoplePanel";
 import MobileHeader from "@/components/tracker/MobileHeader";
 import HeaderQuote from "@/components/tracker/HeaderQuote";
-import TodayScreen from "@/components/tracker/TodayScreen";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import { columnOf } from "@/lib/kanban";
 import { isSelfTask } from "@/lib/selfTask";
@@ -56,7 +55,6 @@ import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import MessengerLink from "@/components/tracker/MessengerLink";
 import AccountModal from "@/components/tracker/AccountModal";
 import { useMyMessenger } from "@/hooks/useMyMessenger";
-import { buildToday, todayCount } from "@/lib/todayScreen";
 import type { SearchResult } from "@/lib/localSearch";
 import Icon from "@/components/tracker/Icon";
 import BootSkeleton from "@/components/tracker/BootSkeleton";
@@ -921,7 +919,6 @@ export default function NewTracker() {
             // экран целиком, и мгновенная подмена читается как перезагрузка.
             onTabChange={(tab) => withViewTransition(() => setMobileTab(tab))}
             badges={{
-              today: todayCount(buildToday(visibleTasks, visibleMeetings)),
               tasks: visibleTasks.filter((t) => columnOf(t, participants.forTask(t.id), selfOf(t)) === "new").length,
               work: visibleTasks.filter((t) => columnOf(t, participants.forTask(t.id), selfOf(t)) === "work").length,
               meetings: visibleMeetings.filter((m) => !m.status || m.status === "planned").length,
@@ -932,40 +929,6 @@ export default function NewTracker() {
             {/* Every section stays mounted and is merely hidden: switching tabs
                 keeps scroll position and open editors, and the modals inside
                 them are portalled to <body>, so they show over the shell. */}
-            <div hidden={mobileTab !== "today"}>
-              <TodayScreen
-                participants={participants}
-                tasks={visibleTasks}
-                meetings={visibleMeetings}
-                sections={sections}
-                // Правило галочки здесь то же, что на доске: закрывает
-                // задачу постановщик, а не тот, кому она поручена. И если
-                // делает её другой человек, закрытие требует результата —
-                // значит не галочкой, а карточкой, где есть приёмка и
-                // волевое закрытие. Исполнители известны панели задач, а
-                // не этому экрану, поэтому здесь сравнивается имя в поле
-                // «Исполнитель»: приближение в сторону строгости, то есть
-                // лишний раз откроется карточка, а не закроется молча
-                // чужая работа.
-                canCompleteTask={(task) => isCreatedByMe(task, mineOnlyId)}
-                onToggleTask={(task) => {
-                  const someoneElse = task.status !== "done" && !!task.assignee && task.assignee !== myName;
-                  if (someoneElse) {
-                    setOpenExistingTaskId(task.id);
-                    toasts.showToast("Нужен результат", "Задачу делает другой человек — закройте её в карточке, написав, что сделано.");
-                    return;
-                  }
-                  actions.saveTask({ ...task, status: task.status === "done" ? "in_progress" : "done", completedAt: task.status === "done" ? "" : new Date().toISOString() });
-                }}
-                onOpenTask={(task) => setOpenExistingTaskId(task.id)}
-                onOpenMeeting={(meeting) => setOpenExistingMeetingId(meeting.id)}
-                // Чтобы карточка знала, кем я в ней числюсь, и красилась
-                // тем же тоном, что на доске.
-                myAssigneeId={identity.assigneeId}
-                onGoToTasks={() => setMobileTab("tasks")}
-                showToast={toasts.showToast}
-              />
-            </div>
             <div hidden={mobileTab !== "tasks"}>{panels.mainColNew}</div>
             <div hidden={mobileTab !== "work"}>{panels.mainColWork}</div>
             {/* Календаря месяца здесь больше нет. Слова Кирилла

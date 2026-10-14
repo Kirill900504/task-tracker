@@ -215,18 +215,31 @@ export async function POST(req: Request) {
     if (!idea) return NextResponse.json({ error: "Мысль не найдена" }, { status: 404 });
     const { linked, unlinked, self } = await recipientsByName(supabase, admin, to, user.id);
     if (!linked.length && self.length && !unlinked.length) return NextResponse.json({ sentTo, failed, self });
-    if (!linked.length) {
-      return NextResponse.json({ error: nobodyReachable(unlinked, "Выберите, кому отправить"), unreachable: unlinked });
-    }
+    // Мысль доходит не только мессенджером: у получателя она появляется в
+    // его списке мыслей в трекере (idea_recipients). Поэтому человек без
+    // мессенджера, но со входом в трекер — тоже адресат. 14.10.2026 Кирилл
+    // спросил, почему в «Кому отправить» у мысли не все: меню показывало
+    // только подключённых к мессенджеру, и половина команды для мысли не
+    // существовала вовсе.
+    const { data: unlinkedRows } = unlinked.length
+      ? await supabase.from("assignees").select("id, name").in("name", unlinked)
+      : { data: [] };
+    const known = (unlinkedRows || []) as { id: string; name: string }[];
     // «Сохранить мысль» — только тем, у кого есть свой список мыслей, то
     // есть вход в трекер (членство или своя строка владельца «(я)»).
     const { data: members } = await admin
       .from("workspace_members")
       .select("assignee_id")
-      .in("assignee_id", linked.map((p) => p.id))
+      .in("assignee_id", [...linked.map((p) => p.id), ...known.map((p) => p.id)])
       .eq("status", "active")
       .not("member_id", "is", null);
     const withLogin = new Set(((members || []) as { assignee_id: string }[]).map((m) => m.assignee_id));
+    const trackerOnly = known.filter((p) => withLogin.has(p.id) || isSelfAssignee(p.name));
+    const nowhere = unlinked.filter((name) => !trackerOnly.some((p) => p.name === name));
+    if (!linked.length && !trackerOnly.length) {
+      return NextResponse.json({ error: nobodyReachable(unlinked, "Выберите, кому отправить"), unreachable: unlinked });
+    }
+    for (const name of nowhere) failed.push(`${name} (нет ни мессенджера, ни входа в трекер)`);
     const results = await Promise.all(
       linked.map((person) =>
         deliver(
@@ -237,11 +250,13 @@ export async function POST(req: Request) {
         ),
       ),
     );
-    const reached = linked.filter((_, i) => results[i].ok);
+    const reached: { id: string; name: string }[] = [...linked.filter((_, i) => results[i].ok), ...trackerOnly];
     results.forEach((result, i) => {
       if (result.ok) sentTo.push(linked[i].name);
       else failed.push(`${linked[i].name} (${result.error})`);
     });
+    // Без мессенджера — значит в трекер: строка ниже и есть доставка.
+    for (const p of trackerOnly) sentTo.push(p.name);
     // Кому мысль ушла — теперь строка, а не только факт отправки:
     // получатель увидит её у себя на экране, а не только в чате, и будет
     // видно, во что она превратилась. Одной записью на всех — upsert с

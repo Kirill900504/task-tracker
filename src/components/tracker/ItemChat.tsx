@@ -8,7 +8,9 @@ import Icon from "./Icon";
 import FileList from "./FileList";
 import MicButton from "./MicButton";
 import { humanError } from "@/lib/humanError";
-import { withoutSelfMark } from "@/lib/actorName";
+import { nameLegacyRole, withoutSelfMark } from "@/lib/actorName";
+import { useColleagues } from "@/hooks/useColleagues";
+import { isSelfAssignee } from "@/lib/trackerRows";
 import { ChatMuteButton } from "./AlertsButton";
 import EmojiPicker from "./EmojiPicker";
 import { insertAt, nearBottom, splitLinks } from "@/lib/chatText";
@@ -212,10 +214,11 @@ export default function ItemChat({
   // предложил участник, — одним нажатием на самом предложении.
   onAcceptProposal?: (proposal: { date: string; time: string; reason: string; by: string }) => void;
 }) {
-  // «По задаче» в обсуждении встречи — мелочь, но именно из таких мелочей
-  // складывается ощущение, что окно собрано из чужих кусков.
-  const about = kind === "meeting" ? "встрече" : kind === "idea" ? "мысли" : "задаче";
   const { comments, loading, send, edit, remove, react } = useItemComments(kind, itemId);
+  // Имя владельца — для старых строк хроники, записанных словом «Владелец»
+  // (lib/actorName.nameLegacyRole). Его строка в общем списке людей помечена «(я)».
+  const { colleagues } = useColleagues();
+  const ownerName = colleagues.find((c) => isSelfAssignee(c.name))?.name ?? "";
   const ask = useAsk();
   const [draft, setDraft] = useState("");
   const [mentionCursor, setMentionCursor] = useState<{ query: string | null; index: number }>({ query: null, index: 0 });
@@ -450,13 +453,10 @@ export default function ItemChat({
       <div className="chat-head">
         <span className="chat-title">Обсуждение</span>
         {comments.length > 0 && <span className="chat-count">{comments.length}</span>}
-        {/* Правая кнопка — единственное, о чём нельзя догадаться, глядя на
-            ветку: под сообщениями теперь ничего не написано. Одна строка
-            справа от заголовка стоит дешевле, чем три подписи под каждой
-            репликой, которые она заменила. */}
-        {comments.some((c) => !c.system) && (
-          <span className="chat-hint">Правая кнопка на сообщении — реакции и действия</span>
-        )}
+        {/* Строки-подсказки «правая кнопка — реакции и действия» здесь
+            больше нет: 14.10.2026 Кирилл попросил убрать подсказки-описания
+            по всему трекеру. Меню по правой кнопке и долгому нажатию — то
+            же, что в любом мессенджере, его там и ищут. */}
         {kind !== "idea" && <ChatMuteButton kind={kind} itemId={itemId} />}
       </div>
 
@@ -497,7 +497,7 @@ export default function ItemChat({
         )}
         {!loading && comments.length === 0 && (
           <div className="chat-empty">
-            Пока тихо. Здесь видно всё, что говорили по {about}, — и это видят все её участники.
+            Сообщений пока нет
           </div>
         )}
         {!loading && comments.length > 0 && (
@@ -530,7 +530,7 @@ export default function ItemChat({
                     из-за чего карточку открывают, и должно читаться
                     первым. */}
                 {c.system ? (() => {
-                  const { label, comment } = splitEvent(c.body);
+                  const { label, comment } = splitEvent(nameLegacyRole(c.body, ownerName));
                   return (
                     <div
                       className={"chat-event" + (menuFor?.id === c.id ? " menu-open" : "") + (flashId === c.id ? " flash" : "")}
@@ -928,10 +928,26 @@ export default function ItemChat({
             ))}
           </div>
         )}
+        {/* Ряд устроен как в Telegram (14.10.2026, «скопируй всё у
+            телеграм»): скрепка слева, поле во всю оставшуюся ширину со
+            смайликом внутри, справа микрофон и круглая «отправить». До
+            этого поле было одним из пяти равных соседей и на телефоне
+            сжималось до четверти ряда, а подсказка в нём рвалась на шесть
+            строк. Подсказка теперь одно слово — как у мессенджеров. */}
+        <button
+          type="button"
+          className="chat-round chat-attach"
+          title="Приложить файл"
+          aria-label="Приложить файл"
+          onClick={() => fileInput.current?.click()}
+        >
+          <Icon name="clip" size={18} />
+        </button>
+        <div className="chat-input-wrap">
         <textarea
           ref={draftRef}
           value={draft}
-          placeholder={`Написать по ${about}… ${mentionCandidates.length ? "(@ — позвать кого-то из участников)" : ""}`}
+          placeholder="Сообщение"
           onChange={(e) => setDraft(e.target.value)}
           // Снимок экрана вставляется прямо в поле (Ctrl+V), как в любом
           // мессенджере: «покажи, что сделал» чаще всего и есть скриншот, и
@@ -990,8 +1006,23 @@ export default function ItemChat({
               }
             }
           }}
-          rows={2}
+          rows={1}
         />
+        {/* Смайлики — внутри поля, у правого края, как в Telegram и MAX. */}
+        <div className="chat-emoji-wrap">
+          <button
+            type="button"
+            className={"chat-emoji-btn" + (emojiOpen ? " on" : "")}
+            title="Смайлики"
+            aria-label="Смайлики"
+            aria-expanded={emojiOpen}
+            onClick={() => setEmojiOpen((v) => !v)}
+          >
+            <Icon name="smile" size={18} />
+          </button>
+          {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
+        </div>
+        </div>
         <input
           ref={fileInput}
           type="file"
@@ -1008,41 +1039,22 @@ export default function ItemChat({
             обсуждениях». Надиктованное дописывается в поле, а не уходит
             само: распознавание ошибается, и прочесть перед отправкой
             дешевле, чем исправлять отправленное. */}
-        {/* Смайлики — у поля, как в Telegram и MAX. */}
-        <div className="chat-emoji-wrap">
-          <button
-            type="button"
-            className={"btn btn-small chat-clip" + (emojiOpen ? " on" : "")}
-            title="Смайлики"
-            aria-label="Смайлики"
-            aria-expanded={emojiOpen}
-            onClick={() => setEmojiOpen((v) => !v)}
-          >
-            <Icon name="smile" size={16} />
-          </button>
-          {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
-        </div>
+        {/* Микрофон стоит всегда, а не сменяется кнопкой отправки, как в
+            Telegram: надиктованное дописывается в поле, и подмена кнопки
+            посреди диктовки сняла бы сам микрофон. */}
         <MicButton value={draft} onChange={setDraft} title="Надиктовать сообщение" />
         <button
           type="button"
-          className="btn btn-small chat-clip"
-          title="Приложить файл"
-          aria-label="Приложить файл"
-          onClick={() => fileInput.current?.click()}
-        >
-          <Icon name="clip" size={16} />
-        </button>
-        <button
-          type="button"
-          className="btn btn-small btn-primary"
+          className="chat-round chat-send btn-primary"
+          title="Отправить"
+          aria-label="Отправить"
           disabled={!draft.trim() && !pending.length}
           onClick={handleSend}
         >
           {/* «Отправляю…» на кнопке больше нет, и не потому, что стало
               некогда: теперь это видно на самом сообщении — оно уже в ленте и
-              бледнеет, пока не подтвердится. Подпись, повторяющая то, что и
-              так на экране, — это та самая надпись ни о чём. */}
-          <Icon name="send" size={15} /> Отправить
+              бледнеет, пока не подтвердится. */}
+          <Icon name="send" size={18} />
         </button>
       </div>
     </div>

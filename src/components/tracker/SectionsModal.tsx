@@ -163,7 +163,6 @@ export default function SectionsModal({
                     }}
                     label={`Кто отвечает за «${section.name}»`}
                     requireExecutor={false}
-                    hint="Этих людей трекер подставит в новую задачу по разделу, каждого с его ролью. Нажали второй раз — человек убран из раздела."
                   />
                 </div>
               )}

@@ -53,12 +53,12 @@ test("the phone gets its own shell: compact header, tabs, and tasks first", asyn
   // всё требование, и перепутанная пара внутри него ничем себя не выдаст.
   // «В работе» встала между «Задачами» и «Приёмкой» 23.09.2026: три
   // состояния доски были кнопками внутри одного раздела, теперь это три
-  // полноценных раздела.
+  // полноценных раздела. «Сегодня» убран 14.10.2026 его словами.
   const tabs = await page.locator(".mobile-tab .mobile-tab-label").allTextContents();
-  expect(tabs).toEqual(["Встречи", "Задачи", "В работе", "Приёмка", "Мысли", "Сегодня"]);
+  expect(tabs).toEqual(["Встречи", "Задачи", "В работе", "Приёмка", "Мысли"]);
 
   // Значки — свои, контурные: ни одного эмодзи из системного шрифта.
-  await expect(page.locator(".mobile-tab .mobile-tab-icon svg")).toHaveCount(6);
+  await expect(page.locator(".mobile-tab .mobile-tab-icon svg")).toHaveCount(5);
 
   // Кнопка в шапке одна, и у неё есть лицо — «вместо кнопок Лупы и „…“
   // оставить одну кнопку с картинкой команды».
@@ -166,10 +166,8 @@ test("круглая «+» создаёт событие того раздела
   await page.click(".quick-add-fab");
   await expect(page.locator("#ideaInput")).toBeFocused();
 
-  // В «Сегодня» и «Приёмке» кнопки нет: заводить там нечего.
+  // В «Приёмке» кнопки нет: заводить там нечего.
   await page.click('[data-tab="review"]');
-  await expect(page.locator(".quick-add-fab")).toHaveCount(0);
-  await page.click('[data-tab="today"]');
   await expect(page.locator(".quick-add-fab")).toHaveCount(0);
 });
 
@@ -190,12 +188,8 @@ test("tabs switch sections and a task can be created from the phone", async ({ p
   await page.click("#saveTaskBtn");
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
 
-  // And the Today screen accounts for it: a task with no date is not today's
-  // business, but it is never silently dropped — it shows as a count, either
-  // beside the empty state or under the day's list.
-  await page.click('[data-tab="today"]');
-  await expect(page.locator("#todayScreen")).toBeVisible();
-  await expect(page.locator("#todayScreen")).toContainText("Без срока");
+  // Раздела «Сегодня» на телефоне нет (14.10.2026).
+  await expect(page.locator('[data-tab="today"]')).toHaveCount(0);
 });
 
 test("a task is finished by swiping the card to the right", async ({ page }) => {
@@ -464,14 +458,14 @@ test("«Принял» есть в меню карточки и не требу�
   await expect(page.locator(".action-sheet .export-item", { hasText: "Принял в работу" })).toHaveCount(0);
 });
 
-// Листание разделов пальцем.
+// Листание разделов пальцем — только по нижней панели.
 //
-// Жест просили прямо (22.09.2026), и опасность у него ровно одна: на этом
-// же экране горизонталь уже занята — по карточке задачи свайп закрывает её
-// или открывает действия, полосы фильтров и столбцов прокручиваются вбок.
-// Поэтому проверяется и то, что жест работает, и то, что он НЕ работает
-// там, где занято.
-test("свайп по содержимому листает разделы, но не там, где горизонталь занята", async ({ page }) => {
+// Жест просили прямо (22.09.2026), а 14.10.2026 Кирилл сузил его: «оставь
+// только в области разделов» — по содержимому горизонталь занята карточкой,
+// которую смахивают в «готово», и полосами, которые едут вбок. Поэтому
+// проверяется и то, что жест работает на панели, и то, что по содержимому
+// он больше не листает.
+test("свайп по нижней панели листает разделы, по содержимому — нет", async ({ page }) => {
   await login(page);
   await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/);
 
@@ -497,17 +491,16 @@ test("свайп по содержимому листает разделы, но
       { selector, dx },
     );
 
-  // Влево — следующий раздел по полосе: «Задачи» → «В работе».
-  await swipe("#mobileMain", -140);
+  // Влево по панели — следующий раздел по полосе: «Задачи» → «В работе».
+  await swipe("#mobileNav", -140);
   await expect(page.locator('.mobile-tab[data-tab="work"]')).toHaveClass(/active/, { timeout: 5000 });
 
   // Вправо — обратно.
-  await swipe("#mobileMain", 140);
+  await swipe("#mobileNav", 140);
   await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/, { timeout: 5000 });
 
-  // А по полосе над доской — ничего: у неё своя горизонталь, и
-  // переключать разделы оттуда значит отнимать у неё жест.
-  await swipe('#mobileMain > div:not([hidden]) .toolbar', -140);
+  // А по содержимому — ничего.
+  await swipe("#mobileMain", -140);
   await page.waitForTimeout(600);
   await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/);
 });
@@ -612,4 +605,55 @@ test("свайп влево по карточке открывает её дей
   await expect(page.locator(".action-sheet .export-item", { hasText: "Наверх списка" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator(".action-sheet")).toHaveCount(0);
+});
+
+// Четырнадцать замечаний Кирилла 14.10.2026 по снимкам с iPhone — то, что
+// можно проверить без пальца. Каждая строка — отдельная его фраза, и
+// вернуть любую одной случайной правкой проще, чем заметить.
+test("окно задачи на телефоне: стоит на месте, без поиска людей и раздела, чат и стрелка назад как надо", async ({ page }) => {
+  const title = `E2E окно моб ${Date.now()}`;
+  await login(page);
+  await expect(page.locator("#syncStatus")).toContainText("Сохранено", { timeout: 40_000 });
+
+  await page.click("#newTaskBtn:visible");
+  await expect(page.locator("#fTitle")).toBeVisible();
+  // «Убери поиск человека печатанием… завести нового человека тоже убери».
+  await expect(page.locator(".people-search:visible")).toHaveCount(0);
+  await expect(page.locator("#addAssigneeBtn")).toHaveCount(0);
+  await expect(page.locator("#morePeopleBtn")).toHaveCount(0);
+  // «Убери эти подсказки описания» и «убери выбор отдела».
+  await expect(page.locator(".tp-hint")).toHaveCount(0);
+  await expect(page.locator("#fSection")).toHaveCount(0);
+  // «Окно можно таскать по экрану» — горизонтальной прокрутки у окна нет.
+  const sideways = await page.evaluate(() => {
+    const o = document.querySelector("dialog[open].overlay") as HTMLElement;
+    return getComputedStyle(o).overflowX;
+  });
+  expect(sideways).toBe("hidden");
+
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+  await page.locator(".task", { hasText: title }).click();
+  const dialog = page.locator("dialog[open].overlay");
+  await expect(dialog.locator(".chat-composer textarea")).toBeVisible();
+
+  // Чат — как в Telegram: поле занимает бо́льшую часть ряда, подсказка в
+  // нём одним словом, и лента стоит открытой даже пустой.
+  const sizes = await page.evaluate(() => {
+    const row = document.querySelector("dialog[open] .chat-composer") as HTMLElement;
+    const box = row.querySelector("textarea") as HTMLTextAreaElement;
+    const feed = document.querySelector("dialog[open] .chat-feed") as HTMLElement;
+    return { row: row.clientWidth, box: box.clientWidth, feed: feed.clientHeight, ph: box.placeholder };
+  });
+  expect(sizes.box).toBeGreaterThan(sizes.row * 0.4);
+  expect(sizes.ph).toBe("Сообщение");
+  expect(sizes.feed).toBeGreaterThan(200);
+
+  // Стрелка назад едет вместе с прокруткой: долистали до чата — она на экране.
+  await dialog.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  const back = await page.locator("dialog[open] .modal-back-btn").boundingBox();
+  expect(back).not.toBeNull();
+  expect(back!.y).toBeGreaterThanOrEqual(0);
+  expect(back!.y).toBeLessThan(80);
 });

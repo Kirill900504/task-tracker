@@ -94,7 +94,7 @@ export default function MeetingAgenda({
         <div className="agenda-add">
           <AutoGrowTextarea
             id="agendaInput"
-            placeholder={items.length ? "Ещё пункт… Enter — добавить" : "Что обсудим? Enter — добавить пункт"}
+            placeholder={items.length ? "Ещё пункт" : "Что обсудим?"}
             value={text}
             onChange={setText}
             singleLine

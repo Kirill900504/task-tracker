@@ -1037,22 +1037,19 @@ test("вопросы задаются окном трекера, а не бра�
   await page.fill("#fTitle", title);
   await pickAnyExecutor(page);
 
-  // Новый раздел: сначала имя, потом выбор из двух названных возможностей —
-  // вместо «ОК — личный, Отмена — рабочий», где ответ был спрятан в чужих
-  // кнопках и отменить вопрос было нельзя вовсе.
-  await page.click("#addSectionBtn");
+  // Новый человек: имя спрашивает окно трекера. Раньше здесь заводили
+  // раздел, но поля «Раздел» в форме задачи больше нет (14.10.2026).
+  await page.click("#addAssigneeBtn");
   const ask = page.locator(".ask-modal");
   await expect(ask).toBeVisible();
   // Пустой обязательный ответ окно не принимает и не закрывается.
   await page.click("#askOkBtn");
   await expect(ask.locator(".ask-problem")).toBeVisible();
   await expect(ask).toBeVisible();
-
-  await page.fill("#askInput", `Раздел ${Date.now()}`);
-  await page.click("#askOkBtn");
-  await expect(ask).toBeVisible();
-  await ask.getByRole("button", { name: "Рабочий" }).click();
+  // А отмена закрывает вопрос и не трогает форму под ним.
+  await page.click("#askCancelBtn");
   await expect(page.locator(".ask-modal")).toHaveCount(0);
+  await expect(page.locator("#fTitle")).toHaveValue(title);
 
   await page.click("#saveTaskBtn");
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
@@ -1285,12 +1282,20 @@ test("левая кнопка по разделу заводит задачу, �
   // попадает, тест попадает всегда.
   await page.waitForTimeout(800);
 
-  // Левая кнопка — новая задача, и раздел в ней уже выбран.
+  // Левая кнопка — новая задача, и она заводится в этом разделе. Поля
+  // «Раздел» в форме больше нет (14.10.2026), поэтому раздел проверяется
+  // там, где он и живёт, — в строке задачи в базе.
   await tab.click();
   await expect(page.locator("#fTitle")).toBeVisible();
-  await expect(page.locator(`#fSection [data-value="${id}"]`)).toHaveAttribute("aria-pressed", "true");
-  await page.keyboard.press("Escape");
+  await expect(page.locator("#fSection")).toHaveCount(0);
+  const inSection = `E2E раздел ${stamp}`;
+  await page.fill("#fTitle", inSection);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
   await expect(page.locator("#fTitle")).toHaveCount(0);
+  await expect
+    .poll(async () => (await admin.from("tasks").select("section_id").eq("title", inSection).maybeSingle()).data?.section_id ?? null, { timeout: 30_000 })
+    .toBe(id);
 
   // Правая — отбор по разделу, и повторная его снимает.
   await tab.click({ button: "right" });

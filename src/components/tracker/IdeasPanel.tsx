@@ -261,7 +261,7 @@ export default function IdeasPanel({
           // Без эмодзи: значок микрофона стоит тут же, справа от поля, — и
           // нарисованный, а не в виде наклейки посреди подсказки, где он к
           // тому же ломал её на две строки.
-          placeholder="Мысль, идея (M)… Enter — сохранить"
+          placeholder="Новая мысль"
           value={text}
           onChange={setText}
           singleLine

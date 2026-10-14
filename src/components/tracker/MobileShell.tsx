@@ -2,7 +2,9 @@
 
 import { useRef, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import Icon, { type IconName } from "./Icon";
-import { SWIPE_PX_OVER_CARD, neighbour, startsInBusyArea, startsOverCard, verdict } from "@/lib/mobileSwipe";
+import { neighbour, verdict } from "@/lib/mobileSwipe";
+
+const NAV_SWIPE_PX = 40;
 
 // The phone gets its own frame: one section on screen at a time, chosen from
 // a bar under the thumb, instead of the desktop's three columns stacked into
@@ -13,7 +15,12 @@ import { SWIPE_PX_OVER_CARD, neighbour, startsInBusyArea, startsOverCard, verdic
 // difference is the navigation around them, not a second implementation of
 // the tracker.
 
-export type MobileTab = "today" | "tasks" | "work" | "meetings" | "ideas" | "review";
+// «Сегодня» убран 14.10.2026 словами Кирилла: «Раздел „сегодня“ из
+// мобильной версии — убрать». Он повторял то, что и так есть в «Задачах»
+// (фильтр «Просрочено») и «Встречах», и был единственным разделом, где
+// жила своя выборка «что открыто» — она и показала принятую задачу
+// просроченной.
+export type MobileTab = "tasks" | "work" | "meetings" | "ideas" | "review";
 
 // Вкладка, с которой начинается каждая сессия. Слова Кирилла 20.09.2026:
 // «Задачи… он же всегда должен быть главной страницей и на с него
@@ -44,7 +51,6 @@ const TABS: { id: MobileTab; label: string; icon: IconName }[] = [
   { id: "work", label: "В работе", icon: "clock" },
   { id: "review", label: "Приёмка", icon: "inbox" },
   { id: "ideas", label: "Мысли", icon: "bulb" },
-  { id: "today", label: "Сегодня", icon: "today" },
 ];
 
 const TAB_IDS = TABS.map((t) => t.id);
@@ -62,16 +68,17 @@ export default function MobileShell({
   badges?: Partial<Record<MobileTab, number>>;
   children: ReactNode;
 }) {
-  // Листание разделов пальцем.
+  // Листание разделов пальцем — только по нижней панели.
   //
-  // Правило, по которому жест отличается от всех остальных горизонталей на
-  // этом экране, вынесено в lib/mobileSwipe — там же записано, почему оно
-  // именно такое. Здесь остаются только руки: где палец лёг и куда пришёл.
+  // 14.10.2026, словами Кирилла: «Свайп с перелистыванием вправо и влево по
+  // разделам оставь только в области разделов» (обвёл на снимке полосу
+  // вкладок). По содержимому жест спорил со всем, что там уже ездит вбок:
+  // карточка, которую смахивают в «готово», полосы фильтров, список,
+  // который ведут вверх чуть наискось. Отдельный порог для карточки
+  // (lib/mobileSwipe, SWIPE_PX_OVER_CARD) лечил это наполовину. На панели
+  // вкладок горизонталь не занята ничем, поэтому и порог здесь короче:
+  // полоса низкая, и палец по ней проходит недалеко.
   const from = useRef<{ x: number; y: number } | null>(null);
-  // Жест начался на карточке задачи — ей отдаётся первые 150px (см.
-  // lib/mobileSwipe), и только после них движение читается как смена
-  // раздела, а не как её собственный свайп.
-  const overCard = useRef(false);
 
   // Касания, а не pointer-события — и это вся починка 24.09.2026, третьей
   // по счёту попытки. На настоящем телефоне браузер, увидев, что палец
@@ -85,9 +92,7 @@ export default function MobileShell({
       from.current = null;
       return;
     }
-    if (startsInBusyArea(e.target as Element)) return;
     const t = e.touches[0];
-    overCard.current = startsOverCard(e.target as Element);
     from.current = { x: t.clientX, y: t.clientY };
   }
 
@@ -96,25 +101,25 @@ export default function MobileShell({
     from.current = null;
     const t = e.changedTouches[0];
     if (!start || !t) return;
-    const where = verdict(t.clientX - start.x, t.clientY - start.y, overCard.current ? SWIPE_PX_OVER_CARD : undefined);
+    const where = verdict(t.clientX - start.x, t.clientY - start.y, NAV_SWIPE_PX);
     const next = neighbour(TAB_IDS, tab, where);
     if (next) onTabChange(next);
   }
 
   return (
     <>
-      <main
-        className="mobile-main"
-        id="mobileMain"
+      <main className="mobile-main" id="mobileMain">
+        {children}
+      </main>
+      <nav
+        className="mobile-nav"
+        id="mobileNav"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onTouchCancel={() => {
           from.current = null;
         }}
       >
-        {children}
-      </main>
-      <nav className="mobile-nav" id="mobileNav">
         {TABS.map((t) => {
           const count = badges?.[t.id];
           return (

@@ -351,3 +351,122 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .facts .fact-person.vote-yes{border-color:rgba(63,169,104,.45);}
 .facts .fact-person.vote-late{border-color:rgba(224,184,77,.45);}
 .facts .fact-person.vote-no{border-color:rgba(224,122,95,.5);}
+
+/* ---------- Чат как в Telegram (14.10.2026) ----------------------------
+   «Когда заходишь в задачу, чат уже должен быть открыт… скопируй всё у
+   телеграм». Два изменения. Лента занимает своё место всегда, даже пустая:
+   окно открывается с готовой перепиской, а не с полосой «пока тихо», под
+   которой разворачивается чат после первого сообщения. И строка ввода —
+   одна: скрепка, поле во всю ширину со смайликом внутри, микрофон, круглая
+   «отправить». Поле раньше было соседом четырёх кнопок и с field-sizing
+   сжималось по ширине до своей подсказки — на телефоне до четверти ряда. */
+.chat-feed{min-height:260px;}
+.chat-composer{align-items:flex-end; gap:6px;}
+.chat-composer .chat-input-wrap{
+  flex:1 1 0; min-width:0; position:relative; display:flex; align-items:flex-end;
+  background:var(--bg); border:1px solid var(--line-soft); border-radius:21px;
+}
+.chat-composer .chat-input-wrap:focus-within{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
+.chat-composer .chat-input-wrap textarea{
+  flex:1 1 auto; width:100%; min-width:0; min-height:40px;
+  border:0; background:transparent; box-shadow:none; border-radius:21px;
+  padding:10px 4px 10px 14px; font-size:14.5px;
+}
+.chat-composer .chat-input-wrap textarea:focus{border:0; box-shadow:none;}
+.chat-composer .chat-emoji-wrap{flex:none; align-self:flex-end;}
+.chat-emoji-btn{
+  width:38px; height:40px; display:flex; align-items:center; justify-content:center;
+  background:none; border:0; color:var(--ink-soft); cursor:pointer; border-radius:50%;
+}
+.chat-emoji-btn:hover, .chat-emoji-btn.on{color:var(--accent);}
+.chat-round{
+  flex:none; width:42px; height:42px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; padding:0;
+  background:transparent; border:1px solid var(--line-soft); color:var(--ink-soft); cursor:pointer;
+}
+.chat-round:hover{color:var(--ink); border-color:var(--line);}
+.chat-round.chat-send{background:var(--accent); border-color:var(--accent); color:#F3F8FA;}
+.chat-round.chat-send:disabled{opacity:.45; cursor:default;}
+.chat-composer .field-mic-btn{flex:none; width:42px; height:42px; border-radius:50%;}
+@media (max-width:800px){
+  /* На телефоне лента — половина экрана: переписку видно сразу, а поле
+     ввода остаётся в пределах одного пролистывания от сводки задачи. */
+  .chat-feed{min-height:46vh;}
+  .chat-composer textarea{font-size:16px;}
+  .chat-composer{gap:5px;}
+  .chat-round, .chat-composer .field-mic-btn{width:40px; height:40px;}
+}
+
+/* ---------- Окно стоит на месте (14.10.2026) ---------------------------
+   «Окно в мобильной версии можно таскать по экрану… все окна и уровни
+   должны быть статичными». Причина — одна строка в .overlay: overflow-y:auto
+   без overflow-x по правилам CSS превращает и горизонталь в auto. Стоило
+   любому ряду внутри окна оказаться на пиксель шире экрана, и затемнение
+   становилось горизонтальной прокруткой — окно ездило за пальцем вбок.
+   Горизонталь у окон теперь закрыта всегда, на любом экране; у самого
+   окна — clip, а не hidden: hidden сделал бы его вторым скролл-контейнером
+   и сломал липкие кнопки внизу (см. разбор у .modal в tracker.css). */
+.overlay{overflow-x:hidden; overscroll-behavior:contain;}
+@media (max-width:800px){
+  .modal{max-width:100vw; overflow-x:clip;}
+  .modal .participant-grid, .modal .chip-choice, .modal .deadline-row{flex-wrap:wrap;}
+
+  /* Стрелка назад едет вместе с прокруткой и заметна (14.10.2026: «должна
+     ползти по ходу всего проматывания задачи… и быть более яркая и
+     заметная, чтобы на любом этапе можно было выйти»). Прежде она сидела
+     в углу <dialog> и уезжала вверх вместе с содержимым: из длинной задачи
+     выйти можно было, только долистав до самого верха. fixed — к экрану,
+     а не к окну; фирменная заливка и тень — чтобы её было видно поверх
+     любого блока, под которым она проезжает.
+     Размытие фона у затемнения снято здесь же, и это не украшательство:
+     backdrop-filter делает элемент точкой отсчёта для fixed-потомков, и
+     стрелка с ним «прилипала» к содержимому окна, а не к экрану (поймал
+     e2e). Окно на телефоне во весь экран — размывать под ним нечего. У окна
+     вопроса (Ask) стрелки нет, его размытие остаётся. */
+  .overlay:not(.ask-overlay){backdrop-filter:none;}
+  .modal-back-btn{
+    position:fixed;
+    width:44px; height:44px;
+    background:var(--accent); border-color:var(--accent); color:#F3F8FA;
+    box-shadow:0 4px 14px rgba(0,0,0,.45);
+  }
+  .modal-back-btn:active{filter:brightness(1.1);}
+}
+
+/* ---------- Свайп по карточке: ярко и до конца (14.10.2026) -------------
+   «Сделай значительно ярче результат или действие, к которому приведёт
+   смахивание… когда до конца дотягиваешь, пропадает — должно всегда
+   светиться». Пропадало оно не от бледности: правило «доведено — светится
+   полностью» (.armed .swipe-hint) задевало и ВТОРУЮ подсказку, «Действия»,
+   которая лежит в том же месте поверх — и в момент срабатывания серая
+   плашка закрывала зелёную. Теперь каждая подсказка видна только в свою
+   сторону, а цвет — сплошной, с первого пикселя движения: зелёный у
+   «готово», фирменный синий у «действий». */
+@media (max-width:800px){
+  .swipe-hint{
+    background:#2FA562; color:#fff; font-size:15px; font-weight:700; letter-spacing:.01em;
+    opacity:0; transition:opacity .12s ease, filter .12s ease;
+  }
+  .swipe-hint.left{background:var(--accent); color:#fff; box-shadow:none;}
+  .swipe-wrap.to-right .swipe-hint:not(.left){opacity:1;}
+  .swipe-wrap.to-right .swipe-hint.left{opacity:0;}
+  .swipe-wrap.to-left .swipe-hint.left{opacity:1;}
+  .swipe-wrap.to-left .swipe-hint:not(.left){opacity:0;}
+  .swipe-wrap.armed .swipe-hint:not(.left){opacity:1; filter:brightness(1.18);}
+  .swipe-wrap.armed .swipe-hint.left{opacity:0;}
+  .swipe-wrap.armed-left .swipe-hint.left{opacity:1; color:#fff; filter:brightness(1.18);}
+  .swipe-wrap.armed-left .swipe-hint:not(.left){opacity:0;}
+}
+
+/* ---------- Подсказки в полях — в одну строку (14.10.2026) ---------------
+   «Не вмещается в строку подсказка, проверь во всей мобильной версии,
+   чтобы везде всё влазило». Сами подсказки укорочены до слов («Новая
+   мысль», «Сообщение», «Поиск»), а то, что всё-таки длиннее поля,
+   обрезается многоточием, а не переносится на вторую строку под край
+   поля. И на телефоне нет поиска людей нигде — ни в задаче, ни во встрече:
+   только список целиком (см. PeoplePicker). */
+input{text-overflow:ellipsis;}
+input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:nowrap; overflow:hidden;}
+@media (max-width:800px){
+  .people-search{display:none;}
+}
