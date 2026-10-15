@@ -459,6 +459,28 @@ test("a weekly recurring task keeps its rule across a reload", async ({ page }) 
   await expect(card.locator(".task-recur")).toContainText("ср");
 });
 
+// «Только в рабочий день» у месячного повтора (миграция 0064, предложение
+// Котова 15.10.2026) — отдельная колонка, и доехать до базы и обратно она
+// обязана так же, как правило повтора.
+test("a monthly task set to working days keeps that across a reload", async ({ page }) => {
+  const title = `E2E рабочий день ${Date.now()}`;
+
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickAnyExecutor(page);
+  await page.click('#fRecur [data-value="monthly"]');
+  await page.fill("#fRecurMonthday", "1");
+  await page.click('#fRecurWorkday [data-value="yes"]');
+  await page.click("#saveTaskBtn");
+  await expect(page.locator(".task", { hasText: title })).toBeVisible();
+  await waitForSaved(page);
+
+  await page.reload();
+  const card = page.locator(".task", { hasText: title });
+  await expect(card.locator(".task-recur")).toContainText("Каждое 1 число, в рабочий день");
+});
+
 // Перенос задачи между столбцами — мышью, как человек.
 //
 // До 19.09.2026 это был HTML5 drag-and-drop, и проверить его настоящими
