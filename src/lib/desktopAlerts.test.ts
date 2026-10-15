@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { addresseeOf, alertForComment, alertForNewItem, type AlertContext, type CommentRowForAlert } from "./desktopAlerts";
 import type { AlertPrefs } from "./alertPrefs";
 
-const prefs = (patch: Partial<AlertPrefs> = {}): AlertPrefs => ({ progress: true, reminders: true, quietUntil: "", muted: [], ...patch });
+const prefs = (patch: Partial<AlertPrefs> = {}): AlertPrefs => ({ enabled: true, progress: true, reminders: true, quietUntil: "", muted: [], ...patch });
 
 const ctx = (patch: Partial<AlertContext> = {}): AlertContext => ({
   myUserId: "me",
@@ -54,6 +54,8 @@ describe("alertForComment — реплика коллеги", () => {
     const now = new Date("2026-10-07T18:00:00Z");
     expect(alertForComment(row(), ctx({ now, prefs: prefs({ quietUntil: "2026-10-07T18:30:00Z" }) }))).toBeNull();
     expect(alertForComment(row(), ctx({ now, prefs: prefs({ quietUntil: "2026-10-07T17:30:00Z" }) }))).not.toBeNull();
+    // Общий выключатель глушит всё, и реплику коллеги тоже (15.10.2026).
+    expect(alertForComment(row(), ctx({ now, prefs: prefs({ enabled: false }) }))).toBeNull();
   });
 });
 
@@ -132,5 +134,6 @@ describe("alertForNewItem", () => {
     });
     const now = new Date("2026-10-07T18:00:00Z");
     expect(alertForNewItem({ kind: "task", id: "t9", title: "x", when: "" }, prefs({ quietUntil: "2026-10-07T19:00:00Z" }), now)).toBeNull();
+    expect(alertForNewItem({ kind: "task", id: "t9", title: "x", when: "" }, prefs({ enabled: false }), now)).toBeNull();
   });
 });

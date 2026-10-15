@@ -49,44 +49,62 @@ export default function AlertsButton({
   const prefs = useAlertPrefs();
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const quiet = isQuiet(prefs);
+  // Тишина на час — только та, что с часами; выключенное целиком
+  // называется своими словами (lib/alertPrefs, «общий выключатель»).
+  const hourQuiet = prefs.enabled && quiet;
 
   const items: ActionMenuItem[] = [];
-  if (permission === "default") {
-    items.push({ id: "allow", label: "Показывать поверх всех окон", icon: "bell", onSelect: requestPermission });
-  }
-  items.push(
-    quiet
-      ? { id: "quiet", label: `Снять тишину (до ${hhmm(prefs.quietUntil)})`, icon: "bell", onSelect: () => writeAlertPrefs({ quietUntil: "" }) }
-      : {
-          id: "quiet",
-          label: "Тишина на час",
-          icon: "bell-off",
-          onSelect: () => writeAlertPrefs({ quietUntil: new Date(Date.now() + 3600_000).toISOString() }),
-        },
-    {
-      id: "progress",
-      label: prefs.progress ? "Ход работы: показывать" : "Ход работы: не показывать",
-      icon: prefs.progress ? "check" : "bell-off",
-      onSelect: () => writeAlertPrefs({ progress: !prefs.progress }),
-    },
-    {
-      id: "reminders",
-      label: prefs.reminders ? "За 15 минут до встречи: напоминать" : "За 15 минут до встречи: молчать",
-      icon: prefs.reminders ? "check" : "bell-off",
-      onSelect: () => writeAlertPrefs({ reminders: !prefs.reminders }),
-    },
-  );
-  if (prefs.muted.length) {
-    items.push({ id: "unmute", label: `Вернуть звук обсуждениям (${prefs.muted.length})`, icon: "bell", onSelect: () => writeAlertPrefs({ muted: [] }) });
+  if (!prefs.enabled) {
+    // Выключено всё — остальные рычаги ни на что не влияют, и показывать их
+    // значит предлагать настройку, которая ничего не меняет.
+    items.push({
+      id: "enable",
+      label: "Включить уведомления",
+      icon: "bell",
+      onSelect: () => {
+        writeAlertPrefs({ enabled: true, quietUntil: "" });
+        if (permission === "default") requestPermission();
+      },
+    });
+  } else {
+    items.push({ id: "disable", label: "Выключить все уведомления", icon: "bell-off", onSelect: () => writeAlertPrefs({ enabled: false }) });
+    if (permission === "default") {
+      items.push({ id: "allow", label: "Показывать поверх всех окон", icon: "bell", onSelect: requestPermission });
+    }
+    items.push(
+      hourQuiet
+        ? { id: "quiet", label: `Снять тишину (до ${hhmm(prefs.quietUntil)})`, icon: "bell", onSelect: () => writeAlertPrefs({ quietUntil: "" }) }
+        : {
+            id: "quiet",
+            label: "Тишина на час",
+            icon: "bell-off",
+            onSelect: () => writeAlertPrefs({ quietUntil: new Date(Date.now() + 3600_000).toISOString() }),
+          },
+      {
+        id: "progress",
+        label: prefs.progress ? "Ход работы: показывать" : "Ход работы: не показывать",
+        icon: prefs.progress ? "check" : "bell-off",
+        onSelect: () => writeAlertPrefs({ progress: !prefs.progress }),
+      },
+      {
+        id: "reminders",
+        label: prefs.reminders ? "За 15 минут до встречи: напоминать" : "За 15 минут до встречи: молчать",
+        icon: prefs.reminders ? "check" : "bell-off",
+        onSelect: () => writeAlertPrefs({ reminders: !prefs.reminders }),
+      },
+    );
+    if (prefs.muted.length) {
+      items.push({ id: "unmute", label: `Вернуть звук обсуждениям (${prefs.muted.length})`, icon: "bell", onSelect: () => writeAlertPrefs({ muted: [] }) });
+    }
   }
 
-  const label = quiet ? `Уведомления: тишина до ${hhmm(prefs.quietUntil)}` : "Уведомления";
+  const label = !prefs.enabled ? "Уведомления выключены" : hourQuiet ? `Уведомления: тишина до ${hhmm(prefs.quietUntil)}` : "Уведомления";
   return (
     <>
       <button
         className={"btn btn-icon" + (permission === "granted" && !quiet ? " active" : "")}
         id="notifPermBtn"
-        title={permission === "denied" ? "Уведомления: окна Windows запрещены для этого сайта, показываю внутри трекера" : label}
+        title={prefs.enabled && permission === "denied" ? "Уведомления: окна Windows запрещены для этого сайта, показываю внутри трекера" : label}
         aria-label={label}
         onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())}
       >
@@ -95,7 +113,7 @@ export default function AlertsButton({
       {anchor && (
         <ActionMenu
           anchor={anchor}
-          title="Сообщения коллег, новые задачи и переносы встреч приходят всегда"
+          title={prefs.enabled ? "Сообщения коллег, новые задачи и переносы встреч приходят, пока уведомления включены" : "Уведомления выключены"}
           items={items}
           onClose={() => setAnchor(null)}
         />

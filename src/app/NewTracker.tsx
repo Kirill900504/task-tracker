@@ -12,6 +12,7 @@ import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useDesktopAlerts } from "@/hooks/useDesktopAlerts";
 import AlertsButton from "@/components/tracker/AlertsButton";
+import NotifyBanner from "@/components/tracker/NotifyBanner";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 import { useBotLink } from "@/hooks/useBotLink";
 import { prefetchTeam, useColleagues } from "@/hooks/useColleagues";
@@ -1114,6 +1115,9 @@ export default function NewTracker() {
           </div>
         </div>
       </header>
+      {/* «Включите уведомления» — под шапкой, во всю ширину, как в
+          мессенджере с его снимка; пустая, когда всё включено. */}
+      <NotifyBanner permission={notifications.permission} requestPermission={notifications.requestPermission} />
       {/* Мессенджер — первое, чего не хватает человеку, который вошёл по
           приглашению: без него задачи, напоминания и кнопки «Принял /
           Сделал» приходят только сюда, а сюда он заходит не каждый день.

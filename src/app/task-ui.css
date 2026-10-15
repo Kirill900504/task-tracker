@@ -592,3 +592,24 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .poll-none{margin-top:8px;}
 .poll-form{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px;}
 .poll-extra{display:inline-flex; align-items:center; gap:6px;}
+
+/* Плашка «Включите уведомления» под шапкой (NotifyBanner) — образец со
+   снимка корпоративного мессенджера 15.10.2026: строка во всю ширину,
+   текст слева, «Включить» справа. Тёплый фон, как у напоминания о
+   мессенджере (.ms-link): это просьба, а не ошибка. */
+.notify-banner{
+  display:flex; align-items:center; gap:12px;
+  /* Те же боковые поля, что у сетки панелей (.layout), — край в край с ними. */
+  margin:12px clamp(16px,3vw,40px) -8px; padding:10px 12px 10px 16px;
+  border-radius:var(--radius-md);
+  background:var(--med-bg); border:1px solid rgba(224,184,77,.4);
+  color:var(--ink);
+}
+.notify-banner-text{flex:1; min-width:0; font-size:14px; line-height:1.35;}
+.notify-banner-on{flex:none;}
+.notify-banner-close{
+  flex:none; width:28px; height:28px;
+  display:flex; align-items:center; justify-content:center;
+  border:0; border-radius:6px; background:none; color:var(--ink-soft); padding:0; opacity:.7; cursor:pointer;
+}
+.notify-banner-close:hover{opacity:1; background:rgba(255,255,255,.08);}

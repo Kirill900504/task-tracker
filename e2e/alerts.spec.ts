@@ -76,3 +76,36 @@ test("событие в обсуждении всплывает, открыва�
   await page.locator(".export-item", { hasText: "Снять тишину" }).click();
   await expect(page.locator("#notifPermBtn")).toHaveAttribute("aria-label", "Уведомления");
 });
+
+// Общий выключатель и плашка «Включите уведомления» (15.10.2026, по
+// образцу корпоративного мессенджера). Выключено в колокольчике — плашка
+// под шапкой говорит об этом вслух, «Включить» там же возвращает всё.
+test("уведомления выключаются целиком и включаются плашкой под шапкой", async ({ page }) => {
+  // Окна Windows разрешены — иначе плашка после «Включить» просит
+  // разрешения у браузера и остаётся, а этот тест про выключатель.
+  await page.context().grantPermissions(["notifications"]);
+  await page.goto("/login");
+  await page.fill("#email", email);
+  await page.fill("#password", password);
+  await page.click('button[type="submit"]');
+  await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
+
+  await page.click("#notifPermBtn");
+  await page.locator(".export-item", { hasText: "Выключить все уведомления" }).click();
+  await expect(page.locator("#notifPermBtn")).toHaveAttribute("aria-label", "Уведомления выключены");
+  const banner = page.locator("#notifyBanner");
+  await expect(banner).toContainText("Уведомления выключены");
+
+  // Остальные рычаги при выключенном всём ни на что не влияют — их нет.
+  await page.click("#notifPermBtn");
+  await expect(page.locator(".export-item", { hasText: "Тишина на час" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  // Выключатель живёт между открытиями трекера.
+  await page.reload();
+  await expect(page.locator("#notifyBanner")).toBeVisible({ timeout: 30_000 });
+
+  await page.click("#notifyBannerOn");
+  await expect(page.locator("#notifyBanner")).toHaveCount(0);
+  await expect(page.locator("#notifPermBtn")).toHaveAttribute("aria-label", "Уведомления");
+});

@@ -27,8 +27,21 @@ import { useSyncExternalStore } from "react";
 // утренняя сводка этими рычагами не управляются. Решение 2026-09 «никаких
 // настроек уведомлений на человека» (docs/next-ten.md) было про бота, и
 // оно в силе: бот пишет только то, что нельзя не сказать.
+//
+// *Общий выключатель* (`enabled`) — 15.10.2026, его словами: «чтобы в веб
+// приложении и десктопной версии можно было глобально включать или
+// выключать уведомления», с образцом — плашкой «Включите уведомления» из
+// корпоративного мессенджера. Он сильнее правила «реплика коллеги не
+// выключается» выше: то правило про КАТЕГОРИИ, чтобы второстепенное нельзя
+// было спутать с главным, а здесь человек выключает всё разом и знает об
+// этом — плашка под шапкой говорит вслух, что уведомлений нет, и
+// включаются они одной кнопкой там же (NotifyBanner). Мессенджер и
+// сводки выключатель не трогает — по той же причине, что и остальные
+// рычаги.
 
 export type AlertPrefs = {
+  // Всё сразу: ни окна Windows, ни окошка в трекере, ни напоминаний.
+  enabled: boolean;
   // Ход работы: сдали, отказались, вернули, приняли, сдвинули срок — и
   // только тому, кому это адресовано (lib/desktopAlerts.addresseeOf).
   progress: boolean;
@@ -42,7 +55,7 @@ export type AlertPrefs = {
 
 const KEY = "rokas:alert-prefs";
 const EVENT = "rokas:alert-prefs";
-const DEFAULTS: AlertPrefs = { progress: true, reminders: true, quietUntil: "", muted: [] };
+const DEFAULTS: AlertPrefs = { enabled: true, progress: true, reminders: true, quietUntil: "", muted: [] };
 
 // Один объект на одно значение в хранилище: useSyncExternalStore требует,
 // чтобы снимок не менялся между двумя чтениями без изменения данных.
@@ -61,6 +74,7 @@ export function readAlertPrefs(): AlertPrefs {
   try {
     const parsed = raw ? (JSON.parse(raw) as Partial<AlertPrefs>) : {};
     cached = {
+      enabled: parsed.enabled !== false,
       progress: parsed.progress !== false,
       reminders: parsed.reminders !== false,
       quietUntil: typeof parsed.quietUntil === "string" ? parsed.quietUntil : "",
@@ -84,7 +98,9 @@ export function writeAlertPrefs(patch: Partial<AlertPrefs>): void {
 
 export const muteKey = (kind: "task" | "meeting", id: string) => kind + ":" + id;
 
+// Молчать сейчас: выключено всё или идёт тишина на час.
 export function isQuiet(prefs: AlertPrefs, now: Date = new Date()): boolean {
+  if (!prefs.enabled) return true;
   return !!prefs.quietUntil && new Date(prefs.quietUntil).getTime() > now.getTime();
 }
 
