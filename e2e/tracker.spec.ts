@@ -917,8 +917,12 @@ test("a task can be sent to any connected colleague, not only its assignee", asy
 
   // Меню карточки — телефонное, поэтому и окно на время теста телефонное.
   await page.setViewportSize({ width: 390, height: 780 });
+  // Сначала телефонная оболочка, потом карточка: смена ширины пересобирает
+  // экран целиком, и карточка, найденная в эту долю секунды, — карточка
+  // компьютерной раскладки, которой через миг уже нет («not attached»).
+  await expect(page.locator('.mobile-tab[data-tab="tasks"]')).toHaveClass(/active/);
   const card = page.locator(`.task:has-text("${title}")`).first();
-  await card.scrollIntoViewIfNeeded();
+  await expect(card).toBeVisible();
   await card.locator(".task-menu-btn").click();
   const menu = page.locator(".action-menu");
   await expect(menu).toBeVisible();
