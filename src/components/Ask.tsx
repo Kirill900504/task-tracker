@@ -49,6 +49,9 @@ export type AskOptions = {
   // вида ответа через один флажок значило бы проверять тип на каждом
   // вызове.
   files?: boolean;
+  // Готовые ответы кнопками над полем (lib/quickAnswers). Нажатие вставляет
+  // фразу, а не отправляет — как в AnswerForm.
+  quick?: string[];
 };
 
 // Ответ окна с документами. Файлы ещё НЕ загружены — куда их класть,
@@ -273,6 +276,25 @@ export default function AskProvider({ children }: { children: ReactNode }) {
                 </a>
               )}
               {pending.kind === "say" && pending.code && <div className="ask-code">{pending.code}</div>}
+
+              {pending.kind === "ask" && pending.quick && pending.quick.length > 0 && (
+                <div className="ask-quick">
+                  {pending.quick.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      className="participant-chip"
+                      onClick={() => {
+                        setText(q);
+                        setProblem("");
+                        document.getElementById("askInput")?.focus();
+                      }}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {pending.kind === "ask" && (
                 <div className="field">

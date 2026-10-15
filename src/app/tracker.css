@@ -1377,6 +1377,8 @@
   .ask-question{margin:0 0 10px; font-size:14px; line-height:1.5; color:var(--ink); white-space:pre-line; overflow-wrap:anywhere;}
   .ask-note{margin:0 0 12px; font-size:12.5px; line-height:1.5; color:var(--ink-soft); overflow-wrap:anywhere;}
   .ask-modal .field{margin-bottom:0;}
+  /* Готовые ответы над полем — те же пилюли, что в AnswerForm. */
+  .ask-quick{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px;}
   .ask-modal textarea{min-height:88px;}
   .ask-problem{
     margin-top:10px; padding:8px 10px; border-radius:var(--radius-sm);

@@ -197,7 +197,7 @@ export default function TaskAnswer({
           placeholder="Коротко: что готово и где смотреть"
           emptyHint="Отчёт без слов — это не отчёт: постановщику нечего принимать."
           submitLabel="Отправить отчёт"
-          quick={["Готово, проверьте", "Сделано, результат во вложении", "Сделано, подробности в обсуждении"]}
+          quick={["Готово, проверьте", "Сделано, результат во вложении", "Сделано, подробности в обсуждении", "Сделано частично — остальное в обсуждении"]}
           withFiles
           busy={busy}
           onSubmit={(text, _when, files) => void run(() => onReport(text, files, pending === "doneAll"), true)}
@@ -212,7 +212,7 @@ export default function TaskAnswer({
           placeholder="Что мешает"
           emptyHint="Отказ без причины — это молчание с нажатой кнопкой."
           submitLabel="Отправить"
-          quick={["Не мой участок — нужен другой исполнитель", "Нет доступа или данных", "Не успеваю из-за других задач"]}
+          quick={["Не мой участок — нужен другой исполнитель", "Нет доступа или данных", "Не успеваю из-за других задач", "Нужно решение постановщика"]}
           busy={busy}
           onSubmit={(text, _when, files) => void run(() => onDecline(text, files), true)}
           onCancel={() => setPending(null)}
@@ -226,7 +226,7 @@ export default function TaskAnswer({
           placeholder="Причина переноса"
           emptyHint="Причина обязательна: по ней постановщик и решает."
           submitLabel="Попросить перенос"
-          quick={["Нужно ещё немного времени", "Жду ответа от другой стороны", "Не хватает данных"]}
+          quick={["Нужно ещё немного времени", "Жду ответа от другой стороны", "Не хватает данных", "Изменились вводные"]}
           date={{ label: "Новый срок", initial: deadline || "" }}
           busy={busy}
           onSubmit={(text, when, files) => void run(() => onAskReschedule(when, text, files))}

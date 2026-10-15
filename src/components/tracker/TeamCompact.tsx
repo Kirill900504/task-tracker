@@ -9,6 +9,7 @@ import { answerWithFiles } from "@/lib/answerFiles";
 import { withoutSelfMark } from "@/lib/actorName";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
+import { QUICK_APPROVE, QUICK_CLOSE_UNFULFILLED, QUICK_RETURN } from "@/lib/quickAnswers";
 
 // Решения постановщика по задаче — одним блоком сразу под шапкой окна.
 //
@@ -79,6 +80,7 @@ export default function TeamCompact({
       note: "Его увидят исполнители — подтвердите, что именно принимаете.",
       multiline: true,
       okText: "Принять",
+      quick: QUICK_APPROVE,
       // Обязателен — как и у возврата, и у принудительного закрытия. До
       // 23.09.2026 можно было принять чужую работу пустым нажатием: слова
       // Кирилла — «закрыл успешно без заполнения финального комментария.
@@ -103,6 +105,7 @@ export default function TeamCompact({
       note: "Это увидят исполнители — и это единственное, что объясняет возврат.",
       multiline: true,
       okText: "Вернуть",
+      quick: QUICK_RETURN,
       required: "Возврат без объяснения бессмысленен — напишите, что не так.",
     });
     if (answer === null || busy) return;
@@ -129,6 +132,7 @@ export default function TeamCompact({
       note: "Задача закроется без результата. Комментарий увидят исполнители — напишите, почему закрываете.",
       multiline: true,
       okText: "Закрыть невыполненной",
+      quick: QUICK_CLOSE_UNFULFILLED,
       required: "Без заключительного комментария закрыть нельзя — напишите, почему закрываете.",
     });
     if (answer === null || busy) return;

@@ -42,6 +42,7 @@ import TaskChecklist from "./TaskChecklist";
 import TaskWaitsFor, { type WaitOption } from "./TaskWaitsFor";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import AttachFiles from "./AttachFiles";
+import { QUICK_FORCE_CLOSE } from "@/lib/quickAnswers";
 
 // Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
 // «Понедельник…Воскресенье» подряд не помещаются никуда, а «Пн Вт Ср» читают
@@ -407,6 +408,7 @@ export default function TaskModal({
       note: "Комментарий обязателен: его увидят все на задаче, и только он объясняет, почему она закрыта без обычной приёмки.",
       multiline: true,
       okText: "Закрыть задачу",
+      quick: QUICK_FORCE_CLOSE,
       required: "Без комментария закрыть нельзя — напишите причину.",
     });
     if (answer === null || closingBusy) return;

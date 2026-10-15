@@ -48,6 +48,7 @@ import { humanError } from "@/lib/humanError";
 import { answerWithFiles } from "@/lib/answerFiles";
 import { openTaskChoices } from "@/lib/answerRules";
 import { isSelfTask } from "@/lib/selfTask";
+import { QUICK_APPROVE, QUICK_FORCE_CLOSE } from "@/lib/quickAnswers";
 
 export default function TasksPanel({
   tasks,
@@ -505,6 +506,7 @@ export default function TasksPanel({
         : "Задачу делает другой человек, и она закроется без его отчёта. Напишите результат — он это увидит.",
       placeholder: "Например: прайс согласован, отправили клиенту",
       okText: onReview ? "Принять" : "Закрыть",
+      quick: onReview ? QUICK_APPROVE : QUICK_FORCE_CLOSE,
       required: "Без результата закрывать нельзя.",
     });
     const comment = answer?.text.trim();

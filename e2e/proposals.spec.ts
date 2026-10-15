@@ -251,3 +251,49 @@ test("«Отложить…» убирает задачу с доски авто
   await page.click("#showSnoozedBtn");
   await expect(card).toBeVisible();
 });
+
+test("в окне приёмки четыре готовых ответа, и нажатие только вставляет фразу", async ({ page }) => {
+  // Задача владельца на временном человеке, уже отчитавшемся: так блок
+  // «Принимаете работу?» стоит в карточке без второго входа в трекер.
+  const stamp = Date.now();
+  const name = `QA Приёмка ${stamp}`;
+  const id = `qa-approve-${stamp}`;
+  const { data: person } = await admin.from("assignees").insert({ user_id: ownerId, name }).select("id").single();
+  try {
+    const title = "Приёмка готовым ответом " + stamp;
+    expect(
+      (
+        await admin.from("tasks").insert({
+          id, user_id: ownerId, title, assignee: name, status: "in_progress",
+          approval_state: "awaiting_review", deadline: "2030-01-01",
+        })
+      ).error,
+    ).toBeNull();
+    // Триггер 0024 мог уже завести строку по имени — тогда просто отмечаем отчёт.
+    await admin.from("task_participants").upsert(
+      { user_id: ownerId, task_id: id, assignee_id: person!.id, role: "executor" },
+      { onConflict: "task_id,assignee_id", ignoreDuplicates: true },
+    );
+    expect(
+      (await admin.from("task_participants").update({ done_at: new Date().toISOString(), done_comment: "Готово" }).eq("task_id", id)).error,
+    ).toBeNull();
+
+    await login(page);
+    const card = page.locator(`.task[data-id="${id}"]`);
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await card.click();
+    await page.locator(".tp-review-actions .btn", { hasText: "Принять" }).click({ timeout: 20_000 });
+    const ask = page.locator(".ask-modal");
+    await expect(ask.locator(".ask-quick button")).toHaveCount(4);
+    await ask.locator(".ask-quick button", { hasText: "Принято, всё сделано" }).click();
+    await expect(page.locator("#askInput")).toHaveValue("Принято, всё сделано");
+    // Не отправилось само: окно на месте, задача по-прежнему на приёмке.
+    await expect(page.locator("#askOkBtn")).toBeVisible();
+    await page.click("#askCancelBtn");
+    const { data } = await admin.from("tasks").select("approval_state").eq("id", id).single();
+    expect(data?.approval_state).toBe("awaiting_review");
+  } finally {
+    await admin.from("tasks").delete().eq("id", id);
+    if (person) await admin.from("assignees").delete().eq("id", person.id);
+  }
+});
