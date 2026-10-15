@@ -31,12 +31,21 @@
      «не нравится — оставить без цвета, но выразительней в фирменной
      расцветке рамку»; заливка у личной «напрягает» — полоса, фигурка и
      тёплый цвет остаются. Заливку теперь носит ОДИН вид — мои поручения. */
-  --kind-in:#4FA8D8;
-  --kind-self:#C9B48A;
+  /* Третий круг, 15.10.2026, его словами: личная — «мягко зелёный» (и
+     полоса, и надпись); поручили мне — «мягко красный, не агрессивный и не
+     раздражающий»; наблюдаю — полоса «более серой» и надпись серой.
+     Красный здесь нарочно пыльно-розовый, а не --high (#E07A5F): тот
+     значит «горит» и стоит на заливке просрочки и на её корешке, и два
+     близких красных пришлось бы сравнивать. Зелёный — шалфей, а не
+     --success: ярко-зелёным уже горит галочка «взял в работу». */
+  --kind-in:#C98A8F;
+  --kind-in-glow:rgba(201,138,143,.16);
+  --kind-self:#86B896;
+  --kind-self-ink:#9CCBAA;
   --kind-co:#3E8AA8;
-  --kind-watch:#8FB3C2;
+  --kind-watch:#6E7A80;
   --kind-co-ink:#6FC2E3;
-  --kind-watch-ink:#B9A0DE;
+  --kind-watch-ink:#9AA6AC;
   /* Финиш — фирменным голубым (14.10.2026, его слова: «маркерную надпись
      не оранжевого цвета, а фирменного»). Светлый тон бренда, а не
      --accent: тот на тёмной фишке почти не читается словом. */
@@ -48,10 +57,10 @@
    нужно постановщику. */
 .task.role-executor{border-color:var(--line-soft); background:var(--paper);}
 .task.kind-outgoing{border-color:rgba(62,138,168,.7); background:var(--kind-out-bg);}
-/* Поручили мне — без заливки, рамка фирменным голубым и чуть толще, с
+/* Поручили мне — без заливки, рамка мягким красным и чуть толще, с
    лёгким свечением: видно издалека, но доску не красит. */
-.task.kind-incoming{border:1.5px solid var(--kind-in); box-shadow:0 0 0 1px rgba(79,168,216,.18), var(--edge);}
-.task.kind-self{border-color:rgba(201,180,138,.28);}
+.task.kind-incoming{border:1.5px solid var(--kind-in); box-shadow:0 0 0 1px var(--kind-in-glow), var(--edge);}
+.task.kind-self{border-color:rgba(134,184,150,.28);}
 .task.kind-watch .task-title{color:var(--ink-soft);}
 .task.overdue{border-color:var(--high); background:var(--overdue-bg);}
 .task.due-today{border-color:var(--today); background:var(--today-bg);}
@@ -64,7 +73,7 @@
 .rb-self, .rb-co{width:6px;}
 .rb-self{background:var(--kind-self);}
 .rb-co{background:var(--kind-co);}
-.rb-watch{background:rgba(255,255,255,.07);}
+.rb-watch{background:var(--kind-watch);}
 .task.kind-self, .task.kind-co{padding-left:16px;}
 
 /* ---------- Кубик: три строки ------------------------------------------
@@ -90,8 +99,8 @@
   -webkit-line-clamp:3; line-clamp:3;
 }
 .task.kind-outgoing .task-top .task-title{border-color:rgba(62,138,168,.35);}
-.task.kind-incoming .task-top .task-title{border-color:rgba(79,168,216,.35);}
-.task.kind-self .task-top .task-title{border-color:rgba(201,180,138,.28);}
+.task.kind-incoming .task-top .task-title{border-color:rgba(201,138,143,.35);}
+.task.kind-self .task-top .task-title{border-color:rgba(134,184,150,.28);}
 .task-top .check{margin-top:3px;}
 @media (max-width:800px){
   .task-top .task-title{font-size:15px;}
@@ -175,7 +184,7 @@
    Значок крупнее остальных значков угла: его ищут глазом по доске. */
 .kind-tag{display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; white-space:nowrap; letter-spacing:.01em;}
 .kind-tag .icon{stroke-width:2;}
-.kind-tag-self{color:var(--kind-self);}
+.kind-tag-self{color:var(--kind-self-ink);}
 .kind-tag-co{color:var(--kind-co-ink);}
 .kind-tag-watch{color:var(--kind-watch-ink);}
 
@@ -353,16 +362,17 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
    «Подумай, какие аспекты текущих исправлений и в какой форме натянуть на
    работу со встречами» (13.10.2026). Перенесено то, что значит то же
    самое: название в рамке, своя встреча — фирменным краем, встреча, куда
-   позвали, — фирменной рамкой без заливки, участники в окне — фишками целиком, со своим
+   позвали, — рамкой без заливки (мягкий красный, как у «поручили мне»
+   с 15.10.2026), участники в окне — фишками целиком, со своим
    откликом. Заливки нет: фон карточки встречи уже занят выбранным днём. */
 .meeting-chip .mtitle{
   padding:3px 8px; border-radius:8px; font-weight:700;
   background:rgba(0,0,0,.16); border:1px solid rgba(255,255,255,.07);
 }
 .meeting-chip.kind-outgoing{border-color:rgba(62,138,168,.5);}
-.meeting-chip.kind-incoming{border-color:rgba(79,168,216,.6);}
+.meeting-chip.kind-incoming{border-color:rgba(201,138,143,.6);}
 .meeting-chip.kind-outgoing .mtitle{border-color:rgba(62,138,168,.3);}
-.meeting-chip.kind-incoming .mtitle{border-color:rgba(79,168,216,.3);}
+.meeting-chip.kind-incoming .mtitle{border-color:rgba(201,138,143,.3);}
 .meeting-chip.selected-day{border-color:var(--today);}
 .meeting-chip:hover:not(.dragging){border-color:var(--today);}
 .meeting-chip .mtime{
