@@ -59,7 +59,7 @@ export async function buildTrackerContext(admin: SupabaseClient, userId: string)
   const [taskRes, meetingRes, ideaRes] = await Promise.all([
     admin
       .from("tasks")
-      .select("id,title,assignee,status,deadline,priority,term,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month,completed_at")
+      .select("id,title,assignee,status,deadline,priority,term,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month,recur_workday,completed_at")
       .eq("user_id", userId)
       .or(taskScope)
       .is("deleted_at", null),

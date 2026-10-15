@@ -22,6 +22,7 @@ export type TaskRow = {
   recur_monthday: number | null;
   recur_year_day: number | null;
   recur_year_month: number | null;
+  recur_workday?: boolean | null;
   last_completed_on: string | null;
   section_id: string | null;
   manual_order: number | null;
@@ -128,6 +129,7 @@ export function taskToRow(t: Task): TaskRow {
     recur_monthday: t.recurMonthday !== "" && t.recurMonthday != null ? Number(t.recurMonthday) : null,
     recur_year_day: t.recurYearDay !== "" && t.recurYearDay != null ? Number(t.recurYearDay) : null,
     recur_year_month: t.recurYearMonth !== "" && t.recurYearMonth != null ? Number(t.recurYearMonth) : null,
+    recur_workday: !!t.recurWorkday,
     last_completed_on: t.lastCompletedOn || null,
     section_id: t.sectionId || null,
     manual_order: t.manualOrder != null && (t.manualOrder as unknown as string) !== "" ? Number(t.manualOrder) : null,
@@ -158,6 +160,7 @@ export function taskFromRow(r: TaskRow): Task {
     recurMonthday: r.recur_monthday != null ? String(r.recur_monthday) : "",
     recurYearDay: r.recur_year_day != null ? String(r.recur_year_day) : "",
     recurYearMonth: r.recur_year_month != null ? String(r.recur_year_month) : "1",
+    recurWorkday: !!r.recur_workday,
     lastCompletedOn: r.last_completed_on || "",
     sectionId: r.section_id || "",
     manualOrder: r.manual_order != null ? r.manual_order : null,

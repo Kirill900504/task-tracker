@@ -99,6 +99,7 @@ type TaskRow = {
     recur_monthday: number | null;
     recur_year_day: number | null;
     recur_year_month: number | null;
+    recur_workday?: boolean | null;
   } | null;
 };
 
@@ -130,7 +131,7 @@ export async function myTasks(admin: SupabaseClient, assigneeId: string): Promis
     .from("task_participants")
     .select(
       "id, role, accepted_at, done_at, declined_at, " +
-        "tasks(id, title, number, description, deadline, priority, status, approval_state, approval_comment, deleted_at, recur, recur_weekday, recur_weekdays, recur_monthday, recur_year_day, recur_year_month)",
+        "tasks(id, title, number, description, deadline, priority, status, approval_state, approval_comment, deleted_at, recur, recur_weekday, recur_weekdays, recur_monthday, recur_year_day, recur_year_month, recur_workday)",
     )
     .eq("assignee_id", assigneeId);
 
@@ -162,6 +163,7 @@ export async function myTasks(admin: SupabaseClient, assigneeId: string): Promis
         recur_monthday: r.tasks!.recur_monthday,
         recur_year_day: r.tasks!.recur_year_day,
         recur_year_month: r.tasks!.recur_year_month,
+        recur_workday: r.tasks!.recur_workday,
       },
     }))
     .sort((a, b) => (a.deadline || "9999-99-99").localeCompare(b.deadline || "9999-99-99"));

@@ -5,6 +5,8 @@
 // the Node/Vercel runtime), so a behavior change in one must be mirrored in
 // the other by hand — the tests here exist to catch drift in this copy.
 
+import { monthlyHits, yearlyHits } from "@/lib/recurShift";
+
 // Russia has used a single UTC+3 offset (no DST) since 2014 — shifting the
 // UTC timestamp and reading it back with the UTC getters gives Moscow local
 // wall-clock fields without needing a timezone library.
@@ -32,6 +34,9 @@ export type TaskRow = {
   recur_monthday: number | null;
   recur_year_day: number | null;
   recur_year_month: number | null;
+  // Перенос с выходного на рабочий день (миграция 0064). Необязательное:
+  // выборка, которая колонку не просит, получает повтор как раньше.
+  recur_workday?: boolean | null;
 };
 
 export function isDueToday(t: TaskRow, now: Date, today: string): boolean {
@@ -43,8 +48,11 @@ export function isDueToday(t: TaskRow, now: Date, today: string): boolean {
     const many = (t.recur_weekdays || []).filter((n) => Number.isInteger(n));
     return many.length ? many.includes(now.getUTCDay()) : now.getUTCDay() === t.recur_weekday;
   }
-  if (t.recur === "monthly") return now.getUTCDate() === t.recur_monthday;
-  if (t.recur === "yearly") return now.getUTCDate() === t.recur_year_day && now.getUTCMonth() + 1 === t.recur_year_month;
+  // Тот же расчёт, что у доски (lib/recurShift), только по московским
+  // UTC-полям.
+  const [y, m0, d, wd] = [now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), !!t.recur_workday];
+  if (t.recur === "monthly") return monthlyHits(y, m0, d, t.recur_monthday ?? 0, wd);
+  if (t.recur === "yearly") return yearlyHits(y, m0, d, t.recur_year_day ?? 0, (t.recur_year_month ?? 0) - 1, wd);
   return false;
 }
 

@@ -47,7 +47,7 @@ export async function buildWeeklyFacts(admin: SupabaseClient, userId: string): P
   const [taskRes, meetingRes] = await Promise.all([
     admin
       .from("tasks")
-      .select("id,title,assignee,status,deadline,priority,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month,updated_at,created_at,completed_at")
+      .select("id,title,assignee,status,deadline,priority,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month,recur_workday,updated_at,created_at,completed_at")
       .eq("user_id", userId)
       .or(taskScope)
       .is("deleted_at", null),

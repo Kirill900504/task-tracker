@@ -100,6 +100,7 @@ function emptyForm(task: Task | null, prefill?: TaskPrefill) {
     recurMonthday: task?.recurMonthday ?? "",
     recurYearDay: task?.recurYearDay ?? "",
     recurYearMonth: task?.recurYearMonth || "1",
+    recurWorkday: !!task?.recurWorkday,
   };
 }
 
@@ -541,6 +542,7 @@ export default function TaskModal({
       recurMonthday: form.recurMonthday,
       recurYearDay: form.recurYearDay,
       recurYearMonth: form.recurYearMonth,
+      recurWorkday: (form.recur === "monthly" || form.recur === "yearly") && form.recurWorkday,
       lastCompletedOn: task?.lastCompletedOn ?? "",
       manualOrder: task?.manualOrder ?? null,
       completedAt: task?.completedAt ?? "",
@@ -1200,6 +1202,29 @@ export default function TaskModal({
               value={form.recurYearMonth}
               options={MONTH_OPTIONS.map((o) => ({ value: o.value, label: o.short, title: o.label }))}
               onSelect={(v) => setForm((f) => ({ ...f, recurYearMonth: v }))}
+            />
+          </div>
+          {/* Предложение Котова 15.10.2026: «ставишь на 1-е число, и в
+              какой-то месяц выпадет на сб. или вс. … галка — рабочие дни».
+              Число, выпавшее на выходной или праздник, встаёт на ближайший
+              рабочий день (lib/recurShift). Только у месячного и годового:
+              у недельного дни выбирают руками. */}
+          <div
+            className={"recur-config" + (form.recur === "monthly" || form.recur === "yearly" ? " open" : "")}
+            id="recurWorkdayRow"
+          >
+            <ChipChoice
+              id="fRecurWorkday"
+              value={form.recurWorkday ? "yes" : "no"}
+              options={[
+                { value: "no", label: "В любой день" },
+                {
+                  value: "yes",
+                  label: "Только в рабочий",
+                  title: "Выпало на выходной или праздник — задача встанет на ближайший рабочий день",
+                },
+              ]}
+              onSelect={(v) => setForm((f) => ({ ...f, recurWorkday: v === "yes" }))}
             />
           </div>
 

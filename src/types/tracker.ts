@@ -43,6 +43,9 @@ export interface Task {
   recurMonthday: string;
   recurYearDay: string;
   recurYearMonth: string; // "1"-"12"
+  // Ежемесячная/ежегодная, выпавшая на выходной, встаёт на ближайший
+  // рабочий день (lib/recurShift, миграция 0064).
+  recurWorkday?: boolean;
   lastCompletedOn: string; // YYYY-MM-DD or ""
   manualOrder: number | null;
   // ISO timestamp of when the task was last marked done ("" while open).

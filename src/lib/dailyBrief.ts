@@ -67,7 +67,7 @@ export async function buildBriefFacts(admin: SupabaseClient, userId: string): Pr
   const [taskRes, meetingRes, sight] = await Promise.all([
     admin
       .from("tasks")
-      .select("id,title,assignee,status,deadline,priority,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month,created_by")
+      .select("id,title,assignee,status,deadline,priority,recur,recur_weekday,recur_monthday,recur_year_day,recur_year_month,recur_workday,created_by")
       .eq("user_id", userId)
       .is("deleted_at", null),
     admin

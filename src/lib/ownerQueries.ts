@@ -66,6 +66,7 @@ type TaskRaw = {
   recur_monthday: number | null;
   recur_year_day: number | null;
   recur_year_month: number | null;
+  recur_workday?: boolean | null;
   task_participants?: { role: string; done_at: string | null; declined_at: string | null }[] | null;
 };
 
@@ -88,7 +89,7 @@ export function effectiveApproval(
 export async function ownerTasks(admin: SupabaseClient, actor: BotActor): Promise<OwnerTaskRow[]> {
   const { data } = await admin
     .from("tasks")
-    .select("id, title, number, assignee, deadline, status, approval_state, priority, recur, recur_weekday, recur_weekdays, recur_monthday, recur_year_day, recur_year_month, task_participants(role, done_at, declined_at)")
+    .select("id, title, number, assignee, deadline, status, approval_state, priority, recur, recur_weekday, recur_weekdays, recur_monthday, recur_year_day, recur_year_month, recur_workday, task_participants(role, done_at, declined_at)")
     .match(actorScope(actor)).or(authorFilter(actor))
     .is("deleted_at", null)
     .neq("status", "done")
@@ -114,6 +115,7 @@ export async function ownerTasks(admin: SupabaseClient, actor: BotActor): Promis
       recur_monthday: t.recur_monthday,
       recur_year_day: t.recur_year_day,
       recur_year_month: t.recur_year_month,
+      recur_workday: t.recur_workday,
     },
   }));
 }

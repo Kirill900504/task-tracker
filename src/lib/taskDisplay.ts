@@ -7,6 +7,7 @@
 // used for what the user actually sees on screen, exactly as
 // legacy-tracker.js kept them separate (see taskLogic.ts's own top comment
 // for why the two can't be unified).
+import { monthlyHits, yearlyHits } from "@/lib/recurShift";
 import type { Task } from "@/types/tracker";
 
 export function pad(n: number): string {
@@ -48,10 +49,7 @@ export function isDueToday(task: Task, now: Date = new Date()): boolean {
   if (task.recur === "none") return task.deadline === todayStr(now);
   if (task.recur === "daily") return true;
   if (task.recur === "weekly") return recurDays(task).includes(now.getDay());
-  if (task.recur === "monthly") return String(now.getDate()) === String(task.recurMonthday);
-  if (task.recur === "yearly") {
-    return String(now.getDate()) === String(task.recurYearDay) && String(now.getMonth() + 1) === String(task.recurYearMonth);
-  }
+  if (task.recur === "monthly" || task.recur === "yearly") return periodicHits(task, now);
   return false;
 }
 
@@ -59,11 +57,16 @@ export function isTaskDueOnDate(task: Task, d: Date): boolean {
   if (task.recur === "none") return task.deadline === dateStr(d);
   if (task.recur === "daily") return true;
   if (task.recur === "weekly") return recurDays(task).includes(d.getDay());
-  if (task.recur === "monthly") return String(d.getDate()) === String(task.recurMonthday);
-  if (task.recur === "yearly") {
-    return String(d.getDate()) === String(task.recurYearDay) && String(d.getMonth() + 1) === String(task.recurYearMonth);
-  }
+  if (task.recur === "monthly" || task.recur === "yearly") return periodicHits(task, d);
   return false;
+}
+
+// Ежемесячная и ежегодная — с переносом на рабочий день, если он выбран
+// (lib/recurShift, миграция 0064).
+function periodicHits(task: Task, d: Date): boolean {
+  const workday = !!task.recurWorkday;
+  if (task.recur === "monthly") return monthlyHits(d.getFullYear(), d.getMonth(), d.getDate(), Number(task.recurMonthday), workday);
+  return yearlyHits(d.getFullYear(), d.getMonth(), d.getDate(), Number(task.recurYearDay), Number(task.recurYearMonth) - 1, workday);
 }
 
 // The most recent date (on/before `ref`) this recurring task was due —
@@ -80,6 +83,16 @@ export function mostRecentOccurrence(task: Task, ref: Date): string | null {
     if (!diffs.length) return null;
     const diff = Math.min(...diffs);
     return dateStr(new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - diff));
+  }
+  if ((task.recur === "monthly" || task.recur === "yearly") && task.recurWorkday) {
+    // С переносом на рабочий день срок может уехать за ref, и тогда
+    // последним был прошлый круг, — проще пройти назад по дням, чем
+    // выводить это арифметикой. Пять лет — с запасом на «29 февраля».
+    for (let back = 0; back <= 5 * 366; back++) {
+      const d = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - back);
+      if (periodicHits(task, d)) return dateStr(d);
+    }
+    return null;
   }
   if (task.recur === "monthly") {
     const day = Number(task.recurMonthday);
@@ -166,8 +179,9 @@ export function recurLabel(t: Task): string {
     const sorted = [...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
     return "🔁 По " + sorted.map((d) => weekdayName(d).toLowerCase() + "м").join(", ");
   }
-  if (t.recur === "monthly") return "🔁 Каждое " + t.recurMonthday + " число";
-  if (t.recur === "yearly") return "🔁 Ежегодно " + t.recurYearDay + "." + pad(Number(t.recurYearMonth));
+  const workday = t.recurWorkday ? ", в рабочий день" : "";
+  if (t.recur === "monthly") return "🔁 Каждое " + t.recurMonthday + " число" + workday;
+  if (t.recur === "yearly") return "🔁 Ежегодно " + t.recurYearDay + "." + pad(Number(t.recurYearMonth)) + workday;
   return "";
 }
 

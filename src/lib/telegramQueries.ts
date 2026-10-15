@@ -59,7 +59,7 @@ async function replyToday(admin: ReturnType<typeof createAdminClient>, userId: s
 
   const { data: taskRows } = await admin
     .from("tasks")
-    .select("id, title, assignee, status, deadline, recur, recur_weekday, recur_monthday, recur_year_day, recur_year_month")
+    .select("id, title, assignee, status, deadline, recur, recur_weekday, recur_monthday, recur_year_day, recur_year_month, recur_workday")
     .eq("user_id", userId)
     .or(await involvedFilter(admin, userId, "task"))
     .eq("status", "in_progress")
@@ -101,7 +101,7 @@ async function replyOverdue(admin: ReturnType<typeof createAdminClient>, userId:
   const today = dateStr(moscowNow());
   const { data: taskRows } = await admin
     .from("tasks")
-    .select("id, title, assignee, status, deadline, recur, recur_weekday, recur_monthday, recur_year_day, recur_year_month")
+    .select("id, title, assignee, status, deadline, recur, recur_weekday, recur_monthday, recur_year_day, recur_year_month, recur_workday")
     .eq("user_id", userId)
     .or(await involvedFilter(admin, userId, "task"))
     .eq("status", "in_progress")
