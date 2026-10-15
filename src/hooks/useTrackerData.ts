@@ -25,6 +25,7 @@ import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { diffAssignees, diffRows, mergeIncoming, removeById, sameLists, snapshotList, upsertById } from "@/lib/trackerSync";
 import { describeDbError, syncFailure } from "@/lib/syncError";
 import { refreshRecurringStatuses } from "@/lib/taskDisplay";
+import { ideaJustClosed, meetingJustClosed, playCloseSound, taskJustClosed } from "@/lib/closeSound";
 import {
   DEFAULT_ASSIGNEES,
   ideaFromRow,
@@ -528,8 +529,12 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     [],
   );
 
+  // The «чпок» on closing is decided here, once for every door (lib/closeSound).
   const saveTask = useCallback(
-    (task: Task) => commitTasks(upsertById(liveRef.current.tasks, own(task, liveRef.current.tasks))),
+    (task: Task) => {
+      if (taskJustClosed(liveRef.current.tasks.find((t) => t.id === task.id), task)) playCloseSound();
+      commitTasks(upsertById(liveRef.current.tasks, own(task, liveRef.current.tasks)));
+    },
     [commitTasks, own],
   );
   const deleteTask = useCallback((id: string) => {
@@ -544,7 +549,10 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
 
   // ---- Meeting actions
   const saveMeeting = useCallback(
-    (meeting: Meeting) => commitMeetings(upsertById(liveRef.current.meetings, own(meeting, liveRef.current.meetings))),
+    (meeting: Meeting) => {
+      if (meetingJustClosed(liveRef.current.meetings.find((m) => m.id === meeting.id), meeting)) playCloseSound();
+      commitMeetings(upsertById(liveRef.current.meetings, own(meeting, liveRef.current.meetings)));
+    },
     [commitMeetings, own],
   );
   const deleteMeeting = useCallback((id: string) => {
@@ -559,7 +567,10 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
 
   // ---- Idea actions
   const saveIdea = useCallback(
-    (idea: Idea) => commitIdeas(upsertById(liveRef.current.ideas, own(idea, liveRef.current.ideas))),
+    (idea: Idea) => {
+      if (ideaJustClosed(liveRef.current.ideas.find((i) => i.id === idea.id), idea)) playCloseSound();
+      commitIdeas(upsertById(liveRef.current.ideas, own(idea, liveRef.current.ideas)));
+    },
     [commitIdeas, own],
   );
   const deleteIdea = useCallback((id: string) => {

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { sortByPeopleOrder } from "@/lib/peopleOrder";
 import { onRevive } from "@/lib/revive";
+import { playCloseSound } from "@/lib/closeSound";
 import { assignPerson, waitForTaskRow } from "@/lib/assignWork";
 import type { Attachment } from "@/hooks/useItemComments";
 import { uploadResultFiles } from "@/lib/resultFiles";
@@ -475,6 +476,9 @@ export function useTaskParticipants() {
         if (action === "return") void load();
         throw new Error(data?.error || "Не получилось");
       }
+      // Приёмка и принудительное закрытие закрывают задачу на сервере —
+      // «чпок» только после его «да» (lib/closeSound).
+      if (action === "approve" || action === "force") playCloseSound();
       // Сверка фоном, а не ожиданием: решение сервер уже принял, окно можно
       // закрывать сразу — подписка принесёт новые строки следом.
       void load();
