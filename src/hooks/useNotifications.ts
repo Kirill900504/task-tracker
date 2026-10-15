@@ -70,9 +70,9 @@ export function useNotifications({
   ready: boolean;
 }) {
   const notifiedRef = useRef<Record<string, boolean>>({});
-  // "unsupported" до первого чтения, а не "default": по "default" плашка
-  // «Включите уведомления» (NotifyBanner) просит разрешения, и с ним она
-  // мигала бы на каждом открытии у тех, кто давно всё разрешил.
+  // "unsupported" до первого чтения, а не "default": по "default" панель
+  // колокольчика предлагает «Разрешить», а предлагать то, о чём ещё не
+  // спросили браузер, — неправда у тех, кто давно всё разрешил.
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">("unsupported");
 
   useEffect(() => {

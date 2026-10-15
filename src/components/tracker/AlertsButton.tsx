@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
+import PopLayer from "./PopLayer";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import { isQuiet, muteKey, toggleMuted, useAlertPrefs, writeAlertPrefs } from "@/lib/alertPrefs";
 
 // «Без звука» у одного обсуждения — как у чата в Telegram. Стоит в шапке
@@ -26,18 +27,136 @@ export function ChatMuteButton({ kind, itemId }: { kind: "task" | "meeting"; ite
   );
 }
 
-// Колокольчик в шапке — «отключить уведомления» (07.10.2026: «нужно и
-// предусмотреть иконку или кнопочку „отключить уведомления“, чтобы любой
-// человек мог мутить менее важные события при работе в трекере»).
+// Колокольчик в шапке — ВСЕ настройки уведомлений в одном месте.
 //
-// До этого он умел одно — попросить у браузера разрешение, — а получив его,
-// становился неактивной картинкой. Теперь он и есть место, где уведомления
-// настраивают: что считать менее важным, тишина на час и снятие «не
-// беспокоить» с обсуждений. Что выключить нельзя, сказано в заголовке меню,
-// чтобы отсутствие пункта не читалось как забытый пункт. Правила — в
-// lib/alertPrefs.
+// История в три шага, и каждый объясняет нынешний вид. 07.10.2026 он стал
+// меню («нужно и предусмотреть иконку или кнопочку „отключить
+// уведомления“»). 15.10.2026 появился общий выключатель и рядом с ним
+// плашка «Включите уведомления» под шапкой — по снимку корпоративного
+// мессенджера. Тем же днём Кирилл её снял: «всплывающие окна мне не
+// нравятся и засоряют место, размести все понятно и аккуратно в нашем
+// колокольчике». Плашки больше нет, а меню стало панелью с переключателями:
+// у меню каждое нажатие закрывает его, и настроить три вещи значило трижды
+// открыть колокольчик, а подписи вида «Ход работы: показывать» заставляли
+// читать, что сейчас, а что будет после нажатия. Переключатель отвечает на
+// это сам: где он стоит — так и есть. Обрезанного заголовка («Сообщения
+// коллег, новые задачи и перен…») тоже нет — пояснение стоит строкой под
+// главным переключателем и переносится.
+//
+// Выключено всё — остальные строки не показываются: они ни на что не
+// влияют, а настройка, которая ничего не меняет, — та же ложь, что и
+// неработающая кнопка. О том, что уведомления выключены, говорит сам
+// колокольчик: перечёркнутый, другим цветом. Правила — в lib/alertPrefs.
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+
+function Switch({ id, on, label, onChange }: { id: string; on: boolean; label: string; onChange: () => void }) {
+  return (
+    <button type="button" id={id} role="switch" aria-checked={on} aria-label={label} className={"ap-switch" + (on ? " on" : "")} onClick={onChange}>
+      <span className="ap-knob" />
+    </button>
+  );
+}
+
+function Row({ title, hint, children }: { title: string; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="ap-row">
+      <div className="ap-text">
+        <div className="ap-title">{title}</div>
+        {hint && <div className="ap-hint">{hint}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function AlertsPanel({
+  anchor,
+  permission,
+  requestPermission,
+  onClose,
+}: {
+  anchor: DOMRect;
+  permission: NotificationPermission | "unsupported";
+  requestPermission: () => void;
+  onClose: () => void;
+}) {
+  const prefs = useAlertPrefs();
+  const ref = useRef<HTMLDivElement | null>(null);
+  const hourQuiet = prefs.enabled && isQuiet(prefs);
+  useEscapeToClose(onClose);
+
+  // У кнопки, а у нижнего края экрана — вверх; как ActionMenu.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.maxHeight = window.innerHeight - 16 + "px";
+    el.style.top = Math.max(8, Math.min(anchor.bottom + 6, window.innerHeight - 8 - el.offsetHeight)) + "px";
+    el.style.right = Math.max(8, window.innerWidth - anchor.right) + "px";
+  }, [anchor, prefs.enabled]);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLButtonElement>("[role=switch]")?.focus();
+  }, []);
+
+  return (
+    <PopLayer>
+      <div className="export-backdrop" onClick={onClose} />
+      <div ref={ref} className="alerts-panel" id="alertsPanel" role="dialog" aria-label="Уведомления" style={{ top: -9999, right: 8 }}>
+        <Row
+          title="Уведомления"
+          hint={prefs.enabled ? "Сообщения коллег, новые задачи, переносы встреч" : "Выключены — ничего не всплывает"}
+        >
+          <Switch
+            id="alertsMainSwitch"
+            on={prefs.enabled}
+            label="Уведомления"
+            onChange={() => {
+              if (prefs.enabled) writeAlertPrefs({ enabled: false });
+              else {
+                writeAlertPrefs({ enabled: true, quietUntil: "" });
+                if (permission === "default") requestPermission();
+              }
+            }}
+          />
+        </Row>
+        {prefs.enabled && (
+          <>
+            <div className="ap-sep" />
+            <Row title="Ход работы" hint="Принял, сдал, вернули, сдвинули срок">
+              <Switch id="alertsProgressSwitch" on={prefs.progress} label="Ход работы" onChange={() => writeAlertPrefs({ progress: !prefs.progress })} />
+            </Row>
+            <Row title="За 15 минут до встречи">
+              <Switch id="alertsRemindersSwitch" on={prefs.reminders} label="За 15 минут до встречи" onChange={() => writeAlertPrefs({ reminders: !prefs.reminders })} />
+            </Row>
+            <Row title="Тишина на час" hint={hourQuiet ? `До ${hhmm(prefs.quietUntil)}` : "Через час всё вернётся само"}>
+              <Switch
+                id="alertsQuietSwitch"
+                on={hourQuiet}
+                label="Тишина на час"
+                onChange={() => writeAlertPrefs({ quietUntil: hourQuiet ? "" : new Date(Date.now() + 3600_000).toISOString() })}
+              />
+            </Row>
+            {prefs.muted.length > 0 && (
+              <Row title="Обсуждения без звука" hint={`${prefs.muted.length} шт.`}>
+                <button type="button" className="btn ap-btn" id="alertsUnmuteBtn" onClick={() => writeAlertPrefs({ muted: [] })}>
+                  Вернуть
+                </button>
+              </Row>
+            )}
+            {permission === "default" && (
+              <Row title="Поверх всех окон" hint="Сейчас — только внутри трекера">
+                <button type="button" className="btn ap-btn" id="alertsAllowBtn" onClick={requestPermission}>
+                  Разрешить
+                </button>
+              </Row>
+            )}
+            {permission === "denied" && <div className="ap-note">Окна Windows запрещены в браузере — показываю внутри трекера.</div>}
+          </>
+        )}
+      </div>
+    </PopLayer>
+  );
+}
 
 export default function AlertsButton({
   permission,
@@ -49,75 +168,20 @@ export default function AlertsButton({
   const prefs = useAlertPrefs();
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const quiet = isQuiet(prefs);
-  // Тишина на час — только та, что с часами; выключенное целиком
-  // называется своими словами (lib/alertPrefs, «общий выключатель»).
-  const hourQuiet = prefs.enabled && quiet;
-
-  const items: ActionMenuItem[] = [];
-  if (!prefs.enabled) {
-    // Выключено всё — остальные рычаги ни на что не влияют, и показывать их
-    // значит предлагать настройку, которая ничего не меняет.
-    items.push({
-      id: "enable",
-      label: "Включить уведомления",
-      icon: "bell",
-      onSelect: () => {
-        writeAlertPrefs({ enabled: true, quietUntil: "" });
-        if (permission === "default") requestPermission();
-      },
-    });
-  } else {
-    items.push({ id: "disable", label: "Выключить все уведомления", icon: "bell-off", onSelect: () => writeAlertPrefs({ enabled: false }) });
-    if (permission === "default") {
-      items.push({ id: "allow", label: "Показывать поверх всех окон", icon: "bell", onSelect: requestPermission });
-    }
-    items.push(
-      hourQuiet
-        ? { id: "quiet", label: `Снять тишину (до ${hhmm(prefs.quietUntil)})`, icon: "bell", onSelect: () => writeAlertPrefs({ quietUntil: "" }) }
-        : {
-            id: "quiet",
-            label: "Тишина на час",
-            icon: "bell-off",
-            onSelect: () => writeAlertPrefs({ quietUntil: new Date(Date.now() + 3600_000).toISOString() }),
-          },
-      {
-        id: "progress",
-        label: prefs.progress ? "Ход работы: показывать" : "Ход работы: не показывать",
-        icon: prefs.progress ? "check" : "bell-off",
-        onSelect: () => writeAlertPrefs({ progress: !prefs.progress }),
-      },
-      {
-        id: "reminders",
-        label: prefs.reminders ? "За 15 минут до встречи: напоминать" : "За 15 минут до встречи: молчать",
-        icon: prefs.reminders ? "check" : "bell-off",
-        onSelect: () => writeAlertPrefs({ reminders: !prefs.reminders }),
-      },
-    );
-    if (prefs.muted.length) {
-      items.push({ id: "unmute", label: `Вернуть звук обсуждениям (${prefs.muted.length})`, icon: "bell", onSelect: () => writeAlertPrefs({ muted: [] }) });
-    }
-  }
-
-  const label = !prefs.enabled ? "Уведомления выключены" : hourQuiet ? `Уведомления: тишина до ${hhmm(prefs.quietUntil)}` : "Уведомления";
+  const label = !prefs.enabled ? "Уведомления выключены" : quiet ? `Уведомления: тишина до ${hhmm(prefs.quietUntil)}` : "Уведомления";
   return (
     <>
       <button
-        className={"btn btn-icon" + (permission === "granted" && !quiet ? " active" : "")}
+        className={"btn btn-icon" + (prefs.enabled && !quiet ? " active" : "") + (!prefs.enabled ? " bell-off-all" : "")}
         id="notifPermBtn"
-        title={prefs.enabled && permission === "denied" ? "Уведомления: окна Windows запрещены для этого сайта, показываю внутри трекера" : label}
+        title={label}
         aria-label={label}
+        aria-expanded={!!anchor}
         onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())}
       >
-        <Icon name={quiet || permission !== "granted" ? "bell-off" : "bell"} size={15} />
+        <Icon name={quiet ? "bell-off" : "bell"} size={15} />
       </button>
-      {anchor && (
-        <ActionMenu
-          anchor={anchor}
-          title={prefs.enabled ? "Сообщения коллег, новые задачи и переносы встреч приходят, пока уведомления включены" : "Уведомления выключены"}
-          items={items}
-          onClose={() => setAnchor(null)}
-        />
-      )}
+      {anchor && <AlertsPanel anchor={anchor} permission={permission} requestPermission={requestPermission} onClose={() => setAnchor(null)} />}
     </>
   );
 }

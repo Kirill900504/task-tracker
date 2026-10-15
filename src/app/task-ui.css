@@ -593,23 +593,35 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .poll-form{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px;}
 .poll-extra{display:inline-flex; align-items:center; gap:6px;}
 
-/* Плашка «Включите уведомления» под шапкой (NotifyBanner) — образец со
-   снимка корпоративного мессенджера 15.10.2026: строка во всю ширину,
-   текст слева, «Включить» справа. Тёплый фон, как у напоминания о
-   мессенджере (.ms-link): это просьба, а не ошибка. */
-.notify-banner{
-  display:flex; align-items:center; gap:12px;
-  /* Те же боковые поля, что у сетки панелей (.layout), — край в край с ними. */
-  margin:12px clamp(16px,3vw,40px) -8px; padding:10px 12px 10px 16px;
-  border-radius:var(--radius-md);
-  background:var(--med-bg); border:1px solid rgba(224,184,77,.4);
-  color:var(--ink);
+/* Панель колокольчика (AlertsButton): все настройки уведомлений в одном
+   месте, переключателями. Плашки под шапкой нет — 15.10.2026 Кирилл её
+   снял: «всплывающие окна… засоряют место». */
+.alerts-panel{
+  position:fixed; z-index:121; width:320px; padding:8px;
+  background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
+  box-shadow:var(--shadow-2); overflow-y:auto; overscroll-behavior:contain;
 }
-.notify-banner-text{flex:1; min-width:0; font-size:14px; line-height:1.35;}
-.notify-banner-on{flex:none;}
-.notify-banner-close{
-  flex:none; width:28px; height:28px;
-  display:flex; align-items:center; justify-content:center;
-  border:0; border-radius:6px; background:none; color:var(--ink-soft); padding:0; opacity:.7; cursor:pointer;
+.ap-row{display:flex; align-items:center; gap:12px; padding:9px 8px;}
+.ap-text{flex:1; min-width:0;}
+.ap-title{font-family:var(--display); font-weight:600; font-size:13.5px; color:var(--ink);}
+.ap-row:first-child .ap-title{font-size:14.5px; font-weight:700;}
+.ap-hint{margin-top:2px; font-size:12px; line-height:1.35; color:var(--ink-soft);}
+.ap-sep{height:1px; margin:4px 8px; background:var(--line-soft);}
+.ap-note{padding:6px 8px 4px; font-size:12px; line-height:1.35; color:var(--ink-soft);}
+.ap-btn{flex:none; padding:5px 12px; font-size:12.5px;}
+/* Переключатель: где стоит — так и есть, читать подпись не нужно. */
+.ap-switch{
+  flex:none; position:relative; width:38px; height:22px; padding:0; cursor:pointer;
+  border:1px solid var(--line); border-radius:999px; background:var(--paper-soft);
+  transition:background .15s ease, border-color .15s ease;
 }
-.notify-banner-close:hover{opacity:1; background:rgba(255,255,255,.08);}
+.ap-switch .ap-knob{
+  position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%;
+  background:var(--ink-soft); transition:transform .15s ease, background .15s ease;
+}
+.ap-switch.on{background:var(--accent); border-color:var(--accent);}
+.ap-switch.on .ap-knob{transform:translateX(16px); background:#fff;}
+.ap-switch:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+/* Выключено всё — колокольчик сам говорит об этом: перечёркнут и тёплым
+   цветом, раз плашки, которая говорила вслух, больше нет. */
+#notifPermBtn.bell-off-all{color:var(--med); border-color:rgba(224,184,77,.45);}

@@ -68,44 +68,50 @@ test("событие в обсуждении всплывает, открыва�
   await expect(mute).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
 
-  // Колокольчик — это меню, а не неактивная картинка: тишина на час.
+  // Колокольчик — панель с переключателями: тишина на час.
   await page.click("#notifPermBtn");
-  await page.locator(".export-item", { hasText: "Тишина на час" }).click();
+  const quiet = page.locator("#alertsQuietSwitch");
+  await quiet.click();
+  await expect(quiet).toHaveAttribute("aria-checked", "true");
   await expect(page.locator("#notifPermBtn")).toHaveAttribute("aria-label", /тишина до/);
-  await page.click("#notifPermBtn");
-  await page.locator(".export-item", { hasText: "Снять тишину" }).click();
+  // Панель не закрывается на нажатии — снять тишину можно тут же.
+  await quiet.click();
   await expect(page.locator("#notifPermBtn")).toHaveAttribute("aria-label", "Уведомления");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#alertsPanel")).toHaveCount(0);
 });
 
-// Общий выключатель и плашка «Включите уведомления» (15.10.2026, по
-// образцу корпоративного мессенджера). Выключено в колокольчике — плашка
-// под шапкой говорит об этом вслух, «Включить» там же возвращает всё.
-test("уведомления выключаются целиком и включаются плашкой под шапкой", async ({ page }) => {
-  // Окна Windows разрешены — иначе плашка после «Включить» просит
-  // разрешения у браузера и остаётся, а этот тест про выключатель.
+// Общий выключатель (15.10.2026). Плашки под шапкой нет — Кирилл снял её
+// тем же днём («засоряют место»): всё живёт в панели колокольчика.
+test("уведомления выключаются и включаются главным переключателем колокольчика", async ({ page }) => {
+  // Окна Windows разрешены — иначе панель предлагает «Разрешить», а этот
+  // тест про выключатель.
   await page.context().grantPermissions(["notifications"]);
   await page.goto("/login");
   await page.fill("#email", email);
   await page.fill("#password", password);
   await page.click('button[type="submit"]');
   await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("#notifyBanner")).toHaveCount(0);
 
   await page.click("#notifPermBtn");
-  await page.locator(".export-item", { hasText: "Выключить все уведомления" }).click();
+  const main = page.locator("#alertsMainSwitch");
+  await expect(main).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#alertsPanel")).not.toContainText("Разрешить");
+  await main.click();
+  await expect(main).toHaveAttribute("aria-checked", "false");
   await expect(page.locator("#notifPermBtn")).toHaveAttribute("aria-label", "Уведомления выключены");
-  const banner = page.locator("#notifyBanner");
-  await expect(banner).toContainText("Уведомления выключены");
-
-  // Остальные рычаги при выключенном всём ни на что не влияют — их нет.
-  await page.click("#notifPermBtn");
-  await expect(page.locator(".export-item", { hasText: "Тишина на час" })).toHaveCount(0);
+  // Остальные строки при выключенном всём ни на что не влияют — их нет.
+  await expect(page.locator("#alertsQuietSwitch")).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  // Выключатель живёт между открытиями трекера.
+  // Выключатель живёт между открытиями трекера, и плашки нет и тогда.
   await page.reload();
-  await expect(page.locator("#notifyBanner")).toBeVisible({ timeout: 30_000 });
-
-  await page.click("#notifyBannerOn");
+  await expect(page.locator("#notifPermBtn")).toHaveAttribute("aria-label", "Уведомления выключены", { timeout: 30_000 });
   await expect(page.locator("#notifyBanner")).toHaveCount(0);
+
+  await page.click("#notifPermBtn");
+  await page.locator("#alertsMainSwitch").click();
+  await expect(page.locator("#alertsQuietSwitch")).toBeVisible();
   await expect(page.locator("#notifPermBtn")).toHaveAttribute("aria-label", "Уведомления");
 });
