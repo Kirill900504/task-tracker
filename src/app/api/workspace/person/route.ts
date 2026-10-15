@@ -8,6 +8,7 @@ import { todayStr } from "@/lib/taskDisplay";
 import { recordEvent } from "@/lib/itemHistory";
 import { sendToPerson } from "@/lib/reach";
 import { withoutSelfMark } from "@/lib/actorName";
+import { ownerSeesTask, ownerSight } from "@/lib/ownerVisible";
 
 // Люди в «Команде»: завести, убрать, вернуть (14.10.2026).
 //
@@ -74,13 +75,24 @@ export async function POST(req: Request) {
   const total = work.tasks.length + work.meetings.length + work.authoredTasks.length + work.authoredMeetings.length;
 
   if (body.dryRun) {
+    // Названия — только того, что владелец и так видит на доске (своё и где
+    // он участник). Остальное — числом: поручения уходящего другим людям
+    // ему не показываются нигде в трекере, и окно «кому передать» не
+    // повод сделать исключение (аудит приватности, 15.10.2026).
+    const all = [...work.tasks, ...work.authoredTasks];
+    const [{ data: authors }, sight] = await Promise.all([
+      admin.from("tasks").select("id, created_by").in("id", all.map((t) => t.id)),
+      ownerSight(admin, user.id),
+    ]);
+    const authorOf = new Map(((authors || []) as { id: string; created_by: string | null }[]).map((t) => [t.id, t.created_by]));
+    const visible = all.filter((t) => ownerSeesTask(sight, { id: t.id, created_by: authorOf.get(t.id) ?? null }));
     return NextResponse.json({
       ok: true,
       openTasks: work.tasks.length + work.authoredTasks.length,
       openMeetings: work.meetings.length + work.authoredMeetings.length,
       // Несколько названий — чтобы вопрос «кому передать» говорил о
       // настоящих делах, а не о числе.
-      sample: [...work.tasks, ...work.authoredTasks].slice(0, 4).map((t) => (t.number ? `№${t.number} ` : "") + t.title),
+      sample: visible.slice(0, 4).map((t) => (t.number ? `№${t.number} ` : "") + t.title),
     });
   }
 

@@ -45,11 +45,18 @@ export async function POST(req: Request) {
   // проверка, которую здесь можно однажды забыть дописать.
   const { data: assignee, error: readError } = await supabase
     .from("assignees")
-    .select("id, name")
+    .select("id, name, user_id")
     .eq("id", assigneeId)
     .maybeSingle();
   if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
   if (!assignee) return NextResponse.json({ error: "Человек не найден" }, { status: 404 });
+  // RLS alone is not enough here: every manager can READ the owner's people
+  // list (0031), so it proved «I can see this person», not «this person is
+  // mine to invite». Inviting and handing out access are the owner's
+  // (isOwner), so the row must be in the caller's own space.
+  if ((assignee as { user_id?: string }).user_id !== user.id) {
+    return NextResponse.json({ error: "Это решение не ваше" }, { status: 403 });
+  }
 
   const admin = createAdminClient();
   const { data: membership } = await admin
