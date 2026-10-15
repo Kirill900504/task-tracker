@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextWeekdayMap, sanitizeAgainstKnown, resolveKnownName, nameWasSaid } from "./quickAdd";
+import { nextWeekdayMap, sanitizeAgainstKnown, resolveKnownName, nameWasSaid, mergeDuplicateItems, type QuickAddItem } from "./quickAdd";
 import { isoDate, addDays } from "./whenDate";
 
 describe("isoDate / addDays", () => {
@@ -152,5 +152,63 @@ describe("sanitizeAgainstKnown with partial names", () => {
     const input: Record<string, unknown> = { participants: ["Игорь", "Витковский"] };
     sanitizeAgainstKnown(input, KNOWN);
     expect(input.participants).toEqual(["Игорь Витковский"]);
+  });
+});
+
+describe("mergeDuplicateItems — одна вещь, названная дважды", () => {
+  const task = (input: Record<string, unknown>): QuickAddItem => ({ tool: "create_task", input, droppedNames: [] });
+
+  it("ответ 14.09.2026: две задачи с одним названием на двух людей — одна задача на обоих", () => {
+    // Ровно то, что модель вернула на «создай ещё одну задачу на Игоря…
+    // назначь исполнителя Никита Козлов» (журнал: «create_task, create_task»).
+    const out = mergeDuplicateItems([
+      task({ title: "Тестовая задача для закрытия", description: "четыре раза слово Кирилл", assignee: "Игорь Витковский", executors: [], deadline: "2026-10-01" }),
+      task({ title: "тестовая задача для закрытия", description: "", assignee: "Никита Козлов", executors: [], deadline: "" }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].input.assignee).toBe("Игорь Витковский");
+    expect(out[0].input.executors).toEqual(["Никита Козлов"]);
+    expect(out[0].input.description).toBe("четыре раза слово Кирилл");
+    expect(out[0].input.deadline).toBe("2026-10-01");
+  });
+
+  it("точный повтор — одна задача, без лишнего соисполнителя", () => {
+    const one = { title: "поискать БАЗЫ клиентов!", assignee: "Евгений Макаров", executors: [], deadline: "2026-09-28" };
+    const out = mergeDuplicateItems([task({ ...one }), task({ ...one, title: "Поискать базы клиентов" })]);
+    expect(out).toHaveLength(1);
+    expect(out[0].input.executors).toEqual([]);
+  });
+
+  it("у второй задачи взяты пустые у первой срок и исполнитель", () => {
+    const out = mergeDuplicateItems([task({ title: "Смета", assignee: "", deadline: "" }), task({ title: "Смета", assignee: "Игорь", deadline: "2026-10-20" })]);
+    expect(out[0].input.assignee).toBe("Игорь");
+    expect(out[0].input.deadline).toBe("2026-10-20");
+    expect(out[0].input.executors).toEqual([]);
+  });
+
+  it("разные задачи остаются разными, порядок сохранён", () => {
+    const out = mergeDuplicateItems([task({ title: "Смета" }), task({ title: "Договор" }), task({ title: "Смета" })]);
+    expect(out.map((i) => i.input.title)).toEqual(["Смета", "Договор"]);
+  });
+
+  it("встречи с одним названием в разные дни — две встречи; в один — одна со всеми", () => {
+    const meet = (date: string, participants: string[]): QuickAddItem => ({ tool: "create_meeting", input: { title: "Планёрка", date, time: "10:00", participants }, droppedNames: [] });
+    expect(mergeDuplicateItems([meet("2026-10-16", ["А"]), meet("2026-10-17", ["А"])])).toHaveLength(2);
+    const same = mergeDuplicateItems([meet("2026-10-16", ["А"]), meet("2026-10-16", ["Б", "А"])]);
+    expect(same).toHaveLength(1);
+    expect(same[0].input.participants).toEqual(["А", "Б"]);
+  });
+
+  it("мысль, названная дважды, — одна; задача и мысль с одним текстом — две разные вещи", () => {
+    const idea: QuickAddItem = { tool: "create_idea", input: { text: "Позвонить в банк", important: false }, droppedNames: [] };
+    const out = mergeDuplicateItems([idea, { ...idea, input: { text: "позвонить в банк.", important: true } }, task({ title: "Позвонить в банк" })]);
+    expect(out.map((i) => i.tool)).toEqual(["create_idea", "create_task"]);
+    expect(out[0].input.important).toBe(true);
+  });
+
+  it("не трогает входной массив", () => {
+    const first = task({ title: "Смета", assignee: "Игорь", executors: [] });
+    mergeDuplicateItems([first, task({ title: "Смета", assignee: "Никита" })]);
+    expect(first.input.executors).toEqual([]);
   });
 });

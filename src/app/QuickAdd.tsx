@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type FormEvent, type ReactNode } from "react";
+import { useState, useEffect, useRef, type FormEvent, type ReactNode } from "react";
 import { speechErrorText, useSpeechInput } from "@/hooks/useSpeechInput";
 import { useAsk } from "@/components/Ask";
 import { createPortal } from "react-dom";
@@ -173,7 +173,20 @@ export default function QuickAdd({
     }
   }
 
+  // Разбор подтверждается один раз. Карточка разбора исчезает только с
+  // перерисовкой, а «Сохранить» заводит задачу с НОВЫМ id на каждое
+  // нажатие — второе нажатие, пришедшее раньше перерисовки (двойной тап,
+  // дребезг кнопки), давало задачу-близнеца (см. TaskModal.committedRef).
+  // Флаг снимает только следующий запрос.
+  const confirmedRef = useRef(false);
+  function firstConfirm(): boolean {
+    if (confirmedRef.current) return false;
+    confirmedRef.current = true;
+    return true;
+  }
+
   async function send(fullText: string, isClarifyFollowUp: boolean) {
+    confirmedRef.current = false;
     setStatus("loading");
     try {
       const assignees = api?.getAssignees() || [];
@@ -340,17 +353,17 @@ export default function QuickAdd({
   }
 
   function confirmIdea() {
-    if (!ideaPreview) return;
+    if (!ideaPreview || !firstConfirm()) return;
     api?.createIdea(ideaPreview);
     reset();
   }
   function confirmTask() {
-    if (!taskPreview) return;
+    if (!taskPreview || !firstConfirm()) return;
     api?.createTask(taskPreview);
     reset();
   }
   function confirmNotes() {
-    if (!notes) return;
+    if (!notes || !firstConfirm()) return;
     for (const t of notes.tasks) {
       api?.createTask({ title: t.title, description: "", assignee: t.assignee, term: "short", deadline: t.deadline });
     }
@@ -360,7 +373,7 @@ export default function QuickAdd({
     reset();
   }
   function confirmMeeting() {
-    if (!meetingPreview) return;
+    if (!meetingPreview || !firstConfirm()) return;
     api?.createMeeting(meetingPreview);
     reset();
   }

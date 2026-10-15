@@ -251,6 +251,74 @@ export function sanitizeAgainstKnown(input: Record<string, unknown>, known: stri
 export type QuickAddItem = { tool: string; input: Record<string, unknown>; droppedNames: string[] };
 export type QuickAddParsed = { items: QuickAddItem[] };
 
+// Одна вещь, названная моделью дважды, заводится один раз.
+//
+// 14.09.2026 Кирилл сказал боту одну задачу — «создай ещё одну задачу на
+// Игоря Витковского, назови её тестовая задача для закрытия… назначь
+// исполнителя Никита Козлов», — а журнал ассистента записал ответ модели
+// как «create_task, create_task»: две задачи с одним названием, по одной
+// на каждое имя. Код честно завёл обе, и в базе встали близнецы с номерами
+// 41 и 42. Модель не обязана помнить, что уже назвала вещь; считать, что
+// одна вещь — одна, должен код (то же правило, что с именами и датами).
+//
+// Ключ — название (у мысли текст), без регистра, лишних пробелов и знаков
+// в конце. Совпавшая задача не выбрасывается, а вливается в первую: её
+// исполнитель становится соисполнителем — это ровно то, что человек
+// сказал, когда назвал двоих, — пустые описание и срок берутся у второй.
+// У встречи ключ ещё и день со временем: две встречи с одним названием в
+// разные дни — две встречи. Остальное (вопрос, поиск) — по полному
+// совпадению.
+function sameThingKey(item: QuickAddItem): string {
+  const norm = (v: unknown) =>
+    String(v ?? "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[\s.!?,;:…]+$/u, "")
+      .trim();
+  const input = item.input;
+  if (item.tool === "create_task") return "task|" + norm(input.title);
+  if (item.tool === "create_idea") return "idea|" + norm(input.text);
+  if (item.tool === "create_meeting") return ["meeting", norm(input.title), norm(input.date), norm(input.time)].join("|");
+  return item.tool + "|" + JSON.stringify(input);
+}
+
+function names(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((n): n is string => typeof n === "string" && !!n) : [];
+}
+
+export function mergeDuplicateItems(items: QuickAddItem[]): QuickAddItem[] {
+  const out: QuickAddItem[] = [];
+  const byKey = new Map<string, QuickAddItem>();
+  for (const item of items) {
+    const key = sameThingKey(item);
+    const first = byKey.get(key);
+    if (!first) {
+      const copy = { ...item, input: { ...item.input }, droppedNames: [...item.droppedNames] };
+      byKey.set(key, copy);
+      out.push(copy);
+      continue;
+    }
+    for (const n of item.droppedNames) if (!first.droppedNames.includes(n)) first.droppedNames.push(n);
+    const a = first.input;
+    const b = item.input;
+    if (item.tool === "create_task") {
+      if (!a.assignee && typeof b.assignee === "string") a.assignee = b.assignee;
+      const people = [typeof b.assignee === "string" ? b.assignee : "", ...names(a.executors), ...names(b.executors)];
+      const executors: string[] = [];
+      for (const n of people) if (n && n !== a.assignee && !executors.includes(n)) executors.push(n);
+      a.executors = executors;
+      for (const field of ["description", "deadline"]) if (!a[field] && b[field]) a[field] = b[field];
+    } else if (item.tool === "create_meeting") {
+      const participants = names(a.participants);
+      for (const n of names(b.participants)) if (!participants.includes(n)) participants.push(n);
+      a.participants = participants;
+    } else if (item.tool === "create_idea") {
+      if (b.important) a.important = true;
+    }
+  }
+  return out;
+}
+
 export async function parseQuickAdd(text: string, assignees: string[]): Promise<QuickAddParsed> {
   // Сегодня — по Москве, а не по часам сервера: на Vercel это UTC, и с
   // полуночи до трёх ночи «на сегодня» означало вчерашнее число, то есть
@@ -292,5 +360,5 @@ export async function parseQuickAdd(text: string, assignees: string[]): Promise<
   }
   if (!items.length) throw new Error("Не удалось разобрать ни одного элемента");
 
-  return { items };
+  return { items: mergeDuplicateItems(items) };
 }

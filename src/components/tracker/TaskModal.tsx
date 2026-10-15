@@ -5,7 +5,7 @@
 // public/legacy-tracker.js. Kept on the same element ids (#overlay,
 // #fTitle, #saveTaskBtn, etc.) so the existing e2e patterns keep working
 // against the new UI with minimal changes.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RecurKind, Task, TaskPrefill } from "@/types/tracker";
 import { markTaskCommentsRead } from "@/hooks/useUnreadTaskComments";
 import { uid } from "@/lib/uid";
@@ -272,6 +272,16 @@ export default function TaskModal({
   const [newDescFiles, setNewDescFiles] = useState<File[]>([]);
   const [newDescError, setNewDescError] = useState("");
   const [saving, setSaving] = useState(false);
+  // «Сохранить» отдаёт задачу один раз на окно — флаг в ref, а не в
+  // состоянии. В базе нашлись близнецы: «поискать БАЗЫ клиентов!» 21.09.2026,
+  // две строки с РАЗНЫМИ id через 41 мс. Разные id значат, что save()
+  // прошёл дважды и дважды позвал uid(): окно новой задачи не знает своей
+  // задачи до сохранения, и каждое нажатие заводит новую. Прежняя защита
+  // `if (saving)` читала состояние из замыкания, а оно обновляется только
+  // перерисовкой — второе нажатие, пришедшее до неё (дребезг кнопки мыши,
+  // двойной тап во встроенном браузере мессенджера), видело старое `false`.
+  // Ref меняется сразу, и второе нажатие видит его в ту же долю секунды.
+  const committedRef = useRef(false);
   // Приёмка по выбору (миграция 0060): «Без приёмки» — отчёт всех
   // исполнителей закрывает задачу сам. Выбирается только при постановке.
   const [needsReview, setNeedsReview] = useState(() => task?.needsReview !== false);
@@ -440,7 +450,7 @@ export default function TaskModal({
   }
 
   async function save() {
-    if (saving) return;
+    if (saving || committedRef.current) return;
     const title = form.title.trim();
     if (!title) {
       // Ответ на «не заполнено» — само поле: форма к этому моменту обычно
@@ -500,6 +510,10 @@ export default function TaskModal({
     // фильтр, бот и сводки, и триггер миграции 0024 заводит по ней строку
     // участия, если её почему-то нет.
     const primary = pending.find((p) => p.role === "executor");
+    // Проверки пройдены — дальше задача уходит. Флаг ставится ДО первого
+    // await: загрузка файлов длится секунды, и нажатие в это время
+    // завело бы вторую задачу с теми же файлами.
+    committedRef.current = true;
     const next: Task = {
       // Сначала сохранённая запись целиком, поверх — поля формы. Всё, чего
       // в форме нет (автор, дата постановки), иначе молча терялось: Игорь
@@ -541,6 +555,8 @@ export default function TaskModal({
       try {
         next.descFiles = await uploadTaskFiles(next.id, newDescFiles, "desc");
       } catch (e) {
+        // Задача не ушла — окно остаётся, и нажать «Сохранить» снова можно.
+        committedRef.current = false;
         setSaving(false);
         setNewDescError(humanError(e, "Не получилось загрузить файл — задача не сохранена"));
         return;

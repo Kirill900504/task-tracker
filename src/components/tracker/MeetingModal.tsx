@@ -3,7 +3,7 @@
 // Port of the meeting modal from trackerMarkup.ts + openMeetingModal()/
 // meetingSaveBtn/deleteMeetingBtn/setMeetingStatus/performReschedule in
 // legacy-tracker.js. Kept on the same element ids for e2e-pattern reuse.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import { isoDate, workdayIn } from "@/lib/whenDate";
 import ItemChat, { mentionPeople } from "./ItemChat";
@@ -285,7 +285,14 @@ export default function MeetingModal({
     el?.focus();
   }
 
+  // Одна встреча на одно окно — та же защита, что у TaskModal (там же
+  // история близнецов «поискать БАЗЫ клиентов!»): новая встреча получает
+  // id в момент сохранения, и второе нажатие, пришедшее до перерисовки,
+  // завело бы вторую — с приглашениями всем дважды.
+  const committedRef = useRef(false);
+
   async function save() {
+    if (committedRef.current) return;
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       await ask.say({ title: "Название не заполнено", question: "Укажите название встречи." });
@@ -337,6 +344,7 @@ export default function MeetingModal({
       });
       return;
     }
+    committedRef.current = true;
     onSave({
       // Сначала сохранённая запись целиком, поверх — поля формы. Всё, чего
       // в форме нет (автор, дата постановки), иначе молча терялось: Игорь
