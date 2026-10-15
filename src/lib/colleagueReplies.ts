@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { seenItem, type Viewer } from "@/lib/itemAccess";
 import { closedReply, itemClosed, taskRowClosed } from "@/lib/closedItem";
 import { fmtDate } from "@/lib/taskDisplay";
 import type { CallbackAction } from "@/lib/colleagues";
@@ -98,21 +99,31 @@ export type ColleagueTextResult = {
 // забыл.
 const AIM_LIFETIME_MS = 2 * 60 * 60 * 1000;
 
+// Человек из чата как зритель для lib/itemAccess: его строка, его вход (если
+// есть) и пространство. У владельца вход — само пространство.
+async function viewerOf(admin: SupabaseClient, colleague: { id: string; name: string; user_id: string }): Promise<Viewer> {
+  if (isSelfAssignee(colleague.name)) return { spaceId: colleague.user_id, authId: colleague.user_id, assigneeId: colleague.id };
+  const { data: member } = await admin
+    .from("workspace_members")
+    .select("member_id")
+    .eq("assignee_id", colleague.id)
+    .eq("status", "active")
+    .maybeSingle();
+  return { spaceId: colleague.user_id, authId: (member as { member_id: string | null } | null)?.member_id ?? null, assigneeId: colleague.id };
+}
+
 async function aimReply(
   admin: SupabaseClient,
   colleague: { id: string; name: string; user_id: string },
   kind: "task" | "meeting",
   itemId: string,
 ): Promise<CallbackOutcome> {
-  const table = kind === "task" ? "tasks" : "meetings";
-  const { data } = await admin
-    .from(table)
-    .select("id, title, user_id")
-    .eq("id", itemId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  const item = data as { id: string; title: string; user_id: string } | null;
-  if (!item || item.user_id !== colleague.user_id) return { toast: "Это обсуждение уже не ваше" };
+  // Не «то же пространство», а «стоит на деле или поставил его»
+  // (lib/itemAccess): иначе подделанное нажатие называло заголовок чужой
+  // задачи и направляло текст в её переписку (аудит 15.10.2026).
+  const seen = await seenItem(admin, await viewerOf(admin, colleague), kind, itemId);
+  if (!seen) return { toast: "Это обсуждение уже не ваше" };
+  const item = { ...seen, user_id: colleague.user_id };
 
   await admin
     .from("assignees")
@@ -670,6 +681,9 @@ async function colleagueCallback(
 
   // «Кто идёт» — тот же расклад, что видит карточка в трекере.
   if (action.kind === "meeting" && action.action === "who") {
+    // Состав, ответы и причины отказов — только тем, кто на встрече или
+    // назначил её: одного пространства мало (аудит 15.10.2026).
+    if (!(await seenItem(admin, await viewerOf(admin, colleague), "meeting", action.id))) return { toast: "Эта встреча уже не ваша" };
     const roster = await meetingRoster(admin, colleague, action.id);
     if (!roster) return { toast: "Эта встреча уже не ваша" };
     // Кнопки ответа — только те, что ещё действуют (lib/answerRules).

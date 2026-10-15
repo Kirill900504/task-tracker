@@ -305,6 +305,19 @@ service-role client bypasses RLS entirely, so server code must filter by
 — «своё и где участник» (`involvedFilter`, `lib/ownerVisible`).
 Пятничный отчёт владельца — только числа, без названий чужих задач.
 Сторож — раздел «Каждый видит только своё» в `test:schema`.
+**Служебные функции прав живут в схеме `private`** (миграция 0063,
+15.10.2026): API публикует КАЖДУЮ функцию из `public` (REST `rpc/…` и
+GraphQL), и `task_author('<id>')` отвечал любому вошедшему мимо самих
+прав. Новую функцию такого рода кладите в `private` и зовите
+`private.can_see_item(…)`; в `public` из SECURITY DEFINER остаётся только
+`busy_slots` (сторож в `test:schema`). **И код со служебным ключом
+проверяет «видит ли», а не «то же пространство»** — `lib/itemAccess.seenItem`,
+копия `can_see_item`. Аудит нашёл это в четырёх кнопках бота: обе
+«💬 Ответить», «Кто идёт» и кнопки присланной мысли проверяли только
+пространство, и подделанное нажатие (сторонний клиент мессенджера)
+показывало заголовок, состав или текст чужого дела. Новый обработчик
+кнопки с id дела — сперва `seenItem` (или выборка по своей строке
+участия), потом всё остальное.
 
 **Server-to-server routes** must be listed in `src/lib/supabase/middleware.ts`
 or the session middleware redirects them to /login and they answer 405 with

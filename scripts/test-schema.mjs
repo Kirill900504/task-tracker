@@ -297,6 +297,20 @@ async function main() {
 
   // 0057: владелец пространства — один из равных и в ЧТЕНИИ. До неё
   // `user_id = auth.uid()` пускало его ко всему пространству целиком.
+  // 0063: функции, на которых держатся права, живут в `private` — API
+  // публикует каждую функцию из `public`, и по ним можно было спросить
+  // автора и состояние чужого дела мимо самих прав.
+  console.log("\nСлужебные функции прав — вне API (0063):");
+  {
+    const { rows } = await db.query(
+      `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.prokind = 'f' and p.prosecdef
+          and pg_get_function_result(p.oid) <> 'trigger' and p.proname <> 'busy_slots'`,
+    );
+    check("в public нет ни одной SECURITY DEFINER-функции, кроме busy_slots", rows.length === 0);
+    if (rows.length) console.log("    лишние:", rows.map((r) => r.proname).join(", "));
+  }
+
   console.log("\nКаждый видит только своё (0057):");
   await as(db, OWNER, async () => {
     const { rows } = await db.query("select id from public.tasks where id = $1", [authoredId]);

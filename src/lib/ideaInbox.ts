@@ -209,6 +209,11 @@ async function answerIdea(admin: SupabaseClient, me: Receiver | null, action: Ca
     .eq("assignee_id", me.assigneeId)
     .maybeSingle();
   const recipient = recRow as { id: string; seen_at: string | null; converted_task_id: string | null } | null;
+  // Мысль — тем, кому её прислали, и её автору; одного пространства мало.
+  // До 15.10.2026 любая кнопка здесь (хоть «Назад») переписывала сообщение
+  // текстом мысли по одному её id, и подделанное нажатие читало чужую.
+  const isAuthor = !!me.userId && (idea.createdBy ?? idea.userId) === me.userId;
+  if (!recipient && !isAuthor) return { toast: "Эта мысль прислана не вам" };
   const markAnswered = async (patch: Record<string, unknown> = {}) => {
     await admin
       .from("idea_recipients")

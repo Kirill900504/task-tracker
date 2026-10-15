@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { seenItem } from "@/lib/itemAccess";
 import { closedReply, itemClosed } from "@/lib/closedItem";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { encodeCallback, type CallbackAction, type ColleagueRow } from "@/lib/colleagues";
@@ -370,18 +371,16 @@ export async function handleOwnerCallback(
   // отвечало «эта кнопка не для вас», и написать в задачу из мессенджера
   // было нельзя вовсе. Замечено сквозной диагностикой 20.09.2026.
   if (action.action === "msg" && (action.kind === "task" || action.kind === "meeting")) {
-    const table = action.kind === "task" ? "tasks" : "meetings";
-    const { data } = await admin
-      .from(table)
-      .select("id, title")
-      .eq("id", action.id)
-      // Пространство, а не авторство: написать в обсуждение вправе
-      // любой участник итема, и запрещать это постановщику чужой
-      // задачи значило бы запретить разговор в ней.
-      .eq("user_id", actor.spaceId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    const item = data as { id: string; title: string } | null;
+    // Не авторство, но и не «то же пространство»: написать в обсуждение
+    // вправе любой, кто на деле или его поставил (lib/itemAccess — то же
+    // правило, что у базы). Одного пространства мало: подделанное нажатие
+    // называло заголовок чужой задачи и клало текст в её переписку.
+    const item = await seenItem(
+      admin,
+      { spaceId: actor.spaceId, authId: actor.isOwner ? actor.spaceId : actor.userId, assigneeId: actor.assigneeId || null },
+      action.kind,
+      action.id,
+    );
     if (!item) return { toast: action.kind === "task" ? "Эта задача не найдена" : "Эта встреча не найдена" };
     // Закрытое — только просмотр (lib/closedItem): адрес для реплики не
     // запоминается вовсе, иначе следующий текст ушёл бы в закрытое.
