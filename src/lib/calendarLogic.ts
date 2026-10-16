@@ -73,11 +73,17 @@ export function sortMeetingsForList(meetings: Meeting[], showResolved: boolean):
 //
 // Час после начала, а не минута в минуту: встреча, начавшаяся в 15:00,
 // в 15:05 ещё идёт, и просить у неё итог значит мешать.
+//
+// Закрывает встречу ИСХОД, а не текст в поле итога (16.10.2026). Поле
+// пишется само при выходе из него, и встреча с набранным итогом, но без
+// «Успех / Провал», оставалась planned навсегда — а правило «есть текст —
+// вопрос снят» прятало её: ни плашки, ни группы «Нужен итог», ни вопроса
+// бота. Кирилл увидел это на тестовой встрече, просроченной на сутки и
+// ничем не помеченной.
 export const RECAP_GRACE_MINUTES = 60;
 
 export function awaitsRecap(meeting: Meeting, now: Date = new Date()): boolean {
   if (meeting.status && meeting.status !== "planned") return false;
-  if (meeting.result) return false;
   if (!meeting.date) return false;
   const [hh, mm] = (meeting.time || "23:59").split(":").map(Number);
   const start = new Date(meeting.date + "T00:00:00");

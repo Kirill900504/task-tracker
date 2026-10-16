@@ -107,8 +107,8 @@ describe("awaitsRecap", () => {
     expect(awaitsRecap(base, new Date("2026-09-20T09:00:00"))).toBe(false);
   });
 
-  it("написанный итог снимает вопрос", () => {
-    expect(awaitsRecap({ ...base, result: "решили переделать" }, new Date("2026-09-21T18:00:00"))).toBe(false);
+  it("набранный итог без исхода вопроса не снимает", () => {
+    expect(awaitsRecap({ ...base, result: "решили переделать" }, new Date("2026-09-21T18:00:00"))).toBe(true);
   });
 
   it("как и закрытая встреча", () => {

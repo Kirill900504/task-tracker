@@ -525,9 +525,9 @@ export async function GET(req: Request) {
           .eq("status", "planned")
           .lt("date", dateStr(threeDaysAgo))
           .is("deleted_at", null);
-        const forgotten = ((noRecap || []) as { title: string; date: string }[]).filter(
-          (m) => !(m as { result?: string }).result,
-        );
+        // Без исхода — значит без итога, даже если в поле что-то набрано:
+        // закрывает встречу «Успех / Провал», а не текст (см. awaitsRecap).
+        const forgotten = (noRecap || []) as { title: string; date: string }[];
         if (forgotten.length) {
           const list = forgotten.slice(0, 5).map((m) => `• ${m.title} (${m.date.split("-").reverse().join(".")})`);
           text = (text ? text + "\n\n" : "📊 Неделя по людям\n\n") + "Встречи без итога:\n" + list.join("\n");
@@ -613,7 +613,9 @@ export async function GET(req: Request) {
       // после начала, и ещё раз на следующее утро, если так и не ответили.
       // Дальше не дёргают — встреча без итога попадёт в понедельничную
       // сводку, и это уже другой разговор.
-      if (!m.result) {
+      // Набранный текст без исхода встречу не закрывает (awaitsRecap),
+      // поэтому спрашивают по статусу, а не по пустому полю.
+      {
         const recap = recapDue(m.date, startMinutes, today, yesterday, nowMin, BRIEF_FROM_MINUTES);
         if (recap) {
           const { error: recapTaken } = await admin

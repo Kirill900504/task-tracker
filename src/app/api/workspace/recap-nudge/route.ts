@@ -65,7 +65,7 @@ export async function POST(req: Request) {
 
   // То же условие, что у плашки «нужен итог» (awaitsRecap), но по
   // московским часам: функция на сервере живёт в UTC.
-  if ((meeting.status && meeting.status !== "planned") || meeting.result || !meeting.date) {
+  if ((meeting.status && meeting.status !== "planned") || !meeting.date) {
     return NextResponse.json({ error: "У встречи уже есть итог" }, { status: 409 });
   }
   const [hh, mm] = (meeting.time || "23:59").split(":").map(Number);
