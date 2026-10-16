@@ -16,11 +16,19 @@ import { defaultDeadline } from "@/lib/newTask";
 // с итогом целиком в названии — а на планёрке договариваются о трёх-пяти
 // делах разным людям, и остальные четыре не заводились никогда.
 //
-// Пункты режет код (lib/recapItems), а не модель. Ничего не создаётся
-// молча: каждый пункт показан, у него выбирают человека и срок, лишнее
-// снимают галочкой — и только потом «Поставить». Срок обязателен
+// Пункты — это ПОВЕСТКА встречи, а не итог, порезанный на строки
+// (16.10.2026, его слова: «предлагай к постановке задачей повестки, а не
+// итоговое описание»). Итог — свободный текст, и резать его на задачи
+// значило получать задачи из обрывков фраз; пункт повестки же уже
+// сформулирован как дело, а «что решили» по нему уходит в описание задачи.
+// Ничего не создаётся молча: каждый пункт показан, у него выбирают
+// человека и срок, лишнее снимают галочкой — и только потом «Поставить».
+// Отказаться целиком — своей кнопкой «Не ставить задачей»: окно всплывает
+// само после «Успех / Провал», и выход из него обязан быть словом рядом с
+// «Поставить», а не только крестиком в углу. Срок обязателен
 // (14.10.2026) — по умолчанию неделя, как везде.
-export type RecapTask = { title: string; assignee: string; deadline: string };
+export type RecapItem = { title: string; note: string };
+export type RecapTask = RecapItem & { assignee: string; deadline: string };
 
 type Row = RecapTask & { on: boolean };
 
@@ -38,14 +46,14 @@ export default function MeetingTasksSheet({
   onClose,
 }: {
   meetingTitle: string;
-  items: string[];
+  items: RecapItem[];
   // Кого можно назначить: участники встречи и организатор.
   people: string[];
   onCreate: (tasks: RecapTask[]) => void;
   onClose: () => void;
 }) {
   const [rows, setRows] = useState<Row[]>(() =>
-    items.map((title) => ({ title, assignee: people[0] || "", deadline: defaultDeadline(), on: true })),
+    items.map(({ title, note }) => ({ title, note, assignee: people[0] || "", deadline: defaultDeadline(), on: true })),
   );
   const chosen = rows.filter((r) => r.on && r.title.trim() && r.assignee);
   const set = (i: number, patch: Partial<Row>) => setRows((list) => list.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -53,7 +61,7 @@ export default function MeetingTasksSheet({
   return (
     <Modal onClose={onClose} dismissOnBackdrop={false}>
       <div className="modal recap-tasks" id="recapTasksSheet">
-        <ItemModalHead title="Поручения из итога" kicker={`Встреча «${meetingTitle}»`} plain onClose={onClose} closeId="recapTasksClose" />
+        <ItemModalHead title="Задачи из повестки" kicker={`Встреча «${meetingTitle}»`} plain onClose={onClose} closeId="recapTasksClose" />
         <div className="recap-rows">
           {rows.map((r, i) => (
             <div className={"recap-row" + (r.on ? "" : " off")} key={i}>
@@ -62,6 +70,7 @@ export default function MeetingTasksSheet({
               </button>
               <div className="recap-main">
                 <input className="recap-title" value={r.title} maxLength={200} onChange={(e) => set(i, { title: e.target.value })} aria-label="Что сделать" />
+                {r.note && <div className="recap-note">Решили: {r.note}</div>}
                 <div className="recap-meta">
                   <Dropdown
                     compact
@@ -90,13 +99,16 @@ export default function MeetingTasksSheet({
         <div className="modal-actions">
           <div className="left" />
           <div className="left">
+            <button type="button" className="btn" id="recapTasksSkip" onClick={onClose}>
+              Не ставить задачей
+            </button>
             <button
               type="button"
               className="btn btn-primary"
               id="recapTasksCreate"
               disabled={!chosen.length}
               onClick={() => {
-                onCreate(chosen.map(({ title, assignee, deadline }) => ({ title: title.trim(), assignee, deadline })));
+                onCreate(chosen.map(({ title, note, assignee, deadline }) => ({ title: title.trim(), note, assignee, deadline })));
                 onClose();
               }}
             >

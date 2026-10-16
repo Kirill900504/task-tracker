@@ -138,11 +138,11 @@ export default function MeetingModal({
   // Организатор переносит встречу на время, предложенное участником
   // (кнопка на самом предложении в обсуждении).
   onAcceptProposal?: (proposal: { date: string; time: string; reason: string; by: string }) => void;
-  // «Поручения из итога» (MeetingTasksSheet): итог успешной встречи —
-  // задачами по пунктам. Это НОВОЕ, а не правка закрытого, поэтому кнопка
+  // «Задачи из повестки» (MeetingTasksSheet): пункты повестки закрытой
+  // встречи — задачами. Кнопка живёт в самой повестке (MeetingAgenda). Это НОВОЕ, а не правка закрытого, поэтому кнопка
   // есть и у закрытой встречи (правило «Закрытое событие — только
   // просмотр» оставляет такие выходы, как «В задачу»).
-  onRecapTasks?: (meeting: Meeting, result: string) => void;
+  onRecapTasks?: (meeting: Meeting, items: AgendaItem[]) => void;
 }) {
   const isEditing = !!meeting;
   // Новой встрече без заданного времени — первый ещё не начавшийся слот, а
@@ -523,11 +523,6 @@ export default function MeetingModal({
                     <button type="button" className="btn btn-small" id="reopenMeetingBtn" onClick={() => void setStatus("planned")}>
                       <Icon name="reset" size={15} /> Вернуть в план
                     </button>
-                    {meeting.status === "success" && result.trim() && onRecapTasks && (
-                      <button type="button" className="btn btn-small btn-primary" id="recapTasksBtn" onClick={() => onRecapTasks(meeting, result)}>
-                        <Icon name="tasks" size={15} /> Поручения из итога
-                      </button>
-                    )}
                   </div>
                 </>
               ) : (
@@ -740,7 +735,10 @@ export default function MeetingModal({
 
               {/* Повестка — под сводкой и кнопкой переноса, над итогом: до
                   встречи её дописывают, на встрече по ней идут. */}
-              <MeetingAgenda meetingId={meeting.id} isOrganizer={canEdit} closed={!!resolved} onTask={onAgendaTask} />
+              <MeetingAgenda meetingId={meeting.id} isOrganizer={canEdit} closed={!!resolved}
+                onTask={onAgendaTask}
+                onAllToTasks={resolved && canEdit && onRecapTasks ? (items) => onRecapTasks(meeting, items) : undefined}
+              />
 
               {!decisionsFirst && decisionBlocks}
             </div>

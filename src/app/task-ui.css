@@ -598,6 +598,7 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .recap-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:7px;}
 .recap-title{width:100%; padding:8px 10px; border-radius:var(--radius-sm); background:var(--bg); border:1px solid var(--line-soft); color:var(--ink); font:inherit; font-size:13.5px; font-weight:600;}
 .recap-title:focus{outline:none; border-color:var(--accent);}
+.recap-note{font-size:12.5px; color:var(--ink-soft); padding:0 2px; overflow-wrap:anywhere;}
 .recap-meta{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
 .recap-meta .participant-chip{padding:5px 10px; font-size:12px;}
 @media (max-width:800px){ .recap-title{font-size:16px;} }

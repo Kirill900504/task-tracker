@@ -30,8 +30,8 @@ import { busyPeople } from "@/lib/meetingTime";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useDropHandler } from "./dnd/TrackerDnd";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import MeetingTasksSheet, { type RecapTask } from "./MeetingTasksSheet";
-import { recapItems } from "@/lib/recapItems";
+import MeetingTasksSheet, { type RecapItem, type RecapTask } from "./MeetingTasksSheet";
+import { loadAgenda, type AgendaItem } from "@/hooks/useMeetingAgenda";
 
 export default function MeetingsPanel({
   myUserId = "",
@@ -132,11 +132,10 @@ export default function MeetingsPanel({
   const movedSavedRef = useRef(false);
   // Окно с прошедшими встречами.
   const [doneOpen, setDoneOpen] = useState(false);
-  // Окно «Поручения из итога»: по какой встрече и какие пункты.
-  const [recapSheet, setRecapSheet] = useState<{ meeting: Meeting; items: string[] } | null>(null);
-  function openRecapTasks(m: Meeting, result: string) {
-    const items = recapItems(result);
-    setRecapSheet({ meeting: m, items: items.length ? items : [result.trim()].filter(Boolean) });
+  // Окно «Задачи из повестки»: по какой встрече и какие пункты.
+  const [recapSheet, setRecapSheet] = useState<{ meeting: Meeting; items: RecapItem[] } | null>(null);
+  function openRecapTasks(m: Meeting, items: AgendaItem[]) {
+    setRecapSheet({ meeting: m, items: items.map((i) => ({ title: i.text, note: i.note })) });
   }
 
   // See TasksPanel's identical pattern: an external open request from a
@@ -436,32 +435,39 @@ export default function MeetingsPanel({
     // записать это нужно сейчас, пока помнится, кто и что. Только
     // предложение: «просто прошла» — тоже исход, и окно формы без спроса
     // учило бы закрывать его не глядя.
-    // Итог из нескольких пунктов — сразу окно поручений по пунктам
-    // (предложение 4): договорились о трёх делах — три задачи, а не одна с
-    // итогом целиком в названии.
-    if (status === "success" && onCreateTasks && recapItems(resultText).length >= 2) {
-      openRecapTasks(m, resultText);
-      return;
-    }
-    if (status === "success" && onTaskFromMeeting) {
-      void (async () => {
-        const yes = await ask.confirm({
-          title: "Встреча закрыта",
-          question: "Поставить задачу по итогам встречи?",
-          note: resultText.trim() ? `Итог: ${resultText.trim()}` : undefined,
-          okText: "Поставить задачу",
-          cancelText: "Не нужно",
-        });
-        if (!yes) return;
-        const said = resultText.trim();
-        onTaskFromMeeting({
-          title: said ? (said.length > 120 ? said.slice(0, 119) + "…" : said) : "",
-          desc: `По итогам встречи «${m.title}» (${fmtDate(m.date)}${m.time ? ", " + m.time : ""})${said ? ": " + said : ""}`,
-          deadline: "",
-          people: meetingPeopleForTask(m),
-        });
-      })();
-    }
+    // У встречи есть повестка — окно задач по её пунктам, при ЛЮБОМ исходе
+    // (16.10.2026: «при завершении успехом или без результата встреч,
+    // предлагай к постановке задачей повестки, а не итоговое описание»).
+    // Провал — тоже повод поручить: «не договорились» по пункту чаще всего
+    // и значит «кому-то разобраться до следующего раза». Повестка читается
+    // один раз здесь: окно встречи к этому моменту уже закрыто.
+    if (status !== "success" && status !== "no_result") return;
+    void (async () => {
+      const agenda = onCreateTasks ? await loadAgenda(m.id) : null;
+      if (agenda && agenda.length) {
+        openRecapTasks(m, agenda);
+        return;
+      }
+      // Повестки нет — прежний вопрос, и только после успеха. Название
+      // задачи пустое: итог — рассказ о встрече, а не формулировка дела,
+      // поэтому он идёт в описание, а дело называет человек.
+      if (status !== "success" || !onTaskFromMeeting) return;
+      const yes = await ask.confirm({
+        title: "Встреча закрыта",
+        question: "Поставить задачу по итогам встречи?",
+        note: resultText.trim() ? `Итог: ${resultText.trim()}` : undefined,
+        okText: "Поставить задачу",
+        cancelText: "Не ставить задачей",
+      });
+      if (!yes) return;
+      const said = resultText.trim();
+      onTaskFromMeeting({
+        title: "",
+        desc: `По итогам встречи «${m.title}» (${fmtDate(m.date)}${m.time ? ", " + m.time : ""})${said ? ": " + said : ""}`,
+        deadline: "",
+        people: meetingPeopleForTask(m),
+      });
+    })();
   }
 
   // Закрыть встречу кнопкой прямо в списке — и сразу сказать, чем она
@@ -815,7 +821,7 @@ export default function MeetingsPanel({
                 }
               : undefined
           }
-          onRecapTasks={onCreateTasks ? (m, result) => openRecapTasks(m, result) : undefined}
+          onRecapTasks={onCreateTasks ? (m, items) => openRecapTasks(m, items) : undefined}
         />
       )}
 

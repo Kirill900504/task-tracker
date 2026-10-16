@@ -40,7 +40,7 @@ async function newMeeting(page: Page, title: string) {
   await page.locator("#mParticipants .participant-chip").first().click();
 }
 
-test("итог встречи из нескольких пунктов — поручения одним окном", async ({ page }) => {
+test("закрытая встреча предлагает задачи из повестки", async ({ page }) => {
   test.setTimeout(120_000);
   const title = `E2E итог-поручения ${Date.now()}`;
   await login(page);
@@ -51,12 +51,27 @@ test("итог встречи из нескольких пунктов — по�
   await expect(chip).toBeVisible();
   await chip.locator(".mtitle").click();
   const stamp = Date.now();
-  await page.fill("#mResult", `- Обзвонить филиалы ${stamp}\n- Сверить прайс ${stamp}`);
+  for (const item of [`Обзвонить филиалы ${stamp}`, `Сверить прайс ${stamp}`]) {
+    await page.fill("#agendaInput", item);
+    await page.press("#agendaInput", "Enter");
+  }
+  await expect(page.locator("#meetingAgenda .agenda-item")).toHaveCount(2);
+  // Ждём, пока оба пункта доедут до базы: окно читает повестку оттуда.
+  await expect
+    .poll(async () => {
+      const { data } = await admin.from("meeting_agenda").select("id").like("text", `%${stamp}`);
+      return (data || []).length;
+    }, { timeout: 20_000 })
+    .toBe(2);
+  // Итог — рассказ, а не список дел: задачами его больше не режут.
+  await page.fill("#mResult", "Поговорили обо всём");
   await page.click("#markSuccessBtn");
-  // Итог из двух пунктов — окно поручений само.
+  // Повестка из двух пунктов — окно задач само.
   const sheet = page.locator("#recapTasksSheet");
   await expect(sheet).toBeVisible({ timeout: 20_000 });
   await expect(sheet.locator(".recap-row")).toHaveCount(2);
+  await expect(sheet.locator(".recap-title").first()).toHaveValue(`Обзвонить филиалы ${stamp}`);
+  await expect(sheet.locator("#recapTasksSkip")).toHaveText("Не ставить задачей");
   await page.click("#recapTasksCreate");
   await expect
     .poll(async () => {

@@ -520,14 +520,15 @@ export default function NewTracker() {
   // Поручения из итога встречи (MeetingTasksSheet): каждая — обычная
   // задача, тем же путём, что и строка быстрого ввода: запись движком
   // синхронизации и назначение человека с сообщением ему.
-  function createTasksFromMeeting(list: { title: string; assignee: string; deadline: string }[], m: Meeting) {
+  function createTasksFromMeeting(list: { title: string; note?: string; assignee: string; deadline: string }[], m: Meeting) {
     const where = `По итогам встречи «${m.title}» (${fmtDate(m.date)}${m.time ? ", " + m.time : ""})`;
     for (const item of list) {
       const id = uid();
       actions.saveTask({
         id,
         title: item.title,
-        desc: where,
+        // Пункт повестки — дело, «что решили» по нему — подробности дела.
+        desc: item.note ? `${where}\nРешили: ${item.note}` : where,
         assignee: item.assignee,
         sectionId: "",
         priority: "med",

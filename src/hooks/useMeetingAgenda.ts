@@ -31,6 +31,8 @@ async function realId(id: string): Promise<string | null> {
   return id.startsWith("tmp-") ? ((await realIds.get(id)) ?? null) : id;
 }
 
+// Экспортирован ради окна «Задачи из повестки» (MeetingsPanel): после
+// «Успех / Провал» повестку читают один раз, без подписки.
 async function load(meetingId: string): Promise<AgendaItem[] | null> {
   const { data, error } = await createClient()
     .from("meeting_agenda")
@@ -41,6 +43,8 @@ async function load(meetingId: string): Promise<AgendaItem[] | null> {
   if (error) return null;
   return ((data || []) as Row[]).map((r) => ({ id: r.id, text: r.text, note: r.note || "", position: r.position, authorId: r.author_id }));
 }
+
+export { load as loadAgenda };
 
 export function useMeetingAgenda(meetingId: string) {
   const [items, setItems] = useState<AgendaItem[]>([]);

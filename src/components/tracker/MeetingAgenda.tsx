@@ -20,6 +20,7 @@ export default function MeetingAgenda({
   isOrganizer,
   closed,
   onTask,
+  onAllToTasks,
 }: {
   meetingId: string;
   isOrganizer: boolean;
@@ -27,6 +28,9 @@ export default function MeetingAgenda({
   // задачи из пунктов остаются.
   closed: boolean;
   onTask?: (item: AgendaItem) => void;
+  // Закрытая встреча: все пункты разом — окном «Задачи из повестки», то
+  // же, что всплывает само после «Успех / Провал».
+  onAllToTasks?: (items: AgendaItem[]) => void;
 }) {
   const { items, loaded, error, add, setNote, remove } = useMeetingAgenda(meetingId);
   const ask = useAsk();
@@ -60,6 +64,11 @@ export default function MeetingAgenda({
       <label>
         Повестка {items.length > 0 && <span className="count">{items.length}</span>}
       </label>
+      {onAllToTasks && items.length > 0 && (
+        <button type="button" className="btn btn-small btn-primary agenda-all-tasks" id="recapTasksBtn" onClick={() => onAllToTasks(items)}>
+          <Icon name="tasks" size={15} /> Задачи из повестки
+        </button>
+      )}
       {items.length > 0 && (
         <ol className="agenda-list">
           {items.map((item) => {
