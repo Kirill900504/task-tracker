@@ -347,7 +347,7 @@ export default function TasksPanel({
     if (!showSnoozed && snoozedMine(t)) return false;
     if (filterAssignee !== "all" && t.assignee !== filterAssignee) return false;
     if (onlyOverdue && !isOverdue(t)) return false;
-    if (sharedBoard && !isMobile && !matchesBoardFilter(boardFilter, t, roleOn(t), myUserId)) return false;
+    if (sharedBoard && !matchesBoardFilter(boardFilter, t, roleOn(t), myUserId)) return false;
     if (filterSection !== "all" && (t.sectionId || "") !== filterSection) return false;
     if (calendarFilterDate && !isTaskDueOnDate(t, new Date(calendarFilterDate + "T00:00:00"))) return false;
     return true;
@@ -791,6 +791,8 @@ export default function TasksPanel({
           // Кирилла 20.09.2026: «вместо огромной кнопки „+ Новая задача“
           // оставить маленькую кнопочку „+“… справа отображать только
           // кнопку просрочено и „Все/мне/я поручил“, остальное скрыть».
+          // С 16.10.2026 этот «+» — единственный на экране: круглая
+          // плавающая кнопка внизу дублировала его и ушла.
           // Полоса шириной в экран, из которой половина — надпись на
           // кнопке, стоила первого экрана до единой задачи; «Загрузка»,
           // «Завершённые» и сама кнопка «Фильтры» с телефона ушли
@@ -867,9 +869,13 @@ export default function TasksPanel({
                 доска сама разошлась на три раздела («Задачи», «В работе»,
                 «Приёмка»), различать «чьё» внутри каждого уже незачем, а
                 сама кнопка «Я поручил» потеряла смысл вопроса, на который
-                отвечала. Фильтры на телефоне не применяются вовсе (см. filtered): та
-                же логика фильтрации продолжает работать на компьютере. */}
-            {sharedBoard && !isMobile && (
+                отвечала.
+
+                Вернулись 16.10.2026 его же словами: «добавить справа от
+                плюсика фильтр кнопочный… принцип работы как и на пк». Те же
+                три кнопки, то же сохранённое значение и та же логика —
+                второй копии фильтра для телефона нет. */}
+            {sharedBoard && (
               <div className="view-switch" role="group" aria-label="Чьи задачи показывать — можно нажать несколько">
                 {BOARD_FILTERS.map((f) => {
                   const on = boardFilter.includes(f.key);

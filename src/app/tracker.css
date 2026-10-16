@@ -350,14 +350,6 @@
   @media (max-width:800px){
     #quickAddSlot{display:none;}
   }
-  .quick-add-fab{
-    position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom, 0px));
-    width:56px; height:56px; border-radius:50%; border:none;
-    background:var(--accent); color:#F3F8FA; font-size:28px; line-height:1;
-    display:flex; align-items:center; justify-content:center;
-    box-shadow:0 6px 18px rgba(0,0,0,.45); cursor:pointer; z-index:250;
-  }
-  .quick-add-fab:active{transform:scale(.94);}
   .quick-add-sheet-backdrop{
     position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:260;
     display:flex; align-items:flex-end;
@@ -2354,7 +2346,10 @@
        под значком, то есть фигура, которую видно боковым зрением. */
     .mobile-nav{
       position:fixed; left:0; right:0; bottom:0; z-index:210;
-      display:grid; grid-template-columns:repeat(6, 1fr);
+      /* Колонки считает сам ряд, а не цифра: было repeat(6, 1fr) со времён
+         шести разделов, и когда «Сегодня» убрали (14.10.2026), справа
+         осталась пустая шестая колонка — «зачем оставил дырку». */
+      display:grid; grid-auto-flow:column; grid-auto-columns:1fr;
       background:color-mix(in srgb, var(--paper) 88%, transparent);
       backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
       border-top:1px solid var(--line-soft);
@@ -2511,8 +2506,6 @@
     .modal-actions .btn{min-height:44px; padding:0 16px;}
     .time-slot, .participant-chip{min-height:38px;}
 
-    /* Быстрый ввод не должен налезать на навигацию */
-    .quick-add-fab{bottom:calc(78px + env(safe-area-inset-bottom, 0px));}
     #syncStatus{bottom:calc(80px + env(safe-area-inset-bottom, 0px));}
     .ms-link, .ms-link-dismissed{bottom:calc(80px + env(safe-area-inset-bottom, 0px)); left:12px; right:12px; max-width:none;}
     /* Тосты поднимаются над нижней навигацией — и над круглой «+» тоже.
@@ -2540,8 +2533,11 @@
        не нужна — остаётся только то, чем пользуются. */
     .mobile-main #mainCol > .dash-panel-head{display:none;}
 
-    /* Полоса над доской на телефоне: «+», «Все / Мне / Я поручил»,
-       «Просрочено» — и больше ничего.
+    /* Полоса над доской на телефоне: «+», «Я поручил · Мне · Помогаю»,
+       «Просрочено» — и больше ничего. «+» здесь единственный: круглой
+       плавающей кнопки внизу больше нет (16.10.2026, «оставить только
+       один плюсик сверху»), а фильтры вернулись теми же кнопками, что на
+       компьютере.
 
        Слова Кирилла 20.09.2026: «вместо огромной кнопки „+ Новая задача“
        оставить маленькую кнопочку „+“ для создания новой задачи, справа
@@ -2567,7 +2563,7 @@
       display:inline-flex; align-items:center; justify-content:center;
     }
     .toolbar .filter-pill{min-height:44px;}
-    .toolbar .view-switch-btn{min-height:40px; padding:0 12px;}
+    .toolbar .view-switch-btn{min-height:40px; padding:0 10px;}
   }
 
   @media (max-width:800px){

@@ -103,8 +103,9 @@ test("на телефоне убрано всё, что дублирует по�
 
   // Задачи: вместо кнопки во всю ширину — «+», и ничего больше. Ни
   // «Загрузки», ни «Завершённых», ни самой кнопки «Фильтры» (сворачивать
-  // стало нечего), и с 23.09.2026 — ни «Все / Мне / Я поручил»: доска сама
-  // разошлась на три раздела, различать «чьё» внутри каждого уже незачем.
+  // стало нечего). Фильтры «Я поручил · Мне · Помогаю» вернулись 16.10.2026,
+  // но, как и на компьютере, только когда на доске есть что различать — на
+  // пустой доске их нет.
   await expect(page.locator("#newTaskBtn:visible")).toBeVisible();
   const addBox = await page.locator("#newTaskBtn:visible").boundingBox();
   expect(addBox!.width).toBeLessThan(80);
@@ -132,8 +133,8 @@ test("на телефоне убрано всё, что дублирует по�
   // Встречи: ни календаря месяца, ни полосы «Встречи N + ✓».
   await page.click('[data-tab="meetings"]');
   await expect(page.locator("#calPanel")).toHaveCount(0);
-  await expect(page.locator("#addMeetingBtn")).toHaveCount(0);
   await expect(page.locator("#meetingsDoneBtn")).toHaveCount(0);
+  await expect(page.locator(".mobile-main .panel-title:visible")).toHaveCount(0);
 
   // Мысли: первым на экране поле, а не заголовок с числом.
   await page.click('[data-tab="ideas"]');
@@ -145,30 +146,43 @@ test("на телефоне убрано всё, что дублирует по�
   await expect(page.locator(".review-screen .section-title")).toHaveCount(0);
 });
 
-// Круглая «+» заводит то, в каком разделе её нажали.
-test("круглая «+» создаёт событие того раздела, где нажата", async ({ page }) => {
+// Один «+» на раздел, и он сверху (16.10.2026: «оставить только один
+// плюсик сверху»). Круглой плавающей кнопки нет нигде, а нижняя панель
+// делится на столько колонок, сколько в ней разделов, — без пустой шестой,
+// оставшейся от убранного «Сегодня».
+test("один «+» сверху в каждом разделе, нижняя панель без пустого места", async ({ page }) => {
   await login(page);
+  await expect(page.locator(".quick-add-fab")).toHaveCount(0);
 
-  // Задачи → форма задачи.
-  await page.click(".quick-add-fab");
-  await expect(page.locator("#fTitle")).toBeVisible();
-  await page.keyboard.press("Escape");
+  // Задачи → форма задачи. Своя задача делает доску «общей», и справа от
+  // «+» встают те же три фильтра, что на компьютере.
+  const title = `E2E фильтр моб ${Date.now()}`;
+  await page.click("#newTaskBtn:visible");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator("#col-new .task:visible", { hasText: title });
+  await expect(card).toBeVisible();
+  const filter = (key: string) => page.locator(`.toolbar:visible .view-switch [data-filter="${key}"]`);
+  await expect(filter("assigned")).toBeVisible();
+  await expect(filter("mine")).toBeVisible();
+  await expect(filter("helping")).toBeVisible();
+  // «Помогаю» прячет задачу, где я исполнитель; отжатие возвращает её.
+  await filter("helping").click();
+  await expect(card).toHaveCount(0);
+  await filter("helping").click();
+  await expect(card).toBeVisible();
 
   // Встречи → форма встречи.
   await page.click('[data-tab="meetings"]');
-  await page.click(".quick-add-fab");
+  await page.click("#addMeetingBtn:visible");
   await expect(page.locator("#mTitle")).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // Мысли → курсор в поле: заводить там нечем, и «создать» значит именно
-  // это.
-  await page.click('[data-tab="ideas"]');
-  await page.click(".quick-add-fab");
-  await expect(page.locator("#ideaInput")).toBeFocused();
-
-  // В «Приёмке» кнопки нет: заводить там нечего.
-  await page.click('[data-tab="review"]');
-  await expect(page.locator(".quick-add-fab")).toHaveCount(0);
+  // Последняя вкладка доходит до правого края панели.
+  const nav = await page.locator("#mobileNav").boundingBox();
+  const last = await page.locator(".mobile-tab").last().boundingBox();
+  expect(nav!.x + nav!.width - (last!.x + last!.width)).toBeLessThanOrEqual(8);
 });
 
 test("tabs switch sections and a task can be created from the phone", async ({ page }) => {
@@ -337,12 +351,6 @@ test("a notification is closed by its cross on the phone too", async ({ page }) 
     return !!hit?.closest(".toast .close");
   }, { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 });
   expect(onTop).toBe(true);
-  // Строже точки: у короткого однострочного тоста крестик опускается ниже,
-  // и перекрытие было именно у таких. Поэтому — никакого пересечения с «+»
-  // вообще, при любой высоте тоста: стопка обязана начинаться выше неё.
-  const fab = await page.locator(".quick-add-fab:visible").first().boundingBox();
-  const stack = await page.locator("#toast-stack").boundingBox();
-  if (fab && stack) expect(stack.y + stack.height).toBeLessThanOrEqual(fab.y + 1);
 
   await toast.locator(".close").click();
   await expect(toast).toHaveCount(0);

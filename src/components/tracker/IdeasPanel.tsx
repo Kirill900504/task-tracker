@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Idea } from "@/types/tracker";
 import { doneIdeasNewestFirst, sortIdeasForList } from "@/lib/ideaDisplay";
 import { isMine } from "@/lib/ownership";
@@ -77,7 +77,6 @@ export default function IdeasPanel({
   onConvertToTask,
   onConvertToMeeting,
   onIncomingConvert,
-  focusAddSignal = 0,
 }: {
   // Свой auth-id: чужую мысль прислали тебе, а не отдали.
   myUserId?: string;
@@ -96,11 +95,6 @@ export default function IdeasPanel({
   onIncomingConvert?: (req: IncomingConversion) => void;
   // The idea the global search just jumped to, briefly flashed.
   highlightId?: string | null;
-  // Круглая «+» на телефоне нажата в разделе мыслей. Заводить мысль
-  // нечем — окна у неё нет, — значит «создать» здесь означает «поставить
-  // курсор в поле», и панель делает это сама. Счётчик, а не флаг: второе
-  // нажатие подряд должно сработать так же, как первое.
-  focusAddSignal?: number;
 }) {
   const isMobile = useIsMobile();
   const [text, setText] = useState("");
@@ -192,16 +186,6 @@ export default function IdeasPanel({
     setKept(next);
     writeKept(week, next);
   }
-
-  // Фокус — побочное действие над DOM, а не состояние, поэтому эффект
-  // здесь на своём месте (правило React-компилятора запрещает setState в
-  // эффекте, а не работу с узлом). Нулевой сигнал — это первая отрисовка:
-  // открывать клавиатуру тому, кто просто зашёл в раздел, незачем.
-  useEffect(() => {
-    if (!focusAddSignal) return;
-    const el = document.getElementById("ideaInput") as HTMLTextAreaElement | HTMLInputElement | null;
-    el?.focus();
-  }, [focusAddSignal]);
 
   function addText(raw: string) {
     const v = raw.trim();

@@ -273,9 +273,6 @@ export default function NewTracker() {
   // Разбор фразы голосом: на телефоне это лист снизу, и открывает его
   // строка в меню шапки, а не собственная круглая кнопка (см. QuickAdd).
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  // Круглая «+» нажата в разделе мыслей: заводить там нечего, поэтому
-  // «создать» значит «поставить курсор в поле» (см. IdeasPanel).
-  const [ideaFocusSignal, setIdeaFocusSignal] = useState(0);
   // «Загрузка» — у кого что горит. На компьютере её открывает кнопка в
   // полосе над доской; на телефоне полоса сведена к трём кнопкам по слову
   // Кирилла, и эта из неё ушла. Совсем терять её нельзя: «к кому идти
@@ -825,7 +822,6 @@ export default function NewTracker() {
             onConvertToTask={convertIdeaToTask}
             onConvertToMeeting={convertIdeaToMeeting}
             onIncomingConvert={convertIncoming}
-            focusAddSignal={ideaFocusSignal}
           />
         ),
   };
@@ -999,28 +995,13 @@ export default function NewTracker() {
               <ReviewScreen tasks={myReviewTasks} onOpen={(t) => setOpenExistingTaskId(t.id)} />
             </div>
           </MobileShell>
-          {/* Круглая «+» заводит то, в каком разделе её нажали.
-              Слова Кирилла 20.09.2026: «если в разделе задачи → ЗАДАЧУ,
-              если в разделе встречи → ВСТРЕЧУ и с мыслями так же». До
-              этого она открывала разбор фразы — одинаковый во всех пяти
-              разделах, то есть кнопка, которая не знает, где стоит.
-              В «Сегодня» и «Приёмке» её нет вовсе: заводить там нечего,
-              а кнопка, заводящая задачу из очереди приёмки, отвечала бы
-              не на тот вопрос, с которым туда заходят. */}
-          {(mobileTab === "tasks" || mobileTab === "work" || mobileTab === "meetings" || mobileTab === "ideas") && (
-            <button
-              type="button"
-              className="quick-add-fab"
-              aria-label={mobileTab === "tasks" || mobileTab === "work" ? "Новая задача" : mobileTab === "meetings" ? "Новая встреча" : "Новая мысль"}
-              onClick={() => {
-                if (mobileTab === "tasks" || mobileTab === "work") setOpenTaskRequest({});
-                else if (mobileTab === "meetings") setOpenMeetingRequest({ date: selectedDate ?? todayStr() });
-                else setIdeaFocusSignal((n) => n + 1);
-              }}
-            >
-              <Icon name="plus" size={26} />
-            </button>
-          )}
+          {/* Круглой плавающей «+» здесь больше нет — 16.10.2026, слова
+              Кирилла: «оставить только один плюсик сверху». Она повторяла
+              «+» в первой строке раздела (у задач — в полосе над доской, у
+              мыслей — у поля ввода, у встреч — своей строкой) и к тому же
+              закрывала правый край последней карточки. Заводит по-прежнему
+              то, в каком разделе нажат, — теперь потому, что каждый «+»
+              стоит в своём разделе. */}
           {loadOpen && (
             <LoadModal
               tasks={tasks}

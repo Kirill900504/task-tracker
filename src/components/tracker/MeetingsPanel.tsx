@@ -576,8 +576,8 @@ export default function MeetingsPanel({
           встреч и кнопкой для создания новой, это всё лишнее, так как итак
           понятно, что мы в блоке встречи». Каждая из трёх вещей в ней уже
           сказана в другом месте: название — подписью вкладки внизу, число —
-          цифрой на той же вкладке, «+» — круглой кнопкой, которая на
-          телефоне и так заводит встречу именно здесь (см. NewTracker).
+          цифрой на той же вкладке, а «+» остался один, отдельной строкой
+          ниже (до 16.10.2026 его заменяла круглая плавающая кнопка).
           Прошедшие встречи с телефона не показываются по его же слову
           («завершённые в мобильной версии поскрывай»): это чтение задним
           числом, и место ему на компьютере. */}
@@ -603,6 +603,21 @@ export default function MeetingsPanel({
           )}
           <button className="btn btn-primary btn-small" id="addMeetingBtn" title="Новая встреча (B)" onClick={() => setModalState({ open: true, meeting: null, prefill: { date: selectedDay ?? todayStr() } })}>
             +
+          </button>
+        </div>
+      )}
+      {/* На телефоне от той строки остаётся один «+», слева, как у задач:
+          круглая плавающая кнопка ушла 16.10.2026 («оставить только один
+          плюсик сверху»), и заводить встречу теперь нечем, кроме этой. */}
+      {isMobile && (
+        <div className="toolbar">
+          <button
+            className="btn btn-primary toolbar-add"
+            id="addMeetingBtn"
+            aria-label="Новая встреча"
+            onClick={() => setModalState({ open: true, meeting: null, prefill: { date: selectedDay ?? todayStr() } })}
+          >
+            <Icon name="plus" size={18} />
           </button>
         </div>
       )}
