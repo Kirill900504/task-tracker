@@ -375,6 +375,17 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .meeting-chip.kind-incoming .mtitle{border-color:rgba(201,138,143,.3);}
 .meeting-chip.selected-day{border-color:var(--today);}
 .meeting-chip:hover:not(.dragging){border-color:var(--today);}
+/* Прошла, а исхода нет — красным, как просроченная задача (16.10.2026:
+   «просроченные к закрытию и описанию встречи выделяй красной рамкой»).
+   Прежняя жёлтая рамка из tracker.css проигрывала рамке вида встречи
+   выше — у этих правил та же сила, а файл подключён позже, — и такая
+   встреча выглядела как любая другая. Красный сильнее и выбранного дня:
+   это единственные встречи в списке, которые ждут действия. */
+.meeting-chip.awaits-recap,
+.meeting-chip.awaits-recap.selected-day{border-color:var(--high); background:var(--overdue-bg); box-shadow:inset 0 0 0 1px var(--high);}
+.meeting-chip.awaits-recap .mtitle{border-color:rgba(224,122,95,.35);}
+.meeting-chip.awaits-recap .pill-recap{background:var(--high); color:#2A130D; border-color:var(--high); font-weight:700;}
+.meetings-need-recap .meetings-group-title{color:var(--high);}
 .meeting-chip .mtime{
   padding:1px 7px; border-radius:999px; background:rgba(79,168,216,.12);
 }
