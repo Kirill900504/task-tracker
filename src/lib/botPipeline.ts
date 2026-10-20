@@ -16,6 +16,9 @@ import { extractMeetingNotes } from "@/lib/meetingNotes";
 import { findMeetingForNotes } from "@/lib/meetingLink";
 import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
 import { attachExecutors, attachMeetingParticipants, assignNote, selfAssigneeName } from "@/lib/assignExecutors";
+import { planSnooze, planAway } from "@/lib/botSelf";
+import { guideAnswer } from "@/lib/botGuide";
+import type { Viewer } from "@/lib/telegramQueries";
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 import { deadlineNote, newTaskRow } from "@/lib/newTask";
 import { ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav } from "@/lib/ownerQueries";
@@ -81,6 +84,12 @@ const SKILLS: Record<string, (ctx: SkillContext, input: Record<string, unknown>,
   agenda_add: (c, i) => addAgenda(c, i),
   checklist: (c, i) => editChecklist(c, i),
   nudge: (c, i) => planNudge(c, i),
+  // Аудит ботов 20.10.2026: «отложить» и «меня не будет» — кнопки трекера,
+  // которых в боте не было (lib/botSelf), и «как…?» о самом трекере —
+  // ответ из справочника, а не от модели (lib/botGuide).
+  snooze_task: (c, i) => planSnooze(c, i),
+  away: (c, i) => planAway(c, i),
+  howto: async (_c, i) => ({ text: guideAnswer(String(i.topic || "").trim(), "assigner"), buttons: navRow("assigner") }),
 };
 
 // Явное «нет» на предложенное действие.
@@ -220,6 +229,12 @@ async function remember(ctx: BotContext, patch: Record<string, unknown>) {
 // его встречи и задачи), на что он ответил и что сказал целиком — фраза
 // едет в память переноса, чтобы подтверждённая стала уроком.
 type ToolExtra = { actor: BotActor; reply: ReplyContext | null; phrase: string };
+
+// Кто смотрит, если это не владелец: вопрос и поиск отвечают о ЕГО делах
+// (lib/telegramQueries.Viewer), а не о пространстве владельца.
+function viewerOf(extra?: ToolExtra): Viewer | undefined {
+  return extra && !extra.actor.isOwner ? { userId: extra.actor.userId, assigneeId: extra.actor.assigneeId } : undefined;
+}
 
 async function respondToTool(ctx: BotContext, userId: string, tool: string, input: Record<string, unknown>, droppedNames: string[], extra?: ToolExtra) {
   if (tool === "create_task") {
@@ -370,12 +385,16 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
   }
 
   if (tool === "create_idea") {
+    // Мысль — того, кто её сказал. Без created_by она записывалась бы
+    // владельческой (пустой автор — это и есть «владелец», lib/ownership):
+    // мысль руководителя легла бы в чужой список и пропала из его.
     const row = {
       id: uid(),
       user_id: userId,
       text: String(input.text || ""),
       important: !!input.important,
       done: false,
+      ...(extra && !extra.actor.isOwner ? { created_by: extra.actor.userId } : {}),
     };
     const { error } = await ctx.admin.from("ideas").insert(row);
     if (error) {
@@ -527,7 +546,7 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
       await say(ctx, "Что искать? Назовите тему или человека.");
       return;
     }
-    const hits = await searchTracker(ctx.admin, userId, query);
+    const hits = await searchTracker(ctx.admin, userId, query, viewerOf(extra));
     await say(ctx, await summariseSearch(query, hits));
     return;
   }
@@ -541,7 +560,7 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     // Two-step on purpose: the parse above only decided "this is a question".
     // The answer needs the user's actual data, which is fetched here and
     // handed to the model as a read-only snapshot (see trackerContext).
-    const context = await buildTrackerContext(ctx.admin, userId);
+    const context = await buildTrackerContext(ctx.admin, userId, viewerOf(extra));
     await say(ctx, await answerTrackerQuestion(question, context));
     return;
   }
@@ -718,6 +737,22 @@ async function offerTask(
     return true;
   }
 
+  // Встреча, мысль, вопрос о своих делах и поиск — ровно как у владельца,
+  // от имени руководителя. До аудита ботов 20.10.2026 эта ветка понимала
+  // только поручения: «встреча с Игорем завтра в 11», «что у меня завтра?»
+  // и просто мысль получали в ответ справку — у постановщиков равные права
+  // везде, кроме бота. Встречу заводит createMeetingFromBot по актору,
+  // мысль пишется с его created_by, вопрос и поиск видят только его дела
+  // (viewerOf). manage_item сюда нарочно не идёт: его выборка написана
+  // по пространству и для руководителя нашла бы чужое — закрыть или
+  // удалить задачу он может в её карточке.
+  const ACTOR_TOOLS = ["create_meeting", "create_idea", "answer_question", "search_tracker"];
+  const others = items.filter((it) => ACTOR_TOOLS.includes(it.tool));
+  if (others.length) {
+    const actor: BotActor = { userId: memberId, spaceId: colleague.user_id, assigneeId: colleague.id, isOwner: false };
+    for (const it of others) await respondToTool(ctx, colleague.user_id, it.tool, it.input, it.droppedNames, { actor, reply, phrase: text });
+  }
+
   const tasks = items
     .filter((it) => it.tool === "create_task")
     .map((it) => ({
@@ -728,7 +763,8 @@ async function offerTask(
       deadline: (it.input.deadline as string) || "",
     }))
     .filter((t) => t.title);
-  if (!tasks.length) return false;
+  // Ответили встречей, мыслью или ответом на вопрос — справка не нужна.
+  if (!tasks.length) return others.length > 0;
 
   await ctx.admin
     .from("assignees")

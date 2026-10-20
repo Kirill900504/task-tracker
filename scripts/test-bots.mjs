@@ -399,6 +399,24 @@ try {
     .eq("created_by", memberUser.user.id);
   check("задача заведена от имени руководителя", (madeTasks || []).length === 1, madeTasks);
 
+  // Аудит ботов 20.10.2026: кроме поручений ветка руководителя не понимала
+  // ничего — мысль, встреча и вопрос словами получали в ответ справку.
+  // Мысль теперь записывается от его имени, а «меня не будет» — на его
+  // строке (lib/botSelf), как кнопка в личном кабинете.
+  const mgrSay = (text) =>
+    post("/api/telegram/webhook", { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text } }, { "x-telegram-bot-api-secret-token": tgSecret });
+  await mgrSay("мысль: проверить ценники на кассах проверочного магазина");
+  const { data: mgrIdeas } = await admin.from("ideas").select("text, created_by").eq("user_id", userId).eq("created_by", memberUser.user.id);
+  check("мысль руководителя словами — записана от его имени", (mgrIdeas || []).some((i) => /ценник/i.test(i.text)), mgrIdeas);
+  const awayDay = new Date(Date.now() + 3 * 3600_000 + 3 * 86400_000).toISOString().slice(0, 10);
+  const [, awayM, awayD] = awayDay.split("-");
+  await mgrSay(`меня не будет до ${awayD}.${awayM}`);
+  const { data: awayRow } = await admin.from("assignees").select("away_until").eq("id", assignee.id).maybeSingle();
+  check("«меня не будет до …» — отметка на своей строке", awayRow?.away_until === awayDay, awayRow);
+  await mgrSay("я вернулся");
+  const { data: backRow } = await admin.from("assignees").select("away_until").eq("id", assignee.id).maybeSingle();
+  check("«я вернулся» — отметка снята", !backRow?.away_until, backRow);
+
   const { data: pendingGone } = await admin.from("assignees").select("pending_action").eq("id", assignee.id).maybeSingle();
   check("память подтверждения освобождается", pendingGone?.pending_action === null, pendingGone);
 
@@ -862,6 +880,18 @@ try {
   await say("да");
   const { data: skillAccepted } = await admin.from("tasks").select("status, approval_state").eq("id", skillTask).maybeSingle();
   check("и после «да» задача принята и закрыта", skillAccepted?.status === "done" && skillAccepted?.approval_state === "accepted", skillAccepted);
+
+  // «Отложить» словами (аудит ботов 20.10.2026, lib/botSelf): касается
+  // только доски самого постановщика, поэтому без «да».
+  const snoozeTask = "sz" + Math.random().toString(36).slice(2, 8);
+  await admin.from("tasks").insert({ id: snoozeTask, user_id: userId, title: "Отчёт для банка", assignee: "Проверочный Коллега", status: "in_progress", deadline: msk(10) });
+  const [, snM, snD] = msk(6).split("-");
+  await say(`отложи отчёт для банка до ${snD}.${snM}`);
+  const { data: snoozed } = await admin.from("tasks").select("snoozed_until").eq("id", snoozeTask).maybeSingle();
+  check("«отложи … до …» — задача отложена до этого дня", snoozed?.snoozed_until === msk(6), snoozed);
+  await say("верни отчёт для банка на доску");
+  const { data: unsnoozed } = await admin.from("tasks").select("snoozed_until").eq("id", snoozeTask).maybeSingle();
+  check("«верни … на доску» — снова на доске", !unsnoozed?.snoozed_until, unsnoozed);
 
   check("и заводит новую в то же время", (bulkNew || []).length === 1 && bulkNew[0].time === "18:30" && bulkNew[0].date === bulkOld?.moved_to_date, bulkNew);
 

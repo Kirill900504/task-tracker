@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { moscowNow, dateStr, isDueToday, isOverdue, type TaskRow } from "@/lib/taskLogic";
-import { involvedFilter } from "@/lib/telegramQueries";
+import { involvedFilter, viewerInvolvedFilter, type Viewer } from "@/lib/telegramQueries";
 
 // Builds the compact snapshot of a user's tracker that the assistant reads
 // before answering a free-form question ("что горит?", "сколько висит на
@@ -46,7 +46,8 @@ function taskLine(t: TaskRow, today: string): string {
   return `- ${t.title}${bits.length ? " (" + bits.join(", ") + ")" : ""}`;
 }
 
-export async function buildTrackerContext(admin: SupabaseClient, userId: string): Promise<string> {
+// `viewer` — руководитель, спрашивающий о своих делах (lib/telegramQueries.Viewer).
+export async function buildTrackerContext(admin: SupabaseClient, userId: string, viewer?: Viewer): Promise<string> {
   const now = moscowNow();
   const today = dateStr(now);
 
@@ -55,7 +56,11 @@ export async function buildTrackerContext(admin: SupabaseClient, userId: string)
   // — чужие поручения, чужие встречи и чужие мысли — и отдавал это модели,
   // то есть отвечал ему о том, чего он в трекере не видит, и увозил это во
   // внешний сервис. Тот же фильтр, что у поиска в боте (lib/trackerSearch).
-  const [taskScope, meetingScope] = await Promise.all([involvedFilter(admin, userId, "task"), involvedFilter(admin, userId, "meeting")]);
+  const [taskScope, meetingScope] = await Promise.all(
+    viewer
+      ? [viewerInvolvedFilter(admin, viewer, "task"), viewerInvolvedFilter(admin, viewer, "meeting")]
+      : [involvedFilter(admin, userId, "task"), involvedFilter(admin, userId, "meeting")],
+  );
   const [taskRes, meetingRes, ideaRes] = await Promise.all([
     admin
       .from("tasks")
@@ -72,7 +77,11 @@ export async function buildTrackerContext(admin: SupabaseClient, userId: string)
       .gte("date", shiftIso(now, -MEETING_WINDOW_PAST_DAYS))
       .lte("date", shiftIso(now, MEETING_WINDOW_FUTURE_DAYS))
       .order("date", { ascending: true }),
-    admin.from("ideas").select("text,important,done").eq("user_id", userId).is("created_by", null).is("deleted_at", null).order("created_at", { ascending: false }).limit(MAX_IDEAS),
+    (viewer
+      ? admin.from("ideas").select("text,important,done").eq("user_id", userId).eq("created_by", viewer.userId)
+      : admin.from("ideas").select("text,important,done").eq("user_id", userId).is("created_by", null)
+    )
+      .is("deleted_at", null).order("created_at", { ascending: false }).limit(MAX_IDEAS),
   ]);
 
   const allTasks = (taskRes.data || []) as (TaskRow & { priority?: string; term?: string; completed_at?: string | null })[];

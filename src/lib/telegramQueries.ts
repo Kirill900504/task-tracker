@@ -53,6 +53,24 @@ export async function involvedFilter(
   const ids = ((rows || []) as Record<string, string>[]).map((r) => r[column]).filter(Boolean);
   return ids.length ? `created_by.is.null,id.in.(${ids.join(",")})` : "created_by.is.null";
 }
+
+// Кто смотрит, когда это не владелец: руководитель со своим входом.
+// Аудит ботов 20.10.2026: вопросы, поиск и мысли в боте были написаны
+// под владельца (его автор — пустой `created_by`, его строка — «(я)»), и
+// руководителю их просто не давали — «что у меня завтра?» от него
+// получало в ответ справку. Тот же фильтр для него: поставленное им
+// (`created_by` — его auth-id) и то, где он участник по своей строке.
+export type Viewer = { userId: string; assigneeId: string };
+
+export async function viewerInvolvedFilter(admin: SupabaseClient, viewer: Viewer, kind: "task" | "meeting"): Promise<string> {
+  const table = kind === "task" ? "task_participants" : "meeting_participants";
+  const column = kind === "task" ? "task_id" : "meeting_id";
+  const { data: rows } = await admin.from(table).select(column).eq("assignee_id", viewer.assigneeId);
+  const ids = ((rows || []) as Record<string, string>[]).map((r) => r[column]).filter(Boolean);
+  const mine = `created_by.eq.${viewer.userId}`;
+  return ids.length ? `${mine},id.in.(${ids.join(",")})` : mine;
+}
+
 async function replyToday(admin: ReturnType<typeof createAdminClient>, userId: string): Promise<string> {
   const now = moscowNow();
   const today = dateStr(now);
