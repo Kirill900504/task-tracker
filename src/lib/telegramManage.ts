@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { attachExecutors, assignNote, authorAssigneeName } from "@/lib/assignExecutors";
 import { applyBulkMove, type BulkMovePlan } from "@/lib/bulkActions";
-import { closeMeetingWithResult } from "@/lib/meetingLink";
+import { closeMeetingWithResult, mergeResult } from "@/lib/meetingLink";
+import { announceMeetingClosed } from "@/lib/meetingRecap";
 import { newTaskRow } from "@/lib/newTask";
 import { REOPEN_PATCH } from "@/lib/reviewWork";
 import { isSelfAssignee } from "@/lib/trackerRows";
@@ -240,6 +241,17 @@ export async function resolvePendingAction(
     if (pending.meeting) {
       const failed = await closeMeetingWithResult(admin, pending.meeting.id, pending.meeting.result, pending.meeting.summary);
       lines.push(failed ? "Встречу закрыть не получилось: " + failed : "✓ Встреча «" + pending.meeting.title + "» закрыта, итог записан в карточку.");
+      // Вопрос «Что решили?» и приглашения в обоих мессенджерах — под то,
+      // что теперь правда (см. botMirror.mirrorMeetingClosed).
+      if (!failed) {
+        await announceMeetingClosed(
+          admin,
+          pending.meeting.id,
+          pending.meeting.title,
+          "success",
+          mergeResult(pending.meeting.result, pending.meeting.summary),
+        );
+      }
     }
     if (!pending.tasks.length) {
       return lines.length ? lines.join("\n") : "Нечего записывать.";

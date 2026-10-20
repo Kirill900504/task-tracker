@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { approveTaskFromMeeting, deliverRecap } from "@/lib/meetingRecap";
+import { announceMeetingClosed, approveTaskFromMeeting, deliverRecap } from "@/lib/meetingRecap";
+import { mergeResult } from "@/lib/meetingLink";
 import { recordEvent } from "@/lib/itemHistory";
 import { actorName } from "@/lib/actorName";
 
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: row } = await admin
     .from("meetings")
-    .select("id, title, date, time, user_id, created_by, from_task_id")
+    .select("id, title, date, time, user_id, created_by, from_task_id, result")
     .eq("id", body.meetingId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
     user_id: string;
     created_by: string | null;
     from_task_id: string | null;
+    result: string | null;
   } | null;
   if (!meeting) return NextResponse.json({ error: "Встреча не найдена" }, { status: 404 });
 
@@ -97,6 +99,11 @@ export async function POST(req: Request) {
       label: await actorName(admin, meeting.user_id, user.id),
       userId: user.id,
     }));
+
+  // Встреча закрыта в трекере — вопрос «Что решили?» с кнопками в обоих
+  // мессенджерах переписывается тем, чем она кончилась. Иначе там
+  // оставалось «Записать итог», и итог записывали второй раз.
+  if (outcome) await announceMeetingClosed(admin, meeting.id, meeting.title, outcome, mergeResult(meeting.result || "", result));
 
   return NextResponse.json({ ok: true, sent, closedTask: !!closedTask });
 }

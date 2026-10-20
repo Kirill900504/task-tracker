@@ -5,6 +5,9 @@ import { recordEvent } from "@/lib/itemHistory";
 import { mergeResult } from "@/lib/meetingLink";
 import { fmtDate } from "@/lib/taskDisplay";
 import { applyReview } from "@/lib/reviewWork";
+import { encodeCallback } from "@/lib/colleagues";
+import { mirrorMeetingClosed } from "@/lib/botMirror";
+import type { BotButton } from "@/lib/botTransport";
 
 // Итог встречи — одно правило на трекер и на бота.
 //
@@ -121,6 +124,36 @@ export async function closeMeeting(
   }
 
   if (outcome === "success" && who) await approveTaskFromMeeting(admin, meeting, result, who);
+  await announceMeetingClosed(admin, meeting.id, meeting.title, outcome, mergeResult(meeting.result || "", result));
+}
+
+// Как закрытая встреча выглядит в мессенджере — одной фразой для нажатого
+// сообщения и для всех его копий (botMirror): две разные формулировки
+// одного состояния и были той рассинхронизацией, на которую жаловались.
+export function closedMeetingText(title: string, outcome: "success" | "no_result", result: string): string {
+  const head = outcome === "success" ? `✅ Встреча «${title}» закрыта.` : `⚪ Встреча «${title}» закрыта без результата.`;
+  return result.trim() ? `${head}\n\n📝 Итог: ${result.trim()}` : head;
+}
+
+// «Записать итог» — только пока итога нет. Итог пишется ОДИН раз
+// (17.10.2026: «итог должен записываться только один раз»): дополнить его
+// можно в обсуждении встречи, а второй «итог» поверх первого — это два
+// ответа на вопрос «что решили», и неясно, какой из них верный.
+export function recordRecapButtons(meetingId: string, result: string): BotButton[][] {
+  return result.trim() ? [] : [[{ text: "📝 Записать итог", data: encodeCallback("meeting", "mrec", meetingId) }]];
+}
+
+// Переписать все сообщения о встрече, где бы и у кого они ни лежали. Зовут
+// все двери, которыми встреча закрывается: бот (closeMeeting), трекер
+// (/api/workspace/recap), надиктованный итог (telegramManage).
+export async function announceMeetingClosed(
+  admin: SupabaseClient,
+  meetingId: string,
+  title: string,
+  outcome: "success" | "no_result",
+  result: string,
+): Promise<void> {
+  await mirrorMeetingClosed(admin, meetingId, closedMeetingText(title, outcome, result), recordRecapButtons(meetingId, result));
 }
 
 // Встреча прошла успешно — значит задача, ради которой собирались, принята.

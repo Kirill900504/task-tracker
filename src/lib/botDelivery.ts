@@ -5,6 +5,7 @@ import { telegramTransport } from "@/lib/telegram";
 import { maxTransport, maxConfigured } from "@/lib/max";
 import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
 import { queueNotice, type Notice } from "@/lib/noticeQueue";
+import { ownerSelfAssigneeId, rememberSent } from "@/lib/botMirror";
 
 // Where a message actually goes.
 //
@@ -54,9 +55,27 @@ export async function notifyOwner(
   // этого действия. Владельцу их до сих пор было не на что вешать: его
   // нажатия никто не разбирал (см. lib/botCallback).
   buttons?: BotButton[][],
+  // О чём сообщение — тогда оно запоминается на строке «(я)» владельца, и
+  // ответ в другом мессенджере перепишет его (botMirror). Без этого вопрос
+  // «Что решили?» лежал в Telegram и в MAX, ответ в одном не трогал второй,
+  // и итог записывали дважды (17.10.2026).
+  memo?: { kind: "task" | "meeting"; itemId: string },
 ): Promise<number> {
   const chats = await ownerChats(admin, userId);
-  await Promise.all(chats.map((chat) => transportFor(chat.channel).send(chat.chatId, text, buttons?.length ? { buttons } : undefined)));
+  const results = await Promise.all(
+    chats.map((chat) => transportFor(chat.channel).send(chat.chatId, text, buttons?.length ? { buttons } : undefined)),
+  );
+  if (memo && buttons?.length) {
+    const self = await ownerSelfAssigneeId(admin, userId);
+    if (self) {
+      await rememberSent(
+        admin,
+        userId,
+        { ...memo, assigneeId: self },
+        chats.map((chat, i) => ({ channel: chat.channel, chatId: chat.chatId, messageId: results[i].ok ? results[i].messageId : undefined })),
+      );
+    }
+  }
   return chats.length;
 }
 
@@ -90,6 +109,8 @@ export async function notifyAuthor(
   // тоже несёт их: её верхняя группа — «Ждут вашей приёмки», то есть от
   // человека прямо сейчас ждут решения, а нажать было нечего.
   buttons?: BotButton[][],
+  // См. notifyOwner: запомнить сообщение, чтобы ответ переписал его копии.
+  memo?: { kind: "task" | "meeting"; itemId: string },
 ): Promise<void> {
   if (notice) {
     const to = !createdBy || createdBy === ownerId ? null : createdBy;
@@ -99,7 +120,7 @@ export async function notifyAuthor(
   }
 
   if (!createdBy || createdBy === ownerId) {
-    await notifyOwner(admin, ownerId, text, buttons);
+    await notifyOwner(admin, ownerId, text, buttons, memo);
     return;
   }
 
@@ -115,7 +136,7 @@ export async function notifyAuthor(
   if (!assigneeId) {
     // Автора не нашли — молчать хуже, чем сказать не тому: владелец всё
     // равно отвечает за пространство.
-    await notifyOwner(admin, ownerId, text, buttons);
+    await notifyOwner(admin, ownerId, text, buttons, memo);
     return;
   }
 
@@ -125,7 +146,11 @@ export async function notifyAuthor(
     .eq("id", assigneeId)
     .maybeSingle();
   const target = person ? chatsFor(person as ColleagueRow)[0] : undefined;
-  if (target) await sendToColleague(target, text, buttons);
+  if (!target) return;
+  const sent = await sendToColleague(target, text, buttons);
+  if (memo && buttons?.length) {
+    await rememberSent(admin, ownerId, { ...memo, assigneeId }, [{ ...target, messageId: sent.ok ? sent.messageId : undefined }]);
+  }
 }
 
 // Writing to a colleague: one message, through the messenger they connected

@@ -111,9 +111,12 @@ async function tellOrganizer(
   ownerReached: boolean,
   text: string,
   buttons?: Parameters<typeof notifyOwner>[3],
+  // Запомнить сообщение (botMirror): вопрос «Что решили?» уходит в оба
+  // мессенджера, и ответ в одном обязан переписать второй.
+  memo?: Parameters<typeof notifyOwner>[4],
 ): Promise<void> {
   if (!createdBy || createdBy === userId) {
-    if (!ownerReached) await notifyOwner(admin, userId, text, buttons);
+    if (!ownerReached) await notifyOwner(admin, userId, text, buttons, memo);
     return;
   }
   const { data: member } = await admin
@@ -124,7 +127,7 @@ async function tellOrganizer(
     .maybeSingle();
   const assigneeId = (member as { assignee_id?: string } | null)?.assignee_id;
   if (assigneeId && participantIds.includes(assigneeId)) return;
-  await notifyAuthor(admin, userId, createdBy, text, undefined, buttons);
+  await notifyAuthor(admin, userId, createdBy, text, undefined, buttons, memo);
 }
 
 export async function GET(req: Request) {
@@ -628,7 +631,10 @@ export async function GET(req: Request) {
             // Тому, кто собрал, — кнопки итога разбирает половина
             // постановщика, и у руководителя она находит его встречу по
             // created_by так же, как у владельца.
-            await tellOrganizer(admin, userId, m.created_by ?? null, [], false, recapAsk(recap, m.title, whenPast), recapButtons(m.id));
+            await tellOrganizer(admin, userId, m.created_by ?? null, [], false, recapAsk(recap, m.title, whenPast), recapButtons(m.id), {
+              kind: "meeting",
+              itemId: m.id,
+            });
           }
         }
       }

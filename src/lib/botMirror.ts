@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { BotChannelConfig } from "@/lib/botTransport";
+import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { transportFor, TELEGRAM_CHANNEL, MAX_CHANNEL } from "@/lib/botDelivery";
 import { meetingCard, taskCard } from "@/lib/colleagueQueries";
 
@@ -74,6 +74,78 @@ export async function mirrorClosed(admin: SupabaseClient, kind: "task" | "meetin
   } catch (e) {
     console.error("bot mirror:", e instanceof Error ? e.message : String(e));
   }
+}
+
+// Встреча закрыта (исход и, может быть, итог) — все сообщения о ней, у
+// всех и во всех мессенджерах, переписываются тем, что теперь правда.
+//
+// Слова Кирилла 17.10.2026: «если в максе пишешь итог, это не видно в
+// телеге, если в телеге — это не сохраняется в МАХ», и рядом — «почему
+// позволяет по несколько раз записывать итог». Это одна ошибка: вопрос
+// «Что решили?» с кнопкой «Записать итог» уходил организатору в оба
+// мессенджера, а ответ в одном не трогал второе — и оно продолжало
+// спрашивать, на что он честно отвечал ещё раз.
+//
+// Кнопка «Записать итог» остаётся ровно в одном случае: встреча закрыта
+// без слов, и спросить их можно только у организатора (`organizerButtons`
+// попадают только в его сообщения; у участника эта кнопка отвечала бы
+// «встреча не найдена»).
+export async function mirrorMeetingClosed(
+  admin: SupabaseClient,
+  meetingId: string,
+  text: string,
+  organizerButtons: BotButton[][],
+): Promise<void> {
+  try {
+    const since = new Date(Date.now() - MIRROR_WINDOW_MS).toISOString();
+    const [{ data }, { data: m }] = await Promise.all([
+      admin
+        .from("bot_messages")
+        .select("assignee_id, channel, chat_id, message_id")
+        .eq("item_kind", "meeting")
+        .eq("item_id", meetingId)
+        .gte("created_at", since),
+      admin.from("meetings").select("user_id, created_by").eq("id", meetingId).maybeSingle(),
+    ]);
+    const rows = (data || []) as { assignee_id: string; channel: "telegram" | "max"; chat_id: number; message_id: string }[];
+    if (!rows.length) return;
+    const meeting = m as { user_id: string; created_by: string | null } | null;
+    const organizer = meeting ? await organizerAssigneeId(admin, meeting.user_id, meeting.created_by) : null;
+    await Promise.all(
+      rows.map((t) =>
+        transportFor(t.channel === "max" ? MAX_CHANNEL : TELEGRAM_CHANNEL).edit(
+          t.chat_id,
+          t.message_id,
+          text,
+          t.assignee_id === organizer ? organizerButtons : [],
+        ),
+      ),
+    );
+  } catch (e) {
+    console.error("bot mirror:", e instanceof Error ? e.message : String(e));
+  }
+}
+
+// Строка людей того, кто собрал встречу: у руководителя — по членству, у
+// владельца (пустой created_by или его собственный id) — строка «(я)».
+export async function organizerAssigneeId(admin: SupabaseClient, spaceId: string, createdBy: string | null): Promise<string | null> {
+  if (createdBy && createdBy !== spaceId) {
+    const { data } = await admin.from("workspace_members").select("assignee_id").eq("member_id", createdBy).eq("owner_id", spaceId).maybeSingle();
+    return (data as { assignee_id?: string } | null)?.assignee_id || null;
+  }
+  return ownerSelfAssigneeId(admin, spaceId);
+}
+
+export async function ownerSelfAssigneeId(admin: SupabaseClient, spaceId: string): Promise<string | null> {
+  const { data } = await admin
+    .from("assignees")
+    .select("id")
+    .eq("user_id", spaceId)
+    .like("name", "%(я)")
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  return (data as { id: string } | null)?.id || null;
 }
 
 // Переписать все запомненные сообщения человека об этом элементе. `skip` —

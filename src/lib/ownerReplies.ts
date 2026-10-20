@@ -8,7 +8,7 @@ import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
 import { effectiveApproval, ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, personReply, type OwnerReply } from "@/lib/ownerQueries";
 import { applyReview } from "@/lib/reviewWork";
 import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
-import { closeMeeting } from "@/lib/meetingRecap";
+import { closeMeeting, closedMeetingText, recordRecapButtons } from "@/lib/meetingRecap";
 import { recordEvent } from "@/lib/itemHistory";
 import { actorName } from "@/lib/actorName";
 import { actorScope, authorFilter, type BotActor } from "@/lib/botActor";
@@ -283,9 +283,14 @@ export async function ownerMeetingCard(admin: SupabaseClient, actor: BotActor, m
   // здесь ровно для этого, и она есть у того, кто встречу собрал.
   const proposed = meeting.status === "proposed";
   if (proposed) lines.push("", "Это предложение: время пока не занято. Назначится само, когда ответят все.");
+  // Закрытая встреча исходов больше не предлагает: исход у неё уже есть,
+  // а «Прошла» под ней читалось как вопрос, на который ждут ответа.
+  const closed = meeting.status === "success" || meeting.status === "no_result";
 
   const actions: BotButton[][] = proposed
     ? [[{ text: "✅ Назначить", data: encodeCallback("meeting", "mset", meetingId) }]]
+    : closed
+    ? recordRecapButtons(meetingId, meeting.result || "")
     : [
         [
           { text: "✅ Прошла", data: encodeCallback("meeting", "mok", meetingId) },
@@ -301,7 +306,7 @@ export async function ownerMeetingCard(admin: SupabaseClient, actor: BotActor, m
   // трогает: человек уже ответил, и звать его второй раз — не шутка, а
   // невнимательность.
   const latecomers = rows.filter((r) => r.response === "none" || (r.response === "yes" && r.late));
-  if (!proposed && latecomers.length) {
+  if (!proposed && !closed && latecomers.length) {
     actions.push([{ text: "🙋 Поторопить (" + latecomers.length + ")", data: encodeCallback("meeting", "mlate", meetingId) }]);
   }
 
@@ -651,6 +656,15 @@ export async function handleOwnerCallback(
   if ((action.action === "mok" || action.action === "mno") && action.kind === "meeting") {
     const meeting = await loadMeeting(admin, actor, action.id);
     if (!meeting) return { toast: "Эта встреча не найдена" };
+    // Второе нажатие — из второго мессенджера или из старого сообщения —
+    // ничего не перезаписывает: исход называется один раз.
+    if (meeting.status === "success" || meeting.status === "no_result") {
+      return {
+        toast: "Встреча уже закрыта",
+        rewriteTo: closedMeetingText(meeting.title, meeting.status, meeting.result || ""),
+        rewriteButtons: [...recordRecapButtons(action.id, meeting.result || ""), ...ownerNav()],
+      };
+    }
     const outcome = action.action === "mok" ? "success" : "no_result";
     // Актор — ради задачи, из которой встреча выросла: успешная встреча
     // принимает по ней работу, если она ждала приёмки. Итога здесь нет
@@ -662,13 +676,11 @@ export async function handleOwnerCallback(
     });
     return {
       toast: outcome === "success" ? "Закрыл" : "Без результата",
-      rewriteTo:
-        outcome === "success"
-          ? `✅ Встреча «${meeting.title}» закрыта.`
-          : `⚪ Встреча «${meeting.title}» закрыта без результата.`,
+      rewriteTo: closedMeetingText(meeting.title, outcome, meeting.result || ""),
       // Итог можно дописать и после: встреча закрыта, но «о чём
       // договорились» остаётся вопросом, на который ждут ответа участники.
-      rewriteButtons: [[{ text: "📝 Записать итог", data: encodeCallback("meeting", "mrec", action.id) }], ...ownerNav()],
+      // Если он уже набран в трекере — кнопки нет: итог пишется один раз.
+      rewriteButtons: [...recordRecapButtons(action.id, meeting.result || ""), ...ownerNav()],
     };
   }
 
@@ -677,6 +689,19 @@ export async function handleOwnerCallback(
   if (action.action === "mrec" && action.kind === "meeting") {
     const meeting = await loadMeeting(admin, actor, action.id);
     if (!meeting) return { toast: "Эта встреча не найдена" };
+    // Итог уже есть — второй раз не спрашиваем (17.10.2026: «почему
+    // позволяет по несколько раз записывать итог»). Сообщение, под которым
+    // нажали, переписывается тем, что записано, и теряет кнопку.
+    if ((meeting.result || "").trim()) {
+      const closed = meeting.status === "success" || meeting.status === "no_result";
+      return {
+        toast: "Итог уже записан",
+        rewriteTo: closed
+          ? closedMeetingText(meeting.title, meeting.status as "success" | "no_result", meeting.result || "")
+          : `📝 «${meeting.title}»\n\nИтог уже записан: ${(meeting.result || "").trim()}`,
+        rewriteButtons: ownerNav(),
+      };
+    }
     return {
       toast: "Слушаю",
       say: `📝 «${meeting.title}»\n\nЧто решили? Напишите или надиктуйте — запишу итогом и разошлю тем, кто был.`,
