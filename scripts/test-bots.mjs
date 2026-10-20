@@ -767,6 +767,35 @@ try {
   const { data: lesson } = await admin.from("bot_lessons").select("phrase").eq("actor", userId);
   check("и подтверждённая фраза стала уроком", (lesson || []).length >= 1, lesson);
 
+  // Массовый перенос — теми же правилами, что одиночный: не смена даты, а
+  // новая встреча и прежняя, закрытая как перенесённая. «Завтра» — рабочий
+  // день (lib/whenDate.workdayIn), так же его считает и бот.
+  const workday = (days) => {
+    const d = new Date(Date.now() + 3 * 3600_000 + days * 86400_000);
+    const wd = d.getUTCDay();
+    if (wd === 6) d.setUTCDate(d.getUTCDate() + 2);
+    if (wd === 0) d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  };
+  const bulkId = "ownbk" + Math.random().toString(36).slice(2, 8);
+  await admin.from("meetings").insert({ id: bulkId, user_id: userId, date: workday(1), time: "18:30", title: "Проверка массового переноса", participants: [], status: "planned" });
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "перенеси все завтрашние встречи на следующую неделю" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: bulkPending } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
+  check("«перенеси все завтрашние встречи…» → план массового переноса", bulkPending?.pending_action?.kind === "bulk_move" && (bulkPending?.pending_action?.plan?.meetings || []).some((m) => m.id === bulkId), bulkPending);
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "да" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: bulkOld } = await admin.from("meetings").select("status, moved_to_date").eq("id", bulkId).maybeSingle();
+  const { data: bulkNew } = await admin.from("meetings").select("date, time").eq("user_id", userId).eq("title", "Проверка массового переноса").eq("status", "planned").is("deleted_at", null);
+  check("массовый перенос закрывает прежнюю как перенесённую", bulkOld?.status === "no_result" && !!bulkOld?.moved_to_date, bulkOld);
+  check("и заводит новую в то же время", (bulkNew || []).length === 1 && bulkNew[0].time === "18:30" && bulkNew[0].date === bulkOld?.moved_to_date, bulkNew);
+
   // «✍️ Записать мысль» на экране мыслей: следующее сообщение — мысль.
   // Отзыв Витовского 25.09.2026 («Мысли только открывают список, но не дают
   // написать»); у руководителя иного пути нет вовсе — его свободный текст

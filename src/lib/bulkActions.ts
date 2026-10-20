@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveWhen } from "@/lib/whenDate";
 import { moscowNow, dateStr } from "@/lib/taskLogic";
 import { plural } from "@/lib/plural";
+import { MEETING_MOVE_COLUMNS, moveMeeting, moveTaskDeadline, type MeetingToMove } from "@/lib/itemMove";
 
 // "Перенеси всё, что на пятницу, на понедельник" — one sentence instead of
 // opening each item. The model only classifies the request and names the two
@@ -90,34 +91,58 @@ export async function planBulkMove(userId: string, req: BulkMoveRequest): Promis
   return { plan, error: null };
 }
 
+// Перенос — тот же, что у одной встречи или одной задачи (lib/itemMove),
+// просто много раз. До 20.10.2026 здесь менялась только дата: встреча
+// «тихо» уезжала на другой день, люди об этом не узнавали, а по прежнему
+// времени у них оставались кнопки «Буду». Одиночный перенос из бота уже
+// делал это правильно, и две двери с разными правилами — ровно то, что в
+// этом проекте расходилось трижды. Время встречи остаётся прежним: «всё с
+// пятницы на понедельник» двигает день, а не час.
 export async function applyBulkMove(plan: BulkMovePlan): Promise<string> {
   const admin = createAdminClient();
-  const done: string[] = [];
+  const moved: string[] = [];
+  const problems: string[] = [];
 
   if (plan.tasks.length) {
-    const { error } = await admin
+    const { data } = await admin
       .from("tasks")
-      .update({ deadline: plan.toDate })
+      .select("id, title, number, deadline, user_id, created_by")
       .in(
         "id",
         plan.tasks.map((t) => t.id),
       );
-    if (error) return "Не получилось перенести задачи: " + error.message;
-    done.push(`${plan.tasks.length} ${plural(plan.tasks.length, "задача", "задачи", "задач")}`);
+    let count = 0;
+    for (const task of (data || []) as { id: string; title: string; number: number | null; deadline: string | null; user_id: string; created_by: string | null }[]) {
+      const done = await moveTaskDeadline(admin, task, plan.toDate, task.created_by || task.user_id);
+      if (done.ok) count++;
+      else problems.push(`«${task.title}»: ${done.error}`);
+    }
+    if (count) moved.push(`${count} ${plural(count, "задача", "задачи", "задач")}`);
   }
+
   if (plan.meetings.length) {
-    const { error } = await admin
+    const { data } = await admin
       .from("meetings")
-      .update({ date: plan.toDate })
+      .select(MEETING_MOVE_COLUMNS)
       .in(
         "id",
         plan.meetings.map((m) => m.id),
       );
-    if (error) return "Не получилось перенести встречи: " + error.message;
-    done.push(`${plan.meetings.length} ${plural(plan.meetings.length, "встреча", "встречи", "встреч")}`);
+    let count = 0;
+    for (const meeting of (data || []) as MeetingToMove[]) {
+      const done = await moveMeeting(admin, meeting, { date: plan.toDate, time: meeting.time || "" }, meeting.created_by || meeting.user_id);
+      if (done.ok) count++;
+      else problems.push(`«${meeting.title}»: ${done.error}`);
+    }
+    if (count) moved.push(`${count} ${plural(count, "встреча", "встречи", "встреч")}`);
   }
 
-  return `✓ Перенесено на ${fmt(plan.toDate)}: ${done.join(", ")}.`;
+  const head = moved.length ? `✓ Перенесено на ${fmt(plan.toDate)}: ${moved.join(", ")}.` : "Ничего не перенёс.";
+  const tail = [
+    ...(plan.meetings.length && moved.some((m) => m.includes("встреч")) ? ["Участникам встреч сообщил «было → стало»."] : []),
+    ...(problems.length ? ["⚠ Не получилось:", ...problems.map((p) => "• " + p)] : []),
+  ];
+  return [head, ...tail].join("\n");
 }
 
 // Exposed for the reminders/tests: today's date in the same frame the planner
