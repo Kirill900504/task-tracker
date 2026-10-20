@@ -843,7 +843,10 @@ export default function TasksPanel({
               aria-label="Новая задача"
               onClick={() => setModalState({ open: true, task: null })}
             >
-              {isMobile ? <Icon name="plus" size={18} /> : "+ Новая задача"}
+              {/* Слово прячется, когда доске тесно (tracker.css, @container):
+                  «+» с подсказкой говорит то же, а полоса остаётся одной
+                  строкой. */}
+              {isMobile ? <Icon name="plus" size={18} /> : <>+<span className="fp-word nt-word"> Новая задача</span></>}
             </button>
             <div className="search-wrap" id="quickAddSlot" />
             {/* «Загрузка» вместо фильтра по исполнителю.
@@ -964,7 +967,7 @@ export default function TasksPanel({
                   говорит ровно то же самое. Слово не потеряно: оно в
                   title и для читалки экрана. */}
               <Icon name="warning" size={14} />
-              {!isMobile && " Просрочено"}
+              {!isMobile && <span className="fp-word">Просрочено</span>}
               {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
             </button>
             )}
@@ -979,7 +982,7 @@ export default function TasksPanel({
                 onClick={() => setShowSnoozed(!snoozedView)}
               >
                 <Icon name="clock" size={14} />
-                {!isMobile && " Отложено"}
+                {!isMobile && <span className="fp-word">Отложено</span>}
                 <span className="filter-pill-count">{snoozedCount}</span>
               </button>
             )}
@@ -996,6 +999,8 @@ export default function TasksPanel({
                 className={"filter-pill done" + (showDone ? " active" : "")}
                 id="showDoneCheckbox"
                 aria-pressed={showDone}
+                title="Завершённые"
+                aria-label="Завершённые"
                 onClick={() => onShowDoneChange(!showDone)}
               >
                 {/* Счётчика здесь нет намеренно. Он появлялся ровно в момент
@@ -1004,7 +1009,7 @@ export default function TasksPanel({
                     20.09.2026: «не хочу, чтобы в трекере нажатие одной кнопки
                     двигало другие кнопки или разделы». Сколько завершённых, и
                     так написано в заголовке открывшегося столбца. */}
-                <Icon name="check" size={14} /> Завершённые
+                <Icon name="check" size={14} /> <span className="fp-word">Завершённые</span>
               </button>
             )}
           </div>
