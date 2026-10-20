@@ -31,6 +31,8 @@ import { numbered, taskRef } from "@/lib/taskRef";
 import { ownerSeesTask, ownerSight } from "@/lib/ownerVisible";
 import { normalizeDuration } from "@/lib/meetingTime";
 import { timeIsUpText } from "@/lib/meetingNudges";
+import { telegramTransport } from "@/lib/telegram";
+import { maxTransport } from "@/lib/max";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -162,6 +164,23 @@ export async function GET(req: Request) {
   after(async () => {
     await admin.from("bot_dialog").delete().lt("created_at", new Date(Date.now() - 2 * 86400_000).toISOString());
   });
+  // Напоминания себе («напомни завтра в 9 про смету», миграция 0066). Строка
+  // сперва ЗАНИМАЕТСЯ условным UPDATE и только потом отправляется: два
+  // прогона крона подряд иначе прислали бы одно напоминание дважды.
+  const { data: dueReminders } = await admin
+    .from("bot_reminders")
+    .select("id, channel, chat_id, body")
+    .is("sent_at", null)
+    .is("cancelled_at", null)
+    .lte("due_at", new Date().toISOString())
+    .limit(50);
+  for (const r of (dueReminders || []) as { id: string; channel: "telegram" | "max"; chat_id: number; body: string }[]) {
+    const { data: claimed } = await admin.from("bot_reminders").update({ sent_at: new Date().toISOString() }).eq("id", r.id).is("sent_at", null).select("id");
+    if (!claimed?.length) continue;
+    const transport = r.channel === "max" ? maxTransport() : telegramTransport();
+    await transport.send(r.chat_id, `⏰ Напоминаю: ${r.body}`).catch(() => undefined);
+  }
+
   const now = moscowNow();
   const today = dateStr(now);
   // «За сутки» напоминают накануне, поэтому в выборку берётся и завтра.

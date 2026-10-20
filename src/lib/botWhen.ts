@@ -281,3 +281,104 @@ export function moveChoices(today: string, from: string): { label: string; date:
   }
   return out;
 }
+
+// ---------------------------------------------------------------- напоминание
+//
+// «Напомни завтра в 9», «через 2 часа», «в 15:30», «в пятницу». Отличие от
+// parseWhen — нужен МОМЕНТ, а не день: без часа — 9 утра, без дня —
+// сегодня, а если этот час сегодня уже прошёл — завтра. `now` — московское
+// время в полях UTC (taskLogic.moscowNow), ответ — момент ISO с +03:00.
+export function parseDue(text: string, now: Date): { at: string; label: string } | null {
+  const s = ` ${String(text || "").toLowerCase().replace(/ё/g, "е")} `;
+  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const todayIso = now.toISOString().slice(0, 10);
+  const rel = s.match(/через\s+(\d+|полчаса|час|пару|[а-я]+)?\s*(минут|мин(?![а-я])|час)/);
+  if (rel || /через\s+полчаса/.test(s)) {
+    let minutes = 0;
+    if (/через\s+полчаса/.test(s)) minutes = 30;
+    else if (rel) {
+      const n = rel[1] && /^\d+$/.test(rel[1]) ? Number(rel[1]) : rel[1] === "пару" ? 2 : count(rel[1] && rel[1] !== "час" ? rel[1] : undefined);
+      minutes = rel[2].startsWith("час") ? n * 60 : n;
+    }
+    if (minutes > 0 && minutes <= 60 * 24 * 7) {
+      const at = new Date(now.getTime() + minutes * 60_000);
+      const date = at.toISOString().slice(0, 10);
+      const time = `${pad(at.getUTCHours())}:${pad(at.getUTCMinutes())}`;
+      return { at: `${date}T${time}:00+03:00`, label: date === todayIso ? `сегодня в ${time}` : `${dayLabel(date)} в ${time}` };
+    }
+  }
+  const when = parseWhen(s, todayIso);
+  // «в 9» без «ч» и двоеточия — тоже час, если речь о напоминании.
+  const bare = !when.time ? s.match(/(?<![а-я\d])в\s+([01]?\d|2[0-3])(?![\d:.])/) : null;
+  const time = when.time || (bare ? `${pad(Number(bare[1]))}:00` : "");
+  if (!when.date && !time) return null;
+  let date = when.date || todayIso;
+  const t = time || "09:00";
+  const [h, m] = t.split(":").map(Number);
+  if (!when.date && h * 60 + m <= nowMin) date = shift(todayIso, 1);
+  if (date === todayIso && h * 60 + m <= nowMin) return null;
+  if (date < todayIso) return null;
+  return { at: `${date}T${t}:00+03:00`, label: date === todayIso ? `сегодня в ${t}` : `${dayLabel(date)} в ${t}` };
+}
+
+// -------------------------------------------------------------------- повтор
+//
+// «Каждый понедельник», «по средам и пятницам», «по будням», «каждый день»,
+// «каждое 5 число», «раз в две недели», «ежемесячно». Колонки — те же, что
+// пишет форма задачи (taskLogic: weekly + recur_weekdays, monthly +
+// recur_monthday) и встречи (lib/meetingRepeat: weekly | biweekly |
+// monthly). Ничего не узнали — null, и дело заводится разовым.
+export type TaskRepeat = { recur: "daily" | "weekly" | "monthly"; recur_weekday?: number; recur_weekdays?: number[]; recur_monthday?: number };
+
+const DAY_WORDS: [RegExp, number][] = [
+  [/понедельн/, 1],
+  [/вторн/, 2],
+  [/(?<![а-я])сред/, 3],
+  [/четверг/, 4],
+  [/пятниц/, 5],
+  [/суббот/, 6],
+  [/воскресен/, 0],
+];
+
+export function parseTaskRepeat(text: string, startDate = ""): TaskRepeat | null {
+  const s = ` ${String(text || "").toLowerCase().replace(/ё/g, "е")} `;
+  if (/каждый\s+день|ежедневно|каждое\s+утро|каждый\s+вечер/.test(s)) return { recur: "daily" };
+  if (/будн|каждый\s+рабочий\s+день|по\s+рабочим\s+дням/.test(s)) return { recur: "weekly", recur_weekday: 1, recur_weekdays: [1, 2, 3, 4, 5] };
+  const month = s.match(/кажд[а-я]*\s+(\d{1,2})(?:-?е|-?го)?\s*(?:числ|месяц)|(\d{1,2})(?:-?го|-?е)?\s+(?:числа\s+)?каждого\s+месяца/);
+  if (month) {
+    const day = Number(month[1] || month[2]);
+    if (day >= 1 && day <= 31) return { recur: "monthly", recur_monthday: day };
+  }
+  const repeating = /кажд|по\s+(понедельн|вторн|сред|четверг|пятниц|суббот|воскресен)|еженедельно/.test(s);
+  if (repeating) {
+    const days = DAY_WORDS.filter(([re]) => re.test(s)).map(([, d]) => d);
+    if (days.length) return { recur: "weekly", recur_weekday: days[0], recur_weekdays: days };
+    if (/кажд[а-я]*\s+недел|еженедельно/.test(s)) {
+      const d = startDate ? new Date(startDate + "T00:00:00Z").getUTCDay() : 1;
+      return { recur: "weekly", recur_weekday: d, recur_weekdays: [d] };
+    }
+    if (/кажд[а-я]*\s+месяц|ежемесячно/.test(s)) {
+      const d = startDate ? Number(startDate.slice(8, 10)) : 1;
+      return { recur: "monthly", recur_monthday: d };
+    }
+  }
+  if (/ежемесячно/.test(s)) return { recur: "monthly", recur_monthday: startDate ? Number(startDate.slice(8, 10)) : 1 };
+  return null;
+}
+
+export function parseMeetingRepeat(text: string): "weekly" | "biweekly" | "monthly" | null {
+  const s = String(text || "").toLowerCase().replace(/ё/g, "е");
+  if (/раз\s+в\s+(две|2)\s+недел|через\s+неделю\s+кажд/.test(s)) return "biweekly";
+  if (/кажд[а-я]*\s+месяц|ежемесячно|раз\s+в\s+месяц/.test(s)) return "monthly";
+  if (/кажд|еженедельно|по\s+(понедельн|вторн|сред|четверг|пятниц|суббот|воскресен)|раз\s+в\s+неделю/.test(s)) return "weekly";
+  return null;
+}
+
+export function repeatLabel(r: TaskRepeat): string {
+  const names = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+  if (r.recur === "daily") return "каждый день";
+  if (r.recur === "monthly") return `каждое ${r.recur_monthday}-е число`;
+  const days = r.recur_weekdays || [];
+  if (days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d))) return "по будням";
+  return "по " + days.map((d) => names[d]).join(", ");
+}

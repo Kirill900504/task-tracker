@@ -104,7 +104,7 @@ export function moveData(kind: "meeting" | "task", action: string, id: string, d
 
 // ------------------------------------------------------------------ выборки
 
-type TaskToMove = { id: string; title: string; number?: number | null; deadline: string | null; user_id: string; status: string | null };
+export type TaskToMove = { id: string; title: string; number?: number | null; deadline: string | null; user_id: string; status: string | null };
 
 async function loadMeeting(admin: SupabaseClient, actor: BotActor, id: string): Promise<MeetingToMove | null> {
   const { data } = await admin
@@ -247,12 +247,12 @@ export type MoveRequest = {
   parsed?: unknown;
 };
 
-type Found = { kind: "meeting"; m: MeetingToMove } | { kind: "task"; t: TaskToMove };
+export type Found = { kind: "meeting"; m: MeetingToMove } | { kind: "task"; t: TaskToMove };
 
 // Какое дело человек имеет в виду — общий поиск для переноса и отмены.
 // Порядок — от надёжного к догадке: id из кнопок сообщения, на которое
 // ответили; названное словами; название внутри того сообщения.
-async function findItems(
+export async function findItems(
   admin: SupabaseClient,
   actor: BotActor,
   req: { itemType: string; query: string; replyText?: string; replyItem?: { kind: "meeting" | "task"; id: string } | null },
