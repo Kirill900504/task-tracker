@@ -15,6 +15,9 @@
 // /_next/static). Нажатие раньше этого — редкость первых секунд, и стоит
 // оно одного короткого ожидания, а не белого экрана.
 //
+// Чего здесь нет нарочно: поиска. В него печатают сразу после «/», и
+// буквы, набранные до того, как кусок окна догрузился, терялись.
+//
 // Загрузчики объявлены здесь ОДИН раз: `dynamic()` у места использования
 // и фоновая подгрузка зовут одну и ту же функцию, иначе легко добавить
 // окно в одно место и забыть в другом.
@@ -23,7 +26,6 @@ export const loadTaskModal = () => import("@/components/tracker/TaskModal");
 export const loadMeetingModal = () => import("@/components/tracker/MeetingModal");
 export const loadTeamModal = () => import("@/components/tracker/TeamModal");
 export const loadAccountModal = () => import("@/components/tracker/AccountModal");
-export const loadSearchOverlay = () => import("@/components/tracker/SearchOverlay");
 export const loadSectionsModal = () => import("@/components/tracker/SectionsModal");
 export const loadMeetingTasksSheet = () => import("@/components/tracker/MeetingTasksSheet");
 export const loadSentIdeasModal = () => import("@/components/tracker/SentIdeasModal");
@@ -39,7 +41,6 @@ const ALL = [
   loadDoneListModal,
   loadAccountModal,
   loadTeamModal,
-  loadSearchOverlay,
   loadSentIdeasModal,
   loadIdeaReviewModal,
   loadMeetingTasksSheet,
@@ -58,6 +59,6 @@ export function prefetchWindows(): void {
     });
   };
   const idle = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-  if (idle) idle(go, { timeout: 2500 });
-  else setTimeout(go, 1200);
+  if (idle) idle(go, { timeout: 1000 });
+  else setTimeout(go, 600);
 }

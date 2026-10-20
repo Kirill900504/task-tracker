@@ -1,7 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { loadSearchOverlay, loadTeamModal, loadLoadModal, loadAccountModal, prefetchWindows } from "@/lib/lazyWindows";
+import { loadTeamModal, loadLoadModal, loadAccountModal, prefetchWindows } from "@/lib/lazyWindows";
+// Поиск — НЕ ленивый: его открывают «/» и сразу печатают, и буквы,
+// набранные, пока догружается кусок окна, терялись (e2e «поиск находит
+// «КП»» на 20.10.2026). Окно маленькое; первое нажатие дороже.
+import SearchOverlay from "@/components/tracker/SearchOverlay";
 
 // New UI, built up phase by phase per the approved migration plan.
 // Phase 6 adds drag-and-drop: task reorder/column-move, idea→task/meeting
@@ -66,7 +70,6 @@ import { withViewTransition } from "@/lib/viewTransition";
 
 // Окна — отдельными кусками, подгружаются фоном после первого кадра
 // (lib/lazyWindows: почему и как).
-const SearchOverlay = dynamic(loadSearchOverlay, { ssr: false });
 const TeamModal = dynamic(loadTeamModal, { ssr: false });
 const LoadModal = dynamic(loadLoadModal, { ssr: false });
 const AccountModal = dynamic(loadAccountModal, { ssr: false });
