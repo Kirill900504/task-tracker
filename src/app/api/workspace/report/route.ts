@@ -325,7 +325,7 @@ export async function POST(req: Request) {
   if (!body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
   const { data: row } = await admin
     .from("task_participants")
-    .select("id, assignee_id, task_id, accepted_at, done_at, declined_at, reschedule_requested_at, reschedule_reason, tasks(title, number, created_by, approval_state)")
+    .select("id, assignee_id, task_id, role, accepted_at, done_at, declined_at, reschedule_requested_at, reschedule_reason, tasks(title, number, created_by, approval_state)")
     .eq("id", body.participantId)
     .maybeSingle();
   type TaskRef = { title: string; number: number | null; created_by: string | null; approval_state: string | null };
@@ -333,6 +333,7 @@ export async function POST(req: Request) {
     id: string;
     assignee_id: string;
     task_id: string;
+    role: string | null;
     accepted_at: string | null;
     done_at: string | null;
     declined_at: string | null;
@@ -341,6 +342,13 @@ export async function POST(req: Request) {
     tasks: TaskRef | TaskRef[] | null;
   } | null;
   if (!part || part.assignee_id !== m.assignee_id) return NextResponse.json({ error: "Это не ваша задача" }, { status: 403 });
+  // Наблюдатель смотрит и пишет в обсуждение — и только. Бот это знал
+  // (colleagueReplies), а маршрут нет: аудит 20.10.2026 отчитался
+  // «Сделал» от имени наблюдателя, и задача на приёмке собирала отчёт
+  // человека, который её не делал.
+  if (part.role === "watcher") {
+    return NextResponse.json({ error: "Вы наблюдатель — отвечают исполнители. Написать можно в обсуждении." }, { status: 403 });
+  }
 
   // Ответ даётся один раз (lib/answerRules): «Сделал» и «Не могу»
   // окончательны, пока постановщик не вернёт задачу на доработку; «Принял»
@@ -374,8 +382,16 @@ export async function POST(req: Request) {
   // части: Игорь Витковский — „Тест на 2 исполнителях“» — о собственном
   // нажатии, сделанном накануне (отзыв 25.09.2026).
   const authorId = taskRef?.created_by || m.owner_id;
-  const tell = (text: string, notice?: Notice) =>
-    authorId === user.id ? Promise.resolve() : notifyAuthor(admin, m.owner_id, taskRef?.created_by || null, text, notice);
+  //
+  // После ответа браузеру (after): ответ уже записан, а сообщение
+  // постановщику — это поиск его чатов, очередь сводки, иногда полёт до
+  // Telegram и MAX. Человек, нажавший «Сделал», ждал всё это целиком
+  // (замер 20.10.2026: «Принял» 0,5–0,7 с, «Сделал» 0,7–0,8 с на тёплой
+  // функции). Так же уже устроены приёмка и рассылки итогов.
+  const ownerId = m.owner_id;
+  const tell = (text: string, notice?: Notice) => {
+    if (authorId !== user.id) after(() => notifyAuthor(admin, ownerId, taskRef?.created_by || null, text, notice).then(() => undefined));
+  };
   // Ответ, данный в трекере, переписывает и сообщения о задаче в
   // мессенджерах (lib/botMirror): иначе там так и висят «Принял / Сделал»
   // после того, как человек уже отчитался. После ответа браузеру — ждать
@@ -384,10 +400,13 @@ export async function POST(req: Request) {
   after(() => mirrorAnswer(admin, { kind: "task", itemId: part.task_id, assigneeId: part.assignee_id }));
 
   if (body.action === "accept") {
-    await admin.from("task_participants").update({ accepted_at: now }).eq("id", part.id);
-    await admin.from("tasks").update({ accepted_at: now }).eq("id", part.task_id);
-    await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `✅ ${myName} принял в работу` });
-    await tell(`✅ ${myName} принял в работу: ${named}`, { kind: "accepted", ...ref });
+    // Три записи друг от друга не зависят — одним заходом, а не тремя.
+    await Promise.all([
+      admin.from("task_participants").update({ accepted_at: now }).eq("id", part.id),
+      admin.from("tasks").update({ accepted_at: now }).eq("id", part.task_id),
+      recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `✅ ${myName} принял в работу` }),
+    ]);
+    tell(`✅ ${myName} принял в работу: ${named}`, { kind: "accepted", ...ref });
     return NextResponse.json({ ok: true });
   }
 
@@ -423,21 +442,24 @@ export async function POST(req: Request) {
     // Та же проверка, что и у кнопки в мессенджере — буквально та же
     // функция, потому что «отчитались все» не должно значить разное в
     // зависимости от того, откуда пришёл последний отчёт.
-    await recordEvent(admin, {
-      actorUserId: user.id,
-      userId: m.owner_id,
-      kind: "task",
-      itemId: part.task_id,
-      // Файл в хронике называется числом, а не именем: имён бывает три, и
-      // строка события — это отметка на полях, а не список вложений.
-      text: `🏁 ${myName} ${whole ? "сдал задачу целиком" : "отчитался"}: ${comment}` + (files.length ? ` (📎 ${files.length})` : ""),
-    });
-    const everyone = await closeIfEveryoneReported(admin, part.task_id, whole);
+    // Хроника и проверка «отчитались все» независимы — параллельно.
+    const [, everyone] = await Promise.all([
+      recordEvent(admin, {
+        actorUserId: user.id,
+        userId: m.owner_id,
+        kind: "task",
+        itemId: part.task_id,
+        // Файл в хронике называется числом, а не именем: имён бывает три, и
+        // строка события — это отметка на полях, а не список вложений.
+        text: `🏁 ${myName} ${whole ? "сдал задачу целиком" : "отчитался"}: ${comment}` + (files.length ? ` (📎 ${files.length})` : ""),
+      }),
+      closeIfEveryoneReported(admin, part.task_id, whole),
+    ]);
     // Про файлы в мессенджере говорится словами, но не ссылкой: ссылка на
     // файл из закрытой корзины живёт час, а сообщение — навсегда, и через
     // сутки она читалась бы как сломанная.
     const attached = files.length ? `\n📎 Приложено файлов: ${files.length} — смотреть в задаче.` : "";
-    await tell(
+    tell(
       everyone
         ? `🏁 ${myName} по задаче ${named}: ${comment}${attached}\n\n${whole ? "Сдал задачу целиком" : "Отчитались все"} — задача ждёт вашей приёмки.`
         : `🏁 ${myName} по задаче ${named}: ${comment}${attached}`,
@@ -467,15 +489,17 @@ export async function POST(req: Request) {
         reschedule_reason: null,
       })
       .eq("id", part.id);
-    await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `⛔ ${myName} не может: ${reason}` });
     // Отказ — тоже ответ, и после него задача ждёт решения постановщика, а
     // не исполнителя. Раньше здесь не вызывалось ничего, и задача с
     // единственным отказавшимся исполнителем оставалась «в работе»
     // навсегда: ждать было некого, а на приёмке она не появлялась. Слова
     // Кирилла 21.09.2026: «после отказа задача не переносится „на
     // приёмку“».
-    const everyone = await closeIfEveryoneReported(admin, part.task_id);
-    await tell(
+    const [, everyone] = await Promise.all([
+      recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `⛔ ${myName} не может: ${reason}` }),
+      closeIfEveryoneReported(admin, part.task_id),
+    ]);
+    tell(
       everyone
         ? `⛔ ${myName} не может ${named}: ${reason}\n\nОтветили все — задача ждёт вашего решения.`
         : `⛔ ${myName} не может ${named}: ${reason}`,
@@ -487,13 +511,15 @@ export async function POST(req: Request) {
   if (body.action === "reschedule") {
     const reason = (body.comment || "").trim();
     if (!reason) return NextResponse.json({ error: "Нужна причина" }, { status: 400 });
-    await admin
-      .from("task_participants")
-      .update({ reschedule_requested_at: now, reschedule_to: body.date || null, reschedule_reason: reason })
-      .eq("id", part.id);
     const to = body.date ? ` на ${fmtDate(body.date)}` : "";
-    await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `📅 ${myName} просит перенос${to}: ${reason}` });
-    await tell(`📅 ${myName} просит перенести ${named}${to}: ${reason}`, { kind: "reschedule", ...ref, what: `${to.trim() || "на другой срок"} — ${reason}` });
+    await Promise.all([
+      admin
+        .from("task_participants")
+        .update({ reschedule_requested_at: now, reschedule_to: body.date || null, reschedule_reason: reason })
+        .eq("id", part.id),
+      recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: part.task_id, text: `📅 ${myName} просит перенос${to}: ${reason}` }),
+    ]);
+    tell(`📅 ${myName} просит перенести ${named}${to}: ${reason}`, { kind: "reschedule", ...ref, what: `${to.trim() || "на другой срок"} — ${reason}` });
     return NextResponse.json({ ok: true });
   }
 

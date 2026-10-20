@@ -6,6 +6,10 @@ import { mergeResult } from "@/lib/meetingLink";
 import { recordEvent } from "@/lib/itemHistory";
 import { actorName } from "@/lib/actorName";
 
+// Строки хроники, которыми записывается итог: deliverRecap (с текстом) и
+// закрытие без слов ниже.
+const RECAP_LINE = /^(✅ Встреча прошла успешно|⚪ Встреча без результата|⚪ Встреча закрыта без результата|📝 Итог встречи)/u;
+
 // Итог встречи — тем, кто на ней был.
 //
 // Организатора об итоге спрашивают через два часа после конца, напоминают
@@ -40,7 +44,7 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: row } = await admin
     .from("meetings")
-    .select("id, title, date, time, user_id, created_by, from_task_id, result")
+    .select("id, title, date, time, user_id, created_by, from_task_id, result, status, resolved_at")
     .eq("id", body.meetingId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -53,6 +57,8 @@ export async function POST(req: Request) {
     created_by: string | null;
     from_task_id: string | null;
     result: string | null;
+    status: string | null;
+    resolved_at: string | null;
   } | null;
   if (!meeting) return NextResponse.json({ error: "Встреча не найдена" }, { status: 404 });
 
@@ -63,6 +69,28 @@ export async function POST(req: Request) {
   // тоже только у своих (равные права, 06.10.2026).
   if ((meeting.created_by || meeting.user_id) !== user.id) {
     return NextResponse.json({ error: "Это не ваша встреча" }, { status: 403 });
+  }
+
+  // Итог пишется один раз (правило 17.10.2026 — в боте оно уже стояло).
+  // Маршрут трекера повторов не узнавал: аудит 20.10.2026 записал второй
+  // итог поверх первого, и участникам ушли две рассылки, а в хронике
+  // встали две строки «Встреча прошла успешно» с разными словами.
+  // Признак повтора — строка итога в хронике, написанная ПОСЛЕ текущего
+  // закрытия (`resolved_at` ставит вкладка): после «Вернуть в план» и
+  // нового закрытия старая строка оказывается раньше, и итог законно
+  // пишется снова. Минута допуска — на расхождение часов браузера и базы.
+  if (meeting.resolved_at && meeting.status && meeting.status !== "planned" && meeting.status !== "proposed") {
+    const since = new Date(new Date(meeting.resolved_at).getTime() - 60_000).toISOString();
+    const { data: lines } = await admin
+      .from("item_comments")
+      .select("body")
+      .eq("item_kind", "meeting")
+      .eq("item_id", meeting.id)
+      .eq("system", true)
+      .gte("created_at", since);
+    if (((lines || []) as { body: string }[]).some((l) => RECAP_LINE.test(l.body))) {
+      return NextResponse.json({ ok: true, sent: 0, already: true });
+    }
   }
 
   // Кому сказать, куда записать и что вернуть в задачу — правила, и
