@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { exactSelfPhrase } from "@/lib/botSelf";
 
-// Фразы возврата разбирает код, а не модель: на боевом модель с памятью
-// разговора дважды из трёх отвечала на «верни … на доску» не тем типом.
+// Фразы возврата разбирает код, а не модель: ответ однозначен по словам,
+// и полёт в модель за ним не нужен.
 describe("exactSelfPhrase", () => {
   test("«верни … на доску» — вернуть задачу", () => {
     expect(exactSelfPhrase("верни отчёт для банка на доску")).toEqual([{ tool: "snooze_task", input: { query: "отчёт для банка", back: true }, droppedNames: [] }]);

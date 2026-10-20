@@ -25,11 +25,14 @@ function short(text: string, limit: number): string {
 }
 
 // Фразы возврата — без модели, как точные команды «сегодня» и
-// «просрочено». На боевом 20.10.2026 «верни отчёт для банка на доску»
-// сразу после «отложи … до 26.10» дважды из трёх разобралось не тем
-// типом: модель видит разговор (lib/botMemory), и свежая просьба
-// «отложить» в нём тянула её назад. Ответ однозначен по самим словам —
-// значит, его даёт код.
+// «просрочено»: ответ однозначен по самим словам, значит его даёт код —
+// быстрее, без полёта в модель и без зависимости от того, что она увидит
+// в памяти разговора (lib/botMemory).
+// Честная пометка на будущее: поставлено это 20.10.2026 в погоне за
+// падением «верни … на доску» в test:bots, и причина оказалась другой —
+// лимит 20 сообщений в минуту у владельца отбрасывал сообщение до разбора
+// (см. комментарий в scripts/test-bots.mjs). Перехват оставлен, потому
+// что он верен сам по себе, а не потому, что лечил то падение.
 export function exactSelfPhrase(text: string): { tool: string; input: Record<string, unknown>; droppedNames: string[] }[] | null {
   const s = text.trim().replace(/[.!]+$/, "");
   const board = /^(?:верни|вернуть|верните)\s+(.+?)\s+(?:обратно\s+)?на\s+доску$/i.exec(s) || /^не\s+откладывай(?:те)?\s+(.+)$/i.exec(s);
@@ -49,10 +52,8 @@ export function exactSelfPhrase(text: string): { tool: string; input: Record<str
 export async function planSnooze(ctx: SkillContext, input: Record<string, unknown>): Promise<SkillReply> {
   const query = String(input.query || "").trim();
   // «На доску» и «не откладывай» в самой фразе — всегда возврат, что бы ни
-  // ответила модель. На боевом 20.10.2026 «верни отчёт для банка на доску»
-  // сразу после «отложи … до 26.10» разобралось с датой из памяти разговора
-  // (lib/botMemory) — и задача осталась отложенной. Слова человека сильнее
-  // контекста.
+  // ответила модель (она видит разговор, где только что звучало
+  // «отложи … до …»). Слова человека сильнее контекста.
   const back = input.back === true || /на\s+доску|не\s+отклад/i.test(ctx.phrase);
   const { tasks, found } = await findItems(ctx.admin, ctx.actor, { itemType: "task", query, replyText: ctx.reply?.text, replyItem: ctx.reply?.item });
   const hits = found.filter((f): f is { kind: "task"; t: TaskToMove } => f.kind === "task").map((f) => f.t);
