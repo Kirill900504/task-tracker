@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { busyPeople, busyStarts, defaultMeetingStart, endsAt, minutesOf, normalizeDuration, overlaps, slotOf, startsInPast, timeOf, warnBefore } from "./meetingTime";
+import { busyPeople, busyStarts, defaultMeetingStart, endsAt, minutesOf, normalizeDuration, overlaps, rescheduleTime, slotOf, startsInPast, timeOf, warnBefore } from "./meetingTime";
 
 // Занятость человека считается здесь, и ошибка тут стоит дороже обычной:
 // слот, показанный свободным, — это два приглашения на одно время, а
@@ -156,5 +156,23 @@ describe("startsInPast", () => {
     expect(startsInPast("2026-10-05", "18:00", now)).toBe(true);
     expect(startsInPast("2026-10-07", "09:00", now)).toBe(false);
     expect(startsInPast("", "09:00", now)).toBe(false);
+  });
+});
+// Перенос встречи: прежнее время, а занято или прошло — следующее после него.
+describe("rescheduleTime", () => {
+  const now = new Date(2026, 9, 20, 13, 10); // 20.10.2026, 13:10
+  const busy = (taken: string[]) => (_d: string, t: string) => (taken.includes(t) ? ["Игорь"] : []);
+
+  it("оставляет прежнее время, если оно свободно", () => {
+    expect(rescheduleTime("2026-10-21", "14:00", busy([]), undefined, now)).toBe("14:00");
+  });
+  it("занято — следующее свободное после прежнего, а не первое с утра", () => {
+    expect(rescheduleTime("2026-10-21", "14:00", busy(["14:00", "14:30"]), undefined, now)).toBe("15:00");
+  });
+  it("сегодня прошедшее время сдвигается на следующий слот", () => {
+    expect(rescheduleTime("2026-10-20", "11:00", busy([]), undefined, now)).toBe("13:30");
+  });
+  it("после прежнего свободного нет — первое свободное за день", () => {
+    expect(rescheduleTime("2026-10-21", "17:30", busy(["17:30", "18:00"]), undefined, now)).toBe("09:00");
   });
 });

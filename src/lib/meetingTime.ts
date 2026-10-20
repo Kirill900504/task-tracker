@@ -155,6 +155,28 @@ export function startsInPast(date: string, time: string, now: Date = new Date())
   return start !== null && start <= now.getHours() * 60 + now.getMinutes();
 }
 
+// Время переноса встречи на новый день: прежнее, а если оно там занято у
+// кого-то из состава или уже прошло — СЛЕДУЮЩЕЕ свободное после него. Слова
+// Кирилла 20.10.2026: «время при переносе указывай аналогичное или же
+// следующее за тем что было, если на след день такое время уже занято».
+// Раньше занятое время оставалось выбранным, и «ОК» просто гас без
+// объяснения, куда деться. После прежнего до конца дня свободного нет —
+// первое свободное вообще; нет и его — прежнее, и окно скажет, кто занят.
+export function rescheduleTime(
+  date: string,
+  preferred: string,
+  busyAt?: (date: string, time: string) => string[],
+  slots: string[] = WORKDAY_SLOTS,
+  now: Date = new Date(),
+): string {
+  if (!date) return preferred;
+  const free = (slot: string) => !startsInPast(date, slot, now) && !(busyAt && busyAt(date, slot).length);
+  if (preferred && free(preferred)) return preferred;
+  const from = minutesOf(preferred) ?? -1;
+  const after = slots.find((slot) => (minutesOf(slot) ?? -1) > from && free(slot));
+  return after ?? slots.find(free) ?? preferred;
+}
+
 function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
