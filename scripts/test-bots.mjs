@@ -794,6 +794,28 @@ try {
   const { data: bulkOld } = await admin.from("meetings").select("status, moved_to_date").eq("id", bulkId).maybeSingle();
   const { data: bulkNew } = await admin.from("meetings").select("date, time").eq("user_id", userId).eq("title", "Проверка массового переноса").eq("status", "planned").is("deleted_at", null);
   check("массовый перенос закрывает прежнюю как перенесённую", bulkOld?.status === "no_result" && !!bulkOld?.moved_to_date, bulkOld);
+  // Отмена словами (20.10.2026): причина во фразе — спрашивается только «да».
+  const cancelId = "ownca" + Math.random().toString(36).slice(2, 8);
+  await admin.from("meetings").insert({ id: cancelId, user_id: userId, date: msk(4), time: "12:00", title: "Встреча с банком", participants: [], status: "planned" });
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "отмени встречу с банком, клиент заболел" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: cancelPending } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
+  check("«отмени встречу с банком, клиент заболел» → ждёт «да» с причиной", cancelPending?.pending_action?.kind === "meeting_cancel_confirm" && cancelPending?.pending_action?.id === cancelId && /заболел/.test(cancelPending?.pending_action?.reason || ""), cancelPending);
+  const { data: stillThere } = await admin.from("meetings").select("deleted_at").eq("id", cancelId).maybeSingle();
+  check("и до «да» встреча на месте", stillThere && !stillThere.deleted_at, stillThere);
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "да" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: cancelled } = await admin.from("meetings").select("deleted_at").eq("id", cancelId).maybeSingle();
+  const { data: cancelNote } = await admin.from("item_comments").select("body").eq("item_id", cancelId).eq("system", true);
+  check("«да» отменяет встречу", !!cancelled?.deleted_at, cancelled);
+  check("и причина записана в её историю", (cancelNote || []).some((c) => /отменил встречу: клиент заболел/.test(c.body)), cancelNote);
+
   check("и заводит новую в то же время", (bulkNew || []).length === 1 && bulkNew[0].time === "18:30" && bulkNew[0].date === bulkOld?.moved_to_date, bulkNew);
 
   // «✍️ Записать мысль» на экране мыслей: следующее сообщение — мысль.

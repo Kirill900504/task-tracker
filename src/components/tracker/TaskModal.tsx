@@ -946,8 +946,11 @@ export default function TaskModal({
                             label: "Ход работы",
                             value: (
                               <>
-                                {progressText}
-                                {task.needsReview === false && <span className="fact-note"> · без приёмки — закроется отчётом</span>}
+                                {/* Одной строкой (20.10.2026: последняя цифра
+                                    «закончили 3» переносилась на вторую строку
+                                    и читалась отдельно от слов). */}
+                                <span className="progress-line">{progressText}</span>
+                                {task.needsReview === false && <span className="fact-note progress-note">без приёмки — закроется отчётом</span>}
                               </>
                             ),
                           },

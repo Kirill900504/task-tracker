@@ -31,7 +31,7 @@ import { taskRef } from "@/lib/taskRef";
 import { navRow } from "@/lib/botMenu";
 import { isYes } from "@/lib/telegramManage";
 import { contextBlock, lessonActor, lessonsBlock, lessonsFor, recentDialog, recordingTransport, rememberLine, saveLesson, type DialogLine, type ReplyContext } from "@/lib/botMemory";
-import { applyMove, cancelMeetingFromBot, moveFromTypedWhen, planMoveFromText, type CancelPending, type MovePending } from "@/lib/botMoveFlow";
+import { applyMove, cancelMeetingFromBot, moveFromTypedWhen, planCancelFromText, planMoveFromText, type CancelConfirmPending, type CancelPending, type MovePending } from "@/lib/botMoveFlow";
 import { parseWhen } from "@/lib/botWhen";
 import { dateStr, moscowNow } from "@/lib/taskLogic";
 
@@ -65,7 +65,7 @@ const SAID_NO = /^(нет|неа|не надо|не нужно|не перено
 // фраза, а не правка списка.
 function passesThrough(waiting: unknown, trimmed: string): boolean {
   const kind = (waiting as { kind?: string } | null)?.kind;
-  if (kind === "move_item") return true;
+  if (kind === "move_item" || kind === "meeting_cancel_confirm") return true;
   if (kind === "bulk_move") return !isYes(trimmed) && !SAID_NO.test(trimmed);
   return false;
 }
@@ -427,6 +427,20 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     return;
   }
 
+  if (tool === "cancel_meeting" && extra) {
+    const plan = await planCancelFromText(ctx.admin, extra.actor, {
+      query: String(input.query || ""),
+      reason: String(input.reason || ""),
+      replyText: extra.reply?.text,
+      replyItem: extra.reply?.item,
+      phrase: extra.phrase,
+      parsed: { type: "cancel_meeting", ...input },
+    });
+    if (plan.pending) await rememberFor(ctx, extra.actor, plan.pending);
+    await ctx.transport.send(ctx.chatId, plan.text, plan.buttons?.length ? { buttons: screenButtons(plan.buttons) } : undefined);
+    return;
+  }
+
   if (tool === "move_item" && extra) {
     const plan = await planMoveFromText(ctx.admin, extra.actor, {
       itemType: String(input.itemType || ""),
@@ -634,10 +648,10 @@ async function offerTask(
 
   // Перенос встречи или срока — у руководителя ровно так же, как у
   // владельца: свои встречи и свои задачи, с подтверждением кнопкой.
-  const move = items.find((it) => it.tool === "move_item");
+  const move = items.find((it) => it.tool === "move_item" || it.tool === "cancel_meeting");
   if (move) {
     const actor: BotActor = { userId: memberId, spaceId: colleague.user_id, assigneeId: colleague.id, isOwner: false };
-    await respondToTool(ctx, colleague.user_id, "move_item", move.input, [], { actor, reply, phrase: text });
+    await respondToTool(ctx, colleague.user_id, move.tool, move.input, [], { actor, reply, phrase: text });
     return true;
   }
 
@@ -694,6 +708,24 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
     }
     await ctx.transport.send(ctx.chatId, await cancelMeetingFromBot(ctx.admin, actor, waiting as CancelPending, trimmed), { buttons: navRow("assigner") });
     return true;
+  }
+
+  // Отмена, предложенная по фразе с причиной: ждём «да».
+  if ((waiting as CancelConfirmPending).kind === "meeting_cancel_confirm") {
+    const pending = waiting as CancelConfirmPending;
+    if (isYes(trimmed)) {
+      const text = await cancelMeetingFromBot(ctx.admin, actor, { kind: "meeting_cancel", id: pending.id, title: pending.title, at: pending.at }, pending.reason);
+      if (text.startsWith("🚫") && pending.phrase && pending.parsed) {
+        await saveLesson(ctx.admin, { spaceId: actor.spaceId, actor: lessonActor(actor), phrase: pending.phrase, parsed: pending.parsed });
+      }
+      await ctx.transport.send(ctx.chatId, text, { buttons: navRow("assigner") });
+      return true;
+    }
+    if (SAID_NO.test(trimmed)) {
+      await say(ctx, "Хорошо, встреча остаётся.");
+      return true;
+    }
+    return false;
   }
 
   // Перенос: либо ждём день словами («✍️ Другой день»), либо «да» на

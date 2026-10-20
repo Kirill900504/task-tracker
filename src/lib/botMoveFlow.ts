@@ -247,36 +247,45 @@ export type MoveRequest = {
   parsed?: unknown;
 };
 
-export async function planMoveFromText(admin: SupabaseClient, actor: BotActor, req: MoveRequest): Promise<{ text: string; buttons?: BotButton[][]; pending?: MovePending }> {
+type Found = { kind: "meeting"; m: MeetingToMove } | { kind: "task"; t: TaskToMove };
+
+// Какое дело человек имеет в виду — общий поиск для переноса и отмены.
+// Порядок — от надёжного к догадке: id из кнопок сообщения, на которое
+// ответили; названное словами; название внутри того сообщения.
+async function findItems(
+  admin: SupabaseClient,
+  actor: BotActor,
+  req: { itemType: string; query: string; replyText?: string; replyItem?: { kind: "meeting" | "task"; id: string } | null },
+): Promise<{ meetings: MeetingToMove[]; tasks: TaskToMove[]; found: Found[] }> {
   const wantMeeting = req.itemType !== "task";
   const wantTask = req.itemType !== "meeting";
   const [meetings, tasks] = await Promise.all([wantMeeting ? movableMeetings(admin, actor) : Promise.resolve([]), wantTask ? movableTasks(admin, actor) : Promise.resolve([])]);
 
-  type Found = { kind: "meeting"; m: MeetingToMove } | { kind: "task"; t: TaskToMove };
   let found: Found[] = [];
-
-  // 1. Дело из кнопок сообщения, на которое ответили.
   if (req.replyItem) {
-    if (req.replyItem.kind === "meeting") {
+    if (req.replyItem.kind === "meeting" && wantMeeting) {
       const m = meetings.find((x) => x.id === req.replyItem!.id) || (await loadMeeting(admin, actor, req.replyItem.id));
       if (m) found = [{ kind: "meeting", m }];
-    } else {
+    } else if (req.replyItem.kind === "task" && wantTask) {
       const t = tasks.find((x) => x.id === req.replyItem!.id) || (await loadTask(admin, actor, req.replyItem.id));
       if (t) found = [{ kind: "task", t }];
     }
   }
-  // 2. Названное словами.
   if (!found.length && req.query.trim()) {
     const all = [...meetings.map((m) => ({ title: m.title, f: { kind: "meeting", m } as Found })), ...tasks.map((t) => ({ title: t.title, f: { kind: "task", t } as Found }))];
     found = bestMatches(all, req.query).map((x) => x.f);
   }
-  // 3. Название внутри сообщения, на которое ответили (напоминание без кнопок).
   if (!found.length && req.replyText?.trim()) {
     const scored = [...meetings.map((m) => ({ s: coverage(m.title, req.replyText!), f: { kind: "meeting", m } as Found })), ...tasks.map((t) => ({ s: coverage(t.title, req.replyText!), f: { kind: "task", t } as Found }))]
       .filter((x) => x.s >= 0.6)
       .sort((a, b) => b.s - a.s);
     if (scored.length) found = scored.filter((x) => x.s >= scored[0].s - 0.001).map((x) => x.f);
   }
+  return { meetings, tasks, found };
+}
+
+export async function planMoveFromText(admin: SupabaseClient, actor: BotActor, req: MoveRequest): Promise<{ text: string; buttons?: BotButton[][]; pending?: MovePending }> {
+  const { meetings, tasks, found } = await findItems(admin, actor, req);
 
   if (!found.length) {
     // Не нашли — не тупик: показываем, что ЕСТЬ, кнопками. Одно нажатие
@@ -369,7 +378,7 @@ export async function handleMoveCallback(admin: SupabaseClient, actor: BotActor,
   const target = splitTarget(action.id);
 
   if (action.action === "mvx") {
-    return { toast: "Не переношу", rewriteTo: "Хорошо, ничего не переношу.", rewriteButtons: navRow("assigner"), clearPending: true };
+    return { toast: "Ничего не меняю", rewriteTo: "Хорошо, ничего не меняю.", rewriteButtons: navRow("assigner"), clearPending: true };
   }
 
   if (action.action === "mv") {
@@ -577,4 +586,65 @@ export async function handleProposeCallback(
   }
 
   return { toast: "Не понял, что нажато" };
+}
+
+// ------------------------------------------------ отмена встречи словами
+//
+// 20.10.2026, просьба Кирилла: «сделай отмену встречи словами» — «отмени
+// встречу с банком, клиент заболел». Правила те же, что у кнопки «🚫
+// Отменить»: отменяет тот, кто назначил; без причины не отменяется (её
+// получат люди, освободившие это время); перед отменой — подтверждение,
+// потому что отмена рассылается всем и обратно её не вернуть одним словом.
+// Причина названа во фразе — спрашиваем только «да»; не названа — сперва
+// спрашиваем её (тот же вопрос, что после кнопки).
+
+export type CancelConfirmPending = {
+  kind: "meeting_cancel_confirm";
+  id: string;
+  title: string;
+  reason: string;
+  phrase?: string;
+  parsed?: unknown;
+  at: string;
+};
+
+export async function planCancelFromText(
+  admin: SupabaseClient,
+  actor: BotActor,
+  req: { query: string; reason: string; replyText?: string; replyItem?: { kind: "meeting" | "task"; id: string } | null; phrase?: string; parsed?: unknown },
+): Promise<{ text: string; buttons?: BotButton[][]; pending?: CancelPending | CancelConfirmPending }> {
+  const { meetings, found } = await findItems(admin, actor, { itemType: "meeting", query: req.query, replyText: req.replyText, replyItem: req.replyItem });
+  const hits = found.filter((f): f is { kind: "meeting"; m: MeetingToMove } => f.kind === "meeting");
+
+  if (!hits.length) {
+    if (!meetings.length) return { text: "Не нашёл, что отменять: назначенных вами открытых встреч нет." };
+    return {
+      text: `Не нашёл встречу${req.query.trim() ? ` «${req.query.trim()}»` : ""} среди назначенных вами. Какую отменить?`,
+      buttons: [...meetings.slice(0, 6).map((m) => [{ text: `🚫 ${dayLabel(m.date)} ${short(m.title, 26)}`, data: encodeCallback("meeting", "mvxok", m.id) }]), ...navRow("assigner")],
+    };
+  }
+  if (hits.length > 1) {
+    return {
+      text: "Нашёл несколько — какую отменить?",
+      buttons: hits.slice(0, 6).map((h) => [{ text: `🚫 ${dayLabel(h.m.date)} ${short(h.m.title, 26)}`, data: encodeCallback("meeting", "mvxok", h.m.id) }]),
+    };
+  }
+
+  const m = hits[0].m;
+  const reason = req.reason.trim();
+  if (!reason) {
+    return {
+      text: `🚫 Отменить встречу «${m.title}» (${meetingWhen(m)})?\n\nНапишите одним сообщением причину — её получат участники. Передумали — «нет».`,
+      buttons: [[{ text: "↩ Не отменять", data: encodeCallback("meeting", "oshow", m.id) }]],
+      pending: { kind: "meeting_cancel", id: m.id, title: m.title, at: new Date().toISOString() },
+    };
+  }
+  return {
+    text: `🚫 Отменить встречу «${m.title}» (${meetingWhen(m)})?\nПричина: ${reason}\n\nУчастникам сообщу сразу. Нажмите «Отменить встречу» или ответьте «да».`,
+    buttons: [
+      [{ text: "🚫 Отменить встречу", data: encodeCallback("meeting", "mvxgo", m.id) }],
+      [{ text: "↩ Не отменять", data: moveData("meeting", "mvx", m.id) }],
+    ],
+    pending: { kind: "meeting_cancel_confirm", id: m.id, title: m.title, reason, phrase: req.phrase, parsed: req.parsed, at: new Date().toISOString() },
+  };
 }

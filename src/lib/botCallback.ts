@@ -11,7 +11,7 @@ import { createTaskFromBot, nextNewTaskStep, resolveWhen } from "@/lib/ownerNewT
 import { ownerNav } from "@/lib/ownerQueries";
 import type { CallbackOutcome } from "@/lib/colleagueReplies";
 import { handleIdeaInbox, isIdeaInboxAction } from "@/lib/ideaInbox";
-import { handleProposeCallback, isProposeAction, splitTarget, type MovePending } from "@/lib/botMoveFlow";
+import { cancelMeetingFromBot, handleProposeCallback, isProposeAction, splitTarget, type CancelConfirmPending, type MovePending } from "@/lib/botMoveFlow";
 import { lessonActor, saveLesson } from "@/lib/botMemory";
 
 // Нажатая кнопка — один разбор на оба мессенджера.
@@ -116,6 +116,21 @@ async function routeBotCallback(
       await remember(admin, actor, channel, chatId, step.pending);
       return { toast: "Без описания", rewriteTo: step.text, rewriteButtons: step.buttons };
     }
+    // «🚫 Отменить встречу» под отменой, сказанной словами: причина в 64
+    // байта кнопки не помещается и лежит в памяти чата (lib/botMoveFlow).
+    if (action.kind === "meeting" && action.action === "mvxgo") {
+      const waiting = (await pendingOf(admin, actor, channel, chatId)) as CancelConfirmPending | null;
+      if (waiting?.kind !== "meeting_cancel_confirm" || waiting.id !== action.id) {
+        return { toast: "Отмена устарела — откройте встречу и нажмите «🚫 Отменить»" };
+      }
+      await remember(admin, actor, channel, chatId, null);
+      const text = await cancelMeetingFromBot(admin, actor, { kind: "meeting_cancel", id: waiting.id, title: waiting.title, at: waiting.at }, waiting.reason);
+      if (text.startsWith("🚫") && waiting.phrase && waiting.parsed) {
+        await saveLesson(admin, { spaceId: actor.spaceId, actor: lessonActor(actor), phrase: waiting.phrase, parsed: waiting.parsed });
+      }
+      return { toast: "Готово", rewriteTo: text, rewriteButtons: ownerNav() };
+    }
+
     const today = new Date().toISOString().slice(0, 10);
     const outcome = await handleOwnerCallback(admin, actor, action, today);
     if (!outcome) {
