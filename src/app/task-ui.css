@@ -283,15 +283,32 @@
 /* «Отложить» — в строке срока, самой правой, чуть выделена фирменной
    рамкой среди серых кнопок срока; отложенная задача — залита и подписана
    днём возвращения. */
+/* Кнопки сводки («Отложить», «+» у людей) — ЗАЛИТЫЕ, с тенью и скруглением
+   кнопки, а не пилюли с рамкой (20.10.2026: «сделай, чтобы кнопки… были
+   больше похожи на кнопки и отличались по цвету от статуса „в работе“, а
+   то сливается»). Статус стадии — голубой контур без заливки; кнопка рядом
+   в таком же голубом контуре читалась вторым статусом. Отсюда правило:
+   статус — контур, действие — заливка. */
 .snooze-btn{
-  margin-left:auto; flex:none; height:32px; padding:0 12px; border-radius:999px; cursor:pointer;
+  margin-left:auto; flex:none; height:32px; padding:0 13px; border-radius:9px; cursor:pointer;
   display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
   font-family:var(--display); font-size:12.5px; font-weight:700;
-  color:var(--accent); background:rgba(62,138,168,.1); border:1px solid rgba(62,138,168,.55);
+  color:#fff; background:var(--accent); border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18);
+  transition:background .12s ease, transform .08s ease;
 }
-.snooze-btn:hover{background:rgba(62,138,168,.18); border-color:var(--accent);}
-.snooze-btn.on{color:#fff; background:var(--accent); border-color:var(--accent);}
-.facts-row.has-extra{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr) auto;}
+.snooze-btn:hover{background:#4A9BBB;}
+.snooze-btn:active{transform:translateY(1px); box-shadow:0 1px 3px rgba(0,0,0,.35);}
+/* Отложенная — тёмная залитая: всё ещё кнопка, но уже «включённая». */
+.snooze-btn.on{color:#DDF0F7; background:#285A6E; border-color:rgba(255,255,255,.1);}
+.snooze-btn.on:hover{background:#2F6A81;}
+.facts-row.has-extra{grid-template-columns:minmax(0,1fr) minmax(0,max-content) auto;}
+/* Ход работы — одной строкой; если места совсем нет — многоточием, а не
+   переносом последней цифры. Приписка «без приёмки» — строкой ниже и в
+   ширину колонки не входит (width:0 + min-width:100%), иначе она
+   растягивала бы колонку своей длиной. */
+.progress-line{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.progress-note{display:block; width:0; min-width:100%; font-size:12px;}
 .facts-extra{display:flex; align-items:center; padding:0 12px 0 4px;}
 .facts-extra .snooze-btn{margin-left:0;}
 @media (max-width:560px){
@@ -355,13 +372,16 @@
 /* ---------- Сводка: люди по ролям внутри блока (TaskPeople) ---------- */
 .facts-footer{border-top:1px solid rgba(255,255,255,.06); margin-top:4px; padding:8px 12px 6px;}
 .tpeople-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;}
+/* «+» — той же залитой кнопкой, что «Отложить» (см. .snooze-btn). */
 .tpeople-add{
-  width:30px; height:30px; border-radius:50%; flex:none; cursor:pointer;
+  width:32px; height:32px; border-radius:9px; flex:none; cursor:pointer;
   display:inline-flex; align-items:center; justify-content:center;
-  background:var(--accent-soft); color:var(--accent); border:1px solid rgba(62,138,168,.6);
-  transition:background .12s ease, color .12s ease;
+  background:var(--accent); color:#fff; border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18);
+  transition:background .12s ease, transform .08s ease;
 }
-.tpeople-add:hover{background:var(--accent); color:#EAF6FA;}
+.tpeople-add:hover{background:#4A9BBB;}
+.tpeople-add:active{transform:translateY(1px); box-shadow:0 1px 3px rgba(0,0,0,.35);}
 .tpeople-empty{font-size:12.5px; color:var(--high); margin-bottom:6px;}
 .tpeople-group{margin-bottom:8px;}
 .tpeople-label{font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:5px;}
