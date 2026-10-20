@@ -934,7 +934,7 @@ export async function handleColleagueText(
   const command = matchColleagueCommand(body);
   if (!rows.length && command) {
     const today = new Date().toISOString().slice(0, 10);
-    const answer = await replyForColleague(admin, colleague, command, today);
+    const answer = await replyForColleague(admin, colleague, command, today, source);
     return { reply: answer.text, buttons: answer.buttons };
   }
 

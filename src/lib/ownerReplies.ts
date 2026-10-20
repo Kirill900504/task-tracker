@@ -15,6 +15,7 @@ import { actorScope, authorFilter, type BotActor } from "@/lib/botActor";
 import { latecomerText } from "@/lib/meetingNudges";
 import { sendToPerson } from "@/lib/reach";
 import { numbered, taskRef } from "@/lib/taskRef";
+import { handleMoveCallback, isMoveAction } from "@/lib/botMoveFlow";
 
 // Что происходит, когда ПОСТАНОВЩИК нажимает кнопку.
 //
@@ -65,6 +66,8 @@ export type OwnerOutcome = {
   // Последний шаг: код срока. Саму задачу заводит pipeline — там лежит
   // незакрытый вопрос с названием и людьми.
   finishNewTask?: string;
+  // Забыть незакрытый вопрос (lib/botMoveFlow: «Не надо» под переносом).
+  clearPending?: boolean;
 };
 
 // Найти владельца по чату. Его чат живёт не там, где чаты коллег:
@@ -212,8 +215,12 @@ export async function ownerTaskCard(admin: SupabaseClient, actor: BotActor, task
   if (closed) {
     buttons.push([{ text: "🔄 Открыть заново", data: encodeCallback("task", "reop", taskId) }]);
   } else {
+    // «Перенести срок» вместо «Продлить»: экран дней (завтра, понедельник,
+    // +неделя, свой день словами — lib/botMoveFlow), а не только «+N».
+    // Срок двигают и назад, на раньше, и «+3 дня» на это не отвечало.
+    // Старые сообщения с «plus» по-прежнему работают (ниже).
     buttons.push([
-      { text: "📅 Продлить срок", data: encodeCallback("task", "plus", taskId) },
+      { text: "📅 Перенести срок", data: encodeCallback("task", "mv", taskId) },
       { text: "🔔 Напомнить", data: encodeCallback("task", "ping", taskId) },
     ]);
   }
@@ -309,6 +316,16 @@ export async function ownerMeetingCard(admin: SupabaseClient, actor: BotActor, m
   if (!proposed && !closed && latecomers.length) {
     actions.push([{ text: "🙋 Поторопить (" + latecomers.length + ")", data: encodeCallback("meeting", "mlate", meetingId) }]);
   }
+  // Перенос и отмена — у каждой открытой встречи (20.10.2026: «на каждое
+  // событие больше вариантов к управлению, например более простые
+  // переносы»). Перенос — экран дней и времени (lib/botMoveFlow), отмена —
+  // с причиной, как в трекере.
+  if (!closed) {
+    actions.push([
+      { text: "📅 Перенести", data: encodeCallback("meeting", "mv", meetingId) },
+      { text: "🚫 Отменить", data: encodeCallback("meeting", "mvxok", meetingId) },
+    ]);
+  }
 
   return {
     text: lines.join("\n"),
@@ -352,6 +369,10 @@ export async function handleOwnerCallback(
   action: CallbackAction,
   today: string,
 ): Promise<OwnerOutcome | null> {
+  // Перенос и отмена — свой модуль: туда же приходит перенос, сказанный
+  // словами, и экран у обоих один.
+  if (isMoveAction(action)) return handleMoveCallback(admin, actor, action);
+
   if (action.action === "omenu") {
     const menu = ownerMenu();
     return { toast: "Меню", say: menu.text, sayButtons: menu.buttons };

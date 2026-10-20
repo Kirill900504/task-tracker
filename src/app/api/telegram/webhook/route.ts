@@ -7,6 +7,7 @@ import { deliverCallbackNotice, handleBotCallback } from "@/lib/botCallback";
 import { mirrorAnswer } from "@/lib/botMirror";
 import type { BotContext } from "@/lib/botPipeline";
 import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
+import { replyContext } from "@/lib/botMemory";
 
 // Telegram's side of the bot: the update format, voice files, and Telegram's
 // own retry behaviour. What a message MEANS is not decided here — that is
@@ -192,6 +193,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  await handleText(ctx, text);
+  await handleText(ctx, text, telegramReply(message?.reply_to_message));
   return NextResponse.json({ ok: true });
+}
+
+// Сообщение, на которое человек ответил свайпом (реплай): его текст и
+// данные кнопок под ним — по ним бот узнаёт, о какой встрече «эта встреча»
+// (lib/botMemory.replyContext).
+type TelegramReplied = {
+  text?: string;
+  caption?: string;
+  reply_markup?: { inline_keyboard?: { callback_data?: string }[][] };
+};
+
+function telegramReply(replied: TelegramReplied | undefined) {
+  if (!replied) return null;
+  const data = (replied.reply_markup?.inline_keyboard || []).flat().map((b) => b.callback_data || "").filter(Boolean);
+  return replyContext(replied.text || replied.caption || "", data);
 }

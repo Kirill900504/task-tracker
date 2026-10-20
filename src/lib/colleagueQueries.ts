@@ -53,7 +53,22 @@ const TRIGGERS: Record<ColleagueQuery, string[]> = {
 };
 
 // Ответ на «/app»: кнопка мини-приложения и, рядом, вход с компьютера.
-export function appReply(): BotReply {
+//
+// В MAX мини-приложения в ответах нет (см. keyboardAttachment в lib/max):
+// там на «приложение» отвечает меню кнопок — то, чем трекер в MAX и
+// работает. Обещать «открывается прямо здесь» без кнопки было бы враньём.
+export function appReply(channel: "telegram" | "max" = "telegram"): BotReply {
+  if (channel === "max") {
+    return {
+      text:
+        "В MAX трекер работает кнопками — нажмите «☰ Меню кнопок»: задачи, встречи, перенос, приёмка.\n\n" +
+        "На компьютере удобнее отдельное окно: «💻 Вход с компьютера» — пришлю ссылку.",
+      buttons: [
+        [{ text: "☰ Меню кнопок", data: encodeCallback("task", "list", "menu") }],
+        [{ text: "💻 Вход с компьютера", data: encodeCallback("task", "list", "enter") }],
+      ],
+    };
+  }
   return {
     text:
       "📱 Трекер открывается прямо здесь, в мессенджере, — без пароля.\n\n" +
@@ -341,6 +356,7 @@ export async function replyForColleague(
   colleague: { id: string; name: string },
   kind: ColleagueQuery,
   today: string,
+  channel: "telegram" | "max" = "telegram",
 ): Promise<BotReply> {
   if (kind === "menu") return botMenu((await canAssign(admin, colleague)) ? "assigner" : "recipient");
   // Справка — тоже по человеку, а не по кнопке: «❓ Помощь» получателя
@@ -351,7 +367,7 @@ export async function replyForColleague(
     return { text: colleagueCommandsHelp(colleague.name), buttons: navButtons() };
   }
   if (kind === "enter") return signInReply(admin, colleague.id);
-  if (kind === "app") return appReply();
+  if (kind === "app") return appReply(channel);
 
   if (kind === "meetings") {
     const meetings = await myMeetings(admin, colleague.id, today);

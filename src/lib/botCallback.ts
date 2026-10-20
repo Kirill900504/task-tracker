@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig } from "@/lib/botTransport";
 import type { CallbackAction } from "@/lib/colleagues";
-import { meetingButtons, screenButtons, type ColleagueRow } from "@/lib/colleagues";
+import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, screenButtons, type ColleagueRow } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { sendToPerson } from "@/lib/reach";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
@@ -11,6 +11,8 @@ import { createTaskFromBot, nextNewTaskStep, resolveWhen } from "@/lib/ownerNewT
 import { ownerNav } from "@/lib/ownerQueries";
 import type { CallbackOutcome } from "@/lib/colleagueReplies";
 import { handleIdeaInbox, isIdeaInboxAction } from "@/lib/ideaInbox";
+import { handleProposeCallback, isProposeAction, splitTarget, type MovePending } from "@/lib/botMoveFlow";
+import { lessonActor, saveLesson } from "@/lib/botMemory";
 
 // Нажатая кнопка — один разбор на оба мессенджера.
 //
@@ -92,6 +94,15 @@ async function routeBotCallback(
   // постановщицкая половина, где таких кнопок нет (lib/ideaInbox).
   if (isIdeaInboxAction(action)) return handleIdeaInbox(admin, chatId, action, channel);
 
+  // «🕐 Другое время» под приглашением — тоже кнопка ПОЛУЧАТЕЛЯ, кем бы он
+  // ни был: владелец, позванный руководителем, предлагает время своей
+  // строкой «(я)», как и отвечает «Буду» (lib/botMoveFlow).
+  if (isProposeAction(action)) {
+    const person = (await findColleagueByChat(admin, chatId, channel)) || (await findOwnerSelfByChat(admin, chatId, channel));
+    if (!person) return { toast: "Этот чат не подключён" };
+    return handleProposeCallback(admin, person, action, channel.id);
+  }
+
   const actor = await findActorByChat(admin, chatId, channel);
   if (actor) {
     // «Без описания» в мастере «Поручить»: следующий шаг зависит от того,
@@ -117,6 +128,17 @@ async function routeBotCallback(
       if (asColleague.toast !== "Этот чат не подключён") return asColleague;
       // Молчать нельзя: нажатие без ответа читается как сломанная кнопка.
       return { toast: "Эта кнопка не для вас" };
+    }
+
+    if (outcome.clearPending) await remember(admin, actor, channel, chatId, null);
+    // Перенос, предложенный по фразе, подтверждён кнопкой: фраза и её
+    // разбор становятся уроком (lib/botMemory), а «да» больше ждать не надо.
+    if (action.action === "mvgo" && outcome.toast === "Перенесено") {
+      const waiting = (await pendingOf(admin, actor, channel, chatId)) as MovePending | null;
+      if (waiting?.kind === "move_item" && waiting.id === splitTarget(action.id).id) {
+        if (waiting.phrase && waiting.parsed) await saveLesson(admin, { spaceId: actor.spaceId, actor: lessonActor(actor), phrase: waiting.phrase, parsed: waiting.parsed });
+        await remember(admin, actor, channel, chatId, null);
+      }
     }
 
     // Сказать исполнителям — сразу и без сводки: от них ждут ответа.

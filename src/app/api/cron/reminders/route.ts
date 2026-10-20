@@ -10,7 +10,7 @@ import { isRussianWorkingDay } from "@/lib/workCalendar";
 import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
 import { briefButtons } from "@/lib/ownerQueries";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
-import { dueReminder, minutesUntil, organizerNeedsReminder, ownerReminder, participantReminder, reasonNudge, recapAsk, recapButtons, recapDue } from "@/lib/meetingReminders";
+import { dueReminder, minutesUntil, organizerNeedsReminder, organizerReminderButtons, ownerReminder, participantReminder, reasonNudge, recapAsk, recapButtons, recapDue } from "@/lib/meetingReminders";
 import { awaitingReason, voteTally, withOrganizer, type MeetingVote } from "@/lib/meetingVotes";
 import { organizerName } from "@/lib/meetingOrganizer";
 import { chatsFor, meetingButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
@@ -159,6 +159,12 @@ export async function GET(req: Request) {
   );
 
   const admin = createAdminClient();
+  // Разговор с ботом нужен модели на полчаса (lib/botMemory) — старше двух
+  // суток он не нужен никому, а лежат там чужие слова. Убирается фоном,
+  // после ответа крону; не получилось — уберётся через пять минут.
+  after(async () => {
+    await admin.from("bot_dialog").delete().lt("created_at", new Date(Date.now() - 2 * 86400_000).toISOString());
+  });
   const now = moscowNow();
   const today = dateStr(now);
   // «За сутки» напоминают накануне, поэтому в выборку берётся и завтра.
@@ -712,7 +718,7 @@ export async function GET(req: Request) {
         const { error: ownerDup } = await admin
           .from("telegram_notifications")
           .insert({ user_id: userId, kind: window.kind, ref_id: m.id, notif_date: today });
-        if (!ownerDup) await tellOrganizer(admin, userId, m.created_by ?? null, [], false, ownerReminder(window.kind, m.title, when, tally));
+        if (!ownerDup) await tellOrganizer(admin, userId, m.created_by ?? null, [], false, ownerReminder(window.kind, m.title, when, tally), organizerReminderButtons(m.id));
       }
 
       // Кому именно писать: молчащим — вопрос, согласившимся — напоминание.

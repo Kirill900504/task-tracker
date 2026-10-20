@@ -179,7 +179,7 @@ export async function composeBrief(facts: BriefFacts): Promise<string> {
 
   let text = draft;
   try {
-    const raw = await gigaChatComplete({ system, user: draft, temperature: 0.2 });
+    const raw = await gigaChatComplete({ system, user: draft, temperature: 0.2, tier: "light" });
     const candidate = raw.trim();
     if (rewriteIsFaithful(draft, candidate, titles)) text = candidate;
   } catch {

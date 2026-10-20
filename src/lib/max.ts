@@ -1,6 +1,7 @@
 import type { BotButton, BotSendResult, BotTransport } from "@/lib/botTransport";
 import { maxSettings } from "@/lib/botSettings";
 import { russianFetch } from "@/lib/russianCa";
+import { miniAppUrl } from "@/lib/trackerUrl";
 
 // MAX (max.ru) Bot API.
 //
@@ -49,11 +50,22 @@ function headers(token: string): Record<string, string> {
 // found» (проверено запросом 13.10.2026). Пока имя бота неизвестно, кнопка
 // остаётся ссылкой — молча превратить её в callback было бы хуже всего:
 // нажатие ушло бы боту, который о ней ничего не знает.
+//
+// А с 20.10.2026 кнопки мини-приложения в MAX нет вовсе — его слова: «в МАХ
+// вместо приложения сделать работу с меню». В MAX трекер работает кнопками
+// бота, как в Telegram «☰ Меню кнопок»; мини-приложение там открывается
+// своей кнопкой кабинета, и вторая такая же в каждом меню только отнимала
+// строку. Убирается здесь, на выходе в MAX, — одним местом на все меню и
+// ответы, а не правкой каждого из них (их больше десятка, и забытый один
+// вернул бы кнопку). Ссылки (вход с компьютера) — не мини-приложение и
+// остаются: они ведут на /login, а не на /app.
 export function keyboardAttachment(buttons: BotButton[][], botUsername = "") {
+  const miniApp = miniAppUrl();
+  const shown = buttons.map((row) => row.filter((b) => b.app !== miniApp)).filter((row) => row.length);
   return {
     type: "inline_keyboard",
     payload: {
-      buttons: buttons.map((row) =>
+      buttons: shown.map((row) =>
         row.map((b) =>
           b.app
             ? botUsername

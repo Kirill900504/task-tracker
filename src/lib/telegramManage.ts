@@ -37,7 +37,9 @@ export type PendingCreateTasks = {
   // before this existed still resolve.
   meeting?: { id: string; title: string; result: string; summary: string };
 };
-export type PendingBulkMove = { kind: "bulk_move"; plan: BulkMovePlan };
+// Фраза и её разбор едут вместе с планом: подтверждённый «да» перенос
+// становится уроком для модели (lib/botMemory).
+export type PendingBulkMove = { kind: "bulk_move"; plan: BulkMovePlan; phrase?: string; parsed?: unknown };
 export type PendingAction = PendingDelete | PendingCreateTasks | PendingBulkMove;
 
 function isCreateTasks(p: PendingAction): p is PendingCreateTasks {
@@ -219,13 +221,18 @@ export async function handleManageItem(
 
 const AFFIRMATIVE = ["да", "ага", "угу", "yes", "y", "давай", "удали", "конечно", "подтверждаю"];
 
+// «Да» с точкой или восклицательным знаком — всё ещё «да»: «Да.» отменяло
+// перенос, о котором человек только что попросил.
+export function isYes(text: string): boolean {
+  return AFFIRMATIVE.includes(text.trim().toLowerCase().replace(/[.!]+$/, ""));
+}
+
 export async function resolvePendingAction(
   pending: PendingAction,
   replyText: string,
 ): Promise<string> {
   const admin = createAdminClient();
-  const normalized = replyText.trim().toLowerCase();
-  const confirmed = AFFIRMATIVE.includes(normalized);
+  const confirmed = isYes(replyText);
 
   if (isBulkMove(pending)) {
     if (!confirmed) return "Отменено — ничего не переносил.";

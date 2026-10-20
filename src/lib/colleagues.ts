@@ -282,6 +282,9 @@ export function meetingButtons(meetingId: string, choices: VoteChoice[] = ["yes"
       { text: "👥 Кто идёт", data: encodeCallback("meeting", "who", meetingId) },
       { text: "💬 Ответить", data: encodeCallback("meeting", "msg", meetingId) },
     ],
+    // Предложить другое время (20.10.2026) — организатору и остальным, с
+    // «подходит / не подходит» (lib/botMoveFlow.handleProposeCallback).
+    [{ text: "📆 Предложить другое время", data: encodeCallback("meeting", "pp", meetingId) }],
   ];
 }
 

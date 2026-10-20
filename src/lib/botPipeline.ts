@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { BotChannelConfig, BotTransport } from "@/lib/botTransport";
+import type { BotButton, BotChannelConfig, BotTransport } from "@/lib/botTransport";
 import { closedReply, itemClosed } from "@/lib/closedItem";
 import { answerOwnOpenQuestion, colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
 import { appReply, matchColleagueCommand, navButtons, signInReply } from "@/lib/colleagueQueries";
-import { encodeCallback, findColleagueByChat, findOwnerSelfByChat } from "@/lib/colleagues";
+import { encodeCallback, findColleagueByChat, findOwnerSelfByChat, screenButtons } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
@@ -28,6 +28,12 @@ import { actorScope, authorFilter, findActorByChat, type BotActor } from "@/lib/
 import { actorName, withoutSelfMark } from "@/lib/actorName";
 import { busyOnServer } from "@/lib/meetingBusyServer";
 import { taskRef } from "@/lib/taskRef";
+import { navRow } from "@/lib/botMenu";
+import { isYes } from "@/lib/telegramManage";
+import { contextBlock, lessonActor, lessonsBlock, lessonsFor, recentDialog, recordingTransport, rememberLine, saveLesson, type DialogLine, type ReplyContext } from "@/lib/botMemory";
+import { applyMove, cancelMeetingFromBot, moveFromTypedWhen, planMoveFromText, type CancelPending, type MovePending } from "@/lib/botMoveFlow";
+import { parseWhen } from "@/lib/botWhen";
+import { dateStr, moscowNow } from "@/lib/taskLogic";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
 // мессенджере, а закрывает следующее сообщение владельца.
@@ -46,6 +52,23 @@ const AIM_LIFETIME_MS = 2 * 60 * 60 * 1000;
 // Слово, которым открывают меню. Одно на оба чата: дверь обратно должна
 // называться одинаково у владельца и у любого другого постановщика.
 const MENU_WORD = /^(меню|menu|\/menu|что умеешь|start|\/start)$/i;
+
+// Явное «нет» на предложенное действие.
+const SAID_NO = /^(нет|неа|не надо|не нужно|не переноси|не отменяй|отмена|отмени|стоп|no)[.!]*$/i;
+
+// Ответ на «Переношу? да?», который не «да» и не «нет», — это УТОЧНЕНИЕ, а
+// не отказ. 19.10.2026 на «Переношу 3 записи?» Кирилл ответил «Только
+// телемост» и получил «Отменено — ничего не переносил», потом то же на «На
+// 26.10». Такое сообщение идёт в обычный разбор, где модель видит разговор
+// целиком (lib/botMemory) и понимает, к чему оно. Удаление и создание задач
+// по-прежнему отменяются любым другим словом: там уточнение — это новая
+// фраза, а не правка списка.
+function passesThrough(waiting: unknown, trimmed: string): boolean {
+  const kind = (waiting as { kind?: string } | null)?.kind;
+  if (kind === "move_item") return true;
+  if (kind === "bulk_move") return !isYes(trimmed) && !SAID_NO.test(trimmed);
+  return false;
+}
 
 function isOwnerReply(p: unknown): p is OwnerReplyPending {
   return !!p && (p as OwnerReplyPending).kind === "owner_reply";
@@ -163,7 +186,12 @@ async function remember(ctx: BotContext, patch: Record<string, unknown>) {
 // надиктованные списком после встречи, и раньше эти два места делали разное
 // (одно тихо теряло строку, второе не заводило её вовсе).
 
-async function respondToTool(ctx: BotContext, userId: string, tool: string, input: Record<string, unknown>, droppedNames: string[]) {
+// Что ещё нужно разбору, кроме самой фразы: кто пишет (перенос ищет только
+// его встречи и задачи), на что он ответил и что сказал целиком — фраза
+// едет в память переноса, чтобы подтверждённая стала уроком.
+type ToolExtra = { actor: BotActor; reply: ReplyContext | null; phrase: string };
+
+async function respondToTool(ctx: BotContext, userId: string, tool: string, input: Record<string, unknown>, droppedNames: string[], extra?: ToolExtra) {
   if (tool === "create_task") {
     // Не назвали, кому, — значит себе.
     //
@@ -392,8 +420,27 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     }
     // Shown and confirmed before anything moves — a bulk edit is the one
     // place a misunderstanding is expensive to undo.
-    await remember(ctx, { pending_action: { kind: "bulk_move", plan } });
-    await say(ctx, describePlan(plan) + "\n\nПереношу? Ответьте «да» — любой другой ответ отменит.");
+    await remember(ctx, { pending_action: { kind: "bulk_move", plan, phrase: extra?.phrase, parsed: { type: "bulk_move", ...input } } });
+    // «Любой другой ответ отменит» больше неправда: уточнение («только
+    // телемост») разбирается как уточнение, а отменяет «нет».
+    await say(ctx, describePlan(plan) + "\n\nПереношу? Ответьте «да». Если нужно не всё — напишите, что именно («только телемост»).");
+    return;
+  }
+
+  if (tool === "move_item" && extra) {
+    const plan = await planMoveFromText(ctx.admin, extra.actor, {
+      itemType: String(input.itemType || ""),
+      query: String(input.query || ""),
+      when: String(input.when || ""),
+      replyText: extra.reply?.text,
+      replyItem: extra.reply?.item,
+      phrase: extra.phrase,
+      parsed: { type: "move_item", ...input },
+    });
+    if (plan.pending) await rememberFor(ctx, extra.actor, plan.pending);
+    // Кнопки экрана: нажатие переписывает это же сообщение, и
+    // подтверждение превращается в ответ, а не встаёт под ним ещё одним.
+    await ctx.transport.send(ctx.chatId, plan.text, plan.buttons?.length ? { buttons: screenButtons(plan.buttons) } : undefined);
     return;
   }
 
@@ -424,10 +471,21 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
 
   // cant_help, or anything unrecognized — an honest "I don't do that" beats
   // silently failing or (the bug this replaced) echoing the user's message.
-  await say(
-    ctx,
-    "Это не похоже ни на поручение, ни на вопрос о делах. " +
-      "Напишите поручение («завтра позвонить Сергею») или спросите про свои задачи («что горит на этой неделе»).",
+  //
+  // Но не тупик: 19.10.2026 на «26.10» бот ответил лекцией о том, что
+  // умеет, и ни одной кнопкой. Ответ на сообщение о встрече или задаче
+  // предлагает то, что с ней можно сделать; остальное — меню.
+  const item = extra?.reply?.item;
+  const itemButtons =
+    item?.kind === "meeting"
+      ? [[{ text: "📅 Перенести встречу", data: encodeCallback("meeting", "mv", item.id) }, { text: "📋 Открыть", data: encodeCallback("meeting", "oshow", item.id) }]]
+      : item?.kind === "task"
+        ? [[{ text: "📅 Перенести срок", data: encodeCallback("task", "mv", item.id) }, { text: "📋 Открыть", data: encodeCallback("task", "oshow", item.id) }]]
+        : [];
+  await ctx.transport.send(
+    ctx.chatId,
+    "Не понял, что сделать. Можно так: «завтра позвонить Сергею», «перенеси встречу с банком на 26.10», «что горит на этой неделе» — или кнопками:",
+    { buttons: screenButtons([...itemButtons, ...navRow("assigner")]) },
   );
 }
 
@@ -557,16 +615,30 @@ async function offerTask(
   colleague: { id: string; name: string; user_id: string },
   memberId: string,
   text: string,
+  dialog: DialogLine[] = [],
+  reply: ReplyContext | null = null,
 ): Promise<boolean> {
   const { data: assigneeRows } = await ctx.admin.from("assignees").select("name").eq("user_id", colleague.user_id).is("archived_at", null);
   const known = (assigneeRows || []).map((r) => r.name as string);
 
   let items;
   try {
-    ({ items } = await parseQuickAdd(text, known));
+    ({ items } = await parseQuickAdd(text, known, {
+      context: contextBlock(dialog, reply?.text || ""),
+      lessons: lessonsBlock(await lessonsFor(ctx.admin, memberId, text)),
+    }));
   } catch {
     // Модель не ответила — это не повод отвечать человеку ошибкой про JSON.
     return false;
+  }
+
+  // Перенос встречи или срока — у руководителя ровно так же, как у
+  // владельца: свои встречи и свои задачи, с подтверждением кнопкой.
+  const move = items.find((it) => it.tool === "move_item");
+  if (move) {
+    const actor: BotActor = { userId: memberId, spaceId: colleague.user_id, assigneeId: colleague.id, isOwner: false };
+    await respondToTool(ctx, colleague.user_id, "move_item", move.input, [], { actor, reply, phrase: text });
+    return true;
   }
 
   const tasks = items
@@ -614,6 +686,51 @@ async function offerTask(
 // Возвращает true, если сообщение было ответом на вопрос: тогда
 // вызывающий на этом и останавливается.
 async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknown, trimmed: string): Promise<boolean> {
+  // Отмена встречи ждёт причину (кнопка «🚫 Отменить» — lib/botMoveFlow).
+  if ((waiting as CancelPending).kind === "meeting_cancel") {
+    if (SAID_NO.test(trimmed)) {
+      await say(ctx, "Хорошо, встреча остаётся.");
+      return true;
+    }
+    await ctx.transport.send(ctx.chatId, await cancelMeetingFromBot(ctx.admin, actor, waiting as CancelPending, trimmed), { buttons: navRow("assigner") });
+    return true;
+  }
+
+  // Перенос: либо ждём день словами («✍️ Другой день»), либо «да» на
+  // предложенный по фразе перенос.
+  if ((waiting as MovePending).kind === "move_item") {
+    const pending = waiting as MovePending;
+    const show = async (r: { text: string; buttons?: BotButton[][]; pending?: MovePending }) => {
+      if (r.pending) await rememberFor(ctx, actor, r.pending);
+      await ctx.transport.send(ctx.chatId, r.text, r.buttons?.length ? { buttons: screenButtons(r.buttons) } : undefined);
+    };
+    if (!pending.date) {
+      await show(await moveFromTypedWhen(ctx.admin, actor, pending, trimmed));
+      return true;
+    }
+    if (isYes(trimmed)) {
+      const done = await applyMove(ctx.admin, actor, pending.itemType, pending.id, pending.date, pending.time);
+      if (done.ok && pending.phrase && pending.parsed) {
+        await saveLesson(ctx.admin, { spaceId: actor.spaceId, actor: lessonActor(actor), phrase: pending.phrase, parsed: pending.parsed });
+      }
+      await ctx.transport.send(ctx.chatId, done.text, { buttons: screenButtons(done.buttons) });
+      return true;
+    }
+    if (SAID_NO.test(trimmed)) {
+      await say(ctx, "Хорошо, ничего не переношу.");
+      return true;
+    }
+    // «На 27.10», «в 15:00», «лучше в среду» — поправка к тому же переносу.
+    // Длинная фраза — уже новая просьба: её разберёт модель вместе с
+    // разговором (вызывающий пропускает её дальше).
+    const when = parseWhen(trimmed, dateStr(moscowNow()), pending.date);
+    if ((when.date || when.time) && trimmed.split(/\s+/).length <= 6) {
+      await show(await moveFromTypedWhen(ctx.admin, actor, { ...pending, date: when.date ? "" : pending.date }, trimmed));
+      return true;
+    }
+    return false;
+  }
+
   // Возврат на доработку: нажали кнопку, теперь пишут, что именно
   // доделать. Правила возврата общие с трекером (lib/reviewWork):
   // отчёты обнуляются, людям говорится сразу, в хронику пишется строка.
@@ -771,8 +888,21 @@ async function rememberFor(ctx: BotContext, actor: BotActor, value: Record<strin
   await ctx.admin.from("assignees").update({ pending_action: value }).eq("id", actor.assigneeId);
 }
 
-export async function handleText(ctx: BotContext, text: string): Promise<void> {
+// Память разговора на этот чат: что говорили за последние полчаса (без
+// текущего сообщения — оно и так перед моделью), и транспорт, который
+// записывает каждый ответ бота. Реплика человека записывается тут же.
+async function openMemory(ctx: BotContext, spaceId: string, text: string): Promise<{ ctx: BotContext; dialog: DialogLine[] }> {
+  const ref = { spaceId, channel: ctx.channel.id, chatId: ctx.chatId };
+  const dialog = await recentDialog(ctx.admin, ref);
+  await rememberLine(ctx.admin, ref, "user", text);
+  return { ctx: { ...ctx, transport: recordingTransport(ctx.transport, ctx.admin, ref) }, dialog };
+}
+
+// `reply` — сообщение бота, на которое человек ответил (реплай), если
+// мессенджер его прислал. См. ReplyContext в lib/botMemory.
+export async function handleText(baseCtx: BotContext, text: string, reply: ReplyContext | null = null): Promise<void> {
   const trimmed = text.trim();
+  let ctx = baseCtx;
 
   const { data: account, error: accountError } = await ctx.admin
     .from(ctx.channel.accountsTable)
@@ -794,6 +924,8 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     }
     const colleague = await findColleagueByChat(ctx.admin, ctx.chatId, ctx.channel);
     if (colleague) {
+      const memory = await openMemory(baseCtx, colleague.user_id, trimmed);
+      ctx = memory.ctx;
       // Отложенное подтверждение всегда старше всего остального: следующее
       // сообщение — это «да» или отказ, а не новая просьба.
       const waiting = await pendingFor(ctx.admin, colleague.id);
@@ -805,8 +937,10 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
         // разбирает их та же функция, что и в чате владельца.
         const actor = await findActorByChat(ctx.admin, ctx.chatId, ctx.channel);
         if (actor && (await assignerPending(ctx, actor, waiting, trimmed))) return;
-        await say(ctx, await resolvePendingAction(waiting, trimmed));
-        return;
+        if (!passesThrough(waiting, trimmed)) {
+          await say(ctx, await resolvePendingAction(waiting, trimmed));
+          return;
+        }
       }
 
       // Раньше здесь был тупик: «это канал в одну сторону». Он и был им,
@@ -845,7 +979,7 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
       // человек, которому пишут, и заводить от его имени задачи в чужом
       // пространстве было бы подлогом.
       if (asManager) {
-        const offered = await offerTask(ctx, colleague, asManager, trimmed);
+        const offered = await offerTask(ctx, colleague, asManager, trimmed, memory.dialog, reply);
         if (offered) return;
       }
 
@@ -878,6 +1012,8 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
   // словом, показывало 19 задач вместо 8 — чужие пространства целиком.
   // Кнопки этим не болели: они всегда несли настоящего актора.
   const asOwner: BotActor = { userId: account.user_id, spaceId: account.user_id, assigneeId: "", isOwner: true };
+  const memory = await openMemory(baseCtx, account.user_id, trimmed);
+  ctx = memory.ctx;
 
   // Незакрытый вопрос старше всего остального: следующее сообщение — это
   // «да», причина возврата или шаг мастера, а не новая просьба.
@@ -887,9 +1023,16 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     if (await assignerPending(ctx, asOwner, waiting, trimmed)) return;
     // Остывшее «💬 Ответить» сюда не адресовано: resolvePendingAction
     // разбирает подтверждения («да»), и незнакомая ему память ответила бы
-    // «Отменено, „undefined“ не тронул».
-    if (!isOwnerReply(waiting)) {
-      await say(ctx, await resolvePendingAction(waiting as PendingAction, trimmed));
+    // «Отменено, „undefined“ не тронул». Уточнение к переносу — тоже не
+    // ответ «да/нет», а новая фраза о том же (passesThrough).
+    if (!isOwnerReply(waiting) && !passesThrough(waiting, trimmed)) {
+      const bulk = waiting as { kind?: string; phrase?: string; parsed?: unknown };
+      const answer = await resolvePendingAction(waiting as PendingAction, trimmed);
+      // Подтверждённый массовый перенос — урок, как и одиночный.
+      if (bulk.kind === "bulk_move" && isYes(trimmed) && bulk.phrase && bulk.parsed && answer.startsWith("✓")) {
+        await saveLesson(ctx.admin, { spaceId: account.user_id, actor: lessonActor(asOwner), phrase: bulk.phrase, parsed: bulk.parsed });
+      }
+      await say(ctx, answer);
       return;
     }
   }
@@ -909,7 +1052,7 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
   const ownerWord = matchColleagueCommand(trimmed);
   if (ownerWord === "app" || ownerWord === "enter") {
     const selfRow = ownerWord === "enter" ? await findOwnerSelfByChat(ctx.admin, ctx.chatId, ctx.channel) : null;
-    const reply = ownerWord === "app" ? appReply() : selfRow ? await signInReply(ctx.admin, selfRow.id) : null;
+    const reply = ownerWord === "app" ? appReply(ctx.channel.id) : selfRow ? await signInReply(ctx.admin, selfRow.id) : null;
     if (reply) {
       await ctx.transport.send(ctx.chatId, reply.text, reply.buttons?.length ? { buttons: reply.buttons } : undefined);
       return;
@@ -965,7 +1108,10 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
   const assignees = (assigneeRows || []).map((r) => r.name as string);
 
   try {
-    const { items } = await parseQuickAdd(effectiveText, assignees);
+    const { items } = await parseQuickAdd(effectiveText, assignees, {
+      context: contextBlock(memory.dialog, reply?.text || ""),
+      lessons: lessonsBlock(await lessonsFor(ctx.admin, lessonActor(asOwner), effectiveText)),
+    });
     let toProcess = items;
 
     // Loop guard: allow at most ONE clarifying round-trip. An exact-text
@@ -995,7 +1141,7 @@ export async function handleText(ctx: BotContext, text: string): Promise<void> {
     // whole message over an unclear fragment.
     const finalItems = isSingleClarify ? toProcess : toProcess.filter((it) => it.tool !== "ask_clarifying_question");
     for (const it of finalItems) {
-      await respondToTool(ctx, account.user_id, it.tool, it.input, it.droppedNames);
+      await respondToTool(ctx, account.user_id, it.tool, it.input, it.droppedNames, { actor: asOwner, reply, phrase: effectiveText });
     }
     await logAiAction(ctx.admin, {
       userId: account.user_id,

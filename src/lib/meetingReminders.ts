@@ -175,5 +175,21 @@ export function recapButtons(meetingId: string): BotButton[][] {
       { text: "⚪ Без результата", data: encodeCallback("meeting", "mno", meetingId) },
     ],
     [{ text: "📝 Записать итог", data: encodeCallback("meeting", "mrec", meetingId) }],
+    // Встреча, которая не состоялась, — чаще всего встреча, которую надо
+    // перенести. 19.10.2026 Кирилл отвечал на этот вопрос словами
+    // «перенеси на 26.10 на это же время», потому что кнопки не было.
+    [{ text: "📅 Не было — перенести", data: encodeCallback("meeting", "mv", meetingId) }],
+  ];
+}
+
+// Кнопки под напоминанием организатору: за пятнадцать минут до начала
+// встречу чаще всего переносят, а не отменяют, — и делать это словами,
+// угадывая, поймёт ли бот, незачем.
+export function organizerReminderButtons(meetingId: string): BotButton[][] {
+  return [
+    [
+      { text: "📅 Перенести", data: encodeCallback("meeting", "mv", meetingId) },
+      { text: "📋 Открыть", data: encodeCallback("meeting", "oshow", meetingId) },
+    ],
   ];
 }

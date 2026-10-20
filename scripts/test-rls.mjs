@@ -222,6 +222,11 @@ async function main() {
     message_id: "1",
   });
 
+  // Память бота (миграция 0065): реплики разговора и подтверждённые фразы —
+  // чужие слова, браузеру не нужны ни свои, ни тем более чужие.
+  await testServerOnlyTable("bot_dialog", { channel: "telegram", chat_id: 1, role: "user", body: "rls" });
+  await testServerOnlyTable("bot_lessons", { actor: "rls", phrase: "rls", parsed: {} });
+
   await testServerOnlyTable("notification_queue", {
     user_id: "00000000-0000-0000-0000-000000000000",
     kind: "reported",

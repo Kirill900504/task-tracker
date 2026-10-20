@@ -7,6 +7,7 @@ import { decodeCallback } from "@/lib/colleagues";
 import { deliverCallbackNotice, handleBotCallback } from "@/lib/botCallback";
 import { mirrorAnswer } from "@/lib/botMirror";
 import type { BotContext } from "@/lib/botPipeline";
+import { replyContext } from "@/lib/botMemory";
 import { MAX_CHANNEL } from "@/lib/botTransport";
 
 // MAX's side of the bot. Everything past "what did this person say" is the
@@ -147,7 +148,7 @@ export async function POST(req: Request) {
   if (type !== "message_created") return NextResponse.json({ ok: true });
 
   const message = update.message as
-    | { sender?: { user_id?: number; username?: string }; body?: { text?: string; attachments?: unknown } }
+    | { sender?: { user_id?: number; username?: string }; body?: { text?: string; attachments?: unknown }; link?: MaxLink }
     | undefined;
   const chatId = message?.sender?.user_id;
   if (!chatId) return NextResponse.json({ ok: true });
@@ -191,6 +192,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  await handleText(ctx, text);
+  await handleText(ctx, text, maxReply(message?.link));
   return NextResponse.json({ ok: true });
+}
+
+// Сообщение, на которое ответили (реплай): MAX кладёт его в `link` с типом
+// "reply", вместе с кнопками — по их данным бот узнаёт встречу или задачу
+// (lib/botMemory.replyContext). Пересланное (`forward`) — не ответ боту.
+type MaxLink = {
+  type?: string;
+  message?: { text?: string; attachments?: { type?: string; payload?: { buttons?: { payload?: string }[][] } }[] };
+};
+
+function maxReply(link: MaxLink | undefined) {
+  if (!link || link.type !== "reply" || !link.message) return null;
+  const data = (link.message.attachments || [])
+    .filter((a) => a.type === "inline_keyboard")
+    .flatMap((a) => (a.payload?.buttons || []).flat().map((b) => b.payload || ""))
+    .filter(Boolean);
+  return replyContext(link.message.text || "", data);
 }
