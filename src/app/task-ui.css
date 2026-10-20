@@ -251,6 +251,93 @@
   .item-head.plain-head{flex-wrap:nowrap; align-items:center;}
   .item-head.plain-head .item-head-actions{width:auto; justify-content:flex-end;}
 }
+/* Шапка задачи и встречи — ОДНА строка на любой ширине (20.10.2026: «строка
+   должна сохранить чётко одну строку без смещений вниз»). Номер слева,
+   название многоточием, кнопки и × справа; ничего не переносится. Целиком
+   название открывается нажатием (.open) — это единственный случай, когда
+   шапка растёт, и растёт она по просьбе того, кто нажал. */
+.item-head.one-line{flex-wrap:nowrap; align-items:center; gap:10px;}
+.item-head.one-line .item-head-kicker{
+  flex:none; margin:0; height:38px; padding:0 10px; border-radius:10px;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:13px; color:var(--ink-soft); background:var(--paper-soft); border:1px solid var(--line-soft);
+}
+.item-head.one-line .item-head-title{
+  box-sizing:border-box; height:38px; padding:0 12px; display:block;
+  font-size:16px; line-height:36px; cursor:pointer;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.item-head.one-line .item-head-title.open{height:auto; white-space:normal; line-height:1.35; padding:8px 12px;}
+.item-head.one-line .item-head-actions{flex-wrap:nowrap; width:auto;}
+.fc-short{display:none;}
+@media (max-width:800px){
+  .item-head.one-line{flex-wrap:nowrap;}
+  .item-head.one-line .item-head-actions{width:auto; justify-content:flex-end;}
+  .item-head.one-line .item-head-title{font-size:15px;}
+  .item-head.one-line .item-head-btn{padding:0 10px;}
+  .item-head.one-line .item-head-kicker{padding:0 8px;}
+  .fc-long{display:none;}
+  .fc-short{display:inline;}
+}
+
+/* «Отложить» — в строке срока, самой правой, чуть выделена фирменной
+   рамкой среди серых кнопок срока; отложенная задача — залита и подписана
+   днём возвращения. */
+.snooze-btn{
+  margin-left:auto; flex:none; height:32px; padding:0 12px; border-radius:999px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  font-family:var(--display); font-size:12.5px; font-weight:700;
+  color:var(--accent); background:rgba(62,138,168,.1); border:1px solid rgba(62,138,168,.55);
+}
+.snooze-btn:hover{background:rgba(62,138,168,.18); border-color:var(--accent);}
+.snooze-btn.on{color:#fff; background:var(--accent); border-color:var(--accent);}
+.facts-row.has-extra{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr) auto;}
+.facts-extra{display:flex; align-items:center; padding:0 12px 0 4px;}
+.facts-extra .snooze-btn{margin-left:0;}
+@media (max-width:560px){
+  /* Столбец один: «Крайний срок» и кнопка — одной строкой, ход работы
+     ниже во всю ширину. */
+  .facts-row.has-extra{grid-template-columns:minmax(0,1fr) auto;}
+  .facts-row.has-extra > .fact:first-child{grid-column:1; grid-row:1;}
+  .facts-row.has-extra > .facts-extra{grid-column:2; grid-row:1;}
+  .facts-row.has-extra > .fact:nth-child(2){grid-column:1 / -1; grid-row:2;}
+}
+
+/* ---------- Выравнивание окна задачи (20.10.2026: «выровняй и отцентруй
+   все разделы, поля, кнопки, маркеры и статусы») ----------
+   Пилюля стадии растягивалась на высоту ячейки сетки (у flex-обёртки
+   align-items по умолчанию stretch) — на телефоне «В работе» стояла
+   овалом в две строки с текстом в углу. Теперь она своей высоты и текст
+   по центру. */
+.facts-badge{align-items:flex-start; align-self:start;}
+.facts-badge .tp-stage{
+  display:inline-flex; align-items:center; justify-content:center; white-space:nowrap;
+  min-height:26px; padding:0 10px; line-height:1.2; box-sizing:border-box;
+}
+/* «Ждёт задачу» — такой же карточкой, как описание и чек-лист под ним, с
+   той же подписью: на телефоне она одна стояла голым полем между
+   карточками и сбивала левый край. */
+.waits-field, .waits-line{
+  margin:0 0 10px; padding:10px 13px 12px; border-radius:var(--radius-md);
+  background:var(--paper-soft); border:1px solid var(--line-soft); box-shadow:var(--edge);
+}
+.waits-field > label{
+  display:block; margin:0 0 7px; font-size:11px; font-weight:var(--label-weight); letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-label); font-family:var(--display);
+}
+.waits-line{display:flex; flex-wrap:wrap; align-items:center; gap:6px;}
+.task-snoozed{display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; color:var(--accent); white-space:nowrap;}
+.snoozed-banner{
+  display:flex; align-items:center; gap:8px; margin:0 0 10px; padding:8px 8px 8px 12px; border-radius:12px;
+  font-size:13px; font-weight:600; color:var(--ink); background:rgba(62,138,168,.1); border:1px solid rgba(62,138,168,.4);
+}
+.snoozed-banner > span{flex:1; min-width:0;}
+.snoozed-banner-exit{
+  flex:none; height:30px; padding:0 12px; border-radius:999px; cursor:pointer;
+  font-size:12.5px; font-weight:700; color:var(--ink); background:var(--paper-soft); border:1px solid var(--line-soft);
+}
+.snoozed-banner-exit:hover{border-color:var(--accent);}
+
 /* Шапка служебного окна — та же высота строки, что у прежнего h2: × стоит
    на уровне названия, а не ниже него. */
 .item-head.plain-head{align-items:center;}

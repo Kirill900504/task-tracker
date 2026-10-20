@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Icon from "./Icon";
 
 // Шапка окна: название, действия и × в правом верхнем углу.
@@ -22,11 +22,21 @@ import Icon from "./Icon";
 // вокруг названия передают `plain` — рамка выделяет название ЗАДАЧИ, а не
 // слово «Команда».
 //
+// С 20.10.2026 шапка задачи и встречи — ОДНА строка: номер, название,
+// действия, ×. Его слова: «поместить это всё в одну строку… строка должна
+// сохранить чётко одну строку без смещений вниз во вторую». Номер стоял
+// надписью НАД названием, а кнопки на телефоне переносились ПОД него —
+// три строки на то, что читается одним взглядом. Поэтому длинное название
+// обрезается многоточием, а целиком открывается нажатием на него (и
+// подсказкой при наведении): на телефоне наведения нет, и без нажатия
+// хвост названия был бы недоступен вовсе.
+//
 // Одна шапка на все окна по той же причине, по которой у задачи и встречи
 // одна сводка (ItemFacts): «однотипное» значит одно и то же место, а две
 // копии разметки разъедутся.
 export default function ItemModalHead({
   kicker,
+  kickerTitle,
   title,
   titleId,
   actions,
@@ -34,22 +44,35 @@ export default function ItemModalHead({
   closeId,
   plain,
 }: {
-  // «Задача #111», «Встреча» — над названием, мелко.
+  // «#111», «Встреча» — слева от названия, на той же строке.
   kicker?: ReactNode;
+  kickerTitle?: string;
   title: ReactNode;
   titleId?: string;
-  // Кнопки слева от ×: принудительное закрытие, отложить, удалить.
+  // Кнопки слева от ×: принудительное закрытие, удалить.
   actions?: ReactNode;
   onClose: () => void;
   closeId?: string;
   // Название без рамки — у служебных окон («Команда», «Разделы»).
   plain?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const full = typeof title === "string" ? title : undefined;
   return (
-    <div className={"item-head" + (plain ? " plain-head" : "")}>
+    <div className={"item-head" + (plain ? " plain-head" : " one-line")}>
+      {!plain && kicker && (
+        <span className="item-head-kicker" title={kickerTitle}>
+          {kicker}
+        </span>
+      )}
       <div className="item-head-main">
-        {kicker && <div className="item-head-kicker">{kicker}</div>}
-        <h2 id={titleId} className={"item-head-title" + (plain ? " plain" : "")}>
+        {plain && kicker && <div className="item-head-kicker">{kicker}</div>}
+        <h2
+          id={titleId}
+          className={"item-head-title" + (plain ? " plain" : "") + (open ? " open" : "")}
+          title={!plain && !open ? full : undefined}
+          onClick={plain ? undefined : () => setOpen((v) => !v)}
+        >
           {title}
         </h2>
       </div>

@@ -11,7 +11,8 @@
 import { useMemo, useState } from "react";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isClosed, isOverdue, isTaskDueOnDate, taskSortFn, todayStr } from "@/lib/taskDisplay";
-import { isSnoozed } from "@/lib/snooze";
+import { isSnoozed, snoozeDay } from "@/lib/snooze";
+import { chooseSnooze } from "./snoozeAsk";
 import { KANBAN_COLUMNS, columnOf, moveBetween, type KanbanColumn } from "@/lib/kanban";
 import { myRoleOn, showsOverdue } from "@/lib/myRole";
 import { BOARD_FILTERS, cleanBoardFilter, matchesBoardFilter, toggleBoardFilter } from "@/lib/boardFilter";
@@ -173,7 +174,10 @@ export default function TasksPanel({
   const [onlyOverdue, setOnlyOverdue] = useSavedSetting("board.onlyOverdue", false);
   // Показать отложенные (миграция 0049). Отложенное уходит с доски автора
   // до своего дня, а кнопка с числом — единственный путь к нему раньше.
-  const [showSnoozed, setShowSnoozed] = useSavedSetting("board.showSnoozed", false);
+  // НЕ запоминается между запусками, в отличие от фильтров рядом: это
+  // взгляд «только отложенное», и открыть трекер утром на нём значило бы
+  // увидеть доску без единой рабочей задачи.
+  const [showSnoozed, setShowSnoozed] = useState(false);
   // Чьи задачи показывает доска: то, что ждут от меня, то, что поручил я,
   // или всё сразу.
   //
@@ -343,8 +347,16 @@ export default function TasksPanel({
   const today = todayStr();
   const snoozedMine = (t: Task) => authored(t) && t.status !== "done" && isSnoozed(t.snoozedUntil, today);
   const snoozedCount = tasks.filter(snoozedMine).length;
+  // «Отложено» — ОТДЕЛЬНЫЙ взгляд, а не «всё плюс отложенное» (20.10.2026,
+  // «улучши механизм отложенных задач»). Кнопка подмешивала отложенные к
+  // остальным без единой отметки, и нажатие выглядело так, будто не
+  // произошло ничего: две новые карточки среди тридцати не найти. Теперь
+  // доска показывает только их, каждая подписана днём возвращения, а
+  // выход — та же кнопка. Счётчик пустеет — режим снимается сам: смотреть
+  // в пустую доску незачем.
+  const snoozedView = showSnoozed && snoozedCount > 0;
   const filtered = tasks.filter((t) => {
-    if (!showSnoozed && snoozedMine(t)) return false;
+    if (snoozedView ? !snoozedMine(t) : snoozedMine(t)) return false;
     if (filterAssignee !== "all" && t.assignee !== filterAssignee) return false;
     if (onlyOverdue && !isOverdue(t)) return false;
     if (sharedBoard && !matchesBoardFilter(boardFilter, t, roleOn(t), myUserId)) return false;
@@ -485,6 +497,13 @@ export default function TasksPanel({
   // если по задаче отчитались — приёмка, если нет — волевое закрытие. Оба
   // идут через /api/workspace/review, то есть человеку уходит сообщение, а
   // в хронику задачи — строка.
+  async function snoozeFromBoard(t: Task) {
+    const choice = await chooseSnooze(ask, { snoozedUntil: t.snoozedUntil, deadline: t.deadline }, todayStr());
+    if (choice === null) return;
+    const current = (allTasks ?? tasks).find((x) => x.id === t.id) || t;
+    actions.saveTask({ ...current, snoozedUntil: choice });
+  }
+
   async function quickDone(t: Task) {
     if (!authored(t)) {
       toasts.showToast("Это не ваша задача", "Откройте её — там кнопки «Принял» и «Сделал».");
@@ -681,6 +700,18 @@ export default function TasksPanel({
     } else if (onTaskToMeeting) {
       items.push({ id: "meeting", label: "Назначить встречу", icon: "calendar", onSelect: () => onTaskToMeeting(t.id) });
     }
+    // «Отложить» — и из меню карточки, не только из самой задачи: на
+    // телефоне это то же «нашёл → открыл → нашёл кнопку», а откладывают
+    // как раз пачкой, проходя по доске утром. Вопрос тот же (snoozeAsk).
+    if (authored(t) && !isClosed(t)) {
+      const till = snoozedMine(t) ? t.snoozedUntil || "" : "";
+      items.push({
+        id: "snooze",
+        label: till ? `Отложена до ${snoozeDay(till)}…` : "Отложить…",
+        icon: "clock",
+        onSelect: () => void snoozeFromBoard(t),
+      });
+    }
     // «Принял» — прямо отсюда, и это единственный ответ исполнителя,
     // который здесь возможен.
     //
@@ -768,6 +799,7 @@ export default function TasksPanel({
                       people={participants.forTask(t.id)}
                       checklist={checklistCounts[t.id]}
                       waitsFor={waitsFor(t)}
+                      snoozedTill={snoozedMine(t) ? t.snoozedUntil : undefined}
                     />
                   )}
                 </SortableTask>
@@ -930,14 +962,15 @@ export default function TasksPanel({
               {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
             </button>
             )}
-            {(snoozedCount > 0 || showSnoozed) && (
+            {snoozedCount > 0 && (
               <button
                 type="button"
-                className={"filter-pill" + (showSnoozed ? " active" : "")}
+                className={"filter-pill snoozed" + (snoozedView ? " active" : "")}
                 id="showSnoozedBtn"
-                aria-pressed={showSnoozed}
-                title="Задачи, которые вы отложили до другого дня"
-                onClick={() => setShowSnoozed(!showSnoozed)}
+                aria-pressed={snoozedView}
+                title={snoozedView ? "Вернуться ко всей доске" : "Показать только задачи, которые вы отложили до другого дня"}
+                aria-label="Отложено"
+                onClick={() => setShowSnoozed(!snoozedView)}
               >
                 <Icon name="clock" size={14} />
                 {!isMobile && " Отложено"}
@@ -1016,6 +1049,17 @@ export default function TasksPanel({
           NewTracker.tsx). Слова Кирилла 23.09.2026: «убрать кнопки «новые
           задачи», «в работе» и на приёмке и сделать три полноценных
           раздела». Полосы-переключателя, которая была здесь, больше нет. */}
+      {/* Режим «Отложено» говорит о себе словами и выходится тут же:
+          иначе доска с двумя карточками выглядит как пропавшие задачи. */}
+      {snoozedView && (
+        <div className="snoozed-banner" id="snoozedBanner">
+          <Icon name="clock" size={14} />
+          <span>Отложенные вами задачи ({snoozedCount}) — вернутся на доску в свой день</span>
+          <button type="button" className="snoozed-banner-exit" onClick={() => setShowSnoozed(false)}>
+            Вся доска
+          </button>
+        </div>
+      )}
       {isMobile ? (
         <div className="columns columns-single">{renderColumn(mobileColumn ?? "new")}</div>
       ) : (

@@ -32,7 +32,10 @@ export type Fact = {
 };
 
 export type FactRow =
-  | { left: Fact; right?: Fact }
+  // `extra` — кнопка в самом конце строки (у срока это «Отложить»,
+  // 20.10.2026): своей колонкой, а не внутри ячейки, иначе на узкой ячейке
+  // она переносилась под дату.
+  | { left: Fact; right?: Fact; extra?: ReactNode }
   // Во всю ширину: списки людей и всё, что не делится пополам.
   | { wide: Fact };
 
@@ -83,9 +86,10 @@ export default function ItemFacts({
             </span>
           </div>
         ) : (
-          <div className="facts-row" key={i}>
+          <div className={"facts-row" + (row.extra ? " has-extra" : "")} key={i}>
             <FactCell fact={row.left} />
             {row.right ? <FactCell fact={row.right} /> : <span className="fact" />}
+            {row.extra && <span className="facts-extra">{row.extra}</span>}
           </div>
         ),
       )}

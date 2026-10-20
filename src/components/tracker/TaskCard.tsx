@@ -15,6 +15,7 @@ import type { MyRole } from "@/lib/myRole";
 import type { TaskParticipant, TaskStage } from "@/lib/taskProgress";
 import { CARD_KIND_HINT, type CardKind } from "@/lib/taskCardKind";
 import { dueInfo } from "@/lib/dueLabel";
+import { snoozeDay } from "@/lib/snooze";
 import { personState } from "@/lib/personBadge";
 import { prefetchComments } from "@/hooks/useItemComments";
 
@@ -67,6 +68,7 @@ export default function TaskCard({
   unreadCount,
   checklist,
   waitsFor,
+  snoozedTill,
 }: {
   task: Task;
   section: Section | null;
@@ -122,6 +124,10 @@ export default function TaskCard({
   // Открытая задача, которую эта ждёт (миграция 0061). Закрыли ту — и
   // отметка уходит сама: ждать больше нечего.
   waitsFor?: { number: number; title: string };
+  // До какого дня я эту задачу отложил (миграция 0049). Приходит только
+  // автору и только пока отложена: на доске такая карточка видна лишь по
+  // кнопке «Отложено», и без отметки её нельзя было отличить от обычной.
+  snoozedTill?: string;
 }) {
   const isMobile = useIsMobile();
   // Меню карточки: открыто ли и от чего. Якорь нужен только на
@@ -294,7 +300,7 @@ export default function TaskCard({
           )
         )}
 
-        {(due || !!checklist?.total || !!waitsFor || recurLabel(task) || stage === "blocked" || refused || stage === "returned" || awaitingReschedule || !!unreadCount || kind === "watch" || kind === "co" || kind === "self") && (
+        {(due || !!snoozedTill || !!checklist?.total || !!waitsFor || recurLabel(task) || stage === "blocked" || refused || stage === "returned" || awaitingReschedule || !!unreadCount || kind === "watch" || kind === "co" || kind === "self") && (
           <div className="task-foot">
             {due && (
               <span className={"task-due-pill tone-" + (dimOverdue && due.tone !== "late" ? "normal" : due.tone)} title={due.title}>
@@ -319,6 +325,12 @@ export default function TaskCard({
               <span className="task-due-pill tone-today">
                 <Icon name="calendar" size={12} />
                 Сегодня
+              </span>
+            )}
+            {snoozedTill && (
+              <span className="task-snoozed" title="Вы отложили задачу: в этот день она вернётся на доску, и бот напомнит">
+                <Icon name="clock" size={12} />
+                Отложена до {snoozeDay(snoozedTill)}
               </span>
             )}
             {/* «Ждёт #12» — работу пока не начать (миграция 0061). */}

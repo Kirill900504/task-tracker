@@ -28,7 +28,8 @@ import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
 import { withoutSelfMark } from "@/lib/actorName";
 import { fmtDate, isClosed, todayStr } from "@/lib/taskDisplay";
-import { isSnoozed, snoozeChoices } from "@/lib/snooze";
+import { isSnoozed, snoozeDay } from "@/lib/snooze";
+import { chooseSnooze } from "./snoozeAsk";
 import { answerWithFiles } from "@/lib/answerFiles";
 import { isSelfTask } from "@/lib/selfTask";
 import { isoDate, workdayIn } from "@/lib/whenDate";
@@ -332,6 +333,44 @@ export default function TaskModal({
   // Кто я — чтобы чек-лист знал, какие шаги мои (их убрать может автор).
   const checklistUserId = useWorkspaceRole().userId;
   const editable = canEdit && !closed;
+
+  // «Отложить» — кнопкой в строке срока, самой правой (20.10.2026: «часики
+  // отложенных задач переделать в кнопку в строке „Срок“, кнопку чуть
+  // выделить от остальных»). Раньше это был значок в шапке рядом с
+  // корзиной: по виду — ещё одно «удалить», по смыслу — ничего не
+  // говорящие часы. Отложить — это решение о сроке («не сейчас, а тогда»),
+  // и место ему рядом со сроком. Подпись меняется на день возвращения,
+  // чтобы видно было, что задача отложена и до какого числа.
+  const [snoozeNow, setSnoozeNow] = useState(() => task?.snoozedUntil || "");
+  const snoozedNow = isSnoozed(snoozeNow, todayStr());
+  const snoozeButton =
+    task && editable ? (
+      <button
+        type="button"
+        className={"snooze-btn" + (snoozedNow ? " on" : "")}
+        id="snoozeTaskBtn"
+        title={
+          snoozedNow
+            ? `Отложена до ${snoozeDay(snoozeNow)} — нажмите, чтобы вернуть сейчас или выбрать другой день`
+            : "Убрать с вашей доски до выбранного дня — в этот день задача вернётся, и бот напомнит"
+        }
+        onClick={() =>
+          void (async () => {
+            const choice = await chooseSnooze(ask, { snoozedUntil: snoozeNow, deadline: selfDeadline }, todayStr());
+            if (choice === null) return;
+            setSnoozeNow(choice);
+            patchTask({ snoozedUntil: choice });
+            // Отложенная уходит с доски — окно над ней закрывается, как
+            // после приёмки. Возвращённая остаётся открытой: с ней и будут
+            // работать.
+            if (choice) onClose();
+          })()
+        }
+      >
+        <Icon name="clock" size={15} />
+        <span>{snoozedNow ? `До ${snoozeDay(snoozeNow)}` : "Отложить"}</span>
+      </button>
+    ) : null;
 
   // Кто сейчас на задаче — одинаково для новой и для сохранённой, чтобы
   // поле людей было одно и то же в обоих случаях. У новой это набранный
@@ -704,7 +743,8 @@ export default function TaskModal({
             вместо «Отмены» внизу, как у всех окон (14.10.2026). */}
         {isEditing && task ? (
           <ItemModalHead
-            kicker={<>{task.number != null ? `Задача #${task.number}` : "Задача"}{task.needsReview === false && <span className="kicker-note"> · без приёмки — закроется отчётом</span>}</>}
+            kicker={task.number != null ? `#${task.number}` : "Задача"}
+            kickerTitle={task.number != null ? `Задача №${task.number}` : undefined}
             title={form.title || "Задача"}
             titleId="modalTitle"
             closeId="cancelBtn"
@@ -714,38 +754,19 @@ export default function TaskModal({
                 {/* Принудительное закрытие — только у постановщика, только
                     у открытой задачи и не у своей: свою закрывают галочкой. */}
                 {canEdit && !selfTask && stage !== "done" && task.status !== "done" && (
-                  <button type="button" className="item-head-btn force-close" id="forceCloseBtn" disabled={closingBusy} onClick={() => void handleForceClose()}>
-                    Принудительное закрытие
-                  </button>
-                )}
-                {editable && (
                   <button
                     type="button"
-                    className={"item-head-icon" + (isSnoozed(task.snoozedUntil, todayStr()) ? " on" : "")}
-                    id="snoozeTaskBtn"
-                    title={
-                      isSnoozed(task.snoozedUntil, todayStr())
-                        ? `Отложена до ${fmtDate(task.snoozedUntil || "")} — нажмите, чтобы вернуть или перенести`
-                        : "Отложить: убрать с доски до выбранного дня и напомнить в этот день"
-                    }
-                    aria-label="Отложить"
-                    onClick={() =>
-                      void (async () => {
-                        const today = todayStr();
-                        const snoozed = isSnoozed(task.snoozedUntil, today);
-                        const choice = await ask.choose({
-                          title: "Отложить до…",
-                          question: snoozed ? `Сейчас отложена до ${fmtDate(task.snoozedUntil || "")}.` : "Когда напомнить?",
-                          note: "До этого дня задача не видна на вашей доске, в сам день бот о ней напомнит. У исполнителей всё остаётся как было.",
-                          options: [...(snoozed ? [{ value: "", label: "Вернуть сейчас" }] : []), ...snoozeChoices(today)],
-                        });
-                        if (choice === null) return;
-                        patchTask({ snoozedUntil: choice });
-                        onClose();
-                      })()
-                    }
+                    className="item-head-btn force-close"
+                    id="forceCloseBtn"
+                    title="Принудительное закрытие"
+                    disabled={closingBusy}
+                    onClick={() => void handleForceClose()}
                   >
-                    <Icon name="clock" size={17} />
+                    {/* На телефоне шапка в одну строку не вмещает два слова —
+                        там остаётся «Закрыть»: × на телефоне нет (его место
+                        у стрелки «назад»), так что спутать не с чем. */}
+                    <span className="fc-long">Принудительное закрытие</span>
+                    <span className="fc-short">Закрыть</span>
                   </button>
                 )}
                 {task.status === "done" && onRepeat && (
@@ -872,6 +893,7 @@ export default function TaskModal({
                         {q.label}
                       </button>
                     ))}
+                    {snoozeButton}
                   </div>
                 </div>
               )}
@@ -909,7 +931,26 @@ export default function TaskModal({
                       ),
                       muted: !selfDeadline,
                     },
-                    right: selfTask || !progressText ? undefined : { label: "Ход работы", value: progressText },
+                    // У своей задачи «Отложить» стоит в строке «Срок» над
+                    // сводкой; у поручения строки срока нет, и кнопка
+                    // встаёт в конец строки «Крайний срок», самой правой.
+                    extra: selfTask ? undefined : snoozeButton,
+                    // «Без приёмки» стояло припиской к номеру в шапке; шапка
+                    // теперь в одну строку (20.10.2026), и приписка
+                    // переехала к ходу работы — это его свойство: чем он
+                    // кончится.
+                    right:
+                      selfTask || !progressText
+                        ? undefined
+                        : {
+                            label: "Ход работы",
+                            value: (
+                              <>
+                                {progressText}
+                                {task.needsReview === false && <span className="fact-note"> · без приёмки — закроется отчётом</span>}
+                              </>
+                            ),
+                          },
                   },
                 ]}
                 footer={

@@ -239,8 +239,10 @@ test("«Отложить…» убирает задачу с доски авто
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
   await card.click();
+  // Кнопка — в строке срока, а не значком в шапке (20.10.2026).
+  await expect(page.locator("#selfDeadline #snoozeTaskBtn")).toBeVisible();
   await page.click("#snoozeTaskBtn");
-  await page.locator(".ask-modal").getByRole("button", { name: "Завтра", exact: true }).click();
+  await page.locator(".ask-modal").getByRole("button", { name: /^Завтра,/ }).click();
   await expect(card).toBeHidden();
   await expect
     .poll(async () => (await admin.from("tasks").select("snoozed_until").eq("user_id", ownerId).eq("title", title).maybeSingle()).data?.snoozed_until, {
@@ -250,6 +252,11 @@ test("«Отложить…» убирает задачу с доски авто
   // Отложенное не потерялось: кнопка с числом возвращает его на доску.
   await page.click("#showSnoozedBtn");
   await expect(card).toBeVisible();
+  // Режим говорит о себе словами, а карточка — днём возвращения.
+  await expect(page.locator("#snoozedBanner")).toBeVisible();
+  await expect(card).toContainText("Отложена до");
+  await page.locator("#snoozedBanner").getByRole("button", { name: "Вся доска" }).click();
+  await expect(card).toBeHidden();
 });
 
 test("в окне приёмки четыре готовых ответа, и нажатие только вставляет фразу", async ({ page }) => {

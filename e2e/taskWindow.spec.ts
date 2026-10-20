@@ -105,7 +105,7 @@ test("окно задачи: описание с файлом, люди в св�
 
   // Принудительное закрытие: без комментария нельзя, с ним — закрыта.
   await card.locator(".task-title").click();
-  await expect(modal.locator("#forceCloseBtn")).toHaveText("Принудительное закрытие");
+  await expect(modal.locator("#forceCloseBtn")).toContainText("Принудительное закрытие");
   await modal.locator("#forceCloseBtn").click();
   await page.click("#askOkBtn");
   await expect(page.locator(".ask-modal .ask-problem")).toBeVisible();
