@@ -2,6 +2,12 @@
 
 # РОКАС — a personal task tracker
 
+**Передача команде компании.** Кирилл передаёт трекер своим программистам
+(во главе с Никитой Долговым) для встраивания в приложение компании.
+`docs/HANDOFF.md` — точка входа для них: цель, концепция, подходы, карта
+системы, что учесть при внедрении. Меняете концепцию, правило или
+крупную функцию — обновите и его в том же коммите.
+
 Read this first, then `git log` — the commit messages are the project's
 real log, written to explain *why*, not *what*. Everything below is the
 part that is expensive to rediscover: it is here so a new session does not
