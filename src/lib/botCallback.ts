@@ -13,6 +13,9 @@ import type { CallbackOutcome } from "@/lib/colleagueReplies";
 import { handleIdeaInbox, isIdeaInboxAction } from "@/lib/ideaInbox";
 import { cancelMeetingFromBot, handleProposeCallback, isProposeAction, splitTarget, type CancelConfirmPending, type MovePending } from "@/lib/botMoveFlow";
 import { lessonActor, saveLesson } from "@/lib/botMemory";
+// Только типы: сам модуль умений тянет разбор фразы (и GigaChat за ним), а
+// нажатию кнопки он нужен в трёх ветках — там он и подгружается.
+import type { ConfirmPending, SlotPending } from "@/lib/botSkills";
 
 // Нажатая кнопка — один разбор на оба мессенджера.
 //
@@ -116,6 +119,34 @@ async function routeBotCallback(
       await remember(admin, actor, channel, chatId, step.pending);
       return { toast: "Без описания", rewriteTo: step.text, rewriteButtons: step.buttons };
     }
+    // Кнопки умений словами (lib/botSkills). Что именно подтверждают, лежит
+    // в памяти чата: в 64 байта кнопки приёмка с комментарием или список
+    // людей не помещаются.
+    if (action.kind === "task" && (action.action === "cfgo" || action.action === "cfno")) {
+      const waiting = (await pendingOf(admin, actor, channel, chatId)) as ConfirmPending | null;
+      if (waiting?.kind !== "bot_confirm") return { toast: "Уже неактуально", rewriteTo: "Это предложение устарело — скажите ещё раз.", rewriteButtons: ownerNav() };
+      await remember(admin, actor, channel, chatId, null);
+      if (action.action === "cfno") return { toast: "Ничего не меняю", rewriteTo: "Хорошо, ничего не меняю.", rewriteButtons: ownerNav() };
+      const { runConfirmed } = await import("@/lib/botSkills");
+      const text = await runConfirmed(admin, actor, waiting.op);
+      if (/^[✓✅↩🔔]/u.test(text) && waiting.phrase && waiting.parsed) {
+        await saveLesson(admin, { spaceId: actor.spaceId, actor: lessonActor(actor), phrase: waiting.phrase, parsed: waiting.parsed });
+      }
+      return { toast: "Готово", rewriteTo: text, rewriteButtons: ownerNav() };
+    }
+    if (action.kind === "meeting" && (action.action === "fsl" || action.action === "fsd")) {
+      const waiting = (await pendingOf(admin, actor, channel, chatId)) as SlotPending | null;
+      const { handleSlotCallback } = await import("@/lib/botSkills");
+      const r = await handleSlotCallback(admin, actor, action, waiting);
+      if (r.pending) await remember(admin, actor, channel, chatId, r.pending);
+      return { toast: r.toast, rewriteTo: r.text, rewriteButtons: r.buttons?.length ? screenButtons(r.buttons) : undefined };
+    }
+    if (action.kind === "task" && action.action === "rmx") {
+      const mine = actor.isOwner ? actor.spaceId : actor.userId;
+      await admin.from("bot_reminders").update({ cancelled_at: new Date().toISOString() }).eq("id", action.id).eq("actor", mine).is("sent_at", null);
+      return { toast: "Не напомню", rewriteTo: "✖ Напоминание снято." };
+    }
+
     // «🚫 Отменить встречу» под отменой, сказанной словами: причина в 64
     // байта кнопки не помещается и лежит в памяти чата (lib/botMoveFlow).
     if (action.kind === "meeting" && action.action === "mvxgo") {

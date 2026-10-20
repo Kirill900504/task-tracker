@@ -32,7 +32,24 @@ import { navRow } from "@/lib/botMenu";
 import { isYes } from "@/lib/telegramManage";
 import { contextBlock, lessonActor, lessonsBlock, lessonsFor, recentDialog, recordingTransport, rememberLine, saveLesson, type DialogLine, type ReplyContext } from "@/lib/botMemory";
 import { applyMove, cancelMeetingFromBot, moveFromTypedWhen, planCancelFromText, planMoveFromText, type CancelConfirmPending, type CancelPending, type MovePending } from "@/lib/botMoveFlow";
-import { parseWhen } from "@/lib/botWhen";
+import { parseMeetingRepeat, parseTaskRepeat, parseWhen, repeatLabel } from "@/lib/botWhen";
+import {
+  addAgenda,
+  createMeetingFromBot,
+  editChecklist,
+  ideaToTask,
+  planFindSlot,
+  planMeetingPeople,
+  planNudge,
+  planReminder,
+  planReview,
+  planTaskPeople,
+  runConfirmed,
+  type ConfirmPending,
+  type SkillContext,
+  type SkillReply,
+  type SlotPending,
+} from "@/lib/botSkills";
 import { dateStr, moscowNow } from "@/lib/taskLogic";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
@@ -53,6 +70,19 @@ const AIM_LIFETIME_MS = 2 * 60 * 60 * 1000;
 // называться одинаково у владельца и у любого другого постановщика.
 const MENU_WORD = /^(меню|menu|\/menu|что умеешь|start|\/start)$/i;
 
+// Умения словами (lib/botSkills): тип разбора → что делать.
+const SKILLS: Record<string, (ctx: SkillContext, input: Record<string, unknown>, chat: { channel: "telegram" | "max"; chatId: number }) => Promise<SkillReply>> = {
+  review_task: (c, i) => planReview(c, i),
+  task_people: (c, i) => planTaskPeople(c, i),
+  meeting_people: (c, i) => planMeetingPeople(c, i),
+  find_slot: (c, i) => planFindSlot(c, i),
+  remind_me: (c, i, chat) => planReminder(c, i, chat),
+  idea_to_task: (c, i) => ideaToTask(c, i),
+  agenda_add: (c, i) => addAgenda(c, i),
+  checklist: (c, i) => editChecklist(c, i),
+  nudge: (c, i) => planNudge(c, i),
+};
+
 // Явное «нет» на предложенное действие.
 const SAID_NO = /^(нет|неа|не надо|не нужно|не переноси|не отменяй|отмена|отмени|стоп|no)[.!]*$/i;
 
@@ -65,7 +95,7 @@ const SAID_NO = /^(нет|неа|не надо|не нужно|не перено
 // фраза, а не правка списка.
 function passesThrough(waiting: unknown, trimmed: string): boolean {
   const kind = (waiting as { kind?: string } | null)?.kind;
-  if (kind === "move_item" || kind === "meeting_cancel_confirm") return true;
+  if (kind === "move_item" || kind === "meeting_cancel_confirm" || kind === "bot_confirm" || kind === "slot_pick") return true;
   if (kind === "bulk_move") return !isYes(trimmed) && !SAID_NO.test(trimmed);
   return false;
 }
@@ -215,7 +245,12 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     });
     // Номер ставит база (миграция 0045) — забираем его ответом на вставку,
     // чтобы сообщение исполнителю пришло уже с «#42».
-    const { data: inserted, error } = await ctx.admin.from("tasks").insert(row).select("number").maybeSingle();
+    // «Каждый понедельник сдавать отчёт» — повтор считает код из слов
+    // (lib/botWhen.parseTaskRepeat), срок у повторяющейся не ставится: его
+    // считает правило повтора, как в форме задачи.
+    const repeat = parseTaskRepeat(String(input.repeat || ""), String(input.deadline || ""));
+    const insertRow: Record<string, unknown> = repeat ? { ...row, ...repeat, deadline: null } : row;
+    const { data: inserted, error } = await ctx.admin.from("tasks").insert(insertRow).select("number").maybeSingle();
     if (error) {
       await say(ctx, "Не получилось сохранить задачу: " + error.message);
       return;
@@ -225,10 +260,11 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     const assigned = await attachExecutors(ctx.admin, userId, { ...row, number: inserted?.number ?? null }, [row.assignee, ...extra]);
 
     const lines = [`✓ Задача: ${taskRef({ title: row.title as string, number: inserted?.number ?? null })}`];
-    if (row.deadline) lines.push("Срок: " + fmtDate(row.deadline as string));
+    if (repeat) lines.push("🔁 Повтор: " + repeatLabel(repeat));
+    else if (row.deadline) lines.push("Срок: " + fmtDate(row.deadline as string));
     // Срок не назвали — его поставил сервер (lib/newTask.defaultDeadline),
     // и человек должен это знать, а не узнать через неделю.
-    const dueNote = deadlineNote(input.deadline as string | undefined);
+    const dueNote = repeat ? "" : deadlineNote(input.deadline as string | undefined);
     if (dueNote) lines.push(dueNote);
     // Множественное число не украшение: «Исполнитель: Игорь» под задачей,
     // которая стоит на двоих, — это и есть «я думал, что поручил обоим».
@@ -270,6 +306,24 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     };
     if (!row.date) {
       await say(ctx, "Не понял дату встречи — уточните, пожалуйста.");
+      return;
+    }
+    // С 20.10.2026 встреча из бота заводится одной функцией с приглашениями
+    // (lib/botSkills.createMeetingFromBot): раньше людям не уходило ничего,
+    // и о встрече они узнавали из напоминания за сутки.
+    if (extra) {
+      // «Планёрка по вторникам» — ближайший вторник считает код: модель
+      // 20.10.2026 поставила такую на среду.
+      const repeatDay = parseWhen(String(input.repeat || ""), dateStr(moscowNow())).date;
+      const made = await createMeetingFromBot(ctx.admin, extra.actor, {
+        title,
+        date: repeatDay || row.date,
+        time: row.time,
+        participants: (row.participants as unknown[]).filter((n): n is string => typeof n === "string"),
+        recur: parseMeetingRepeat(String(input.repeat || "")) || "none",
+      });
+      const recur = made.ok ? parseMeetingRepeat(String(input.repeat || "")) : null;
+      await say(ctx, made.text + (recur ? "\n🔁 Повтор: " + ({ weekly: "каждую неделю", biweekly: "раз в две недели", monthly: "каждый месяц" } as const)[recur] : "") + droppedNote(droppedNames));
       return;
     }
     // Две встречи на одно время с одним человеком запрещены и отсюда — то
@@ -424,6 +478,15 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     // «Любой другой ответ отменит» больше неправда: уточнение («только
     // телемост») разбирается как уточнение, а отменяет «нет».
     await say(ctx, describePlan(plan) + "\n\nПереношу? Ответьте «да». Если нужно не всё — напишите, что именно («только телемост»).");
+    return;
+  }
+
+  const skill = extra ? SKILLS[tool] : undefined;
+  if (skill && extra) {
+    const skillCtx: SkillContext = { admin: ctx.admin, actor: extra.actor, reply: extra.reply, phrase: extra.phrase, parsed: { type: tool, ...input } };
+    const reply = await skill(skillCtx, input, { channel: ctx.channel.id, chatId: ctx.chatId });
+    if (reply.pending) await rememberFor(ctx, extra.actor, reply.pending);
+    await ctx.transport.send(ctx.chatId, reply.text, reply.buttons?.length ? { buttons: screenButtons(reply.buttons) } : undefined);
     return;
   }
 
@@ -648,7 +711,7 @@ async function offerTask(
 
   // Перенос встречи или срока — у руководителя ровно так же, как у
   // владельца: свои встречи и свои задачи, с подтверждением кнопкой.
-  const move = items.find((it) => it.tool === "move_item" || it.tool === "cancel_meeting");
+  const move = items.find((it) => it.tool === "move_item" || it.tool === "cancel_meeting" || !!SKILLS[it.tool]);
   if (move) {
     const actor: BotActor = { userId: memberId, spaceId: colleague.user_id, assigneeId: colleague.id, isOwner: false };
     await respondToTool(ctx, colleague.user_id, move.tool, move.input, [], { actor, reply, phrase: text });
@@ -707,6 +770,36 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
       return true;
     }
     await ctx.transport.send(ctx.chatId, await cancelMeetingFromBot(ctx.admin, actor, waiting as CancelPending, trimmed), { buttons: navRow("assigner") });
+    return true;
+  }
+
+  // Подтверждение умения (lib/botSkills): приёмка, люди, «поторопить всех».
+  if ((waiting as ConfirmPending).kind === "bot_confirm") {
+    const pending = waiting as ConfirmPending;
+    if (isYes(trimmed)) {
+      const text = await runConfirmed(ctx.admin, actor, pending.op);
+      if (/^[✓✅↩🔔]/u.test(text) && pending.phrase && pending.parsed) {
+        await saveLesson(ctx.admin, { spaceId: actor.spaceId, actor: lessonActor(actor), phrase: pending.phrase, parsed: pending.parsed });
+      }
+      await ctx.transport.send(ctx.chatId, text, { buttons: navRow("assigner") });
+      return true;
+    }
+    if (SAID_NO.test(trimmed)) {
+      await say(ctx, "Хорошо, ничего не меняю.");
+      return true;
+    }
+    return false;
+  }
+
+  // Время выбрано кнопкой — это сообщение и есть название встречи.
+  if ((waiting as SlotPending).kind === "slot_pick" && (waiting as SlotPending).time) {
+    const pending = waiting as SlotPending;
+    if (SAID_NO.test(trimmed)) {
+      await say(ctx, "Хорошо, встречу не назначаю.");
+      return true;
+    }
+    const made = await createMeetingFromBot(ctx.admin, actor, { title: trimmed.slice(0, 200), date: pending.date, time: pending.time!, participants: pending.people });
+    await ctx.transport.send(ctx.chatId, made.text, { buttons: made.id ? screenButtons([[{ text: "📅 Открыть встречу", data: encodeCallback("meeting", "oshow", made.id) }], ...navRow("assigner")]) : navRow("assigner") });
     return true;
   }
 

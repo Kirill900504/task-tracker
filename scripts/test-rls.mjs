@@ -226,6 +226,7 @@ async function main() {
   // чужие слова, браузеру не нужны ни свои, ни тем более чужие.
   await testServerOnlyTable("bot_dialog", { channel: "telegram", chat_id: 1, role: "user", body: "rls" });
   await testServerOnlyTable("bot_lessons", { actor: "rls", phrase: "rls", parsed: {} });
+  await testServerOnlyTable("bot_reminders", { actor: "rls", channel: "telegram", chat_id: 1, due_at: new Date().toISOString(), body: "rls" });
 
   await testServerOnlyTable("notification_queue", {
     user_id: "00000000-0000-0000-0000-000000000000",

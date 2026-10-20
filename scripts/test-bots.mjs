@@ -816,6 +816,53 @@ try {
   check("«да» отменяет встречу", !!cancelled?.deleted_at, cancelled);
   check("и причина записана в её историю", (cancelNote || []).some((c) => /отменил встречу: клиент заболел/.test(c.body)), cancelNote);
 
+  // Десять умений словами (20.10.2026, lib/botSkills) — на боевом, с
+  // настоящей моделью. Фразы — те, какими их скажет человек.
+  const say = (text) =>
+    post("/api/telegram/webhook", { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text } }, { "x-telegram-bot-api-secret-token": tgSecret });
+  const pendingNow = async () => (await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle()).data?.pending_action;
+
+  const skillTask = "sk" + Math.random().toString(36).slice(2, 8);
+  await admin.from("tasks").insert({ id: skillTask, user_id: userId, title: "Смета склада", assignee: "Проверочный Коллега", status: "in_progress", deadline: msk(5) });
+  await admin.from("task_participants").insert({ task_id: skillTask, assignee_id: assignee.id, role: "executor" });
+
+  await say("к смете склада пункты: цены, подпись");
+  const { data: cl1 } = await admin.from("task_checklist").select("text, done").eq("task_id", skillTask).order("position");
+  check("чек-лист: «к смете пункты: цены, подпись» — два пункта", (cl1 || []).length === 2, cl1);
+  await say("по смете склада отметь подпись");
+  const { data: cl2 } = await admin.from("task_checklist").select("text, done").eq("task_id", skillTask).order("position");
+  check("чек-лист: «отметь подпись» — отмечен ровно он", (cl2 || []).filter((i) => i.done).length === 1 && /подпис/i.test((cl2 || []).find((i) => i.done)?.text || ""), cl2);
+
+  await say("напомни завтра в 9 про смету склада");
+  const { data: rem } = await admin.from("bot_reminders").select("due_at, body").eq("chat_id", tgChat);
+  check("напоминание: «завтра в 9» — на 9 утра по Москве", (rem || []).some((r) => new Date(r.due_at).toISOString() === new Date(`${msk(1)}T09:00:00+03:00`).toISOString()), rem);
+
+  const skillMeeting = "skm" + Math.random().toString(36).slice(2, 8);
+  await admin.from("meetings").insert({ id: skillMeeting, user_id: userId, date: msk(4), time: "16:00", title: "Планёрка проверочная", participants: [], status: "planned" });
+  await say("на планёрку проверочную добавь пункт про закупки");
+  const { data: agenda } = await admin.from("meeting_agenda").select("text").eq("meeting_id", skillMeeting);
+  check("повестка: «добавь пункт про закупки»", (agenda || []).some((a) => /закуп/i.test(a.text)), agenda);
+  await say("добавь Проверочного Коллегу на планёрку проверочную");
+  const peoplePending = await pendingNow();
+  check("состав встречи: спрашивает «да»", peoplePending?.kind === "bot_confirm" && peoplePending?.op?.type === "meeting_people", peoplePending);
+  await say("да");
+  const { data: withPeople } = await admin.from("meetings").select("participants").eq("id", skillMeeting).maybeSingle();
+  const { data: mParts } = await admin.from("meeting_participants").select("assignee_id").eq("meeting_id", skillMeeting);
+  check("и после «да» человек позван", (withPeople?.participants || []).includes("Проверочный Коллега") && (mParts || []).some((p) => p.assignee_id === assignee.id), { withPeople, mParts });
+
+  await say("каждый понедельник сдавать отчёт по складу");
+  const { data: weekly } = await admin.from("tasks").select("recur, recur_weekdays, deadline").eq("user_id", userId).ilike("title", "%отчёт%склад%").maybeSingle();
+  check("повтор: «каждый понедельник» — еженедельно по пн", weekly?.recur === "weekly" && (weekly?.recur_weekdays || []).includes(1) && !weekly?.deadline, weekly);
+
+  // Приёмка — последней: она закрывает задачу.
+  await admin.from("task_participants").update({ done_at: new Date().toISOString(), done_comment: "готово" }).eq("task_id", skillTask);
+  await say("смету склада принимаю");
+  const reviewPending = await pendingNow();
+  check("приёмка словами: спрашивает «да»", reviewPending?.kind === "bot_confirm" && reviewPending?.op?.type === "approve" && reviewPending?.op?.taskId === skillTask, reviewPending);
+  await say("да");
+  const { data: skillAccepted } = await admin.from("tasks").select("status, approval_state").eq("id", skillTask).maybeSingle();
+  check("и после «да» задача принята и закрыта", skillAccepted?.status === "done" && skillAccepted?.approval_state === "accepted", skillAccepted);
+
   check("и заводит новую в то же время", (bulkNew || []).length === 1 && bulkNew[0].time === "18:30" && bulkNew[0].date === bulkOld?.moved_to_date, bulkNew);
 
   // «✍️ Записать мысль» на экране мыслей: следующее сообщение — мысль.
