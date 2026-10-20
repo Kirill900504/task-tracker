@@ -714,6 +714,59 @@ try {
   const { data: closedMeeting } = await admin.from("meetings").select("status").eq("id", ownMeeting).maybeSingle();
   check("«Без результата» закрывает встречу", closeMeetingPress.status === 200 && closedMeeting?.status === "no_result", closedMeeting);
 
+  // Перенос встречи (20.10.2026): кнопками — и словами с «да». Перенос —
+  // это новая встреча и прежняя, закрытая как перенесённая (lib/itemMove).
+  const msk = (days) => new Date(Date.now() + 3 * 3600_000 + days * 86400_000).toISOString().slice(0, 10);
+  const compact = (d) => d.replace(/-/g, "");
+  const moveMeetingId = "ownmv" + Math.random().toString(36).slice(2, 8);
+  await admin.from("meetings").insert({
+    id: moveMeetingId,
+    user_id: userId,
+    date: msk(3),
+    time: "10:00",
+    title: "Проверка переноса кнопкой",
+    participants: ["Проверочный Коллега"],
+    status: "planned",
+  });
+  await pressOwner("own10", "m:mv:" + moveMeetingId);
+  await pressOwner("own11", `m:~mvd:${moveMeetingId}.${compact(msk(5))}`);
+  await pressOwner("own12", `m:~mvgo:${moveMeetingId}.${compact(msk(5))}1100`);
+  const { data: movedOld } = await admin.from("meetings").select("status, moved_to_date").eq("id", moveMeetingId).maybeSingle();
+  const { data: movedNew } = await admin.from("meetings").select("id, date, time, status").eq("user_id", userId).eq("title", "Проверка переноса кнопкой").eq("status", "planned").is("deleted_at", null);
+  check("«Перенести» кнопками: прежняя закрыта как перенесённая", movedOld?.status === "no_result" && movedOld?.moved_to_date === msk(5), movedOld);
+  check("и заведена новая на выбранные день и время", (movedNew || []).length === 1 && movedNew[0].date === msk(5) && movedNew[0].time === "11:00", movedNew);
+  const { data: movedParts } = await admin.from("meeting_participants").select("assignee_id").eq("meeting_id", movedNew?.[0]?.id || "нет");
+  check("и состав переехал на новую", (movedParts || []).some((p) => p.assignee_id === assignee.id), movedParts);
+
+  // Словами — модель (боевая GigaChat) разбирает, код ищет и считает дату.
+  const [, mm, dd] = msk(6).split("-");
+  const phraseMeetingId = "ownmw" + Math.random().toString(36).slice(2, 8);
+  await admin.from("meetings").insert({
+    id: phraseMeetingId,
+    user_id: userId,
+    date: msk(3),
+    time: "15:00",
+    title: "Телемост с поставщиком",
+    participants: [],
+    status: "planned",
+  });
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: `Перенеси телемост с поставщиком на ${dd}.${mm} в то же время` } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: phrasePending } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
+  check("фраза «перенеси … на ДД.ММ в то же время» → предложенный перенос", phrasePending?.pending_action?.kind === "move_item" && phrasePending?.pending_action?.id === phraseMeetingId && phrasePending?.pending_action?.date === msk(6) && phrasePending?.pending_action?.time === "15:00", phrasePending);
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "да" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: phraseOld } = await admin.from("meetings").select("status, moved_to_date").eq("id", phraseMeetingId).maybeSingle();
+  check("«да» переносит", phraseOld?.status === "no_result" && phraseOld?.moved_to_date === msk(6), phraseOld);
+  const { data: lesson } = await admin.from("bot_lessons").select("phrase").eq("actor", userId);
+  check("и подтверждённая фраза стала уроком", (lesson || []).length >= 1, lesson);
+
   // «✍️ Записать мысль» на экране мыслей: следующее сообщение — мысль.
   // Отзыв Витовского 25.09.2026 («Мысли только открывают список, но не дают
   // написать»); у руководителя иного пути нет вовсе — его свободный текст
