@@ -1,5 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { loadTaskModal, loadSectionsModal, loadLoadModal } from "@/lib/lazyWindows";
+
 // Доска задач: четыре столбца-состояния, фильтры над ними и карточка
 // задачи.
 //
@@ -23,7 +26,6 @@ import { useDropHandler, type DropTarget } from "./dnd/TrackerDnd";
 import { SortableTask, TaskColumnBody } from "./dnd/SortableTask";
 import TaskCard from "./TaskCard";
 import type { ActionMenuItem } from "./ActionMenu";
-import TaskModal from "./TaskModal";
 import SendMenu from "./SendMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useIsMiniApp } from "@/lib/miniApp";
@@ -34,8 +36,6 @@ import { cardKind } from "@/lib/taskCardKind";
 import { peopleLoad } from "@/lib/peoplePanel";
 import type { useToasts } from "@/hooks/useToasts";
 import SectionTabs from "./SectionTabs";
-import SectionsModal from "./SectionsModal";
-import LoadModal from "./LoadModal";
 import { useAsk } from "@/components/Ask";
 import { uid } from "@/lib/uid";
 import Icon from "./Icon";
@@ -50,6 +50,12 @@ import { answerWithFiles } from "@/lib/answerFiles";
 import { openTaskChoices } from "@/lib/answerRules";
 import { isSelfTask } from "@/lib/selfTask";
 import { QUICK_APPROVE, QUICK_FORCE_CLOSE } from "@/lib/quickAnswers";
+
+// Окна — отдельными кусками, подгружаются фоном после первого кадра
+// (lib/lazyWindows: почему и как).
+const TaskModal = dynamic(loadTaskModal, { ssr: false });
+const SectionsModal = dynamic(loadSectionsModal, { ssr: false });
+const LoadModal = dynamic(loadLoadModal, { ssr: false });
 
 export default function TasksPanel({
   tasks,

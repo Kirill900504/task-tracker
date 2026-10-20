@@ -1,5 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { loadDoneListModal, loadIdeaReviewModal, loadSentIdeasModal } from "@/lib/lazyWindows";
+
 import { useState } from "react";
 import type { Idea } from "@/types/tracker";
 import { doneIdeasNewestFirst, sortIdeasForList } from "@/lib/ideaDisplay";
@@ -7,20 +10,23 @@ import { isMine } from "@/lib/ownership";
 import { formatIdeaCreatedAt, isSelfAssignee } from "@/lib/trackerRows";
 import { uid } from "@/lib/uid";
 import IdeaItem from "./IdeaItem";
-import DoneListModal from "./DoneListModal";
 import Icon from "./Icon";
 import type { useToasts } from "@/hooks/useToasts";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { ideasToReview, isReviewDay, reviewWeek } from "@/lib/ideaReview";
-import IdeaReviewModal from "./IdeaReviewModal";
 import IncomingIdeas from "./IncomingIdeas";
 import SharedIdeaItem from "./SharedIdeaItem";
-import SentIdeasModal from "./SentIdeasModal";
 import { prefetchIdeaInbox, useIdeaRecipients } from "@/hooks/useIdeaRecipients";
 import { authorLabel } from "@/lib/authorName";
 import { incomingFor, sentAwayIds, sentToByIdea, sharedWithMe, type IdeaRecipientRow } from "@/lib/ideaRecipients";
+
+// Окна — отдельными кусками, подгружаются фоном после первого кадра
+// (lib/lazyWindows: почему и как).
+const DoneListModal = dynamic(loadDoneListModal, { ssr: false });
+const IdeaReviewModal = dynamic(loadIdeaReviewModal, { ssr: false });
+const SentIdeasModal = dynamic(loadSentIdeasModal, { ssr: false });
 
 // «Оставить» помнится до конца недели в этом браузере (см. lib/ideaReview).
 // Хранилище может не открыться (приватное окно) — тогда разбор просто

@@ -1,5 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { loadSearchOverlay, loadTeamModal, loadLoadModal, loadAccountModal, prefetchWindows } from "@/lib/lazyWindows";
+
 // New UI, built up phase by phase per the approved migration plan.
 // Phase 6 adds drag-and-drop: task reorder/column-move, idea→task/meeting
 // conversion, and (still to come in this same pass) meeting→calendar and
@@ -35,10 +38,7 @@ import { formatIdeaCreatedAt } from "@/lib/trackerRows";
 import type { Meeting, MeetingPrefill, Task, TaskPrefill } from "@/types/tracker";
 import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
 import { mergeResult } from "@/lib/meetingLink";
-import SearchOverlay from "@/components/tracker/SearchOverlay";
-import TeamModal from "@/components/tracker/TeamModal";
 import MobileShell, { DEFAULT_MOBILE_TAB, type MobileTab } from "@/components/tracker/MobileShell";
-import LoadModal from "@/components/tracker/LoadModal";
 import { peopleLoad } from "@/lib/peoplePanel";
 import MobileHeader from "@/components/tracker/MobileHeader";
 import HeaderQuote from "@/components/tracker/HeaderQuote";
@@ -56,7 +56,6 @@ import { useBusySlots } from "@/hooks/useBusySlots";
 import { withoutSelfMark } from "@/lib/actorName";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
 import MessengerLink from "@/components/tracker/MessengerLink";
-import AccountModal from "@/components/tracker/AccountModal";
 import { useMyMessenger } from "@/hooks/useMyMessenger";
 import type { SearchResult } from "@/lib/localSearch";
 import Icon from "@/components/tracker/Icon";
@@ -64,6 +63,13 @@ import BootSkeleton from "@/components/tracker/BootSkeleton";
 import { isCreatedByMe } from "@/lib/ownership";
 import { isTaskVisible, isMeetingVisible, resolveMyName } from "@/lib/itemVisibility";
 import { withViewTransition } from "@/lib/viewTransition";
+
+// Окна — отдельными кусками, подгружаются фоном после первого кадра
+// (lib/lazyWindows: почему и как).
+const SearchOverlay = dynamic(loadSearchOverlay, { ssr: false });
+const TeamModal = dynamic(loadTeamModal, { ssr: false });
+const LoadModal = dynamic(loadLoadModal, { ssr: false });
+const AccountModal = dynamic(loadAccountModal, { ssr: false });
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 function formatClock(d: Date): string {
@@ -324,8 +330,11 @@ export default function NewTracker() {
   // любое ✈ открываются из уже открытого трекера, то есть время на запрос
   // есть — и тратить его надо здесь, а не после нажатия, когда человек
   // смотрит на «Загрузка…».
+  // Тем же движением — скрипты окон (lib/lazyWindows): они больше не стоят
+  // на пути к первому кадру, но к первому нажатию уже должны быть здесь.
   useEffect(() => {
     prefetchTeam();
+    prefetchWindows();
   }, []);
 
   // Hotkeys: N — task, B — meeting, M — idea, "/" — search. Keyed off the

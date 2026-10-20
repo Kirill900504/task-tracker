@@ -1,5 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { loadMeetingModal, loadDoneListModal, loadMeetingTasksSheet } from "@/lib/lazyWindows";
+
 import { useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { Meeting, MeetingPrefill, MeetingStatus, TaskPrefill } from "@/types/tracker";
@@ -7,8 +10,6 @@ import { addDaysIso, awaitsRecap, sortMeetingsForList } from "@/lib/calendarLogi
 import { fmtDate, todayStr } from "@/lib/taskDisplay";
 import { uid } from "@/lib/uid";
 import MeetingChip from "./MeetingChip";
-import MeetingModal from "./MeetingModal";
-import DoneListModal from "./DoneListModal";
 import Icon from "./Icon";
 import { useMeetingVotes } from "@/hooks/useMeetingVotes";
 import { bumpVoteRoundIfMoved } from "@/lib/meetingRound";
@@ -30,8 +31,14 @@ import { busyPeople } from "@/lib/meetingTime";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useDropHandler } from "./dnd/TrackerDnd";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import MeetingTasksSheet, { type RecapItem, type RecapTask } from "./MeetingTasksSheet";
+import type { RecapItem, RecapTask } from "./MeetingTasksSheet";
 import { loadAgenda, type AgendaItem } from "@/hooks/useMeetingAgenda";
+
+// Окна — отдельными кусками, подгружаются фоном после первого кадра
+// (lib/lazyWindows: почему и как).
+const MeetingModal = dynamic(loadMeetingModal, { ssr: false });
+const DoneListModal = dynamic(loadDoneListModal, { ssr: false });
+const MeetingTasksSheet = dynamic(loadMeetingTasksSheet, { ssr: false });
 
 export default function MeetingsPanel({
   myUserId = "",
