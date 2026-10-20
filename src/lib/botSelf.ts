@@ -24,6 +24,20 @@ function short(text: string, limit: number): string {
   return text.length > limit ? text.slice(0, limit - 1) + "…" : text;
 }
 
+// Фразы возврата — без модели, как точные команды «сегодня» и
+// «просрочено». На боевом 20.10.2026 «верни отчёт для банка на доску»
+// сразу после «отложи … до 26.10» дважды из трёх разобралось не тем
+// типом: модель видит разговор (lib/botMemory), и свежая просьба
+// «отложить» в нём тянула её назад. Ответ однозначен по самим словам —
+// значит, его даёт код.
+export function exactSelfPhrase(text: string): { tool: string; input: Record<string, unknown>; droppedNames: string[] }[] | null {
+  const s = text.trim().replace(/[.!]+$/, "");
+  const board = /^(?:верни|вернуть|верните)\s+(.+?)\s+(?:обратно\s+)?на\s+доску$/i.exec(s) || /^не\s+откладывай(?:те)?\s+(.+)$/i.exec(s);
+  if (board) return [{ tool: "snooze_task", input: { query: board[1].trim(), back: true }, droppedNames: [] }];
+  if (/^я\s+(?:уже\s+|снова\s+)?(?:вернул(?:ся|ась)|на\s+месте)$/i.test(s)) return [{ tool: "away", input: { back: true }, droppedNames: [] }];
+  return null;
+}
+
 // ------------------------------------------------------------ отложить
 
 // «Отложи смету до понедельника». Отложенность — свойство доски ТОГО, КТО

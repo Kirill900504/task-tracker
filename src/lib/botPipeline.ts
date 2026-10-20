@@ -16,7 +16,7 @@ import { extractMeetingNotes } from "@/lib/meetingNotes";
 import { findMeetingForNotes } from "@/lib/meetingLink";
 import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
 import { attachExecutors, attachMeetingParticipants, assignNote, selfAssigneeName } from "@/lib/assignExecutors";
-import { planSnooze, planAway } from "@/lib/botSelf";
+import { planSnooze, planAway, exactSelfPhrase } from "@/lib/botSelf";
 import { guideAnswer } from "@/lib/botGuide";
 import type { Viewer } from "@/lib/telegramQueries";
 import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
@@ -719,7 +719,10 @@ async function offerTask(
 
   let items;
   try {
-    ({ items } = await parseQuickAdd(text, known, {
+    // «верни … на доску», «я вернулся» — кодом, без модели (lib/botSelf).
+    const fixed = exactSelfPhrase(text);
+    if (fixed) items = fixed;
+    else ({ items } = await parseQuickAdd(text, known, {
       context: contextBlock(dialog, reply?.text || ""),
       lessons: lessonsBlock(await lessonsFor(ctx.admin, memberId, text)),
     }));
@@ -1269,10 +1272,15 @@ export async function handleText(baseCtx: BotContext, text: string, reply: Reply
   const assignees = (assigneeRows || []).map((r) => r.name as string);
 
   try {
-    const { items } = await parseQuickAdd(effectiveText, assignees, {
-      context: contextBlock(memory.dialog, reply?.text || ""),
-      lessons: lessonsBlock(await lessonsFor(ctx.admin, lessonActor(asOwner), effectiveText)),
-    });
+    // «верни … на доску», «я вернулся» — кодом, без модели (lib/botSelf).
+    const items =
+      exactSelfPhrase(trimmed) ||
+      (
+        await parseQuickAdd(effectiveText, assignees, {
+          context: contextBlock(memory.dialog, reply?.text || ""),
+          lessons: lessonsBlock(await lessonsFor(ctx.admin, lessonActor(asOwner), effectiveText)),
+        })
+      ).items;
     let toProcess = items;
 
     // Loop guard: allow at most ONE clarifying round-trip. An exact-text
