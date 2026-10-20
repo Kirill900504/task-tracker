@@ -34,7 +34,12 @@ function short(text: string, limit: number): string {
 // доезжает до вкладки подпиской так же, как перенос срока из бота.
 export async function planSnooze(ctx: SkillContext, input: Record<string, unknown>): Promise<SkillReply> {
   const query = String(input.query || "").trim();
-  const back = input.back === true;
+  // «На доску» и «не откладывай» в самой фразе — всегда возврат, что бы ни
+  // ответила модель. На боевом 20.10.2026 «верни отчёт для банка на доску»
+  // сразу после «отложи … до 26.10» разобралось с датой из памяти разговора
+  // (lib/botMemory) — и задача осталась отложенной. Слова человека сильнее
+  // контекста.
+  const back = input.back === true || /на\s+доску|не\s+отклад/i.test(ctx.phrase);
   const { tasks, found } = await findItems(ctx.admin, ctx.actor, { itemType: "task", query, replyText: ctx.reply?.text, replyItem: ctx.reply?.item });
   const hits = found.filter((f): f is { kind: "task"; t: TaskToMove } => f.kind === "task").map((f) => f.t);
   const button = (t: TaskToMove) => [{ text: `📋 ${short(numbered(t), 32)}`, data: encodeCallback("task", "oshow", t.id) }];
@@ -88,7 +93,8 @@ export async function planAway(ctx: SkillContext, input: Record<string, unknown>
   }
   if (!rowId) return { text: "Не нашёл вашу строку в списке людей — отметьте отсутствие в трекере, в личном кабинете." };
 
-  if (input.back === true) {
+  // То же правило, что у «на доску»: «вернулся» во фразе — возврат.
+  if (input.back === true || /вернул(ся|ась)|снова\s+на\s+месте|уже\s+на\s+месте/i.test(ctx.phrase)) {
     await ctx.admin.from("assignees").update({ away_until: null, away_kind: null }).eq("id", rowId);
     return { text: "С возвращением — отметку «нет на месте» снял." };
   }
