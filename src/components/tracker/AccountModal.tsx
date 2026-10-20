@@ -164,7 +164,7 @@ export default function AccountModal({
         <section className="account-section">
           <h3>Мессенджеры</h3>
           <p className="field-hint">
-            Туда приходят задачи и встречи с кнопками ответа, а в меню бота — «📱 Мобильное приложение»: весь трекер
+            Туда приходят задачи и встречи с кнопками ответа, а в меню бота — «Мобильное приложение»: весь трекер
             прямо в чате, без пароля.
           </p>
           {messenger && <MessengerLink messenger={messenger} embedded />}

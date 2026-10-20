@@ -22,6 +22,11 @@
     --long-bg:#25392B;
     --long-border:#3C5C46;
     --success:#3FA968;
+    /* Зелёный для ТЕКСТА («на связи», «прошла»). Тексту доставался
+       --long-border — цвет рамки, #3C5C46 на #2E383C, то есть подпись,
+       которую не прочитать (аудит 20.10.2026: «Это вы — так вас видят
+       остальные» в «Команде» была видна только при наведении глаз). */
+    --ok-ink:#7CC99A;
     --assignee:#B9A0DE;
     --section-work:#4FBDB0;
     --section-work-bg:#1E3A37;
@@ -87,6 +92,14 @@
        generic drop-shadow-everywhere look. */
     --shadow-1: 0 1px 2px rgba(0,0,0,.22), 0 6px 16px -6px rgba(0,0,0,.35);
     --shadow-2: 0 10px 28px -6px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
+    /* Четыре скругления на весь трекер, и только они (плюс 999px у
+       пилюль и 50% у кружков). Аудит 20.10.2026 насчитал двадцать три
+       разных радиуса — 6, 7, 8, 9, 10, 12, 15, 16, 21… — и шесть
+       полупиксельных ступеней шрифта (11 / 11.5 / 12 / 12.5 / 13 / 13.5):
+       глаз не называет такую разницу, но читает её как «собрано из
+       разных кусков». Новое — берите отсюда, а не цифрой на месте;
+       шрифт — целыми пикселями. */
+    --radius-xs: 6px;
     --radius-sm: 9px;
     --radius-md: 14px;
     --radius-lg: 18px;
@@ -313,7 +326,7 @@
     [data-panel-slot="meetingsPanel"]{grid-column:1; grid-row:2;}
     [data-panel-slot="ideasPanel"]{grid-column:1; grid-row:3;}
   }
-  .dash-zone{min-width:0; border-radius:10px; transition:background .15s ease, box-shadow .15s ease;}
+  .dash-zone{min-width:0; border-radius:var(--radius-sm); transition:background .15s ease, box-shadow .15s ease;}
   /* One scrollbar for the whole tracker: the side columns are part of the
      page flow rather than independently scrolling sticky panes, so whichever
      column is longest — tasks, meetings or ideas — is what carries the page
@@ -355,7 +368,7 @@
     display:flex; align-items:flex-end;
   }
   .quick-add-sheet{
-    width:100%; background:var(--paper); border-radius:16px 16px 0 0;
+    width:100%; background:var(--paper); border-radius:var(--radius-md) var(--radius-md) 0 0;
     padding:10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
     box-shadow:0 -8px 24px rgba(0,0,0,.45);
     animation:quick-add-sheet-up .18s ease-out;
@@ -379,7 +392,7 @@
   .quick-add-preview .qap-actions{display:flex; gap:8px; margin-top:2px;}
 
   select, input[type=text], input[type=date], input[type=search]{
-    font-family:var(--sans); font-size:13.5px; padding:9px 11px;
+    font-family:var(--sans); font-size:14px; padding:9px 11px;
     border:1px solid var(--line-soft); border-radius:var(--radius-sm); background:var(--bg); color:var(--ink);
     transition:border-color .15s ease, box-shadow .15s ease;
   }
@@ -430,7 +443,7 @@
   .cal-nav .cal-month{flex:1; text-align:center;}
   .cal-month{font-family:var(--display); font-weight:700; font-size:14px;}
   .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px;}
-  .cal-wd{font-size:10.5px; color:var(--ink-soft); text-align:center; font-family:var(--display); padding:1px 0;}
+  .cal-wd{font-size:11px; color:var(--ink-soft); text-align:center; font-family:var(--display); padding:1px 0;}
   /* Клетка ниже на треть: месяц из шести рядов занимал столько же, сколько
      весь список встреч под ним. Цифра при этом не уменьшилась — ужалось
      пустое место вокруг неё. */
@@ -488,7 +501,7 @@
     white-space:pre-wrap; word-break:break-word; font-size:13px; line-height:1.4;
     display:-webkit-box; -webkit-line-clamp:4; line-clamp:4; -webkit-box-orient:vertical; overflow:hidden;
   }
-  .idea-meta{font-size:10.5px; color:var(--ink-soft); font-family:var(--display); margin-top:2px; opacity:.85;}
+  .idea-meta{font-size:11px; color:var(--ink-soft); font-family:var(--display); margin-top:2px; opacity:.85;}
   /* Нижняя строка мысли: дата слева, кнопки справа (см. IdeaItem — почему
      кнопки ушли из-под правого края текста). Высота строки постоянная,
      чтобы короткая и длинная мысль заканчивались одинаково. */
@@ -592,7 +605,7 @@
   .section-tab{
     padding:7px 14px; border:1px solid var(--line-soft); border-radius:999px;
     background:var(--paper-soft); color:var(--ink-soft); cursor:pointer;
-    font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
+    font-family:var(--display); font-weight:600; font-size:13px; white-space:nowrap;
     box-shadow:var(--edge);
     transition:color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
   }
@@ -618,7 +631,7 @@
     display:inline-flex; align-items:center; gap:6px;
     padding:8px 14px; border:1px solid var(--line-soft); border-radius:999px;
     background:var(--paper-soft); color:var(--ink-soft); cursor:pointer; box-shadow:var(--edge);
-    font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
+    font-family:var(--display); font-weight:600; font-size:13px; white-space:nowrap;
     transition:color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
   }
   .filter-pill:hover{color:var(--ink); border-color:var(--ink-soft);}
@@ -654,7 +667,7 @@
   .load-pill-main{
     display:inline-flex; align-items:center; gap:6px; min-height:34px; width:100%;
     padding:8px 30px 8px 14px; border:none; background:none; cursor:pointer;
-    font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
+    font-family:var(--display); font-weight:600; font-size:13px; white-space:nowrap;
     color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis;
   }
   .load-pill:hover .load-pill-main{color:var(--ink);}
@@ -670,10 +683,10 @@
      широкое окно растянуло бы имя от края до края. */
   .load-modal{max-width:520px;}
   /* Разбор мыслей (lib/ideaReview): строка в панели и окно по одной мысли. */
-  .idea-review-strip{display:block; width:100%; margin:6px 0 8px; padding:9px 12px; text-align:left; border:1px solid var(--accent); border-radius:10px; background:var(--accent-soft); color:inherit; font:inherit; font-size:13px; cursor:pointer;}
+  .idea-review-strip{display:block; width:100%; margin:6px 0 8px; padding:9px 12px; text-align:left; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--accent-soft); color:inherit; font:inherit; font-size:13px; cursor:pointer;}
   .idea-review-strip:hover{box-shadow:0 0 0 3px var(--accent-soft);}
   .idea-review{max-width:480px;}
-  .idea-review-text{margin:10px 0 16px; padding:12px 14px; border-radius:10px; background:var(--accent-soft); font-size:15px; line-height:1.45; overflow-wrap:anywhere; white-space:pre-wrap;}
+  .idea-review-text{margin:10px 0 16px; padding:12px 14px; border-radius:var(--radius-sm); background:var(--accent-soft); font-size:15px; line-height:1.45; overflow-wrap:anywhere; white-space:pre-wrap;}
   .idea-review-actions{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
   @media (max-width:800px){ .filter-pill{min-height:34px;} }
   @media (max-width:800px){
@@ -743,7 +756,7 @@
   /* Тело столбца. Пустой столбец обязан принимать сброс — иначе
      единственную задачу нельзя перенести в опустевший соседний. Заливки и
      рамки «вот эта зона» здесь нет намеренно (см. правило выше). */
-  .task-column-body{border-radius:10px;}
+  .task-column-body{border-radius:var(--radius-sm);}
   .task-column-body.is-empty{min-height:96px;}
 
   /* Место, которое раскрывается под карточку из другого столбца.
@@ -877,7 +890,7 @@
     background:var(--accent); color:#F3F8FA; font-size:10px;
   }
   .check{
-    width:18px; height:18px; border-radius:6px; border:1.5px solid var(--line);
+    width:18px; height:18px; border-radius:var(--radius-xs); border:1.5px solid var(--line);
     flex:none; margin-top:2px; cursor:pointer; display:flex; align-items:center; justify-content:center;
     color:#F3F8FA; font-size:12px; background:var(--paper-soft);
     transition:background .15s ease, border-color .15s ease, transform .1s ease;
@@ -890,7 +903,7 @@
      название написано абзацем, и читать его всё равно придётся в
      карточке. */
   .task-title{
-    font-weight:600; font-size:13.5px; line-height:1.35; color:var(--ink);
+    font-weight:600; font-size:14px; line-height:1.35; color:var(--ink);
     word-break:break-word; overflow-wrap:anywhere;
     display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
   }
@@ -899,7 +912,7 @@
      цветом — это подписи, а не заголовки, и соревноваться им не за что. */
   .task-meta{
     display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; align-items:center;
-    font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);
+    font-size:12px; color:var(--ink-soft); font-variant-numeric:var(--nums);
   }
   .task-meta:empty{display:none;}
   /* «Кто поручил → кому» — одной группой, чтобы стрелка не отрывалась от
@@ -908,7 +921,7 @@
   /* «больше не повторять» у регулярной встречи — словом рядом с фактом,
      а не кнопкой в ряду действий: это правка правила, а не исход встречи. */
   .meeting-recur-note .link-btn{background:none; border:0; padding:0 0 0 6px; font:inherit; color:var(--accent); cursor:pointer; text-decoration:underline dotted;}
-  .task-modal-num{font-size:12.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; margin-bottom:2px;}
+  .task-modal-num{font-size:13px; color:var(--ink-soft); font-variant-numeric:tabular-nums; margin-bottom:2px;}
   .task-who{display:inline-flex; align-items:center; gap:5px; min-width:0; flex-wrap:wrap;}
   .task-assignee{font-weight:700; color:var(--assignee); overflow-wrap:anywhere;}
   .task-from{color:var(--ink-soft); overflow-wrap:anywhere;}
@@ -927,7 +940,7 @@
        флекс — как картинка в потоке он садился на базовую линию и вылезал
        снизу за скруглённый край. */
     display:inline-flex; align-items:center; gap:5px;
-    font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:999px; font-family:var(--display);
+    font-size:12px; font-weight:600; padding:3px 9px; border-radius:999px; font-family:var(--display);
     white-space:nowrap;
     /* База без модификатора тоже должна читаться как метка: роль
        «наблюдатель» на экране руководителя выглядела обрывком текста,
@@ -1052,7 +1065,7 @@
        23.09.2026. Цвет — обычный, не приглушённый: описание читают, а не
        бегло просматривают, и «ink-soft» рядом с настоящим текстом задачи
        выглядело тусклее самого фона карточки. */
-    margin:0 0 18px; font-size:13.5px; line-height:1.6; font-weight:500;
+    margin:0 0 18px; font-size:14px; line-height:1.6; font-weight:500;
     color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;
   }
   /* Свёрнутое длинное описание — до пяти строк с отточием, «как в
@@ -1101,13 +1114,13 @@
   /* Пояснение под полем — то, что объясняет, как им пользоваться
      («нажали второй раз — он снят с задачи»). Оно НЕ должно спорить с
      названием поля: тише и мельче его, но не мельче основного текста. */
-  .field-hint{font-size:12.5px; line-height:1.5; color:var(--ink-soft); margin:8px 0 0;}
+  .field-hint{font-size:13px; line-height:1.5; color:var(--ink-soft); margin:8px 0 0;}
   /* Обязательное поле называется обязательным словами, а не звёздочкой:
      звёздочку надо знать, а «нужен исполнитель» — нет. Выполненное
      требование не исчезает, а меняет цвет и текст: исчезнувшая надпись
      заставляет вспоминать, было там что-то или нет. */
   .field-req{
-    flex:none; font-size:11.5px; font-weight:600; letter-spacing:0;
+    flex:none; font-size:12px; font-weight:600; letter-spacing:0;
     color:var(--high); text-transform:none;
   }
   .field-req.met{color:var(--success);}
@@ -1120,7 +1133,7 @@
   .field input[type=tel], .field input[type=number], .field input[type=url],
   .field textarea, .field select, .field input[type=date]{
     width:100%; padding:10px 12px; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
-    font-family:var(--sans); font-size:13.5px;
+    font-family:var(--sans); font-size:14px;
     /* Поле ввода темнее карточки, а не светлее её: «вырезанное» поле
        читается как место, куда пишут, без обводки потемнее вокруг. */
     background:var(--bg); color:var(--ink);
@@ -1167,7 +1180,7 @@
      крупно и пояснение мельче рядом — как у главной кнопки, а не ссылки. */
   .meeting-move-btn{
     margin:14px 0 16px; width:100%; justify-content:center; gap:8px;
-    padding:11px 16px; font-size:14px; font-weight:700; border-radius:12px;
+    padding:11px 16px; font-size:14px; font-weight:700; border-radius:var(--radius-md);
     background:linear-gradient(135deg, #4FA3C4 0%, var(--accent) 55%, #2F6F88 100%);
     border-color:transparent;
     box-shadow:0 6px 18px -6px rgba(62,138,168,.65), inset 0 1px 0 rgba(255,255,255,.18);
@@ -1225,7 +1238,7 @@
     color:var(--ink-label); font-family:var(--display);
   }
   .fact-value{
-    font-size:13.5px; font-weight:600; color:var(--ink); line-height:1.4;
+    font-size:14px; font-weight:600; color:var(--ink); line-height:1.4;
     font-variant-numeric:var(--nums); overflow-wrap:anywhere;
   }
   .fact-value.muted{font-weight:500; color:var(--ink-soft);}
@@ -1235,7 +1248,7 @@
      человек видно, кого ещё ждём, не читая ни одного имени. */
   .fact-people{display:flex; flex-wrap:wrap; gap:4px 10px;}
   .fact-person{display:inline-flex; align-items:center; gap:5px; white-space:nowrap;}
-  .fact-person-mark{font-size:11.5px; line-height:1;}
+  .fact-person-mark{font-size:12px; line-height:1;}
   .fact-person.vote-yes .fact-person-mark{color:var(--success);}
   .fact-person.vote-no{color:var(--ink-soft);}
   .fact-person.vote-no .fact-person-mark{color:var(--high);}
@@ -1272,9 +1285,9 @@
   .result-item:first-of-type{border-top:0; padding-top:0;}
   .result-line{display:flex; gap:10px; align-items:baseline; justify-content:space-between; flex-wrap:wrap;}
   .result-who{font-size:13px; font-weight:700; color:var(--ink);}
-  .result-when{font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
-  .result-text{font-size:13.5px; color:var(--ink); line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; margin-top:3px;}
-  .results-note{margin-top:8px; font-size:11.5px; color:var(--ink-soft);}
+  .result-when{font-size:12px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
+  .result-text{font-size:14px; color:var(--ink); line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; margin-top:3px;}
+  .results-note{margin-top:8px; font-size:12px; color:var(--ink-soft);}
   /* Документы к результату: фотографию показываем, остальное называем —
      акт и выгрузку узнают по имени, а установленную кассу нет. Та же
      логика, что у вложений обсуждения. */
@@ -1367,14 +1380,14 @@
   /* Вопрос и пояснение к нему почти всегда цитируют название задачи или
      встречи — перенос по буквам здесь по той же причине, что у .toast. */
   .ask-question{margin:0 0 10px; font-size:14px; line-height:1.5; color:var(--ink); white-space:pre-line; overflow-wrap:anywhere;}
-  .ask-note{margin:0 0 12px; font-size:12.5px; line-height:1.5; color:var(--ink-soft); overflow-wrap:anywhere;}
+  .ask-note{margin:0 0 12px; font-size:13px; line-height:1.5; color:var(--ink-soft); overflow-wrap:anywhere;}
   .ask-modal .field{margin-bottom:0;}
   /* Готовые ответы над полем — те же пилюли, что в AnswerForm. */
   .ask-quick{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px;}
   .ask-modal textarea{min-height:88px;}
   .ask-problem{
     margin-top:10px; padding:8px 10px; border-radius:var(--radius-sm);
-    background:var(--high-bg); border:1px solid rgba(224,122,95,.4); color:#F2C9BC; font-size:12.5px;
+    background:var(--high-bg); border:1px solid rgba(224,122,95,.4); color:#F2C9BC; font-size:13px;
     overflow-wrap:anywhere;
   }
   .ask-actions{justify-content:flex-end; flex-wrap:wrap;}
@@ -1400,7 +1413,7 @@
     }
     .ask-modal .modal-actions{position:static; border-top:0; background:none; padding-top:12px;}
   }
-  .recur-config{background:var(--bg); border-radius:6px; padding:10px; margin-top:8px; display:none;}
+  .recur-config{background:var(--bg); border-radius:var(--radius-xs); padding:10px; margin-top:8px; display:none;}
   .recur-config.open{display:block;}
   .stop-recur-row{margin-top:8px; display:none;}
   .stop-recur-row.show{display:block;}
@@ -1415,7 +1428,7 @@
   #toast-stack{position:fixed; bottom:16px; right:16px; z-index:200; display:flex; flex-direction:column-reverse; gap:10px; max-width:320px; pointer-events:none;}
   #syncStatus{
     position:fixed; left:16px; bottom:16px; z-index:150; pointer-events:none;
-    background:var(--paper); border:1px solid var(--line); border-radius:6px;
+    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-xs);
     padding:6px 12px; font-size:12px; color:var(--ink-soft); font-family:var(--display);
     opacity:0; transition:opacity .3s ease;
   }
@@ -1439,7 +1452,7 @@
     background:var(--accent-soft); color:var(--accent); margin-top:1px;
   }
   .toast-text{display:flex; flex-direction:column; gap:2px; min-width:0;}
-  .toast b{font-size:13.5px; font-weight:700; color:var(--ink); font-family:var(--display);}
+  .toast b{font-size:14px; font-weight:700; color:var(--ink); font-family:var(--display);}
   .toast-body{color:var(--ink-soft); line-height:1.4;}
   /* Крестик — отдельным слоем поверх текста, а не float внутри него.
      Плавающий элемент рисуется НИЖЕ строчного содержимого соседнего блока,
@@ -1448,7 +1461,7 @@
   .toast .close{
     position:absolute; top:6px; right:6px; z-index:1;
     width:28px; height:28px; display:flex; align-items:center; justify-content:center;
-    padding:0; border:0; border-radius:7px; background:none; color:var(--ink-soft);
+    padding:0; border:0; border-radius:var(--radius-xs); background:none; color:var(--ink-soft);
     cursor:pointer; opacity:.85;
   }
   .toast .close:hover{opacity:1; background:rgba(255,255,255,.08); color:var(--ink);}
@@ -1459,7 +1472,7 @@
   .toast .close svg{pointer-events:none;}
   .toast-undo{
     align-self:flex-start; margin-top:4px; background:var(--accent-soft); border:1px solid transparent;
-    color:var(--accent); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; font-family:var(--sans); font-weight:600;
+    color:var(--accent); border-radius:var(--radius-xs); padding:4px 10px; font-size:12px; cursor:pointer; font-family:var(--sans); font-weight:600;
   }
   /* Уведомление о событии (lib/desktopAlerts): текст — кнопка «открыть»,
      под ним ряд своих кнопок. Перевод строки в тексте — настоящий: «что
@@ -1495,7 +1508,7 @@
     display:flex; align-items:center; justify-content:center; line-height:1;
   }
   .conn-status-pop{max-width:280px; padding:12px; gap:10px;}
-  .conn-status-text{font-size:12.5px; line-height:1.5; color:var(--ink);}
+  .conn-status-text{font-size:13px; line-height:1.5; color:var(--ink);}
 
   /* Quote in header */
   .header-quote{
@@ -1558,7 +1571,7 @@
     box-shadow:none !important; transform:none; transition:none !important;
   }
   .idea-item.dragging > *{visibility:hidden;}
-  #ideaList{border-radius:8px;}
+  #ideaList{border-radius:var(--radius-sm);}
   @media (prefers-reduced-motion: reduce){ .idea-item.dragging{transform:none;} }
   .idea-item.important{border-color:var(--high); background:var(--high-bg);}
   .idea-item.done{opacity:.55;}
@@ -1600,7 +1613,7 @@
   /* Calendar: meetings */
   .cal-dot.meeting{background:var(--today);}
   .cal-filter-note{align-items:center;}
-  #meetingsForDay{margin-top:2px; border-radius:8px;}
+  #meetingsForDay{margin-top:2px; border-radius:var(--radius-sm);}
   /* Взятая встреча — тот же силуэт, что у задачи и у мысли: пустое место
      без рамки и заливки. */
   .meeting-chip.dragging{
@@ -1618,7 +1631,7 @@
   .meeting-chip{
     display:flex; align-items:flex-start; gap:8px;
     background:var(--paper-soft); border:1px solid var(--line-soft); border-radius:var(--radius-md);
-    padding:9px 10px; margin-top:6px; font-size:12.5px; cursor:grab; box-shadow:var(--edge);
+    padding:9px 10px; margin-top:6px; font-size:13px; cursor:grab; box-shadow:var(--edge);
     transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
   }
   .meeting-chip:hover{border-color:var(--today); box-shadow:var(--shadow-1); transform:translateY(-1px);}
@@ -1632,7 +1645,7 @@
      своим цветом и своим кеглем, и рядом с подписью в шрифте интерфейса
      они выглядели наклейками. Цвет теперь несёт сам значок. */
   .meeting-chip .mstatus{flex:none; display:inline-flex; align-items:center;}
-  .meeting-chip .mstatus.success{color:var(--long-border);}
+  .meeting-chip .mstatus.success{color:var(--ok-ink);}
   .meeting-chip .mstatus.no_result{color:var(--ink-soft);}
   .meeting-chip .mtitle{
     flex:1; min-width:0; white-space:normal; overflow-wrap:break-word; word-break:normal;
@@ -1643,8 +1656,8 @@
     display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px;
     font-variant-numeric:tabular-nums lining-nums;
   }
-  .meeting-chip .mdate{color:var(--ink-soft); font-family:var(--display); font-size:11.5px; white-space:nowrap;}
-  .meeting-chip .mtime{color:var(--today); font-family:var(--display); font-weight:700; font-size:11.5px; white-space:nowrap;}
+  .meeting-chip .mdate{color:var(--ink-soft); font-family:var(--display); font-size:12px; white-space:nowrap;}
+  .meeting-chip .mtime{color:var(--today); font-family:var(--display); font-weight:700; font-size:12px; white-space:nowrap;}
   .meeting-chip .mpeople{
     color:var(--ink-soft); font-family:var(--display); font-size:11px; white-space:nowrap;
     flex:none; cursor:default; padding:2px 3px; border-radius:4px;
@@ -1655,7 +1668,7 @@
      обрезки/контекста наложения родительской панели. */
   .people-tooltip{
     display:none; position:fixed; z-index:300;
-    background:var(--paper); border:1px solid var(--line); border-radius:6px;
+    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-xs);
     box-shadow:var(--shadow-2); padding:8px 10px; min-width:150px; max-width:260px;
     font-family:var(--sans); font-size:12px; color:var(--ink); text-align:left;
   }
@@ -1699,7 +1712,7 @@
   .meeting-actions.vote .meeting-act.vote-no:hover{color:var(--high); border-color:var(--high);}
   .meeting-my-vote{
     min-height:32px; display:inline-flex; align-items:center; justify-content:center; gap:5px;
-    border-radius:var(--radius-sm); font-family:var(--display); font-size:11.5px; font-weight:700;
+    border-radius:var(--radius-sm); font-family:var(--display); font-size:12px; font-weight:700;
   }
   .meeting-my-vote.yes{background:rgba(63,169,104,.14); color:#5BD08A;}
   .meeting-my-vote.late{background:rgba(224,184,77,.14); color:#F0C75E;}
@@ -1716,7 +1729,7 @@
   .meeting-act{
     min-height:32px; padding:6px 4px; display:inline-flex; align-items:center; justify-content:center;
     background:var(--paper-soft); border:1px solid var(--line); border-radius:var(--radius-sm);
-    color:var(--ink-soft); cursor:pointer; font-family:var(--display); font-size:11.5px; font-weight:600;
+    color:var(--ink-soft); cursor:pointer; font-family:var(--display); font-size:12px; font-weight:600;
     line-height:1.1; text-align:center;
     transition:color .15s ease, border-color .15s ease, background .15s ease;
   }
@@ -1751,7 +1764,7 @@
     display:inline-flex; align-items:center; gap:10px; width:100%;
     padding:9px 13px; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
     background:var(--bg); color:var(--ink); cursor:pointer; box-shadow:var(--edge);
-    font-family:var(--display); font-weight:600; font-size:13.5px; text-align:left;
+    font-family:var(--display); font-weight:600; font-size:14px; text-align:left;
     transition:border-color .12s ease, box-shadow .12s ease, color .12s ease;
   }
   .dd-trigger:hover{border-color:var(--accent);}
@@ -1762,7 +1775,7 @@
     transition:transform .15s ease, color .15s ease;
   }
   .dd-trigger.open .dd-arrow{transform:rotate(180deg); color:var(--accent);}
-  .dd-trigger.dd-compact{padding:6px 10px; font-size:12.5px; gap:7px;}
+  .dd-trigger.dd-compact{padding:6px 10px; font-size:13px; gap:7px;}
   .dd-backdrop{position:fixed; inset:0; z-index:140;}
   .dd-pop{
     position:absolute; top:calc(100% + 6px); left:0; min-width:100%; z-index:141;
@@ -1784,7 +1797,7 @@
     display:flex; align-items:center; gap:10px; width:100%;
     padding:9px 11px; border:none; border-radius:var(--radius-sm); background:none;
     color:var(--ink); cursor:pointer; text-align:left;
-    font-family:var(--display); font-weight:600; font-size:13.5px; line-height:1.35;
+    font-family:var(--display); font-weight:600; font-size:14px; line-height:1.35;
     transition:background .1s ease, color .1s ease;
   }
   .dd-option-label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
@@ -1797,7 +1810,7 @@
   /* Popover: create a task/meeting on a clicked calendar date */
   .date-popover{
     display:none; flex-direction:column; position:fixed; z-index:300; gap:2px;
-    background:var(--paper); border:1px solid var(--line); border-radius:6px;
+    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-xs);
     box-shadow:var(--shadow-2); padding:6px; min-width:120px;
   }
   .date-popover-btn{
@@ -1811,7 +1824,7 @@
   .day-peek{
     display:flex; flex-direction:column; gap:8px; width:300px; max-width:calc(100vw - 16px);
     max-height:min(60vh,440px); overflow-y:auto;
-    background:var(--paper); border:1px solid var(--line); border-radius:8px;
+    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm);
     box-shadow:var(--shadow-2); padding:10px;
   }
   .day-peek-head{font-weight:700; font-size:14px; color:var(--ink); padding:0 4px;}
@@ -1836,7 +1849,7 @@
     background:var(--bg); max-width:318px; box-shadow:var(--edge);
   }
   .mini-cal-head{display:flex; align-items:center; gap:6px; margin-bottom:10px;}
-  .mini-cal-month{flex:1; text-align:center; font-family:var(--display); font-weight:700; font-size:13.5px; color:var(--ink);}
+  .mini-cal-month{flex:1; text-align:center; font-family:var(--display); font-weight:700; font-size:14px; color:var(--ink);}
   .mini-cal-nav, .mini-cal-clear{
     width:28px; height:28px; flex:none; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
     background:var(--paper-soft); color:var(--ink-soft); cursor:pointer; font-size:12px; line-height:1; padding:0;
@@ -1851,7 +1864,7 @@
   }
   .mini-cal-day{
     aspect-ratio:1; min-height:32px; border:1px solid transparent; border-radius:var(--radius-sm);
-    background:none; color:var(--ink); cursor:pointer; font-family:var(--display); font-size:12.5px;
+    background:none; color:var(--ink); cursor:pointer; font-family:var(--display); font-size:13px;
     font-weight:600; padding:0;
     transition:background .12s ease, color .12s ease, border-color .12s ease;
   }
@@ -1912,7 +1925,7 @@
   .mini-cal-trigger{
     padding:8px 14px; border:1px solid var(--line-soft); border-radius:999px;
     background:var(--paper-soft); color:var(--ink); cursor:pointer; box-shadow:var(--edge);
-    font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
+    font-family:var(--display); font-weight:600; font-size:13px; white-space:nowrap;
     transition:border-color .12s ease, color .12s ease, background .12s ease;
   }
   .mini-cal-trigger:hover, .mini-cal-trigger.open{border-color:var(--accent); color:var(--accent);}
@@ -1927,7 +1940,7 @@
   /* Working-hours time picker: one tap per slot, wrapping over a few rows. */
   .time-grid{display:flex; flex-wrap:wrap; gap:5px;}
   .time-slot{
-    padding:5px 9px; border:1px solid var(--line); border-radius:6px; cursor:pointer;
+    padding:5px 9px; border:1px solid var(--line); border-radius:var(--radius-xs); cursor:pointer;
     background:var(--paper-soft); color:var(--ink); font-family:var(--display); font-size:12px;
     transition:border-color .12s ease, background .12s ease, color .12s ease;
   }
@@ -1969,13 +1982,13 @@
     font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--ink);
   }
   .people-search:focus{outline:none; border-color:var(--accent);}
-  .people-search-empty{font-size:12.5px; color:var(--ink-soft); padding:7px 2px;}
+  .people-search-empty{font-size:13px; color:var(--ink-soft); padding:7px 2px;}
   @media (max-width:800px){ .people-search{font-size:16px; min-height:40px;} }
   /* Тот же поиск в меню «+ добавить»: строка над пунктами меню. */
   .action-menu-search{margin:4px 8px 6px; width:calc(100% - 16px);}
   .participant-chip{
     padding:7px 13px; border:1px solid var(--line-soft); border-radius:999px; cursor:pointer;
-    background:var(--paper-soft); color:var(--ink); font-family:var(--sans); font-size:12.5px; font-weight:600;
+    background:var(--paper-soft); color:var(--ink); font-family:var(--sans); font-size:13px; font-weight:600;
     line-height:1.35; box-shadow:var(--edge);
     transition:border-color .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease, transform .12s ease;
   }
@@ -2029,14 +2042,14 @@
 
   .participants-field{position:relative;}
   .participants-trigger{
-    width:100%; text-align:left; padding:8px 10px; border:1px solid var(--line); border-radius:6px;
+    width:100%; text-align:left; padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius-xs);
     background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13px; cursor:pointer;
   }
   .participants-trigger:hover{border-color:var(--accent);}
   .participants-trigger.open{border-color:var(--accent);}
   .participants-dropdown{
     display:none; flex-direction:column; position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:200;
-    background:var(--paper); border:1px solid var(--accent); border-radius:6px;
+    background:var(--paper); border:1px solid var(--accent); border-radius:var(--radius-xs);
     box-shadow:var(--shadow-2); max-height:260px;
   }
   .participants-dropdown.open{display:flex;}
@@ -2051,7 +2064,7 @@
 
   /* Итог встречи */
   .outcome-field textarea{
-    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px;
+    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius-xs);
     background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13px; resize:vertical;
   }
   /* Итог — меткой, а не цветной заливкой во всю строку: это состояние
@@ -2129,7 +2142,7 @@
   .export-item{
     display:flex; align-items:center; gap:9px;
     text-align:left; padding:9px 11px; border:0; border-radius:var(--radius-sm); cursor:pointer;
-    background:transparent; color:var(--ink); font-family:var(--display); font-weight:600; font-size:13.5px;
+    background:transparent; color:var(--ink); font-family:var(--display); font-weight:600; font-size:14px;
     transition:background .1s ease, color .1s ease;
   }
   .export-item-label{flex:1; min-width:0;}
@@ -2159,7 +2172,7 @@
   }
   .team-row:last-child{border-bottom:0;}
   .team-name{
-    min-width:0; font-size:13.5px; font-weight:600; color:var(--ink);
+    min-width:0; font-size:14px; font-weight:600; color:var(--ink);
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
   /* Ячейка: подпись и относящиеся к ней кнопки. Прижата вправо, потому что
@@ -2177,7 +2190,7 @@
      полосы у «в трекере · Автоматизация · администратор»), но остаётся
      тихой: это ответ на вопрос «что с ним», а не заголовок. */
   .team-status{
-    font-family:var(--display); font-size:11.5px; color:var(--ink-soft);
+    font-family:var(--display); font-size:12px; color:var(--ink-soft);
     min-width:0; text-align:right; line-height:1.45; overflow-wrap:anywhere;
   }
   /* Кнопка «ещё действия» — та же, что у карточки задачи, и тем же
@@ -2197,23 +2210,23 @@
   /* Зелёным — то, что уже работает: человек на связи, человек в трекере.
      Класс висит на куске подписи, а не на ней целиком: у одного и того же
      человека мессенджер может быть подключён, а вход отключён. */
-  .team-status .linked{color:var(--long-border);}
+  .team-status .linked{color:var(--ok-ink);}
   /* Ссылка приглашения живёт под своей строкой, а не под всем списком:
      нажали у шестого человека — ответ там же, где нажали. Отступ слева и
      подложка говорят, что это ответ на кнопку выше, а не новый раздел. */
   .team-invite{
     margin:2px 0 10px; padding:10px 12px; border-left:2px solid var(--accent);
-    border-radius:0 6px 6px 0; background:var(--paper-soft);
+    border-radius:0 var(--radius-xs) var(--radius-xs) 0; background:var(--paper-soft);
   }
   .team-invite label{display:block; font-size:12px; color:var(--ink-soft); margin-bottom:5px; font-family:var(--display);}
   .team-invite .team-hint{margin-top:6px;}
   .invite-link{
-    padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg);
+    padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius-xs); background:var(--bg);
     font-family:var(--mono); font-size:12px; color:var(--ink); word-break:break-all; margin-bottom:8px;
   }
   /* «Не подключены: N — Ссылки всем» над списком «Команды». */
   .team-bulk{margin:0 0 12px;}
-  .team-bulk-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; border:1px solid var(--accent); border-radius:10px; background:var(--accent-soft); font-size:13px;}
+  .team-bulk-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--accent-soft); font-size:13px;}
   .team-bulk-links{display:flex; flex-direction:column; gap:4px; margin-bottom:8px; max-height:220px; overflow:auto;}
   .team-hint{font-size:12px; color:var(--ink-soft); margin-top:8px;}
   .team-error{font-size:12px; color:var(--high); margin-bottom:10px;}
@@ -2231,7 +2244,7 @@
      не занимает — и выглядеть как назначенная не должна. */
   .pill-proposed{color:var(--ink-soft); background:var(--paper-soft); border:1px solid var(--line-soft);}
   .proposed-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
-  .proposed-text{flex:1; min-width:200px; font-size:12.5px; line-height:1.5; color:var(--ink-soft);}
+  .proposed-text{flex:1; min-width:200px; font-size:13px; line-height:1.5; color:var(--ink-soft);}
   /* Панель «Неделя»: семь дней подряд. Прошедшие гаснут, а не прячутся —
      иначе в пятницу от недели остаётся огрызок. */
   /* Реплика в поиске: её текст — не заголовок задачи, и выглядеть как
@@ -2243,9 +2256,9 @@
   /* Чужая задача: почему кнопок нет. Без этой строки карточка выглядит
      сломанной — открылась, а делать в ней нечего. */
   .task-card-note{
-    margin:-6px 0 16px; padding:9px 11px; font-size:12.5px; line-height:1.5;
+    margin:-6px 0 16px; padding:9px 11px; font-size:13px; line-height:1.5;
     color:var(--ink-soft); background:var(--paper-soft);
-    border-left:3px solid var(--line); border-radius:0 6px 6px 0;
+    border-left:3px solid var(--line); border-radius:0 var(--radius-xs) var(--radius-xs) 0;
   }
 
   /* Окно «Загрузка»: строка на человека, вся строка — кнопка-фильтр.
@@ -2282,7 +2295,7 @@
     font-family:var(--sans); color:var(--ink);
   }
   .review-row:hover{border-color:var(--accent);}
-  .review-row-title{font-size:14.5px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; word-break:break-word;}
+  .review-row-title{font-size:15px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; word-break:break-word;}
   .review-row-meta{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
 
   /* Экран «данные не загрузились»: сообщение и выход из положения,
@@ -2309,13 +2322,13 @@
       background:var(--paper); border-bottom:1px solid var(--line);
     }
     .mobile-brand{display:flex; align-items:center; gap:9px; flex:1; min-width:0;}
-    .mobile-logo{width:32px; height:32px; border-radius:7px; flex:none;}
+    .mobile-logo{width:32px; height:32px; border-radius:var(--radius-xs); flex:none;}
     .mobile-brand-text{min-width:0;}
     .mobile-title{font-family:var(--display); font-size:15px; font-weight:700; color:var(--ink); line-height:1.1;}
-    .mobile-date{font-family:var(--display); font-size:10.5px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .mobile-date{font-family:var(--display); font-size:11px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
     /* 44px — минимальная зона, по которой палец попадает не глядя. */
     .mobile-icon-btn{
-      flex:none; width:44px; height:44px; border-radius:10px;
+      flex:none; width:44px; height:44px; border-radius:var(--radius-sm);
       border:1px solid var(--line); background:var(--paper-soft); color:var(--ink);
       font-size:17px; line-height:1; cursor:pointer;
     }
@@ -2323,7 +2336,7 @@
     /* Значки связи в шапке телефона — та же цель под палец, что у
        основной кнопки, но заметно уже: их до двух подряд, и растянутые
        до 44px квадратов они спорили бы с ней за и так тесную строку. */
-    .mobile-header .conn-status-btn{width:38px; height:38px; border-radius:10px; font-size:15px;}
+    .mobile-header .conn-status-btn{width:38px; height:38px; border-radius:var(--radius-sm); font-size:15px;}
     .conn-status-pop{max-width:min(280px, calc(100vw - 24px));}
     .mobile-menu{min-width:230px; right:12px;}
     .mobile-menu .export-item{padding:12px 12px; font-size:14px;}
@@ -2359,7 +2372,7 @@
     .mobile-tab{
       display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
       padding:6px 2px 7px; border:0; background:none; cursor:pointer;
-      color:var(--ink-soft); font-family:var(--display); font-size:10.5px; font-weight:600;
+      color:var(--ink-soft); font-family:var(--display); font-size:11px; font-weight:600;
       -webkit-tap-highlight-color:transparent;
     }
     .mobile-tab.active{color:var(--accent);}
@@ -2374,7 +2387,7 @@
     .mobile-tab:active .mobile-tab-icon{transform:scale(.92);}
     .mobile-tab-badge{
       position:absolute; top:-3px; right:2px;
-      min-width:17px; height:17px; padding:0 4px; border-radius:9px;
+      min-width:17px; height:17px; padding:0 4px; border-radius:var(--radius-sm);
       background:var(--high); color:#2A130D; font-family:var(--display); font-size:10px; font-weight:700;
       display:flex; align-items:center; justify-content:center;
       box-shadow:0 0 0 2px var(--paper);
@@ -2565,6 +2578,16 @@
     .toolbar .filter-pill{min-height:44px;}
     .toolbar .view-switch-btn{min-height:40px; padding:0 10px;}
   }
+  /* Обычный телефон (390px) — ряд целиком, без прокрутки. На 8px
+     промежутков и 10px полей кнопкам не хватало двадцати пикселей, и
+     «Просрочено» стояла срезанной у края: прокрутка вбок есть, но
+     срезанная кнопка читается как поломка, а не как «листай» (аудит
+     20.10.2026, снимок 390×844). */
+  @media (max-width:430px){
+    .toolbar{gap:6px; padding:6px;}
+    .toolbar .view-switch-btn{padding:0 7px;}
+    .toolbar .filter-pill{padding-left:9px; padding-right:9px;}
+  }
 
   @media (max-width:800px){
     /* Свайп по карточке */
@@ -2624,14 +2647,14 @@
     .action-sheet{
       left:0; right:0; bottom:0; top:auto; z-index:420;
       min-width:0; padding:8px 10px calc(10px + env(safe-area-inset-bottom, 0px));
-      border-radius:16px 16px 0 0; border-bottom:0;
+      border-radius:var(--radius-md) var(--radius-md) 0 0; border-bottom:0;
       max-height:80vh;
       /* Проявляется, а не выезжает: лист с кнопками появляется под самым
          пальцем, и движущаяся под ним кнопка — это промах по соседней. */
       animation:sheet-fade .14s ease-out;
     }
     @keyframes sheet-fade{ from{opacity:0;} to{opacity:1;} }
-    .action-sheet .export-item{padding:15px 12px; font-size:15px; border-radius:10px;}
+    .action-sheet .export-item{padding:15px 12px; font-size:15px; border-radius:var(--radius-sm);}
     .action-sheet .action-menu-title{padding:10px 12px 6px; max-width:none; white-space:normal;}
     .action-sheet-cancel{
       margin-top:4px; border-top:1px solid var(--line); border-radius:0;
@@ -2670,7 +2693,7 @@
   }
   @media (prefers-reduced-motion: reduce){ .auth-card{animation:none;} }
   .auth-brand{display:flex; align-items:center; gap:10px; margin-bottom:24px;}
-  .auth-brand img{width:32px; height:32px; border-radius:9px; box-shadow:0 0 0 1px var(--line);}
+  .auth-brand img{width:32px; height:32px; border-radius:var(--radius-sm); box-shadow:0 0 0 1px var(--line);}
   .auth-brand span{font-family:var(--display); font-weight:800; font-size:15px; letter-spacing:-.01em;}
   .auth-title{font-family:var(--display); font-size:21px; font-weight:800; letter-spacing:-.015em; margin:0 0 7px; color:var(--ink);}
   .auth-sub{color:var(--ink-soft); font-size:13px; line-height:1.55; margin:0 0 22px;}
@@ -2703,7 +2726,7 @@
      anything smaller is a miss on a phone. */
   .auth-peek{
     position:absolute; right:5px; bottom:5px; height:36px; min-width:56px;
-    border:0; border-radius:7px; background:transparent; cursor:pointer;
+    border:0; border-radius:var(--radius-xs); background:transparent; cursor:pointer;
     color:var(--ink-soft); font-size:12px; font-family:var(--display);
   }
   .auth-peek:hover{color:var(--ink); background:var(--paper);}
@@ -2735,7 +2758,7 @@
     color:var(--accent); font-family:var(--sans); font-size:13px;
   }
   .auth-link:hover{text-decoration:underline;}
-  .auth-hint{color:var(--ink-soft); font-size:12.5px; line-height:1.5; margin:16px 0 0;}
+  .auth-hint{color:var(--ink-soft); font-size:13px; line-height:1.5; margin:16px 0 0;}
 
   /* Страница подключения бота (/max) — тот же экран входа, но с
      инструкцией: три шага, которые надо выполнить в другом приложении, в
@@ -2747,13 +2770,13 @@
        это и есть смысл («шаг 2 из 3»), а не украшение. */
     list-style:decimal outside;
     margin:0 0 22px; padding:0 0 0 22px;
-    color:var(--ink-soft); font-size:13.5px; line-height:1.6;
+    color:var(--ink-soft); font-size:14px; line-height:1.6;
   }
   .setup-steps li{margin-bottom:9px;}
   .setup-steps li::marker{color:var(--accent); font-family:var(--display); font-size:12px;}
   .setup-steps b{color:var(--ink);}
   .setup-steps code{
-    font-family:var(--mono); font-size:12.5px; color:var(--ink);
+    font-family:var(--mono); font-size:13px; color:var(--ink);
     background:var(--paper-soft); border:1px solid var(--line);
     border-radius:5px; padding:1px 5px;
   }
@@ -2786,19 +2809,19 @@
      равно нечем заполнить. */
   .tp-role-static{font-size:12px; color:var(--ink-soft); font-family:var(--display);}
   .tp-hint{margin-top:10px; font-size:12px; color:var(--ink-soft); line-height:1.5;}
-  .tp-stage{font-size:11.5px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--ink-soft);}
+  .tp-stage{font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--ink-soft);}
   .tp-stage-accepted{color:var(--today); border-color:var(--today);}
   .tp-stage-blocked{color:var(--high); border-color:var(--high);}
   .tp-stage-awaiting_review{color:var(--today); border-color:var(--today); background:var(--today-bg);}
   .tp-stage-returned{color:var(--med); border-color:var(--med);}
   .tp-stage-done{color:var(--success); border-color:var(--success);}
-  .tp-progress{font-size:12.5px; color:var(--ink); font-family:var(--display); margin-bottom:10px;}
+  .tp-progress{font-size:13px; color:var(--ink); font-family:var(--display); margin-bottom:10px;}
   .tp-returned{
-    font-size:12.5px; color:#F0D9A8; background:var(--med-bg);
+    font-size:13px; color:#F0D9A8; background:var(--med-bg);
     border:1px solid rgba(224,184,77,.35); border-radius:var(--radius-sm);
     padding:8px 10px; margin-bottom:10px; overflow-wrap:anywhere; word-break:break-word;
   }
-  .tp-empty{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
+  .tp-empty{font-size:13px; color:var(--ink-soft); line-height:1.5;}
   /* Цветные врезки карточки (приёмка, просьба о переносе, результат) — та
      же тень, что у сводки выше: одна семья поверхностей на всю карточку,
      а не «эта плоская, эта нет» вперемешку. */
@@ -2806,7 +2829,7 @@
     margin-top:12px; padding:10px 11px; border-radius:var(--radius-sm);
     background:var(--today-bg); border:1px solid var(--today); box-shadow:var(--shadow-1);
   }
-  .tp-review-text{font-size:12.5px; color:var(--ink); margin-bottom:8px; overflow-wrap:anywhere; word-break:break-word;}
+  .tp-review-text{font-size:13px; color:var(--ink); margin-bottom:8px; overflow-wrap:anywhere; word-break:break-word;}
   .tp-review-actions{display:flex; gap:8px; flex-wrap:wrap;}
   .tp-force{margin-top:10px; color:var(--ink-soft);}
 
@@ -2841,7 +2864,7 @@
   .participant-chip.role-coexecutor .chip-status.status-declined,
   .participant-chip.role-watcher .chip-status.status-declined{color:var(--high);}
   .participant-chip.role-coexecutor .chip-status.status-accepted,
-  .participant-chip.role-watcher .chip-status.status-accepted{color:var(--long-border);}
+  .participant-chip.role-watcher .chip-status.status-accepted{color:var(--ok-ink);}
   .participant-chip.role-coexecutor .chip-status.status-unreachable,
   .participant-chip.role-watcher .chip-status.status-unreachable{color:var(--ink-soft);}
 
@@ -2856,17 +2879,17 @@
   .ms{max-width:760px; margin:0 auto; padding:24px 16px 40px;}
   .ms-exit{flex:none;}
   .ms-empty{
-    color:var(--ink-soft); font-size:13.5px; line-height:1.6;
+    color:var(--ink-soft); font-size:14px; line-height:1.6;
     padding:28px 20px; text-align:center;
     border:1px dashed var(--line); border-radius:var(--radius-md);
   }
   .ms-returned{
     margin-top:10px; padding:8px 10px; border-radius:var(--radius-sm);
-    background:var(--med-bg); border:1px solid rgba(224,184,77,.35); color:#F0D9A8; font-size:12.5px;
+    background:var(--med-bg); border:1px solid rgba(224,184,77,.35); color:#F0D9A8; font-size:13px;
   }
-  .ms-reported{margin-top:10px; font-size:12.5px; color:var(--success);}
-  .ms-declined{margin-top:10px; font-size:12.5px; color:var(--high);}
-  .ms-asked{margin-top:10px; font-size:12.5px; color:var(--ink-soft);}
+  .ms-reported{margin-top:10px; font-size:13px; color:var(--success);}
+  .ms-declined{margin-top:10px; font-size:13px; color:var(--high);}
+  .ms-asked{margin-top:10px; font-size:13px; color:var(--ink-soft);}
   /* Кнопки в один ряд на мониторе и в столбик на телефоне, каждая ≥36px —
      это единственное, что человек здесь вообще нажимает. */
   .ms-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;}
@@ -2895,14 +2918,14 @@
     font-weight:var(--label-weight); text-transform:uppercase; letter-spacing:.09em;
   }
   .chat-count{
-    font-size:11.5px; font-weight:700; color:var(--accent); background:var(--accent-soft);
+    font-size:12px; font-weight:700; color:var(--accent); background:var(--accent-soft);
     border:none; border-radius:999px; padding:2px 8px; font-variant-numeric:tabular-nums;
   }
   /* Подсказка про правую кнопку — справа и тише всего в строке: она нужна
      один раз, а стоит там всегда. */
-  .chat-hint{margin-left:auto; font-size:11.5px; color:var(--ink-soft); opacity:.8;}
+  .chat-hint{margin-left:auto; font-size:12px; color:var(--ink-soft); opacity:.8;}
   @media (max-width:560px){ .chat-hint{display:none;} }
-  .chat-empty{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
+  .chat-empty{font-size:13px; color:var(--ink-soft); line-height:1.5;}
 
   /* Переписка, а не список карточек.
      Слова Кирилла 21.09.2026: «режим чата как в телеграм или МАХ (когда
@@ -2950,7 +2973,7 @@
   .chat-avatar.hidden{background:transparent !important;}
   .chat-msg{
     position:relative; max-width:min(78%, 520px);
-    padding:8px 12px 7px; border-radius:15px; background:var(--paper);
+    padding:8px 12px 7px; border-radius:var(--radius-md); background:var(--paper);
     border:1px solid var(--line-soft); box-shadow:var(--shadow-1), var(--edge);
     /* Меню вызывают правой кнопкой по самому сообщению — выделение текста
        при этом не должно превращаться в синюю заливку реплики; обычное
@@ -3029,13 +3052,13 @@
      живёт доли секунды, а на плохой связи видно и так. Переход плавный,
      чтобы подтверждение не выглядело морганием. */
   .chat-msg.sending{opacity:.55;}
-  .chat-author{font-size:12.5px; font-weight:700; margin-bottom:3px;}
+  .chat-author{font-size:13px; font-weight:700; margin-bottom:3px;}
   /* Время — в подвале пузыря, справа: взглядом, а не чтением. */
   .chat-time{
     display:block; text-align:right; margin-top:3px;
-    font-size:10.5px; color:var(--ink-soft); font-family:var(--display); opacity:.85;
+    font-size:11px; color:var(--ink-soft); font-family:var(--display); opacity:.85;
   }
-  .chat-body{font-size:13.5px; color:var(--ink); line-height:1.5; white-space:pre-wrap; word-break:break-word;}
+  .chat-body{font-size:14px; color:var(--ink); line-height:1.5; white-space:pre-wrap; word-break:break-word;}
   /* Тег человека внутри сообщения — своим цветом и потолще: то же самое
      правило, что у автора реплики (цвет считается из имени), только
      внутри текста, а не над ним. */
@@ -3045,12 +3068,12 @@
      ведут к оригиналу и на секунду подсвечивают его в ленте. */
   .chat-quote{
     display:flex; flex-direction:column; gap:1px;
-    padding:4px 8px; margin-bottom:5px; border-radius:6px;
+    padding:4px 8px; margin-bottom:5px; border-radius:var(--radius-xs);
     border-left:3px solid var(--accent); background:rgba(255,255,255,.04);
     cursor:pointer; max-width:100%;
   }
   .chat-quote:hover{background:rgba(255,255,255,.08);}
-  .chat-quote-author{font-size:11.5px; font-weight:700; color:var(--accent);}
+  .chat-quote-author{font-size:12px; font-weight:700; color:var(--accent);}
   .chat-quote-body{
     font-size:12px; color:var(--ink-soft); overflow:hidden;
     text-overflow:ellipsis; white-space:nowrap; max-width:340px;
@@ -3068,14 +3091,14 @@
      нажатия «Отправить», а не после. */
   .chat-reply-bar{
     display:flex; align-items:center; gap:8px;
-    padding:6px 8px; margin-bottom:6px; border-radius:6px;
+    padding:6px 8px; margin-bottom:6px; border-radius:var(--radius-xs);
     border-left:3px solid var(--accent); background:rgba(255,255,255,.04);
   }
   .chat-reply-bar .chat-quote-author, .chat-reply-bar .chat-quote-body{margin:0;}
   .chat-reply-bar-text{flex:1; min-width:0; display:flex; flex-direction:column; gap:1px;}
   .chat-reply-bar-close{
     flex:none; background:none; border:0; color:var(--ink-soft); cursor:pointer;
-    width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:6px;
+    width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-xs);
   }
   .chat-reply-bar-close:hover{background:rgba(255,255,255,.08); color:var(--ink);}
   /* Правка на месте — то же поле, что у composer'а, но внутри самого
@@ -3084,7 +3107,7 @@
      окна для этого больше нет. */
   .chat-edit-box{display:flex; flex-direction:column; gap:6px; min-width:220px;}
   .chat-edit-box textarea{
-    font-family:var(--sans); font-size:13.5px; color:var(--ink); background:var(--bg);
+    font-family:var(--sans); font-size:14px; color:var(--ink); background:var(--bg);
     border:1px solid var(--accent); border-radius:var(--radius-sm); padding:7px 9px;
     resize:vertical; min-height:36px;
   }
@@ -3107,16 +3130,16 @@
   @keyframes chat-mention-in{from{opacity:0; transform:translateY(4px);}to{opacity:1; transform:none;}}
   .chat-mention-item{
     flex:none; display:flex; align-items:center; gap:10px;
-    text-align:left; padding:6px 9px; min-height:40px; border:0; border-radius:8px; background:none;
+    text-align:left; padding:6px 9px; min-height:40px; border:0; border-radius:var(--radius-sm); background:none;
     color:var(--ink); font-family:var(--sans); font-size:14px; cursor:pointer;
   }
-  .chat-mention-item .chat-avatar{width:26px; height:26px; font-size:10.5px;}
+  .chat-mention-item .chat-avatar{width:26px; height:26px; font-size:11px;}
   .chat-mention-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .chat-mention-item.active{background:var(--accent-soft); color:var(--accent);}
   .chat-foot{display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;}
   .chat-reaction{
     display:inline-flex; align-items:center; gap:5px;
-    min-height:28px; padding:3px 10px; font-size:12.5px; font-weight:600; cursor:pointer;
+    min-height:28px; padding:3px 10px; font-size:13px; font-weight:600; cursor:pointer;
     background:var(--paper-soft); color:var(--ink); border:1px solid var(--line-soft); border-radius:999px;
     font-variant-numeric:tabular-nums;
     transition:border-color .12s ease, background .12s ease;
@@ -3130,7 +3153,7 @@
   @media (prefers-reduced-motion: reduce){ .chat-reaction{animation:none;} }
   .chat-mini{
     background:none; border:0; padding:2px 4px; cursor:pointer;
-    font-size:11.5px; color:var(--ink-soft); font-family:var(--sans);
+    font-size:12px; color:var(--ink-soft); font-family:var(--sans);
   }
   .chat-mini:hover{color:var(--ink); text-decoration:underline;}
 
@@ -3159,7 +3182,7 @@
   .chat-menu-item{
     text-align:left; padding:9px 11px; border:none; border-radius:var(--radius-sm);
     background:none; color:var(--ink); cursor:pointer;
-    font-family:var(--display); font-weight:600; font-size:13.5px;
+    font-family:var(--display); font-weight:600; font-size:14px;
     transition:background .1s ease, color .1s ease;
   }
   .chat-menu-item:hover{background:var(--paper-soft); color:var(--accent);}
@@ -3169,14 +3192,14 @@
   .chat-composer{display:flex; gap:8px; align-items:flex-end; margin-top:12px; position:relative;}
   /* Закрытое событие: на месте поля — строка, а не пустота (ItemChat readOnly). */
   .chat-closed{
-    margin-top:12px; padding:10px 14px; border-radius:12px;
+    margin-top:12px; padding:10px 14px; border-radius:var(--radius-md);
     border:1px dashed var(--line-soft); color:var(--ink-soft);
     font-size:13px; text-align:center;
   }
   .chat-reaction:disabled{cursor:default;}
   .chat-reaction:disabled:not(.mine):hover{border-color:var(--line-soft);}
   .chat-composer textarea{
-    flex:1; min-height:42px; resize:vertical; padding:10px 12px; font-size:13.5px;
+    flex:1; min-height:42px; resize:vertical; padding:10px 12px; font-size:14px;
     font-family:var(--sans); color:var(--ink); background:var(--bg);
     border:1px solid var(--line-soft); border-radius:var(--radius-sm);
   }
@@ -3203,27 +3226,27 @@
     display:flex; flex-direction:column; gap:6px;
     padding:8px 12px; margin:6px 0;
     background:var(--accent-soft);
-    border-left:3px solid var(--accent); border-radius:0 10px 10px 0;
+    border-left:3px solid var(--accent); border-radius:0 var(--radius-sm) var(--radius-sm) 0;
     transition:border-color .12s ease, background .12s ease;
   }
   .chat-event.menu-open{border-color:var(--ink);}
   .chat-event.flash{animation:chat-flash 1.4s ease-out;}
   .chat-event-row{display:flex; gap:10px; align-items:baseline; justify-content:space-between;}
-  .chat-event-text{font-size:12.5px; line-height:1.4; font-weight:600; color:var(--ink-label);}
+  .chat-event-text{font-size:13px; line-height:1.4; font-weight:600; color:var(--ink-label);}
   .chat-event-time{font-size:11px; color:var(--ink-soft); white-space:nowrap;}
   /* Слово человека — карточкой, крупнее и контрастнее самой переписки:
      это то, ради чего открывают хронику, а событие сверху — просто
      объясняет, при каких обстоятельствах это было сказано. */
   .chat-event-comment{
     font-size:14px; font-weight:600; line-height:1.5; color:var(--ink);
-    padding:9px 11px; border-radius:10px;
+    padding:9px 11px; border-radius:var(--radius-sm);
     background:var(--paper); border:1px solid var(--line-soft); box-shadow:var(--shadow-1);
     white-space:pre-wrap; overflow-wrap:anywhere;
   }
   .chat-error{
     margin-top:8px; padding:8px 10px; border-radius:var(--radius-sm);
     background:var(--high-bg); border:1px solid rgba(224,122,95,.4);
-    color:#F2C9BC; font-size:12.5px;
+    color:#F2C9BC; font-size:13px;
   }
   /* Подключение своего мессенджера — плавающая карточка, а не полоса на
      всю ширину над доской.
@@ -3249,7 +3272,7 @@
   .ms-link-close{
     position:absolute; top:6px; right:6px; width:22px; height:22px;
     display:flex; align-items:center; justify-content:center;
-    border:0; border-radius:6px; background:none; color:var(--ink-soft); padding:0; opacity:.7;
+    border:0; border-radius:var(--radius-xs); background:none; color:var(--ink-soft); padding:0; opacity:.7;
   }
   .ms-link-close:hover{opacity:1; background:rgba(255,255,255,.08);}
   /* Свёрнутое напоминание — крестиком нажали «скрыть», а мессенджер так и
@@ -3267,7 +3290,7 @@
      своя фиксированная позиция над нижней панелью. */
   .ms-link.ms-link-embedded{position:static; max-width:none; box-shadow:none; z-index:auto; left:auto; right:auto; bottom:auto;}
   .ms-link-state{display:flex; gap:12px; flex-wrap:wrap; align-items:center; padding-right:16px;}
-  .ms-link-on{font-size:12.5px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;}
+  .ms-link-on{font-size:13px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;}
   .ms-link-why{font-size:13px; line-height:1.5; color:var(--ink-soft);}
   .ms-link-why b{color:var(--ink);}
   .ms-link-actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
@@ -3276,14 +3299,14 @@
   .ms-link-error{
     padding:8px 10px; border-radius:var(--radius-sm);
     background:var(--high-bg); border:1px solid rgba(224,122,95,.4);
-    color:#F2C9BC; font-size:12.5px;
+    color:#F2C9BC; font-size:13px;
   }
   .ms-link-code{
     display:flex; flex-direction:column; align-items:flex-start; gap:8px;
     padding:11px 13px; border-radius:var(--radius-sm);
     background:var(--paper-soft); border:1px solid var(--line);
   }
-  .ms-link-hint{font-size:12.5px; line-height:1.5; color:var(--ink-soft);}
+  .ms-link-hint{font-size:13px; line-height:1.5; color:var(--ink-soft);}
   /* «Проверил — пока не вижу». Не ошибка (человек ничего не сделал
      неправильно), но и не оттенок фона: это ответ на нажатие, и он должен
      быть заметен ровно настолько, чтобы его прочли. */
@@ -3307,7 +3330,7 @@
     padding:11px 12px; border-radius:var(--radius-sm);
     background:var(--paper-soft); border:1px solid var(--line);
   }
-  .ms-answer-q{font-size:12.5px; line-height:1.45; color:var(--ink-soft);}
+  .ms-answer-q{font-size:13px; line-height:1.45; color:var(--ink-soft);}
   /* Готовые ответы (AnswerForm.quick): переносятся строками, а не
      прокручиваются вбок — на телефоне полоса прокрутки прячет половину. */
   .ms-answer-quick{display:flex; flex-wrap:wrap; gap:6px;}
@@ -3322,10 +3345,10 @@
     width:100%; resize:vertical; min-height:70px;
     padding:9px 10px; border-radius:var(--radius-sm);
     border:1px solid var(--line); background:var(--paper);
-    color:var(--ink); font:inherit; font-size:13.5px; line-height:1.5;
+    color:var(--ink); font:inherit; font-size:14px; line-height:1.5;
   }
   .ms-answer-text:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
-  .ms-answer-date{display:flex; align-items:center; gap:9px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft);}
+  .ms-answer-date{display:flex; align-items:center; gap:9px; flex-wrap:wrap; font-size:13px; color:var(--ink-soft);}
   .ms-answer-date input{
     padding:7px 9px; border-radius:var(--radius-sm);
     border:1px solid var(--line); background:var(--paper);
@@ -3334,7 +3357,7 @@
   .ms-answer-error{
     padding:7px 9px; border-radius:var(--radius-sm);
     background:var(--high-bg); border:1px solid rgba(224,122,95,.4);
-    color:#F2C9BC; font-size:12.5px; line-height:1.45;
+    color:#F2C9BC; font-size:13px; line-height:1.45;
   }
   .ms-answer-actions{display:flex; gap:8px; flex-wrap:wrap;}
   .ms-chat-toggle{margin-top:10px; align-self:flex-start;}
@@ -3346,13 +3369,13 @@
     margin-bottom:10px; padding:9px 11px; border-radius:var(--radius-sm);
     background:var(--med-bg); border:1px solid rgba(224,184,77,.4); box-shadow:var(--shadow-1);
   }
-  .tp-ask-text{font-size:12.5px; color:#F0D9A8; line-height:1.45; margin-bottom:8px; overflow-wrap:anywhere; word-break:break-word;}
+  .tp-ask-text{font-size:13px; color:#F0D9A8; line-height:1.45; margin-bottom:8px; overflow-wrap:anywhere; word-break:break-word;}
   .tp-ask-text b{color:var(--ink);}
   .tp-ask-actions{display:flex; gap:8px; flex-wrap:wrap;}
   .tp-notice{
     margin-top:10px; padding:8px 10px; border-radius:var(--radius-sm);
     background:var(--paper); border:1px solid var(--line);
-    color:var(--ink-soft); font-size:12.5px; line-height:1.45;
+    color:var(--ink-soft); font-size:13px; line-height:1.45;
   }
 
   /* Файлы в обсуждении. Фотографию видно, остальное названо: акт узнают по
@@ -3367,7 +3390,7 @@
   .file-item{
     display:inline-flex; align-items:center; max-width:100%; min-height:36px;
     padding:6px 10px; border:1px solid var(--line); border-radius:var(--radius-sm);
-    background:var(--paper-soft); color:var(--ink); font-size:12.5px; text-decoration:none;
+    background:var(--paper-soft); color:var(--ink); font-size:13px; text-decoration:none;
     transition:border-color .12s ease;
   }
   .file-item:hover{border-color:var(--accent);}
@@ -3471,7 +3494,7 @@
   }
   .view-switch-btn{
     cursor:pointer; background:none; border:none; font:inherit;
-    font-size:12.5px; font-weight:600; color:var(--ink-soft);
+    font-size:13px; font-weight:600; color:var(--ink-soft);
     padding:0 11px; min-height:34px; display:inline-flex; align-items:center; gap:6px;
     border-right:1px solid var(--line-soft);
   }
@@ -3576,8 +3599,8 @@
     display:flex; flex-direction:column; gap:2px;
   }
   .done-list-text:disabled{cursor:default;}
-  .done-list-title{font-size:13.5px; color:var(--ink); line-height:1.35; overflow-wrap:anywhere; word-break:break-word;}
-  .done-list-note{font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
+  .done-list-title{font-size:14px; color:var(--ink); line-height:1.35; overflow-wrap:anywhere; word-break:break-word;}
+  .done-list-note{font-size:12px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
 
   /* Встреча прошла, а итога нет. Отдельной группой наверху панели: это
      единственные встречи в списке, которые чего-то ждут от смотрящего. */
@@ -3586,7 +3609,9 @@
     font-size:11px; text-transform:uppercase; letter-spacing:.08em;
     color:var(--med); font-weight:700; margin-bottom:2px;
   }
-  .meeting-chip.awaits-recap{border-color:var(--med); background:var(--med-bg);}
+  /* Вид такой встречи — красная рамка, и он целиком в task-ui.css. Здесь
+     стояла жёлтая заливка прежнего правила; пока поверх лежала красная,
+     её не было видно, а без неё она проступила (аудит 20.10.2026). */
   .pill-recap{background:var(--med-bg); color:var(--med); border:1px solid var(--med);}
 
   /* Полоса-переключатель столбцов на телефоне (.board-tabs/.board-tab) ушла
@@ -3608,7 +3633,7 @@
      -------------------------------------------------------------- */
   .skel{padding:14px 16px 24px; max-width:1800px; margin:0 auto;}
   .skel-head{display:flex; align-items:center; gap:12px; padding:6px 2px 18px;}
-  .skel-logo{width:38px; height:38px; border-radius:9px; background:var(--paper-soft);}
+  .skel-logo{width:38px; height:38px; border-radius:var(--radius-sm); background:var(--paper-soft);}
   .skel-head-text{display:flex; flex-direction:column; gap:7px;}
   .skel-layout{display:grid; grid-template-columns:300px minmax(0,1fr) 320px; gap:14px; align-items:start;}
   .skel-col{display:flex; flex-direction:column; gap:14px; min-width:0;}
@@ -3626,7 +3651,7 @@
     background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-md);
     padding:11px 12px; display:flex; flex-direction:column; gap:7px; box-shadow:var(--edge);
   }
-  .skel-line{border-radius:6px; background:var(--paper-soft);}
+  .skel-line{border-radius:var(--radius-xs); background:var(--paper-soft);}
   /* Одна пульсация на весь каркас: блоки, мигающие вразнобой, читаются как
      помехи, а не как «сейчас появится». */
   .skel-line, .skel-day, .skel-pill, .skel-logo{animation:skel-pulse 1.4s ease-in-out infinite;}
@@ -3661,7 +3686,7 @@
      как реплики разной длины; пульсация общая с каркасом запуска. */
   .chat-skeleton{display:flex; flex-direction:column; gap:9px; padding:10px 2px 6px;}
   .chat-skel-line{
-    height:13px; border-radius:7px; background:var(--paper-soft);
+    height:13px; border-radius:var(--radius-xs); background:var(--paper-soft);
     animation:skel-pulse 1.4s ease-in-out infinite;
   }
   @media (prefers-reduced-motion: reduce){ .chat-skel-line{animation:none;} }
@@ -3675,13 +3700,13 @@
      Нижняя граница — 12.5px для служебных подписей и 13px для того, что
      читают (даты, люди, метки фактов). */
   @media (max-width:800px){
-    .mobile-tab{font-size:11.5px;}
-    .idea-meta, .mobile-date, .chat-time, .cal-wd{font-size:12.5px;}
-    .today-heading, .fact-label, .mobile-main .panel-title{font-size:12.5px;}
+    .mobile-tab{font-size:12px;}
+    .idea-meta, .mobile-date, .chat-time, .cal-wd{font-size:13px;}
+    .today-heading, .fact-label, .mobile-main .panel-title{font-size:13px;}
     .task-meta, .meeting-chip .mdate, .meeting-chip .mtime, .meeting-chip .mpeople,
     .result-when, .results-note, .done-list-note, .search-hit-meta, .search-group,
     .people-num, .tp-stage, .chat-event-time, .chat-mini, .pill, .team-status{font-size:13px;}
-    .field-hint, .tp-hint, .team-hint, .subtitle{font-size:13.5px;}
+    .field-hint, .tp-hint, .team-hint, .subtitle{font-size:14px;}
     .idea-text{font-size:15px;}
   }
 
@@ -3711,13 +3736,13 @@
   .incoming-idea{padding:8px 10px; border-radius:var(--radius-md); background:var(--paper-soft); box-shadow:var(--edge);}
   .incoming-idea + .incoming-idea{margin-top:6px;}
   .incoming-idea-text{white-space:pre-wrap; overflow-wrap:anywhere;}
-  .incoming-idea-meta{font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
+  .incoming-idea-meta{font-size:11px; color:var(--ink-soft); margin-top:2px;}
   /* Четыре равные кнопки сеткой 2×2 (те же два ряда, что под мыслью в
      мессенджере): сетка, а не flex-wrap, — ряд не должен рваться
      по-разному у длинных и коротких мыслей. */
   .incoming-idea-actions{display:grid; grid-template-columns:repeat(2, 1fr); gap:6px; margin-top:8px;}
   .incoming-idea-actions .btn{min-height:36px; justify-content:center; padding-left:4px; padding-right:4px; white-space:nowrap;}
-  @media (max-width:800px){ .incoming-idea-meta{font-size:12.5px;} }
+  @media (max-width:800px){ .incoming-idea-meta{font-size:13px;} }
 
   /* Поделённая со мной мысль (0051): строка как своя, только подпись «от
      кого» и два действия справа. Тот же корешок, что у роли на карточке
@@ -3756,13 +3781,13 @@
 .account-section h3{margin:0; font-size:var(--label-size); font-weight:var(--label-weight); color:var(--ink-label); text-transform:uppercase; letter-spacing:.06em;}
 .account-section .field-hint{margin:0;}
 .account-form{display:flex; flex-direction:column; gap:10px; align-items:flex-start;}
-.account-field{display:flex; flex-direction:column; gap:5px; width:100%; font-size:12.5px; color:var(--ink-soft);}
+.account-field{display:flex; flex-direction:column; gap:5px; width:100%; font-size:13px; color:var(--ink-soft);}
 .account-field input{width:100%;}
 .account-pass{display:flex; gap:8px; align-items:center; width:100%;}
 .account-pass input{flex:1; min-width:0;}
 .account-ok{
   padding:8px 10px; border-radius:var(--radius-sm);
-  background:rgba(108,190,140,.12); border:1px solid rgba(108,190,140,.4); color:var(--ink); font-size:12.5px;
+  background:rgba(108,190,140,.12); border:1px solid rgba(108,190,140,.4); color:var(--ink); font-size:13px;
 }
 .account-owner-ms{display:grid; grid-template-columns:1fr auto; gap:8px 12px; align-items:center;}
 .account-items{display:flex; flex-direction:column; gap:6px;}
@@ -3802,9 +3827,9 @@
 @keyframes emoji-in{from{opacity:0; transform:translateY(6px) scale(.97);} to{opacity:1; transform:none;}}
 @media (prefers-reduced-motion: reduce){ .emoji-picker{animation:none;} }
 .emoji-tabs{display:flex; gap:2px; padding:6px; border-bottom:1px solid var(--line-soft);}
-.emoji-tab{flex:1; min-width:0; padding:0; height:34px; border:0; border-radius:8px; background:none; font-size:18px; cursor:pointer;}
+.emoji-tab{flex:1; min-width:0; padding:0; height:34px; border:0; border-radius:var(--radius-sm); background:none; font-size:18px; cursor:pointer;}
 .emoji-tab.on, .emoji-tab:hover{background:rgba(255,255,255,.08);}
 .emoji-grid{display:grid; grid-template-columns:repeat(8, minmax(0, 1fr)); gap:2px; padding:6px; max-height:230px; overflow-y:auto;}
-.emoji-cell{height:36px; min-width:0; padding:0; border:0; border-radius:8px; background:none; font-size:21px; line-height:1; cursor:pointer;}
+.emoji-cell{height:36px; min-width:0; padding:0; border:0; border-radius:var(--radius-sm); background:none; font-size:21px; line-height:1; cursor:pointer;}
 .emoji-cell{transition:background .1s ease, transform .1s ease;}
 .emoji-cell:hover{background:rgba(255,255,255,.08); transform:scale(1.18);}

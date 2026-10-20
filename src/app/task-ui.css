@@ -84,7 +84,7 @@
 .task-top .task-title{flex:1; min-width:0;}
 .task-top .task-num, .task-top .check, .task-top .task-menu-btn{flex:none;}
 .task-top .task-num{
-  padding-top:5px; font-size:11.5px; font-weight:700; color:var(--ink-soft);
+  padding-top:5px; font-size:12px; font-weight:700; color:var(--ink-soft);
   font-variant-numeric:tabular-nums; opacity:1; white-space:nowrap;
 }
 .task-top .task-num:empty{display:none;}
@@ -93,9 +93,9 @@
    тридцати кубиков рамки не сложились в сетку. До трёх строк: длинное
    целиком — во всплывающем окне по наведению (.task-peek). */
 .task-top .task-title{
-  padding:4px 9px; border-radius:8px;
+  padding:4px 9px; border-radius:var(--radius-sm);
   background:rgba(0,0,0,.16); border:1px solid rgba(255,255,255,.07);
-  font-size:13.5px; font-weight:700; line-height:1.38; letter-spacing:-.005em;
+  font-size:14px; font-weight:700; line-height:1.38; letter-spacing:-.005em;
   -webkit-line-clamp:3; line-clamp:3;
 }
 .task.kind-outgoing .task-top .task-title{border-color:rgba(62,138,168,.35);}
@@ -109,7 +109,7 @@
 }
 
 /* Люди: кто поручил → кому, каждый со своим этапом. */
-.task-people{display:flex; flex-wrap:wrap; align-items:center; gap:5px 6px; margin-top:8px; font-size:11.5px; min-width:0;}
+.task-people{display:flex; flex-wrap:wrap; align-items:center; gap:5px 6px; margin-top:8px; font-size:12px; min-width:0;}
 .task-people .task-from{color:var(--ink-soft); font-weight:600;}
 .task-people .task-arrow{color:var(--ink-soft); opacity:.7;}
 
@@ -152,17 +152,17 @@
 .ps-unreachable .pbadge-state{background:var(--paper-soft); color:var(--ink-soft);}
 .pbadge-name{font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .pbadge.ps-waiting .pbadge-name, .pbadge.ps-unreachable .pbadge-name{color:var(--ink-soft);}
-.pbadge-word{font-size:11.5px; font-weight:600; color:var(--ink-soft); white-space:nowrap;}
+.pbadge-word{font-size:12px; font-weight:600; color:var(--ink-soft); white-space:nowrap;}
 .ps-working .pbadge-word{color:#7FD3A0;}
 .ps-done .pbadge-word{color:var(--fin-ink);}
 .ps-declined .pbadge-word{color:var(--high);}
 .pbadge-more{
   display:inline-flex; align-items:center; justify-content:center; min-width:21px; height:21px; padding:0 5px;
-  border-radius:999px; background:var(--paper-soft); color:var(--ink-soft); font-weight:800; font-size:10.5px;
+  border-radius:999px; background:var(--paper-soft); color:var(--ink-soft); font-weight:800; font-size:11px;
 }
 
 /* Низ: срок пилюлей, повтор, состояние, значки. */
-.task-foot{display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-top:8px; font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
+.task-foot{display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-top:8px; font-size:12px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
 .task-foot .task-marks{margin-left:auto;}
 /* «Просит перенести» — пилюля тёплого телесного тона (14.10.2026, слова
    Кирилла: «приглушённо красноватый, похожий на цвет кожи человека,
@@ -182,7 +182,7 @@
 .task-due-pill.tone-today .icon, .task-due-pill.tone-late .icon{opacity:1;}
 /* Метки отношения ко мне — правый нижний угол, цветной значок со словом.
    Значок крупнее остальных значков угла: его ищут глазом по доске. */
-.kind-tag{display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; white-space:nowrap; letter-spacing:.01em;}
+.kind-tag{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; white-space:nowrap; letter-spacing:.01em;}
 .kind-tag .icon{stroke-width:2;}
 .kind-tag-self{color:var(--kind-self-ink);}
 .kind-tag-co{color:var(--kind-co-ink);}
@@ -191,15 +191,15 @@
 /* Полное название поверх доски — по наведению на длинное. */
 .task-peek{
   position:fixed; z-index:5; width:max-content; max-width:min(380px, calc(100vw - 16px));
-  padding:10px 13px; border-radius:12px; pointer-events:none !important;
+  padding:10px 13px; border-radius:var(--radius-md); pointer-events:none !important;
   background:#1B2225; border:1px solid var(--line); box-shadow:var(--shadow-2);
   animation:task-peek-in .12s ease-out;
 }
 @keyframes task-peek-in{from{opacity:0; transform:translateY(-3px);} to{opacity:1; transform:none;}}
-.task-peek-title{font-weight:700; font-size:13.5px; line-height:1.45; color:var(--ink); overflow-wrap:anywhere; white-space:pre-wrap;}
+.task-peek-title{font-weight:700; font-size:14px; line-height:1.45; color:var(--ink); overflow-wrap:anywhere; white-space:pre-wrap;}
 .task-peek-desc{
   margin-top:6px; padding-top:6px; border-top:1px solid var(--line-soft);
-  font-size:12.5px; line-height:1.5; color:var(--ink-soft); white-space:pre-wrap; overflow-wrap:anywhere;
+  font-size:13px; line-height:1.5; color:var(--ink-soft); white-space:pre-wrap; overflow-wrap:anywhere;
   display:-webkit-box; -webkit-line-clamp:8; line-clamp:8; -webkit-box-orient:vertical; overflow:hidden;
 }
 @media (prefers-reduced-motion: reduce){ .task-peek{animation:none;} }
@@ -208,9 +208,9 @@
    Название в рамке, справа — действия и ×. */
 .item-head{display:flex; align-items:flex-start; gap:12px; margin:0 0 14px;}
 .item-head-main{flex:1; min-width:0;}
-.item-head-kicker{font-size:12.5px; font-weight:700; color:var(--ink-soft); font-variant-numeric:tabular-nums; margin-bottom:6px; letter-spacing:.01em;}
+.item-head-kicker{font-size:13px; font-weight:700; color:var(--ink-soft); font-variant-numeric:tabular-nums; margin-bottom:6px; letter-spacing:.01em;}
 .modal .item-head-title{
-  margin:0; padding:10px 14px; border-radius:12px;
+  margin:0; padding:10px 14px; border-radius:var(--radius-md);
   font-size:19px; line-height:1.35; font-weight:800; letter-spacing:-.015em; color:var(--ink);
   background:linear-gradient(180deg, rgba(62,138,168,.16), rgba(62,138,168,.07));
   border:1px solid rgba(62,138,168,.45); box-shadow:inset 3px 0 0 var(--accent);
@@ -219,7 +219,7 @@
 .modal .item-head-title.plain{padding:0; background:none; border:0; box-shadow:none;}
 .item-head-actions{display:flex; align-items:center; gap:8px; flex:none; flex-wrap:wrap; justify-content:flex-end;}
 .item-head-close, .item-head-icon{
-  width:38px; height:38px; border-radius:10px; flex:none;
+  width:38px; height:38px; border-radius:var(--radius-sm); flex:none;
   display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
   background:var(--paper-soft); border:1px solid var(--line-soft); color:var(--ink-soft);
   transition:color .12s ease, border-color .12s ease, background .12s ease;
@@ -228,7 +228,7 @@
 .item-head-icon.on{color:var(--accent); border-color:var(--accent); background:var(--accent-soft);}
 .item-head-icon.danger:hover{color:var(--high); border-color:var(--high); background:var(--high-bg);}
 .item-head-btn{
-  height:38px; padding:0 14px; border-radius:10px; cursor:pointer; white-space:nowrap;
+  height:38px; padding:0 14px; border-radius:var(--radius-sm); cursor:pointer; white-space:nowrap;
   font-family:var(--display); font-size:13px; font-weight:700; color:var(--ink);
   background:var(--paper-soft); border:1px solid var(--line-soft);
 }
@@ -258,7 +258,7 @@
    шапка растёт, и растёт она по просьбе того, кто нажал. */
 .item-head.one-line{flex-wrap:nowrap; align-items:center; gap:10px;}
 .item-head.one-line .item-head-kicker{
-  flex:none; margin:0; height:38px; padding:0 10px; border-radius:10px;
+  flex:none; margin:0; height:38px; padding:0 10px; border-radius:var(--radius-sm);
   display:inline-flex; align-items:center; justify-content:center;
   font-size:13px; color:var(--ink-soft); background:var(--paper-soft); border:1px solid var(--line-soft);
 }
@@ -290,9 +290,9 @@
    в таком же голубом контуре читалась вторым статусом. Отсюда правило:
    статус — контур, действие — заливка. */
 .snooze-btn{
-  margin-left:auto; flex:none; height:32px; padding:0 13px; border-radius:9px; cursor:pointer;
+  margin-left:auto; flex:none; height:32px; padding:0 13px; border-radius:var(--radius-sm); cursor:pointer;
   display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
-  font-family:var(--display); font-size:12.5px; font-weight:700;
+  font-family:var(--display); font-size:13px; font-weight:700;
   color:#fff; background:var(--accent); border:1px solid rgba(255,255,255,.14);
   box-shadow:0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18);
   transition:background .12s ease, transform .08s ease;
@@ -345,13 +345,13 @@
 .waits-line{display:flex; flex-wrap:wrap; align-items:center; gap:6px;}
 .task-snoozed{display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; color:var(--accent); white-space:nowrap;}
 .snoozed-banner{
-  display:flex; align-items:center; gap:8px; margin:0 0 10px; padding:8px 8px 8px 12px; border-radius:12px;
+  display:flex; align-items:center; gap:8px; margin:0 0 10px; padding:8px 8px 8px 12px; border-radius:var(--radius-md);
   font-size:13px; font-weight:600; color:var(--ink); background:rgba(62,138,168,.1); border:1px solid rgba(62,138,168,.4);
 }
 .snoozed-banner > span{flex:1; min-width:0;}
 .snoozed-banner-exit{
   flex:none; height:30px; padding:0 12px; border-radius:999px; cursor:pointer;
-  font-size:12.5px; font-weight:700; color:var(--ink); background:var(--paper-soft); border:1px solid var(--line-soft);
+  font-size:13px; font-weight:700; color:var(--ink); background:var(--paper-soft); border:1px solid var(--line-soft);
 }
 .snoozed-banner-exit:hover{border-color:var(--accent);}
 
@@ -374,7 +374,7 @@
 .tpeople-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;}
 /* «+» — той же залитой кнопкой, что «Отложить» (см. .snooze-btn). */
 .tpeople-add{
-  width:32px; height:32px; border-radius:9px; flex:none; cursor:pointer;
+  width:32px; height:32px; border-radius:var(--radius-sm); flex:none; cursor:pointer;
   display:inline-flex; align-items:center; justify-content:center;
   background:var(--accent); color:#fff; border:1px solid rgba(255,255,255,.14);
   box-shadow:0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18);
@@ -382,7 +382,7 @@
 }
 .tpeople-add:hover{background:#4A9BBB;}
 .tpeople-add:active{transform:translateY(1px); box-shadow:0 1px 3px rgba(0,0,0,.35);}
-.tpeople-empty{font-size:12.5px; color:var(--high); margin-bottom:6px;}
+.tpeople-empty{font-size:13px; color:var(--high); margin-bottom:6px;}
 .tpeople-group{margin-bottom:8px;}
 .tpeople-label{font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:5px;}
 .tpeople-list{display:flex; flex-wrap:wrap; gap:6px;}
@@ -391,11 +391,11 @@
 .tperson{
   display:inline-flex; align-items:center; padding:4px 10px 4px 5px; border-radius:999px;
   background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.08);
-  font:inherit; font-size:12.5px; color:var(--ink); max-width:100%;
+  font:inherit; font-size:13px; color:var(--ink); max-width:100%;
 }
 button.tperson{cursor:pointer; transition:border-color .12s ease, background .12s ease;}
 button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
-.tperson .pbadge-name{font-size:12.5px;}
+.tperson .pbadge-name{font-size:13px;}
 .tperson.role-executor{border-color:rgba(165,139,214,.35);}
 .tperson.role-watcher .pbadge-name{color:var(--ink-soft); font-weight:600;}
 
@@ -409,9 +409,9 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .add-people-hint{margin:-6px 0 10px;}
 .add-people .people-search{width:100%; margin-bottom:10px;}
 .add-people-list{display:flex; flex-direction:column; gap:4px; max-height:min(52vh, 460px); overflow-y:auto; overscroll-behavior:contain; margin:0 -6px; padding:0 6px;}
-.add-people-row{display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:6px 8px; border-radius:10px;}
+.add-people-row{display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:6px 8px; border-radius:var(--radius-sm);}
 .add-people-row:hover{background:rgba(255,255,255,.03);}
-.add-people-name{display:flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px; min-width:0; white-space:nowrap;}
+.add-people-name{display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; min-width:0; white-space:nowrap;}
 .add-people-label{overflow:hidden; text-overflow:ellipsis;}
 .add-people-name .pbadge-dot{flex:none;}
 .add-people-roles{display:inline-flex; gap:6px; flex-wrap:nowrap;}
@@ -422,7 +422,7 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .add-people-roles .participant-chip{padding:5px 10px; font-size:12px;}
 .role-pick-executor:hover{border-color:var(--accent); color:var(--accent);}
 .add-people-empty{padding:14px 8px; color:var(--ink-soft); font-size:13px;}
-.add-people-done{font-size:12.5px; color:var(--success); margin-bottom:8px;}
+.add-people-done{font-size:13px; color:var(--success); margin-bottom:8px;}
 .add-people-new{margin-top:10px;}
 
 /* ---------- Описание отдельным блоком (TaskDescription) ---------- */
@@ -443,7 +443,7 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .desc-empty{font-size:13px; color:var(--ink-soft);}
 .desc-block .auto-grow{
   width:100%; padding:10px 12px; border:1px solid var(--line-soft); border-radius:var(--radius-sm);
-  font-family:var(--sans); font-size:13.5px; line-height:1.55; background:var(--bg); color:var(--ink); resize:none;
+  font-family:var(--sans); font-size:14px; line-height:1.55; background:var(--bg); color:var(--ink); resize:none;
 }
 .desc-block .auto-grow:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
 .desc-files-edit{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
@@ -473,7 +473,7 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
    с 15.10.2026), участники в окне — фишками целиком, со своим
    откликом. Заливки нет: фон карточки встречи уже занят выбранным днём. */
 .meeting-chip .mtitle{
-  padding:3px 8px; border-radius:8px; font-weight:700;
+  padding:3px 8px; border-radius:var(--radius-sm); font-weight:700;
   background:rgba(0,0,0,.16); border:1px solid rgba(255,255,255,.07);
 }
 .meeting-chip.kind-outgoing{border-color:rgba(62,138,168,.5);}
@@ -488,10 +488,16 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
    выше — у этих правил та же сила, а файл подключён позже, — и такая
    встреча выглядела как любая другая. Красный сильнее и выбранного дня:
    это единственные встречи в списке, которые ждут действия. */
+/* Рамкой — и только ею (аудит 20.10.2026). Была ещё сплошная красная
+   заливка и пилюля «Нужен итог» внутри группы с заголовком «Нужен итог»:
+   одно и то же сказано трижды, а список из двух таких встреч становился
+   красным пятном, на котором не читалось название. В группе пилюля
+   прячется; в окне дня календаря, где группы нет, она остаётся. */
 .meeting-chip.awaits-recap,
-.meeting-chip.awaits-recap.selected-day{border-color:var(--high); background:var(--overdue-bg); box-shadow:inset 0 0 0 1px var(--high);}
+.meeting-chip.awaits-recap.selected-day{border-color:var(--high); box-shadow:inset 0 0 0 1px var(--high);}
 .meeting-chip.awaits-recap .mtitle{border-color:rgba(224,122,95,.35);}
 .meeting-chip.awaits-recap .pill-recap{background:var(--high); color:#2A130D; border-color:var(--high); font-weight:700;}
+.meetings-need-recap .meeting-chip.awaits-recap .pill-recap{display:none;}
 .meetings-need-recap .meetings-group-title{color:var(--high);}
 .meeting-chip .mtime{
   padding:1px 7px; border-radius:999px; background:rgba(79,168,216,.12);
@@ -502,7 +508,7 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .facts .fact-people{gap:6px;}
 .facts .fact-person{
   padding:3px 10px 3px 7px; border-radius:999px;
-  background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.08); font-size:12.5px;
+  background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.08); font-size:13px;
 }
 .facts .fact-person.vote-yes{border-color:rgba(63,169,104,.45);}
 .facts .fact-person.vote-late{border-color:rgba(224,184,77,.45);}
@@ -520,13 +526,13 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .chat-composer{align-items:flex-end; gap:6px;}
 .chat-composer .chat-input-wrap{
   flex:1 1 0; min-width:0; position:relative; display:flex; align-items:flex-end;
-  background:var(--bg); border:1px solid var(--line-soft); border-radius:21px;
+  background:var(--bg); border:1px solid var(--line-soft); border-radius:999px;
 }
 .chat-composer .chat-input-wrap:focus-within{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
 .chat-composer .chat-input-wrap textarea{
   flex:1 1 auto; width:100%; min-width:0; min-height:40px;
-  border:0; background:transparent; box-shadow:none; border-radius:21px;
-  padding:10px 4px 10px 14px; font-size:14.5px;
+  border:0; background:transparent; box-shadow:none; border-radius:999px;
+  padding:10px 4px 10px 14px; font-size:15px;
 }
 .chat-composer .chat-input-wrap textarea:focus{border:0; box-shadow:none;}
 .chat-composer .chat-emoji-wrap{flex:none; align-self:flex-end;}
@@ -632,14 +638,14 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
    дальше. Зелёная рамка, как у «Принудительного закрытия»: это итог, а не
    ошибка. */
 .team-notice{
-  margin:0 0 12px; padding:9px 12px; border-radius:10px; font-size:13px; line-height:1.45;
+  margin:0 0 12px; padding:9px 12px; border-radius:var(--radius-sm); font-size:13px; line-height:1.45;
   border:1px solid rgba(63,169,104,.5); background:rgba(63,169,104,.08); color:var(--ink);
 }
 /* Только что добавленный — подсвечен, пока окно открыто: следующий шаг
    (позвать в мессенджер или в трекер) стоит в его строке. */
-.team-row.just-added{background:var(--accent-soft); border-radius:8px; padding-left:8px; padding-right:4px;}
+.team-row.just-added{background:var(--accent-soft); border-radius:var(--radius-sm); padding-left:8px; padding-right:4px;}
 .team-remove{border-left-color:var(--high);}
-.team-remove-sample{margin:0 0 8px; padding-left:18px; font-size:12.5px; color:var(--ink); overflow-wrap:anywhere;}
+.team-remove-sample{margin:0 0 8px; padding-left:18px; font-size:13px; color:var(--ink); overflow-wrap:anywhere;}
 .team-remove-sample li{margin:2px 0;}
 .team-remove-ask{margin:0 0 6px;}
 .team-remove-actions{margin-top:10px;}
@@ -672,17 +678,17 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .checklist-bar{height:4px; border-radius:2px; background:rgba(255,255,255,.07); margin:0 0 8px; overflow:hidden;}
 .checklist-bar span{display:block; height:100%; background:var(--success); transition:width .2s ease;}
 .checklist-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px;}
-.checklist-item{display:flex; align-items:flex-start; gap:9px; padding:4px 2px; border-radius:8px;}
+.checklist-item{display:flex; align-items:flex-start; gap:9px; padding:4px 2px; border-radius:var(--radius-sm);}
 .checklist-item:hover{background:rgba(255,255,255,.03);}
 .checklist-item .check{margin-top:1px; padding:0;}
 .checklist-item .check:disabled{cursor:default; opacity:.8;}
-.checklist-text{flex:1; min-width:0; font-size:13.5px; line-height:1.45; color:var(--ink); overflow-wrap:anywhere;}
+.checklist-text{flex:1; min-width:0; font-size:14px; line-height:1.45; color:var(--ink); overflow-wrap:anywhere;}
 .checklist-item.done .checklist-text{color:var(--ink-soft); text-decoration:line-through;}
-.checklist-del{flex:none; width:24px; height:24px; border:0; background:none; color:var(--ink-soft); cursor:pointer; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; opacity:.6;}
+.checklist-del{flex:none; width:24px; height:24px; border:0; background:none; color:var(--ink-soft); cursor:pointer; border-radius:var(--radius-xs); display:inline-flex; align-items:center; justify-content:center; opacity:.6;}
 .checklist-del:hover{opacity:1; color:var(--high); background:var(--high-bg);}
 .checklist-add{
   width:100%; margin-top:6px; padding:8px 11px; border-radius:var(--radius-sm);
-  background:var(--bg); border:1px solid var(--line-soft); color:var(--ink); font:inherit; font-size:13.5px;
+  background:var(--bg); border:1px solid var(--line-soft); color:var(--ink); font:inherit; font-size:14px;
 }
 .checklist-add:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
 @media (max-width:800px){ .checklist-add{font-size:16px;} }
@@ -699,13 +705,13 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 /* ---------- Поручения из итога встречи (MeetingTasksSheet) ---------- */
 .modal.recap-tasks{max-width:640px;}
 .recap-rows{display:flex; flex-direction:column; gap:8px;}
-.recap-row{display:flex; gap:10px; align-items:flex-start; padding:9px 10px; border-radius:12px; background:var(--paper-soft); border:1px solid var(--line-soft);}
+.recap-row{display:flex; gap:10px; align-items:flex-start; padding:9px 10px; border-radius:var(--radius-md); background:var(--paper-soft); border:1px solid var(--line-soft);}
 .recap-row.off{opacity:.55;}
 .recap-row .check{margin-top:8px; padding:0;}
 .recap-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:7px;}
-.recap-title{width:100%; padding:8px 10px; border-radius:var(--radius-sm); background:var(--bg); border:1px solid var(--line-soft); color:var(--ink); font:inherit; font-size:13.5px; font-weight:600;}
+.recap-title{width:100%; padding:8px 10px; border-radius:var(--radius-sm); background:var(--bg); border:1px solid var(--line-soft); color:var(--ink); font:inherit; font-size:14px; font-weight:600;}
 .recap-title:focus{outline:none; border-color:var(--accent);}
-.recap-note{font-size:12.5px; color:var(--ink-soft); padding:0 2px; overflow-wrap:anywhere;}
+.recap-note{font-size:13px; color:var(--ink-soft); padding:0 2px; overflow-wrap:anywhere;}
 .recap-meta{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
 .recap-meta .participant-chip{padding:5px 10px; font-size:12px;}
 @media (max-width:800px){ .recap-title{font-size:16px;} }
@@ -714,10 +720,10 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .poll-block{margin:0 0 12px; padding:10px 13px 12px; border-radius:var(--radius-md); background:var(--paper-soft); border:1px solid rgba(79,168,216,.4); box-shadow:var(--edge);}
 .poll-hint{margin:0 0 8px;}
 .poll-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;}
-.poll-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 8px; border-radius:10px; background:rgba(0,0,0,.14);}
+.poll-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 8px; border-radius:var(--radius-sm); background:rgba(0,0,0,.14);}
 .poll-when{flex:1; min-width:120px; font-weight:700; font-variant-numeric:tabular-nums;}
 .poll-fits{display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; color:var(--ink-soft);}
-.poll-pick{padding:5px 11px; font-size:12.5px;}
+.poll-pick{padding:5px 11px; font-size:13px;}
 .poll-none{margin-top:8px;}
 .poll-form{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:10px;}
 .poll-extra{display:inline-flex; align-items:center; gap:6px;}
@@ -732,12 +738,12 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 }
 .ap-row{display:flex; align-items:center; gap:12px; padding:9px 8px;}
 .ap-text{flex:1; min-width:0;}
-.ap-title{font-family:var(--display); font-weight:600; font-size:13.5px; color:var(--ink);}
-.ap-row:first-child .ap-title{font-size:14.5px; font-weight:700;}
+.ap-title{font-family:var(--display); font-weight:600; font-size:14px; color:var(--ink);}
+.ap-row:first-child .ap-title{font-size:15px; font-weight:700;}
 .ap-hint{margin-top:2px; font-size:12px; line-height:1.35; color:var(--ink-soft);}
 .ap-sep{height:1px; margin:4px 8px; background:var(--line-soft);}
 .ap-note{padding:6px 8px 4px; font-size:12px; line-height:1.35; color:var(--ink-soft);}
-.ap-btn{flex:none; padding:5px 12px; font-size:12.5px;}
+.ap-btn{flex:none; padding:5px 12px; font-size:13px;}
 /* Переключатель: где стоит — так и есть, читать подпись не нужно. */
 .ap-switch{
   flex:none; position:relative; width:38px; height:22px; padding:0; cursor:pointer;

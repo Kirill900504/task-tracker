@@ -551,12 +551,18 @@ export default function MeetingModal({
                   </div>
                   <AttachFiles files={recapFiles} onChange={setRecapFiles} onError={setRecapError} />
                   {recapError && <div className="ms-answer-error">{recapError}</div>}
+                  {/* Те же два слова, что в ряду под встречей в списке
+                      (MeetingChip): одно действие не называется в двух
+                      местах по-разному — «Успешно / Без результата» здесь
+                      и «Успех / Провал» там читались как два разных
+                      решения (аудит 20.10.2026). Полное название — в
+                      подсказке, как и в списке. */}
                   <div className="outcome-actions">
-                    <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" disabled={recapBusy} onClick={() => void setStatus("success")}>
-                      <Icon name="check" size={15} /> Успешно
+                    <button type="button" className="btn btn-small outcome-btn-success" id="markSuccessBtn" title="Встреча прошла успешно" disabled={recapBusy} onClick={() => void setStatus("success")}>
+                      <Icon name="check" size={15} /> Успех
                     </button>
-                    <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" disabled={recapBusy} onClick={() => void setStatus("no_result")}>
-                      <Icon name="ban" size={15} /> Без результата
+                    <button type="button" className="btn btn-small outcome-btn-noresult" id="markNoResultBtn" title="Встреча прошла без результата" disabled={recapBusy} onClick={() => void setStatus("no_result")}>
+                      <Icon name="ban" size={15} /> Провал
                     </button>
                   </div>
                 </>
