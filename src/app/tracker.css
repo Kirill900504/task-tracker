@@ -348,13 +348,16 @@
   .dash-panel-head .panel-title{margin:0; flex:1;}
   /* То, что поднято под курсор, когда это не карточка: мысль и встреча
      едут плашкой со своим текстом. */
+  /* Одной строкой с многоточием: плашка — ярлык того, что несут, а
+     длинное название без предела ехало под курсором за край экрана. */
   .dnd-ghost{
-    display:inline-flex; align-items:center; gap:8px;
+    display:inline-block;
     background:var(--paper); color:var(--ink);
     border:1px solid var(--accent); border-radius:var(--radius-md);
     box-shadow:0 18px 40px rgba(0,0,0,.45);
     font-family:var(--display); font-weight:700; font-size:13px;
     padding:10px 14px; cursor:grabbing; pointer-events:none;
+    max-width:min(420px, 80vw); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
 
   /* Mobile quick-add: a floating thumb-reachable button + bottom sheet
@@ -389,6 +392,9 @@
   @keyframes quick-add-mic-pulse{ 0%,100%{opacity:1;} 50%{opacity:.55;} }
   .quick-add-preview{display:flex; flex-direction:column; gap:8px; font-size:13px;}
   .quick-add-preview .qap-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  /* Название в превью — то, что будет создано, поэтому целиком, но в
+     пределах окна: слово без пробелов иначе уезжало вбок за край. */
+  .quick-add-preview .qap-row > span{min-width:0; max-width:100%; overflow-wrap:anywhere;}
   .quick-add-preview .qap-actions{display:flex; gap:8px; margin-top:2px;}
 
   select, input[type=text], input[type=date], input[type=search]{
@@ -1455,7 +1461,10 @@
     background:var(--accent-soft); color:var(--accent); margin-top:1px;
   }
   .toast-text{display:flex; flex-direction:column; gap:2px; min-width:0;}
-  .toast b{font-size:13.5px; font-weight:700; color:var(--ink); font-family:var(--display);}
+  .toast b{
+    font-size:13.5px; font-weight:700; color:var(--ink); font-family:var(--display);
+    display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
   .toast-body{color:var(--ink-soft); line-height:1.4;}
   /* Крестик — отдельным слоем поверх текста, а не float внутри него.
      Плавающий элемент рисуется НИЖЕ строчного содержимого соседнего блока,
@@ -1650,9 +1659,13 @@
   .meeting-chip .mstatus{flex:none; display:inline-flex; align-items:center;}
   .meeting-chip .mstatus.success{color:var(--ok-ink);}
   .meeting-chip .mstatus.no_result{color:var(--ink-soft);}
+  /* До трёх строк, как у кубика задачи: слово без пробелов иначе
+     переносилось по буквам в столбец на всю панель (21.10.2026). Целиком
+     название видно по наведению (.task-peek) и в окне встречи. */
   .meeting-chip .mtitle{
-    flex:1; min-width:0; white-space:normal; overflow-wrap:break-word; word-break:normal;
+    flex:1; min-width:0; white-space:normal; overflow-wrap:anywhere; word-break:break-word;
     line-height:1.35; font-weight:600; color:var(--ink);
+    display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
   }
   /* Строка фактов — ровно то же, что «исполнитель · срок» у задачи. */
   .meeting-meta{
@@ -1841,7 +1854,10 @@
   }
   .day-peek-row:hover{background:var(--paper-soft);}
   .day-peek-time{flex:none; color:var(--accent); font-variant-numeric:tabular-nums;}
-  .day-peek-title{flex:1; min-width:0; overflow-wrap:anywhere;}
+  .day-peek-title{
+    flex:1; min-width:0; overflow-wrap:anywhere;
+    display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
   .day-peek-who{flex:none; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--ink-soft);}
   .day-peek-actions{display:flex; gap:4px; border-top:1px solid var(--line-soft); padding-top:6px;}
   /* Мини-календарь на месте поля даты (MiniCalendar). Тот же вид, что и у
@@ -2298,7 +2314,10 @@
     font-family:var(--sans); color:var(--ink);
   }
   .review-row:hover{border-color:var(--accent);}
-  .review-row-title{font-size:14.5px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; word-break:break-word;}
+  .review-row-title{
+    font-size:14.5px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; word-break:break-word;
+    display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+  }
   .review-row-meta{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
 
   /* Экран «данные не загрузились»: сообщение и выход из положения,
@@ -3602,7 +3621,10 @@
     display:flex; flex-direction:column; gap:2px;
   }
   .done-list-text:disabled{cursor:default;}
-  .done-list-title{font-size:13.5px; color:var(--ink); line-height:1.35; overflow-wrap:anywhere; word-break:break-word;}
+  .done-list-title{
+    font-size:13.5px; color:var(--ink); line-height:1.35; overflow-wrap:anywhere; word-break:break-word;
+    display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+  }
   .done-list-note{font-size:11.5px; color:var(--ink-soft); font-variant-numeric:var(--nums);}
 
   /* Встреча прошла, а итога нет. Отдельной группой наверху панели: это

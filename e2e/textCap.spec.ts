@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
+import { pickAnyExecutor } from "./helpers";
 
 // Текстовое поле растёт по тексту до 14 строк, а дальше прокручивается
 // внутри. 14.10.2026 Кирилл прислал снимок формы новой задачи, где длинное
@@ -57,4 +58,45 @@ test("название новой задачи растёт до 14 строк, 
 
   // Кнопка сохранения при этом остаётся на экране.
   await expect(page.locator("#saveTaskBtn")).toBeInViewport();
+});
+
+// То же правило на рабочем поле: название, которое пишет человек, не
+// растягивает карточку. 21.10.2026 встреча «1111…» без единого пробела
+// легла в список столбцом по букве на всю высоту панели — у кубика задачи
+// предел в три строки был, у карточки встречи его не было вовсе. Меряется
+// высота названия в строках, а не наличие класса.
+async function titleRows(page: Page, selector: string) {
+  return page.locator(selector).first().evaluate((el) => {
+    const s = getComputedStyle(el);
+    const line = parseFloat(s.lineHeight) || parseFloat(s.fontSize) * 1.35;
+    return (el.clientHeight - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom)) / line;
+  });
+}
+
+test("длинное название не растягивает карточку встречи и задачи", async ({ page }) => {
+  const stamp = Date.now();
+  const word = "1".repeat(600) + stamp;
+  await login(page);
+
+  await page.click("#addMeetingBtn");
+  await page.fill("#mTitle", word);
+  await page.click("#meetingSaveBtn");
+  const chip = page.locator(".meeting-chip", { hasText: String(stamp) });
+  await expect(chip).toHaveCount(1);
+  expect(Math.round(await titleRows(page, `.meeting-chip:has-text("${stamp}") .mtitle`))).toBeLessThanOrEqual(3);
+  // Карточка не шире своей панели.
+  const wide = await chip.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+  expect(wide).toBe(false);
+  // Целиком — по наведению.
+  await chip.locator(".mtitle").hover();
+  await expect(page.locator(".task-peek")).toBeVisible();
+  await page.mouse.move(0, 0);
+
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", "2".repeat(600) + stamp);
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator(".task", { hasText: String(stamp) });
+  await expect(card).toHaveCount(1);
+  expect(Math.round(await titleRows(page, `.task:has-text("${stamp}") .task-title`))).toBeLessThanOrEqual(3);
 });

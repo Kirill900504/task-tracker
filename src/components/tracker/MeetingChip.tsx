@@ -14,6 +14,7 @@ import { openVoteChoices, type VoteChoice } from "@/lib/answerRules";
 import { prefetchComments } from "@/hooks/useItemComments";
 import { useAsk } from "@/components/Ask";
 import { isPoll } from "@/lib/meetingPollRules";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 // Карточка встречи в списке — устроена как карточка задачи.
 //
@@ -91,6 +92,28 @@ export default function MeetingChip({
   // a chip gets clipped for meetings near the bottom of the list.
   const [peopleAnchor, setPeopleAnchor] = useState<DOMRect | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  // Название — до трёх строк, как у кубика задачи; целиком — своим окном
+  // по наведению, если не поместилось. Без предела слово без пробелов
+  // («1111…») переносилось по буквам в столбец на всю высоту панели и
+  // уносило под себя остальные встречи (21.10.2026). На телефоне
+  // наведения нет — там встречу открывают.
+  const isMobile = useIsMobile();
+  const titleRef = useRef<HTMLSpanElement>(null);
+  const peekTimer = useRef<number | null>(null);
+  const [peek, setPeek] = useState<DOMRect | null>(null);
+  function startPeek() {
+    if (isMobile) return;
+    if (peekTimer.current) window.clearTimeout(peekTimer.current);
+    peekTimer.current = window.setTimeout(() => {
+      const el = titleRef.current;
+      if (el && el.scrollHeight > el.clientHeight + 1) setPeek(el.getBoundingClientRect());
+    }, 450);
+  }
+  function stopPeek() {
+    if (peekTimer.current) window.clearTimeout(peekTimer.current);
+    peekTimer.current = null;
+    setPeek(null);
+  }
   const participants = sanitizeAssigneeList(meeting.participants);
   // Who answered «Буду» in Telegram — shown against the participant count,
   // so a glance says how many are actually coming.
@@ -220,11 +243,14 @@ export default function MeetingChip({
       // окно встречи открывается уже с перепиской (07.10.2026, «на долю
       // секунды появляется пустой чат»).
       onPointerEnter={() => prefetchComments("meeting", meeting.id)}
+      onPointerDownCapture={stopPeek}
       onClick={onOpen}
     >
       <div className="meeting-body">
         <div className="meeting-head">
-          <span className="mtitle">{meeting.title}</span>
+          <span className="mtitle" ref={titleRef} onPointerEnter={startPeek} onPointerLeave={stopPeek}>
+            {meeting.title}
+          </span>
           {!!unreadCount && (
             <span className="task-mark unread" title={`${unreadCount} новых сообщений в обсуждении`}>
               {unreadCount}
@@ -387,6 +413,20 @@ export default function MeetingChip({
         >
           <Icon name="close" size={15} />
         </button>
+      )}
+
+      {peek && (
+        <PopLayer>
+          <div
+            className="task-peek"
+            style={{
+              top: Math.min(peek.bottom + 6, window.innerHeight - 40),
+              left: Math.max(8, Math.min(peek.left - 8, window.innerWidth - 380)),
+            }}
+          >
+            <div className="task-peek-title">{meeting.title}</div>
+          </div>
+        </PopLayer>
       )}
 
       {peopleAnchor && (
