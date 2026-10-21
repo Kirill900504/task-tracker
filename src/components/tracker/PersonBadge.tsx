@@ -4,6 +4,8 @@ import { useId } from "react";
 import Icon, { type IconName } from "./Icon";
 import { colorOf, initialsOf, PERSON_STATE_LABEL, shortName, type PersonState } from "@/lib/personBadge";
 import { withoutSelfMark } from "@/lib/actorName";
+import { useArchivedPeople } from "@/hooks/useArchivedPeople";
+import ArchivedMark from "./ArchivedMark";
 
 // Человек на задаче: кружок с буквами, а в его углу — где он в работе.
 //
@@ -49,7 +51,7 @@ function FinishFlag() {
 
 export default function PersonBadge({
   name,
-  state,
+  state: stateIn,
   showName = false,
   short = true,
   roleNote,
@@ -68,11 +70,18 @@ export default function PersonBadge({
   // значок в углу кружка мелкий для того, кто не знает, что он значит.
   stateWord?: boolean;
 }) {
-  const icon = state ? STATE_ICON[state] : undefined;
   const full = withoutSelfMark(name);
-  const title = [full, roleNote, state ? PERSON_STATE_LABEL[state] : ""].filter(Boolean).join(" — ");
+  // Убранный из команды остаётся на своей задаче — это история, — но
+  // кружок гаснет и рядом с именем стоит «удалён» (useArchivedPeople). На
+  // кубике, где имени нет, то же говорит подсказка. «Задача не дошла» у
+  // него не пишется: мессенджеры снимаются вместе с уходом, и это не
+  // поломка доставки, а «удалён», сказанное второй раз хуже.
+  const archived = useArchivedPeople()(name);
+  const state = archived && stateIn === "unreachable" ? undefined : stateIn;
+  const icon = state ? STATE_ICON[state] : undefined;
+  const title = [full, roleNote, state ? PERSON_STATE_LABEL[state] : "", archived ? "удалён из команды" : ""].filter(Boolean).join(" — ");
   return (
-    <span className={"pbadge" + (state ? " ps-" + state : "")} title={title}>
+    <span className={"pbadge" + (state ? " ps-" + state : "") + (archived ? " ps-archived" : "")} title={title}>
       <span className="pbadge-dot" style={{ background: colorOf(full) }} aria-hidden>
         {initialsOf(full)}
         {state === "done" && (
@@ -87,6 +96,7 @@ export default function PersonBadge({
         )}
       </span>
       {showName && <span className="pbadge-name">{short ? shortName(full) : full}</span>}
+      {showName && archived && <ArchivedMark />}
       {stateWord && state && <span className="pbadge-word">{PERSON_STATE_LABEL[state]}</span>}
     </span>
   );

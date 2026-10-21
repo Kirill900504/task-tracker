@@ -156,6 +156,18 @@
 .ps-working .pbadge-word{color:#7FD3A0;}
 .ps-done .pbadge-word{color:var(--fin-ink);}
 .ps-declined .pbadge-word{color:var(--high);}
+/* Убранный из команды (useArchivedPeople): кружок серый, имя приглушено и
+   рядом слово «удалён». Этап (галочка, флаг) остаётся — это история того,
+   что он успел сделать. */
+.pbadge.ps-archived .pbadge-dot{filter:grayscale(1) brightness(.7);}
+.pbadge.ps-archived .pbadge-name{color:var(--ink-soft); text-decoration:line-through; text-decoration-color:rgba(255,255,255,.35);}
+.archived-mark{
+  display:inline-flex; align-items:center; margin-left:5px; padding:0 5px; height:16px; flex:none;
+  border:1px solid var(--line); border-radius:999px; vertical-align:1px;
+  font-family:var(--display); font-size:10px; font-weight:700; letter-spacing:.02em;
+  color:var(--ink-soft); background:var(--paper-soft); white-space:nowrap; text-decoration:none;
+}
+.pbadge .archived-mark{margin-left:0;}
 .pbadge-more{
   display:inline-flex; align-items:center; justify-content:center; min-width:21px; height:21px; padding:0 5px;
   border-radius:999px; background:var(--paper-soft); color:var(--ink-soft); font-weight:800; font-size:10.5px;
@@ -256,7 +268,10 @@
    название многоточием, кнопки и × справа; ничего не переносится. Целиком
    название открывается нажатием (.open) — это единственный случай, когда
    шапка растёт, и растёт она по просьбе того, кто нажал. */
-.item-head.one-line{flex-wrap:nowrap; align-items:center; gap:10px;}
+/* По ВЕРХУ, а не по центру: свёрнутое название той же высоты, что кнопки,
+   и разницы не видно, а развёрнутое по центру утаскивало номер и кнопки к
+   своей середине (21.10.2026: «номер задачи статично оставался вверху»). */
+.item-head.one-line{flex-wrap:nowrap; align-items:flex-start; gap:10px;}
 .item-head.one-line .item-head-kicker{
   flex:none; margin:0; height:38px; padding:0 10px; border-radius:var(--radius-sm);
   display:inline-flex; align-items:center; justify-content:center;
@@ -267,7 +282,14 @@
   font-size:16px; line-height:36px; cursor:pointer;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.item-head.one-line .item-head-title.open{height:auto; white-space:normal; line-height:1.35; padding:8px 12px;}
+/* Развёрнутое — не выше трети экрана, дальше прокрутка внутри: название
+   из тысячи знаков иначе закрывало собой всю задачу. Раскрытие плавное
+   (lib/smoothHeight, ItemModalHead). Отступ сверху подобран так, чтобы
+   первая строка осталась там же, где стояла свёрнутая, — без скачка. */
+.item-head.one-line .item-head-title.open{
+  height:auto; white-space:normal; line-height:1.35; padding:7px 12px 8px;
+  max-height:min(34vh, 300px); overflow-y:auto; overscroll-behavior:contain;
+}
 .item-head.one-line .item-head-actions{flex-wrap:nowrap; width:auto;}
 .fc-short{display:none;}
 @media (max-width:800px){

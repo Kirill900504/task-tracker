@@ -48,6 +48,7 @@ import { answerWithFiles } from "@/lib/answerFiles";
 import { openTaskChoices } from "@/lib/answerRules";
 import { isSelfTask } from "@/lib/selfTask";
 import { QUICK_APPROVE, QUICK_FORCE_CLOSE } from "@/lib/quickAnswers";
+import { grow, shrink } from "@/lib/smoothHeight";
 
 // Окна — отдельными кусками, подгружаются фоном после первого кадра
 // (lib/lazyWindows: почему и как).
@@ -225,7 +226,15 @@ export default function TasksPanel({
       return empty;
     }
   });
+  // Столбец сворачивается и разворачивается плавно (lib/smoothHeight), как
+  // и всё, что в трекере раскрывается.
   function toggleCollapsed(colId: string) {
+    const el = document.getElementById("col-" + colId);
+    if (collapsedCols[colId]) grow(el, () => flipCollapsed(colId));
+    else shrink(el, { withClass: "collapsed" }, () => flipCollapsed(colId));
+  }
+
+  function flipCollapsed(colId: string) {
     setCollapsedCols((cur) => {
       const next = { ...cur, [colId]: !cur[colId] };
       try {

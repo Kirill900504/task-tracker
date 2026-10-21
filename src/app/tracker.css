@@ -510,11 +510,58 @@
   /* Нижняя строка мысли: дата слева, кнопки справа (см. IdeaItem — почему
      кнопки ушли из-под правого края текста). Высота строки постоянная,
      чтобы короткая и длинная мысль заканчивались одинаково. */
-  .idea-foot{display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:4px; min-height:22px;}
-  .idea-foot .idea-meta{margin-top:0; min-width:0;}
+  /* Перенос ряда разрешён только как последний запас: на самой узкой
+     ступени окна (колонка 260px) кнопки уходят под дату целиком, а не
+     срезаются краем. На обычной ширине дата и три слова стоят в одну строку. */
+  .idea-foot{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 6px; margin-top:5px; min-height:24px;}
+  .idea-foot .idea-meta{margin-top:0; min-width:0; white-space:nowrap;}
+  /* Колонка мыслей 290px (окно уже 1920): дата, время и три слова в
+     строку не встают — время уходит в подсказку, отступы кнопок сжимаются.
+     Замер 21.10.2026: полный ряд 263px, ряд узкой колонки — 240px. */
+  .idea-foot{container:ideafoot / inline-size;}
+  @container ideafoot (max-width:264px){
+    .idea-time{display:none;}
+    .idea-act{padding:0 4px;}
+  }
   .idea-foot .idea-actions{margin-left:auto;}
-  .idea-del{cursor:pointer; color:var(--ink-soft); background:none; border:none; font-size:15px; line-height:1; flex:none;}
-  .idea-del:hover{color:var(--high);}
+  /* Тело мысли: текст во всю ширину, справа сверху — «Важно» и ×. */
+  .idea-body{flex:1; min-width:0;}
+  .idea-head{display:flex; align-items:flex-start; gap:6px;}
+  .idea-head > .idea-text, .idea-head > .input-with-mic{flex:1; min-width:0;}
+  .idea-corner{display:flex; gap:4px; flex:none; margin:-2px -3px 0 0;}
+  /* «Важно» и «Удалить» — цветные кнопки с рамкой, видимые всегда (как
+     крестик встречи, .meeting-del): значок, проступающий на наведение, на
+     телефоне не существует вовсе. Флажок — красный, потому что важная
+     мысль и есть красная карточка: контур с подкраской — «можно
+     отметить», сплошная заливка — «отмечено». У крестика красный только
+     значок — две одинаково красные плашки рядом читались бы одной кнопкой. */
+  .idea-flag, .idea-del{
+    width:24px; height:24px; padding:0; flex:none; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:var(--radius-sm); line-height:1;
+    transition:color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+  }
+  .idea-flag:active, .idea-del:active{transform:scale(.92);}
+  .idea-flag{color:var(--high); background:rgba(224,122,95,.12); border:1px solid rgba(224,122,95,.5);}
+  .idea-flag:hover{background:rgba(224,122,95,.22); border-color:var(--high);}
+  .idea-flag.active{background:var(--high); border-color:var(--high); color:#2A130D; box-shadow:0 0 0 2px rgba(224,122,95,.25);}
+  .idea-flag.active svg path:last-child{fill:currentColor;}
+  .idea-del{color:#FF8C70; background:var(--paper-soft); border:1px solid var(--line);}
+  .idea-del:hover{color:#2A130D; background:var(--high); border-color:var(--high);}
+  /* Три действия мысли словами — уменьшенная .meeting-act: та же рамка,
+     тот же шрифт, высота 24px вместо 32px, чтобы ряд вставал рядом с датой. */
+  .idea-act{
+    min-height:24px; padding:0 5px; display:inline-flex; align-items:center; justify-content:center;
+    background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm);
+    color:var(--ink-soft); cursor:pointer; font-family:var(--display); font-size:10.5px; font-weight:600;
+    line-height:1; white-space:nowrap;
+    transition:color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .idea-act:hover:not(:disabled){color:var(--accent); border-color:var(--accent);}
+  .idea-act.idea-check:hover{color:var(--success); border-color:var(--success);}
+  .idea-act.idea-take-act{color:var(--ink); background:var(--accent-soft); border-color:var(--accent);}
+  .idea-act:active{transform:scale(.96);}
+  .idea-act:disabled{opacity:.6; cursor:default;}
   /* No scrollbar of its own: the whole page scrolls instead (see the
      [data-zone] rule), so a long list of ideas just makes the page taller.
      The padding is still needed — the "important" dot sits 4px outside the
@@ -1502,11 +1549,6 @@
   .idea-item.important{border-color:var(--high); background:var(--high-bg);}
   .idea-item.done{opacity:.55;}
   .idea-item.done .idea-text{text-decoration:line-through;}
-  .idea-check{margin-top:0;}
-  .idea-item.important::after{
-    content:""; position:absolute; top:-4px; right:-4px; width:9px; height:9px;
-    border-radius:50%; background:var(--high); box-shadow:0 0 0 2px var(--paper);
-  }
   /* Две кнопки в ряд: вертикальной стопкой четыре штуки были бы выше самой
      мысли. Прижаты вправо, чтобы неполный ряд не висел в воздухе. */
   /* Кнопки мысли стоят В ОДНУ строку, и ширина у ряда своя, а не заданная
@@ -1517,17 +1559,9 @@
      как хотят». Ширины теперь ровно столько, сколько нужно кнопкам, а
      перенос запрещён. */
   .idea-actions{
-    display:flex; flex-wrap:nowrap; justify-content:flex-end; align-items:flex-start;
-    gap:2px; flex:none;
+    display:flex; flex-wrap:nowrap; justify-content:flex-end; align-items:center;
+    gap:3px; flex:none;
   }
-  /* Единственная кнопка ряда со словами — «В работу» у чужой мысли. Ей
-     своя строка: втиснутая в общий ряд, она отнимала бы ширину у текста
-     самой мысли (то же правило, что у .send-result). */
-  .idea-actions{flex-wrap:wrap;}
-  .idea-actions .idea-take{flex-basis:100%; margin-top:2px;}
-  .idea-flag{cursor:pointer; background:none; border:none; font-size:14px; opacity:.4; padding:2px 4px; line-height:1;}
-  .idea-flag.active{opacity:1;}
-  .idea-flag:hover{opacity:.85;}
   .idea-text{cursor:text;}
   .idea-text:hover{text-decoration:underline dotted; text-decoration-color:var(--ink-soft);}
   .idea-edit-input{
@@ -2087,7 +2121,6 @@
     padding:4px 10px 6px; max-width:250px;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
-  .idea-convert{font-size:15px;}
 
   /* Команда в Telegram */
   .team-list{display:flex; flex-direction:column; gap:2px; margin-bottom:14px;}
@@ -2444,7 +2477,8 @@
     /* Под палец: правило «не мельче 36px» — и для крестика встречи, и для
        значков у мысли (были 28 и 31). */
     .meeting-del{width:36px; height:36px;}
-    .idea-flag, .idea-del{min-width:36px; min-height:36px;}
+    .idea-flag, .idea-del{width:34px; height:34px;}
+    .idea-act{min-height:34px; padding:0 9px; font-size:12px;}
     /* Под палец, а не под курсор */
     .toast{padding-right:52px;}
     .toast .close{width:40px; height:40px; top:4px; right:4px;}
@@ -2552,8 +2586,7 @@
     /* Под палец: каждая кнопка ряда — цель не меньше 34px, и ряд всё
        равно остаётся одной строкой (ширины на четыре кнопки хватает даже
        на 360px экране). */
-    .idea-actions{gap:2px;}
-    .idea-flag, .idea-del{padding:8px; opacity:.7;}
+    .idea-actions{gap:4px;}
 
     /* Лист действий снизу: там, где палец, и всегда одного размера,
        в отличие от выпадашки у крохотной иконки. */
@@ -3474,7 +3507,9 @@
   /* Раскрытые люди раздела — то же поле, что и «Кто на задаче»
      (`PeoplePicker`), поэтому своей разметки у них больше нет: отступ
      слева говорит, что это про строку выше, и на этом всё. */
-  .section-row-people{margin-top:9px; padding-left:16px;}
+  /* Отступ сверху — padding, а не margin: блок выплывает плавно (Reveal),
+     и margin вне его высоты появлялся бы скачком в первом кадре. */
+  .section-row-people{padding-top:9px; padding-left:16px;}
   .section-row-people .field{margin-bottom:0;}
 
   /* Иконка «завершённые» в шапке панели. Зелёная галочка, как просил
@@ -3812,3 +3847,15 @@
   .section-tabs{gap:1px;}
   .section-tab{padding:3px 4px; font-size:11px;}
 }
+
+/* Сеть не пускает к серверу трекера (VersionWatch). Сверху и поверх всего:
+   это объяснение всех «зависших» кнопок разом, и прятать его некуда. */
+.server-unreachable{
+  position:fixed; left:50%; top:10px; transform:translateX(-50%); z-index:2147483000;
+  width:min(640px, calc(100vw - 32px)); box-sizing:border-box;
+  padding:10px 14px; border-radius:var(--radius-md);
+  background:var(--high-bg); border:1px solid rgba(224,122,95,.55);
+  color:#F2C9BC; font-size:13px; line-height:1.45;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
+}
+.server-unreachable b{color:var(--ink);}

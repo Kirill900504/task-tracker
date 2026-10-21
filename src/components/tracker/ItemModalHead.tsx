@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { grow, shrink } from "@/lib/smoothHeight";
 import Icon from "./Icon";
 
 // Шапка окна: название, действия и × в правом верхнем углу.
@@ -57,7 +58,17 @@ export default function ItemModalHead({
   plain?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const full = typeof title === "string" ? title : undefined;
+  // Название раскрывается плавно (21.10.2026: «большое описание плавно
+  // спокойно выплывало, без резких рывков»), а номер и кнопки при этом стоят
+  // на месте — шапка выровнена по верху, а не по центру, иначе они съезжали
+  // к середине развёрнутого названия.
+  function toggle() {
+    const el = titleRef.current;
+    if (open) shrink(el, { withoutClass: "open" }, () => setOpen(false));
+    else grow(el, () => setOpen(true));
+  }
   return (
     <div className={"item-head" + (plain ? " plain-head" : " one-line")}>
       {!plain && kicker && (
@@ -69,9 +80,10 @@ export default function ItemModalHead({
         {plain && kicker && <div className="item-head-kicker">{kicker}</div>}
         <h2
           id={titleId}
+          ref={titleRef}
           className={"item-head-title" + (plain ? " plain" : "") + (open ? " open" : "")}
           title={!plain && !open ? full : undefined}
-          onClick={plain ? undefined : () => setOpen((v) => !v)}
+          onClick={plain ? undefined : toggle}
         >
           {title}
         </h2>

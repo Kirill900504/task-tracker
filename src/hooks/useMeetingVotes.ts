@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { coalescer } from "@/lib/coalesce";
 import { createClient } from "@/lib/supabase/client";
 import { onRevive } from "@/lib/revive";
+import { postJson } from "@/lib/postJson";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { me } from "@/lib/me";
 import type { MeetingVote } from "@/lib/meetingVotes";
@@ -228,16 +229,13 @@ export function useMeetingVotes() {
         }
         return next;
       });
-      const res = await fetch("/api/workspace/report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "vote", participantId, response, comment: reason }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data || data.error) {
-        await reload();
-        throw new Error(data?.error || "Не получилось ответить");
-      }
+      // Не дошло — «Буду» откатывается к базе, а не остаётся на экране
+      // ответом, которого нет (lib/postJson).
+      await postJson(
+        "/api/workspace/report",
+        { action: "vote", participantId, response, comment: reason },
+        { fallback: "Не получилось ответить", onFail: reload },
+      );
       await reload();
     },
     [reload],
