@@ -8,6 +8,8 @@ import { withoutSelfMark } from "@/lib/actorName";
 import Modal from "./Modal";
 import ItemModalHead from "./ItemModalHead";
 import Icon from "./Icon";
+import Reveal from "./Reveal";
+import { shrink } from "@/lib/smoothHeight";
 
 // «Загрузка» — к кому идти первым. Теперь окном, а не панелью.
 //
@@ -56,7 +58,6 @@ export default function LoadModal({
   // «четыре задачи в работе» новостью не является: так и должно быть.
   const hot = rows.filter((p) => p.overdue > 0 || p.silent > 0 || p.review > 0);
   const quiet = rows.filter((p) => !hot.includes(p));
-  const shown = showAll ? [...hot, ...quiet] : hot;
 
   // Выбор человека — это и есть фильтр доски, и после него в окне делать
   // нечего: оно закрыло бы собой тот самый список, ради которого выбирали.
@@ -100,7 +101,31 @@ export default function LoadModal({
           </button>
         )}
 
-        {shown.map((p) => (
+        {hot.map(row)}
+
+        {/* Спокойные выплывают под горящими, а не появляются скачком
+            (lib/smoothHeight) — и так же уезжают обратно. */}
+        {showAll && <Reveal className="load-quiet">{quiet.map(row)}</Reveal>}
+
+        {!!quiet.length && (
+          <button
+            type="button"
+            className="people-more"
+            onClick={(e) => {
+              if (!showAll) return setShowAll(true);
+              const block = e.currentTarget.parentElement?.querySelector<HTMLElement>(".load-quiet");
+              shrink(block ?? null, 0, () => setShowAll(false), true);
+            }}
+          >
+            {showAll ? "Скрыть спокойных" : `Ещё ${quiet.length} — у кого всё идёт`}
+          </button>
+        )}
+      </div>
+    </Modal>
+  );
+
+  function row(p: (typeof rows)[number]) {
+    return (
           <button
             key={p.name}
             type="button"
@@ -124,15 +149,6 @@ export default function LoadModal({
               {p.open > 0 && <span className="people-num">{p.open} в работе</span>}
             </span>
           </button>
-        ))}
-
-        {!!quiet.length && (
-          <button type="button" className="people-more" onClick={() => setShowAll((v) => !v)}>
-            {showAll ? "Скрыть спокойных" : `Ещё ${quiet.length} — у кого всё идёт`}
-          </button>
-        )}
-
-      </div>
-    </Modal>
-  );
+    );
+  }
 }

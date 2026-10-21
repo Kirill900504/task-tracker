@@ -3,6 +3,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import PopLayer from "./PopLayer";
+import Reveal from "./Reveal";
+import { shrink } from "@/lib/smoothHeight";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import { isQuiet, muteKey, toggleMuted, useAlertPrefs, writeAlertPrefs } from "@/lib/alertPrefs";
 
@@ -84,6 +86,7 @@ function AlertsPanel({
   const prefs = useAlertPrefs();
   const ref = useRef<HTMLDivElement | null>(null);
   const hourQuiet = prefs.enabled && isQuiet(prefs);
+  const [toggled, setToggled] = useState(false);
   useEscapeToClose(onClose);
 
   // У кнопки, а у нижнего края экрана — вверх; как ActionMenu.
@@ -111,8 +114,11 @@ function AlertsPanel({
             on={prefs.enabled}
             label="Уведомления"
             onChange={() => {
-              if (prefs.enabled) writeAlertPrefs({ enabled: false });
+              // Строки под переключателем уезжают и выплывают плавно
+              // (lib/smoothHeight), а не исчезают одним кадром.
+              if (prefs.enabled) shrink(ref.current?.querySelector<HTMLElement>(".ap-more") ?? null, 0, () => writeAlertPrefs({ enabled: false }), true);
               else {
+                setToggled(true);
                 writeAlertPrefs({ enabled: true, quietUntil: "" });
                 if (permission === "default") requestPermission();
               }
@@ -120,7 +126,9 @@ function AlertsPanel({
           />
         </Row>
         {prefs.enabled && (
-          <>
+          // Включено с самого открытия — строки появляются вместе с панелью,
+          // своим движением внутри неё им выплывать незачем.
+          <Reveal className="ap-more" appear={toggled}>
             <div className="ap-sep" />
             <Row title="Ход работы" hint="Принял, сдал, вернули, сдвинули срок">
               <Switch id="alertsProgressSwitch" on={prefs.progress} label="Ход работы" onChange={() => writeAlertPrefs({ progress: !prefs.progress })} />
@@ -151,7 +159,7 @@ function AlertsPanel({
               </Row>
             )}
             {permission === "denied" && <div className="ap-note">Окна Windows запрещены в браузере — показываю внутри трекера.</div>}
-          </>
+          </Reveal>
         )}
       </div>
     </PopLayer>

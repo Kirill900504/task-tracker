@@ -3531,7 +3531,9 @@
   /* Раскрытые люди раздела — то же поле, что и «Кто на задаче»
      (`PeoplePicker`), поэтому своей разметки у них больше нет: отступ
      слева говорит, что это про строку выше, и на этом всё. */
-  .section-row-people{margin-top:9px; padding-left:16px;}
+  /* Отступ сверху — padding, а не margin: блок выплывает плавно (Reveal),
+     и margin вне его высоты появлялся бы скачком в первом кадре. */
+  .section-row-people{padding-top:9px; padding-left:16px;}
   .section-row-people .field{margin-bottom:0;}
 
   /* Иконка «завершённые» в шапке панели. Зелёная галочка, как просил

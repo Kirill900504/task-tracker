@@ -10,6 +10,8 @@ import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
 import ItemModalHead from "./ItemModalHead";
 import PeoplePicker from "./PeoplePicker";
+import Reveal from "./Reveal";
+import { shrink } from "@/lib/smoothHeight";
 import { humanError } from "@/lib/humanError";
 
 // «Разделы» — одно окно на всё, что с ними делают.
@@ -130,7 +132,11 @@ export default function SectionsModal({
                     className={"btn btn-small section-btn-people" + (open ? " active" : "")}
                     title="Кого подставлять в новую задачу по этому разделу"
                     aria-expanded={open}
-                    onClick={() => setOpenFor(open ? null : section.id)}
+                    onClick={(e) => {
+                      if (!open) return setOpenFor(section.id);
+                      const people = e.currentTarget.closest(".section-row")?.querySelector<HTMLElement>(".section-row-people");
+                      shrink(people ?? null, 0, () => setOpenFor(null), true);
+                    }}
                   >
                     Люди <span className="pill">{bound.length}</span>
                   </button>
@@ -149,7 +155,7 @@ export default function SectionsModal({
               </div>
 
               {open && (
-                <div className="section-row-people">
+                <Reveal className="section-row-people">
                   <PeoplePicker
                     people={orderedPeople}
                     picked={bound.map((row) => ({
@@ -165,7 +171,7 @@ export default function SectionsModal({
                     label={`Кто отвечает за «${section.name}»`}
                     requireExecutor={false}
                   />
-                </div>
+                </Reveal>
               )}
             </div>
           );

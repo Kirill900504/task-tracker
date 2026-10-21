@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import { grow, shrink } from "@/lib/smoothHeight";
 import Icon from "./Icon";
 
 // Длинный текст — свёрнут до пяти строк, с явной кнопкой «Показать
@@ -45,7 +46,17 @@ export default function ExpandableText({
         {text}
       </div>
       {showToggle && (
-        <button type="button" className="expand-toggle" onClick={() => setExpanded((v) => !v)}>
+        <button
+          type="button"
+          className="expand-toggle"
+          // Плавно в обе стороны (lib/smoothHeight): свёрнутая высота —
+          // та, что даёт `clamped`, её и меряем.
+          onClick={() =>
+            expanded
+              ? shrink(ref.current, { withClass: "clamped" }, () => setExpanded(false))
+              : grow(ref.current, () => setExpanded(true))
+          }
+        >
           {expanded ? "Свернуть" : "Показать полностью"}
           <Icon name={expanded ? "arrow-up" : "arrow-down"} size={13} />
         </button>
