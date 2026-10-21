@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { grow, shrink } from "@/lib/smoothHeight";
 import Icon from "./Icon";
 
@@ -64,8 +64,30 @@ export default function ItemModalHead({
   // спокойно выплывало, без резких рывков»), а номер и кнопки при этом стоят
   // на месте — шапка выровнена по верху, а не по центру, иначе они съезжали
   // к середине развёрнутого названия.
+  //
+  // Раскрывается только то, что НЕ влезло (21.10.2026: «когда название
+  // влазит в стандартную рамку, оно было не кликабельно»). Короткое
+  // название при нажатии всё равно переходило в .open, а развёрнутая рамка
+  // на долю пикселя выше свёрнутой — и описание с обсуждением под шапкой
+  // вздрагивали без всякой пользы. Влезает ли, меряется по самой рамке
+  // (scrollWidth против clientWidth) при каждом изменении её ширины и
+  // текста, и пишется в data-overflow прямо в DOM: это знание о раскладке,
+  // а не состояние, и перерисовка ради него не нужна.
+  useEffect(() => {
+    const el = titleRef.current;
+    if (plain || !el) return;
+    const measure = () => {
+      if (el.classList.contains("open")) return; // развёрнутое всегда «влезает»
+      el.dataset.overflow = el.scrollWidth > el.clientWidth + 1 ? "1" : "0";
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [plain, title]);
   function toggle() {
     const el = titleRef.current;
+    if (!open && el?.dataset.overflow !== "1") return;
     if (open) shrink(el, { withoutClass: "open" }, () => setOpen(false));
     else grow(el, () => setOpen(true));
   }

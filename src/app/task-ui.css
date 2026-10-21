@@ -279,9 +279,13 @@
 }
 .item-head.one-line .item-head-title{
   box-sizing:border-box; height:38px; padding:0 12px; display:block;
-  font-size:16px; line-height:36px; cursor:pointer;
+  font-size:16px; line-height:36px; cursor:default;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
+/* Рука — только у того, что раскроется: влезшее название не нажимается
+   (ItemModalHead меряет и ставит data-overflow). */
+.item-head.one-line .item-head-title[data-overflow="1"],
+.item-head.one-line .item-head-title.open{cursor:pointer;}
 /* Развёрнутое — не выше трети экрана, дальше прокрутка внутри: название
    из тысячи знаков иначе закрывало собой всю задачу. Раскрытие плавное
    (lib/smoothHeight, ItemModalHead). Отступ сверху подобран так, чтобы
