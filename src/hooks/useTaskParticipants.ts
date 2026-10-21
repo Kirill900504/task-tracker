@@ -11,6 +11,7 @@ import { playCloseSound } from "@/lib/closeSound";
 import { assignPerson, waitForTaskRow } from "@/lib/assignWork";
 import type { Attachment } from "@/hooks/useItemComments";
 import { uploadResultFiles } from "@/lib/resultFiles";
+import { postJson } from "@/lib/postJson";
 import type { TaskParticipant, TaskParticipantRole } from "@/lib/taskProgress";
 
 // Кто на задаче: исполнители, соисполнители, наблюдатели.
@@ -381,16 +382,11 @@ export function useTaskParticipants() {
   const decideReschedule = useCallback(
     async (taskId: string, participantId: string, moved: boolean, date?: string | null) => {
       patchParticipant(participantId, (p) => ({ ...p, rescheduleTo: null, rescheduleReason: null }));
-      const res = await fetch("/api/workspace/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: moved ? "moved" : "kept", taskId, participantId, date: date ?? null }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data || data.error) {
-        await load();
-        throw new Error(data?.error || "Не получилось ответить на просьбу");
-      }
+      await postJson(
+        "/api/workspace/review",
+        { action: moved ? "moved" : "kept", taskId, participantId, date: date ?? null },
+        { fallback: "Не получилось ответить на просьбу", onFail: load },
+      );
       await load();
     },
     [load, patchParticipant],
@@ -466,16 +462,11 @@ export function useTaskParticipants() {
   const review = useCallback(
     async (action: "approve" | "return" | "force" | "reopen", taskId: string, comment: string) => {
       if (action === "return") clearAnswers(taskId);
-      const res = await fetch("/api/workspace/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, taskId, comment }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data || data.error) {
-        if (action === "return") void load();
-        throw new Error(data?.error || "Не получилось");
-      }
+      await postJson(
+        "/api/workspace/review",
+        { action, taskId, comment },
+        { fallback: "Не получилось", onFail: () => (action === "return" ? void load() : undefined) },
+      );
       // Приёмка и принудительное закрытие закрывают задачу на сервере —
       // «чпок» только после его «да» (lib/closeSound).
       if (action === "approve" || action === "force") playCloseSound();
@@ -518,16 +509,9 @@ export function useTaskParticipants() {
           return next;
         });
       }
-      const res = await fetch("/api/workspace/report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data || data.error) {
-        await load();
-        throw new Error(data?.error || "Не получилось отправить ответ");
-      }
+      // Не дошло — экран возвращается к базе, иначе отмеченное заранее
+      // «Сделал» так и стоит, хотя в базе ничего нет (lib/postJson).
+      await postJson("/api/workspace/report", payload, { fallback: "Не получилось отправить ответ", onFail: load });
       void load();
     },
     [load],
@@ -579,16 +563,11 @@ export function useTaskParticipants() {
   const returnOne = useCallback(
     async (taskId: string, participantId: string, comment: string) => {
       clearAnswers(taskId, participantId);
-      const res = await fetch("/api/workspace/review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "return_one", taskId, participantId, comment }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data || data.error) {
-        void load();
-        throw new Error(data?.error || "Не получилось вернуть");
-      }
+      await postJson(
+        "/api/workspace/review",
+        { action: "return_one", taskId, participantId, comment },
+        { fallback: "Не получилось вернуть", onFail: () => void load() },
+      );
       // Сверка фоном: экран уже поменялся, подписка принесёт остальное.
       void load();
     },
