@@ -317,6 +317,13 @@ export default function TaskCard({
                 {due.text}
               </span>
             )}
+            {/* Стикер — сразу справа от даты, к которой он относится
+                (21.10.2026: «скоро срок разместить справа от даты дедлайна»). */}
+            {dueSoon && (
+              <span className="task-soon-sticker" title={due!.title + " — срок совсем скоро"}>
+                <Icon name="warning" size={13} /> Скоро срок
+              </span>
+            )}
             {/* Сколько раз срок уже переносили (миграция 0058, предложение 5
                 от 13.10.2026): задача, отложенная трижды, не должна на доске
                 выглядеть поставленной вчера. Число — рядом со сроком, первый
@@ -372,11 +379,6 @@ export default function TaskCard({
               </span>
             )}
             <span className="task-marks">
-              {dueSoon && (
-                <span className="task-soon-sticker" title={due!.title + " — срок совсем скоро"}>
-                  <Icon name="warning" size={13} /> Скоро срок
-                </span>
-              )}
               {!!unreadCount && (
                 <span className="task-mark unread" title={`${unreadCount} новых сообщений в обсуждении`}>
                   {unreadCount}
