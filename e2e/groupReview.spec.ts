@@ -143,3 +143,46 @@ test("«Дождаться всех» возвращает задачу в ра�
 
   await admin.from("tasks").update({ deleted_at: new Date().toISOString() }).eq("id", id);
 });
+
+// «Каждый сдаёт сам» (миграция 0067): исполнитель такой задачи видит одну
+// кнопку «Сделал», без «всю задачу», хотя второй исполнитель ещё молчит.
+// Обычная задача на тех же двоих — для сравнения, иначе «кнопки нет» могло
+// бы значить «окно не дорисовалось».
+test("у задачи «каждый сдаёт сам» нет кнопки «Сделал: всю задачу»", async ({ page }) => {
+  test.setTimeout(90_000);
+  await login(page);
+  const [other] = await threePeople();
+  const { data: selfRows } = await admin.from("assignees").select("id, name").eq("user_id", userId).like("name", "%(я)%");
+  const me = (selfRows || [])[0] as { id: string; name: string } | undefined;
+  if (!me) throw new Error("Нет своей строки «(я)»");
+  const make = async (title: string, eachOwn: boolean) => {
+    const id = randomUUID();
+    const { error } = await admin.from("tasks").insert({
+      id, user_id: userId, title, description: "", assignee: me.name, priority: "med", term: "short", status: "in_progress",
+      deadline: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10), each_own: eachOwn,
+    });
+    if (error) throw new Error(error.message);
+    const now = new Date().toISOString();
+    const { error: pErr } = await admin.from("task_participants").upsert(
+      [me, other].map((p) => ({ user_id: userId, task_id: id, assignee_id: p.id, role: "executor", accepted_at: now })),
+      { onConflict: "task_id,assignee_id" },
+    );
+    if (pErr) throw new Error(pErr.message);
+    return id;
+  };
+  const stamp = Date.now();
+  const ownId = await make(`E2E каждый сам ${stamp}`, true);
+  const anyId = await make(`E2E можно за всех ${stamp}`, false);
+  await page.reload();
+
+  await page.locator(".task", { hasText: `E2E можно за всех ${stamp}` }).click();
+  await expect(page.locator("#myWorkDoneAll")).toBeVisible({ timeout: 20_000 });
+  await page.click("#cancelBtn");
+
+  await page.locator(".task", { hasText: `E2E каждый сам ${stamp}` }).click();
+  await expect(page.locator(".my-work .btn", { hasText: "Сделал" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator("#myWorkDoneAll")).toHaveCount(0);
+  await expect(page.locator(".progress-note", { hasText: "каждый сдаёт сам" })).toBeVisible();
+
+  await admin.from("tasks").update({ deleted_at: new Date().toISOString() }).in("id", [ownId, anyId]);
+});

@@ -8,6 +8,7 @@ import ActionMenu from "./ActionMenu";
 import SendMenu from "./SendMenu";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
+import AddButton from "./AddButton";
 import Icon from "./Icon";
 import PopLayer from "./PopLayer";
 import { stateLabel, type SentTo } from "@/lib/ideaRecipients";
@@ -202,6 +203,7 @@ export default function IdeaItem({
                   if (e.key === "Escape") cancel();
                 }}
               />
+              <AddButton title="Сохранить мысль" disabled={!draft.trim()} onClick={save} />
               <MicButton value={draft} onChange={setDraft} title="Надиктовать мысль" />
             </div>
           ) : (

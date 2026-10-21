@@ -141,7 +141,7 @@ try {
   // автор — тот, кто поручает (у владельца created_by пуст: так его строки
   // и отличаются), исполнители — строками участия, upsert'ом, потому что
   // первого уже завёл триггер по имени в поле (миграция 0024).
-  async function makeTask(by, { title, executors, coexecutors = [], watchers = [], deadline = soon }) {
+  async function makeTask(by, { title, executors, coexecutors = [], watchers = [], deadline = soon, eachOwn = false }) {
     const id = randomUUID();
     const row = {
       id,
@@ -153,6 +153,7 @@ try {
       term: "short",
       status: "in_progress",
       deadline,
+      each_own: eachOwn,
       ...(by.id === space ? {} : { created_by: by.id }),
     };
     const { error } = await by.db.from("tasks").insert(row);
@@ -373,6 +374,21 @@ try {
     check("вернувшийся доделал — снова на приёмке, остальные ничего не нажимали", again.body?.awaitingReview === true, again);
     const ok = await post(lead, "/api/workspace/review", { action: "approve", taskId: g.id, comment: "Все прочитали" });
     check("и принята", ok.status === 200 && (await taskRow(g.id))?.status === "done", ok);
+  }
+  // «Каждый сдаёт сам» (миграция 0067): отчёт за всех такая задача не
+  // принимает ни из какой двери — «всю задачу» маршрут читает как свою часть.
+  {
+    const [lead, e1, e2] = [u[8], u[3], u[4]];
+    const g = await makeTask(lead, { title: "Каждый сдаёт сам", executors: [e1, e2], eachOwn: true });
+    check(`${lead.name} ставит задачу «каждый сдаёт сам»`, !g.error, g.error);
+    seeTask(g.id, lead, e1, e2);
+    const q1 = await partOf(g.id, e1);
+    const whole = await post(e1, "/api/workspace/report", { action: "done", participantId: q1, comment: "За всех", whole: true });
+    const row = await taskRow(g.id);
+    check("«всю задачу» у такой задачи — только своя часть", whole.status === 200 && whole.body?.awaitingReview === false && row?.approval_state !== "awaiting_review", { whole, row });
+    const q2 = await partOf(g.id, e2);
+    const second = await post(e2, "/api/workspace/report", { action: "done", participantId: q2, comment: "Моя часть" });
+    check("на приёмку — когда отчитались оба", second.body?.awaitingReview === true, second);
   }
 
   // ── Встречи ─────────────────────────────────────────────────────────────

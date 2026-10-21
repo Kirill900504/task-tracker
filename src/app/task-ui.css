@@ -34,7 +34,7 @@
   /* Третий круг, 15.10.2026, его словами: личная — «мягко зелёный» (и
      полоса, и надпись); поручили мне — «мягко красный, не агрессивный и не
      раздражающий»; наблюдаю — полоса «более серой» и надпись серой.
-     Красный здесь нарочно пыльно-розовый, а не --high (#E07A5F): тот
+     Красный здесь нарочно пыльно-розовый, а не --late (терракота): та
      значит «горит» и стоит на заливке просрочки и на её корешке, и два
      близких красных пришлось бы сравнивать. Зелёный — шалфей, а не
      --success: ярко-зелёным уже горит галочка «взял в работу». */
@@ -62,7 +62,7 @@
 .task.kind-incoming{border:1.5px solid var(--kind-in); box-shadow:0 0 0 1px var(--kind-in-glow), var(--edge);}
 .task.kind-self{border-color:rgba(134,184,150,.28);}
 .task.kind-watch .task-title{color:var(--ink-soft);}
-.task.overdue{border-color:var(--high); background:var(--overdue-bg);}
+.task.overdue{border-color:var(--late-line); background:var(--overdue-bg);}
 .task.due-today{border-color:var(--today); background:var(--today-bg);}
 .task:hover:not(.dragging){border-color:var(--accent);}
 
@@ -190,7 +190,7 @@
 .task-due-pill .icon{opacity:.8;}
 .task-due-pill.tone-soon{color:var(--med); background:var(--med-bg); border-color:rgba(224,184,77,.45);}
 .task-due-pill.tone-today{color:#0B2833; background:var(--today); border-color:var(--today);}
-.task-due-pill.tone-late{color:#2A130D; background:var(--high); border-color:var(--high);}
+.task-due-pill.tone-late{color:var(--late-ink); background:var(--late-tint); border-color:var(--late-line);}
 .task-due-pill.tone-today .icon, .task-due-pill.tone-late .icon{opacity:1;}
 /* Метки отношения ко мне — правый нижний угол, цветной значок со словом.
    Значок крупнее остальных значков угла: его ищут глазом по доске. */
@@ -520,11 +520,11 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
    красным пятном, на котором не читалось название. В группе пилюля
    прячется; в окне дня календаря, где группы нет, она остаётся. */
 .meeting-chip.awaits-recap,
-.meeting-chip.awaits-recap.selected-day{border-color:var(--high); box-shadow:inset 0 0 0 1px var(--high);}
-.meeting-chip.awaits-recap .mtitle{border-color:rgba(224,122,95,.35);}
-.meeting-chip.awaits-recap .pill-recap{background:var(--high); color:#2A130D; border-color:var(--high); font-weight:700;}
+.meeting-chip.awaits-recap.selected-day{border-color:var(--late); box-shadow:inset 0 0 0 1px var(--late-line);}
+.meeting-chip.awaits-recap .mtitle{border-color:rgba(207,134,101,.35);}
+.meeting-chip.awaits-recap .pill-recap{background:var(--late-tint); color:var(--late-ink); border-color:var(--late-line); font-weight:700;}
 .meetings-need-recap .meeting-chip.awaits-recap .pill-recap{display:none;}
-.meetings-need-recap .meetings-group-title{color:var(--high);}
+.meetings-need-recap .meetings-group-title{color:var(--late-ink);}
 .meeting-chip .mtime{
   padding:1px 7px; border-radius:999px; background:rgba(79,168,216,.12);
 }

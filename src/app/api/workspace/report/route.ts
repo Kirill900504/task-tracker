@@ -325,10 +325,10 @@ export async function POST(req: Request) {
   if (!body.participantId) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
   const { data: row } = await admin
     .from("task_participants")
-    .select("id, assignee_id, task_id, role, accepted_at, done_at, declined_at, reschedule_requested_at, reschedule_reason, tasks(title, number, created_by, approval_state)")
+    .select("id, assignee_id, task_id, role, accepted_at, done_at, declined_at, reschedule_requested_at, reschedule_reason, tasks(title, number, created_by, approval_state, each_own)")
     .eq("id", body.participantId)
     .maybeSingle();
-  type TaskRef = { title: string; number: number | null; created_by: string | null; approval_state: string | null };
+  type TaskRef = { title: string; number: number | null; created_by: string | null; approval_state: string | null; each_own?: boolean | null };
   const part = row as {
     id: string;
     assignee_id: string;
@@ -421,7 +421,10 @@ export async function POST(req: Request) {
     // «Сдал целиком»: задача уходит на приёмку, не дожидаясь остальных
     // исполнителей (closeIfEveryoneReported). Соисполнитель сюда не доходит
     // ни из одной двери — «Сделал» ему не даётся (TaskAnswer, taskButtons).
-    const whole = !!body.whole;
+    // «Каждый сдаёт сам» (миграция 0067): отчёт за всех у такой задачи
+    // невозможен по смыслу — старая кнопка или вторая вкладка сдают только
+    // свою часть.
+    const whole = !!body.whole && taskRef?.each_own !== true;
     await admin
       .from("task_participants")
       .update({
