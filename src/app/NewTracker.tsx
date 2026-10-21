@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { loadTeamModal, loadLoadModal, loadAccountModal, prefetchWindows } from "@/lib/lazyWindows";
+import { loadTeamModal, loadAccountModal, prefetchWindows } from "@/lib/lazyWindows";
 // Поиск — НЕ ленивый: его открывают «/» и сразу печатают, и буквы,
 // набранные, пока догружается кусок окна, терялись (e2e «поиск находит
 // «КП»» на 20.10.2026). Окно маленькое; первое нажатие дороже.
@@ -43,7 +43,6 @@ import type { Meeting, MeetingPrefill, Task, TaskPrefill } from "@/types/tracker
 import QuickAdd, { type QuickAddProvider } from "@/app/QuickAdd";
 import { mergeResult } from "@/lib/meetingLink";
 import MobileShell, { DEFAULT_MOBILE_TAB, type MobileTab } from "@/components/tracker/MobileShell";
-import { peopleLoad } from "@/lib/peoplePanel";
 import MobileHeader from "@/components/tracker/MobileHeader";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import { columnOf } from "@/lib/kanban";
@@ -70,7 +69,6 @@ import { withViewTransition } from "@/lib/viewTransition";
 // Окна — отдельными кусками, подгружаются фоном после первого кадра
 // (lib/lazyWindows: почему и как).
 const TeamModal = dynamic(loadTeamModal, { ssr: false });
-const LoadModal = dynamic(loadLoadModal, { ssr: false });
 const AccountModal = dynamic(loadAccountModal, { ssr: false });
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -281,12 +279,6 @@ export default function NewTracker() {
   // Разбор фразы голосом: на телефоне это лист снизу, и открывает его
   // строка в меню шапки, а не собственная круглая кнопка (см. QuickAdd).
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  // «Загрузка» — у кого что горит. На компьютере её открывает кнопка в
-  // полосе над доской; на телефоне полоса сведена к трём кнопкам по слову
-  // Кирилла, и эта из неё ушла. Совсем терять её нельзя: «к кому идти
-  // первым» — вопрос, который задают как раз не за столом. Поэтому она
-  // строкой в меню шапки, там же, где поиск.
-  const [loadOpen, setLoadOpen] = useState(false);
   const [openExistingTaskId, setOpenExistingTaskId] = useState<string | null>(null);
   const [openExistingMeetingId, setOpenExistingMeetingId] = useState<string | null>(null);
   const [highlightIdeaId, setHighlightIdeaId] = useState<string | null>(null);
@@ -317,9 +309,6 @@ export default function NewTracker() {
     window.addEventListener(OPEN_TASK_NUMBER_EVENT, open);
     return () => window.removeEventListener(OPEN_TASK_NUMBER_EVENT, open);
   }, [visibleTasks, toasts]);
-  // Один фильтр на панель задач и панель «Люди»: нажатие на человека и
-  // выбор в списке — это один и тот же вопрос, заданный двумя способами.
-  const [filterAssignee, setFilterAssignee] = useSavedSetting("board.person", "all");
   // Кто сейчас смотрит на трекер — своя строка в шапке, с меню личного
   // кабинета. Слова Кирилла 23.09.2026: «чтоб каждый видел, что они сидят
   // под личным аккаунтом в системе». Без этого экран у всех четырнадцати
@@ -676,8 +665,6 @@ export default function NewTracker() {
     myUserId: mineOnlyId,
     myMemberAssigneeId: identity.assigneeId,
     ownerId: identity.ownerId,
-    filterAssignee,
-    onFilterAssigneeChange: setFilterAssignee,
     tasks: visibleTasks,
     // Только для «Загрузки» (кто чем занят) — решение объяснено у самого
     // пропа в TasksPanel.tsx: делегируя новую задачу, нужно видеть
@@ -944,12 +931,6 @@ export default function NewTracker() {
               // это стоит редко используемой функции меньше, чем шестой
               // палец в и так тесном ряду.
               { id: "search", label: "Поиск", icon: "search" as const, onSelect: () => setSearchOpen(true) },
-              // Только когда есть кому быть загруженным: строка меню,
-              // открывающая окно со словами «никому ничего не поручено», —
-              // это строка, после которой ничего не произошло.
-              ...(peopleLoad(tasks, assignees, participants.forTask).length > 0
-                ? [{ id: "load", label: "Загрузка — у кого что горит", icon: "users" as const, onSelect: () => setLoadOpen(true) }]
-                : []),
               // Разбор фразы голосом — то, ради чего у быстрого ввода была
               // своя круглая кнопка. Кнопку забрали разделы (пункт 7), а
               // сам разбор остался и открывается отсюда.
@@ -1014,16 +995,6 @@ export default function NewTracker() {
               закрывала правый край последней карточки. Заводит по-прежнему
               то, в каком разделе нажат, — теперь потому, что каждый «+»
               стоит в своём разделе. */}
-          {loadOpen && (
-            <LoadModal
-              tasks={tasks}
-              assignees={assignees}
-              partsOf={participants.forTask}
-              selected={filterAssignee}
-              onSelect={setFilterAssignee}
-              onClose={() => setLoadOpen(false)}
-            />
-          )}
         </>
       ) : (
         <>

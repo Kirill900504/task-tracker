@@ -5,7 +5,7 @@ import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { encodeCallback, type CallbackAction, type ColleagueRow } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
 import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
-import { effectiveApproval, ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, personReply, type OwnerReply } from "@/lib/ownerQueries";
+import { effectiveApproval, ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, type OwnerReply } from "@/lib/ownerQueries";
 import { applyReview } from "@/lib/reviewWork";
 import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
 import { closeMeeting, closedMeetingText, recordRecapButtons } from "@/lib/meetingRecap";
@@ -381,7 +381,10 @@ export async function handleOwnerCallback(
   // словами, и экран у обоих один.
   if (isMoveAction(action)) return handleMoveCallback(admin, actor, action);
 
-  if (action.action === "omenu") {
+  // `oper` — карточка человека из удалённого раздела «👥 Люди» (21.10.2026:
+  // сводка о чужой загрузке противоречит конфиденциальности). Кнопка ещё
+  // живёт в старых сообщениях, и молчать ей нельзя — отвечает меню.
+  if (action.action === "omenu" || action.action === "oper") {
     const menu = ownerMenu();
     return { toast: "Меню", say: menu.text, sayButtons: menu.buttons };
   }
@@ -524,12 +527,6 @@ export async function handleOwnerCallback(
       askReturn: { taskId: task.id, title: task.title },
       say: `↩ ${taskRef(task)}\n\nНапишите следующим сообщением, что именно доделать, — отправлю исполнителям.`,
     };
-  }
-
-  // ——— Человек: что на нём и что ему ещё поручить.
-  if (action.action === "oper" && action.kind === "task") {
-    const reply = await personReply(admin, actor, action.id, today);
-    return { toast: "Открываю", say: reply.text, sayButtons: reply.buttons };
   }
 
   // «Поручить ему» — тот же мастер, но человек уже выбран: спрашиваем

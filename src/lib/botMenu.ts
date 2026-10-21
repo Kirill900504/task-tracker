@@ -117,7 +117,6 @@ const SECTIONS: Section[] = [
     // остальными — отдельно ничего включать не надо.
     assigner: { text: "💡 Мысли", data: encodeCallback("idea", "olist", "all") },
   },
-  { assigner: { text: "👥 Люди", data: encodeCallback("task", "olist", "people") }, wide: true },
   { assigner: { text: "➕ Поручить", data: encodeCallback("task", "new", "start") }, wide: true },
   { assigner: DESKTOP, recipient: DESKTOP, wide: true },
   {

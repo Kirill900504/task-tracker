@@ -29,7 +29,7 @@ import { numbered } from "@/lib/taskRef";
 // разных языка кнопок в одном боте — это два бота. Разница в содержании, а
 // не в форме: коллега отвечает за свою работу, владелец смотрит на чужую.
 
-export type OwnerView = "tasks" | "today" | "overdue" | "meetings" | "review" | "ideas" | "people" | "menu" | "help";
+export type OwnerView = "tasks" | "today" | "overdue" | "meetings" | "review" | "ideas" | "menu" | "help";
 
 const PAGE = 8;
 
@@ -243,57 +243,12 @@ function taskList(title: string, tasks: OwnerTaskRow[], today: string, empty: st
   };
 }
 
-// Кто чем занят — тот же вопрос, что и панель «Загрузка» в трекере, и тот
-// же ответ: строка на человека, у которого есть о чём сказать.
-export function peopleLoadReply(tasks: OwnerTaskRow[], today: string, ids: Record<string, string> = {}): OwnerReply {
-  const byName = new Map<string, { open: number; overdue: number; review: number }>();
-  for (const t of tasks) {
-    const name = (t.assignee || "").trim();
-    if (!name) continue;
-    const row = byName.get(name) || { open: 0, overdue: 0, review: 0 };
-    if (t.approvalState === "awaiting_review") row.review++;
-    else {
-      row.open++;
-      if (overdueOn(t.row, today)) row.overdue++;
-    }
-    byName.set(name, row);
-  }
-  if (!byName.size) return { text: "Никому ничего не поручено.", buttons: ownerNav() };
-
-  const sorted = [...byName.entries()].sort((a, b) => b[1].overdue - a[1].overdue || b[1].open - a[1].open);
-  const lines = sorted.map(([name, r]) => {
-    const bits: string[] = [];
-    if (r.overdue) bits.push(`⚠ ${r.overdue} просрочено`);
-    if (r.review) bits.push(`🔍 ${r.review} на приёмке`);
-    if (r.open) bits.push(`${r.open} в работе`);
-    return `${name}\n   ${bits.join(" · ")}`;
-  });
-  // Имя — кнопка: «а что там у Игоря» задаётся сразу после того, как
-  // увидел цифру напротив него, и ответ должен быть на расстоянии одного
-  // нажатия, а не поиска в списке задач.
-  const rows = sorted
-    .filter(([name]) => ids[name])
-    .map(([name]) => [{ text: short(name, 24), data: encodeCallback("task", "oper", ids[name]) }]);
-  return { text: `👥 Загрузка:\n\n${lines.join("\n")}`, buttons: [...rows, ...ownerNav()] };
-}
-
 export async function ownerListReply(
   admin: SupabaseClient,
   actor: BotActor,
   which: string,
   today: string,
 ): Promise<OwnerReply> {
-  if (which === "people") {
-    // Идентификаторы нужны кнопкам: в списке задач человек назван именем,
-    // а открывается его карточка по строке в списке людей.
-    // Список людей общий на пространство — он и должен быть общим: имена
-    // в задачах одни и те же у всех. Сужает картину не он, а сами задачи.
-    const { data: people } = await admin.from("assignees").select("id, name").eq("user_id", actor.spaceId);
-    const ids: Record<string, string> = {};
-    for (const person of ((people || []) as { id: string; name: string }[])) ids[person.name] = person.id;
-    return peopleLoadReply(await ownerTasks(admin, actor), today, ids);
-  }
-
   if (which === "help") return { text: assignerHelp(), buttons: ownerNav() };
 
   // Встречи нужны только «сегодняшнему» экрану, но спросить их ВМЕСТЕ с
@@ -355,22 +310,6 @@ export async function ownerIdeasReply(admin: SupabaseClient, actor: BotActor): P
       write,
       ...ideas.map((i) => [{ text: `${i.important ? "🚩 " : ""}${short(i.text, 26)}`, data: encodeCallback("idea", "ishow", i.id) }]),
       ...ownerNav(),
-    ],
-  };
-}
-
-export async function personReply(admin: SupabaseClient, actor: BotActor, assigneeId: string, today: string): Promise<OwnerReply> {
-  const { data } = await admin.from("assignees").select("name").eq("id", assigneeId).eq("user_id", actor.spaceId).maybeSingle();
-  const name = (data as { name: string } | null)?.name;
-  if (!name) return { text: "Этого человека больше нет в списке.", buttons: ownerNav() };
-
-  const mine = (await ownerTasks(admin, actor)).filter((t) => (t.assignee || "").trim() === name);
-  const reply = taskList(`📋 ${name}`, mine, today, `За ${name} сейчас ничего не числится.`);
-  return {
-    text: reply.text,
-    buttons: [
-      [{ text: "➕ Поручить ему", data: encodeCallback("task", "npers", assigneeId) }],
-      ...(reply.buttons || []),
     ],
   };
 }
