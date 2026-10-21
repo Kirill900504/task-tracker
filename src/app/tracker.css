@@ -14,7 +14,22 @@
     --accent-soft:#24404B;
     --high:#E07A5F;
     --high-bg:#4A2E28;
-    --overdue-bg:#4A2E28;
+    /* Просрочка — своя палитра, а не --high (21.10.2026, его слова:
+       «менее агрессивный красный цвет на просроченные задачи»). Алый
+       #E07A5F сплошной заливкой пилюли и рамкой кричал с каждой второй
+       карточки доски; срок, который прошёл, — повод взглянуть, а не
+       пожарная тревога. Терракота приглушена и по насыщенности, и по
+       оттенку: она нарочно теплее (ближе к глине), чем пыльно-розовый
+       --kind-in у «поручили мне», чтобы просроченное поручение мне не
+       сливалось с обычным. Пилюля срока — подкраской со светлым словом,
+       а не заливкой с тёмным: так она видна, но не перетягивает глаз с
+       названия. --high остаётся там, где красный значит отказ или
+       удаление. */
+    --late:#CF8665;
+    --late-ink:#E8A887;
+    --late-line:rgba(207,134,101,.55);
+    --late-tint:rgba(207,134,101,.16);
+    --overdue-bg:#3A2F2B;
     --med:#E0B84D;
     --med-bg:#463C22;
     --today:#4FA8D8;
@@ -59,7 +74,7 @@
     --role-bar-co:#2F6076;
     --role-bar-watch:#5C6B73;
     --role-bar-none:rgba(255,255,255,.07);
-    --role-bar-late:#E07A5F;
+    --role-bar-late:#CF8665;
     /* Один шрифт на весь интерфейс, и это Manrope.
        Раньше их было три, и третий — моноширинный — стоял не на коде, а на
        подписях: заголовки блоков, названия полей, даты на карточках, время
@@ -531,10 +546,10 @@
   .idea-corner{display:flex; gap:4px; flex:none; margin:-2px -3px 0 0;}
   /* «Важно» и «Удалить» — цветные кнопки с рамкой, видимые всегда (как
      крестик встречи, .meeting-del): значок, проступающий на наведение, на
-     телефоне не существует вовсе. Флажок — красный, потому что важная
-     мысль и есть красная карточка: контур с подкраской — «можно
+     телефоне не существует вовсе. Флажок — фирменный голубой, потому что
+     важная мысль и есть голубая карточка: контур с подкраской — «можно
      отметить», сплошная заливка — «отмечено». У крестика красный только
-     значок — две одинаково красные плашки рядом читались бы одной кнопкой. */
+     значок — это удаление, и его цвет с флажком не совпадает нарочно. */
   .idea-flag, .idea-del{
     width:24px; height:24px; padding:0; flex:none; cursor:pointer;
     display:inline-flex; align-items:center; justify-content:center;
@@ -542,9 +557,9 @@
     transition:color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
   }
   .idea-flag:active, .idea-del:active{transform:scale(.92);}
-  .idea-flag{color:var(--high); background:rgba(224,122,95,.12); border:1px solid rgba(224,122,95,.5);}
-  .idea-flag:hover{background:rgba(224,122,95,.22); border-color:var(--high);}
-  .idea-flag.active{background:var(--high); border-color:var(--high); color:#2A130D; box-shadow:0 0 0 2px rgba(224,122,95,.25);}
+  .idea-flag{color:var(--fin-ink); background:rgba(79,168,216,.10); border:1px solid rgba(79,168,216,.45);}
+  .idea-flag:hover{background:rgba(79,168,216,.2); border-color:var(--fin);}
+  .idea-flag.active{background:var(--fin); border-color:var(--fin); color:#0B2833; box-shadow:0 0 0 2px rgba(79,168,216,.22);}
   .idea-flag.active svg path:last-child{fill:currentColor;}
   .idea-del{color:#FF8C70; background:var(--paper-soft); border:1px solid var(--line);}
   .idea-del:hover{color:#2A130D; background:var(--high); border-color:var(--high);}
@@ -689,11 +704,11 @@
   .filter-pill:hover{color:var(--ink); border-color:var(--ink-soft);}
   .filter-pill-count{
     font-family:var(--display); font-size:11px; font-weight:700; line-height:1;
-    padding:2px 6px; border-radius:999px; background:var(--high-bg); color:var(--high);
+    padding:2px 6px; border-radius:999px; background:var(--late-tint); color:var(--late-ink);
   }
-  .filter-pill.overdue:hover{color:var(--high); border-color:var(--high);}
-  .filter-pill.overdue.active{background:var(--high); border-color:var(--high); color:#2A1A15; box-shadow:var(--shadow-1);}
-  .filter-pill.overdue.active .filter-pill-count{background:rgba(0,0,0,.18); color:#2A1A15;}
+  .filter-pill.overdue:hover{color:var(--late-ink); border-color:var(--late-line);}
+  .filter-pill.overdue.active{background:var(--late-tint); border-color:var(--late); color:var(--late-ink); box-shadow:var(--shadow-1);}
+  .filter-pill.overdue.active .filter-pill-count{background:var(--late); color:#2A1A13;}
   .filter-pill.done:hover{color:var(--success); border-color:var(--success);}
   .filter-pill.done.active{background:var(--success); border-color:var(--success); color:#0B2116; box-shadow:var(--shadow-1);}
 
@@ -862,7 +877,7 @@
   /* Заливка и рамка — без border-left: левый край занят корешком роли, и
      две полосы друг на друге читались бы как одна широкая непонятного
      цвета. Срок говорит фоном, роль — полоской. */
-  .task.overdue{border-color:var(--high); background:var(--overdue-bg);}
+  .task.overdue{border-color:var(--late-line); background:var(--overdue-bg);}
   .task.due-today{border-color:var(--today); background:var(--today-bg);}
 
   /* Раздел — полоска у ПРАВОГО края, во всю высоту кубика. Переехала
@@ -945,7 +960,7 @@
   .task-from{color:var(--ink-soft); overflow-wrap:anywhere;}
   .task-arrow{color:var(--ink-soft); opacity:.7;}
   .task-due{white-space:nowrap;}
-  .task-due.overdue-text{color:var(--high); font-weight:700;}
+  .task-due.overdue-text{color:var(--late-ink); font-weight:700;}
   .task-due.due-today-text{color:var(--today); font-weight:700;}
   .task-recur{color:var(--ink-soft);}
   .task-progress-short{font-weight:700; color:var(--ink);}
@@ -968,7 +983,7 @@
   .pill-med{background:var(--med-bg); color:var(--med);}
   .pill-recur{color:var(--ink-soft);}
   .pill-date{color:var(--ink-soft); background:rgba(0,0,0,.18); border:1px solid var(--line);}
-  .pill-date.overdue-text{color:#2A130D; font-weight:600; background:var(--high); border-color:var(--high);}
+  .pill-date.overdue-text{color:var(--late-ink); font-weight:700; background:var(--late-tint); border-color:var(--late-line);}
   .pill-date.due-today-text{color:#0B2833; font-weight:600; background:var(--today); border-color:var(--today);}
   .pill-section{background:var(--section-work-bg); color:var(--section-work); font-weight:600;}
   .pill-section-personal{background:var(--section-personal-bg); color:var(--section-personal);}
@@ -1553,7 +1568,7 @@
      ничего не рисует (см. .task.dragging — там причина целиком). */
   .idea-item.dragging{
     /* transition:none — та же причина, что у .task.dragging: без неё
-       граница важной мысли доцветает от красной к прозрачной поверх
+       граница важной мысли доцветает от голубой к прозрачной поверх
        !important, потому что CSS-переход сильнее авторского !important. */
     background:transparent !important; border-color:transparent !important;
     box-shadow:none !important; transform:none; transition:none !important;
@@ -1561,7 +1576,11 @@
   .idea-item.dragging > *{visibility:hidden;}
   #ideaList{border-radius:var(--radius-sm);}
   @media (prefers-reduced-motion: reduce){ .idea-item.dragging{transform:none;} }
-  .idea-item.important{border-color:var(--high); background:var(--high-bg);}
+  /* Важная мысль — фирменным, а не красным (21.10.2026, его слова: «на
+     приоритетные мысли сделать… в более мягких зелёных или фирменных
+     тонах»). Красная карточка в панели мыслей читалась как просрочка или
+     ошибка, а «важно» — это пометка для себя, не тревога. */
+  .idea-item.important{border-color:rgba(79,168,216,.55); background:#233D48;}
   .idea-item.done{opacity:.55;}
   .idea-item.done .idea-text{text-decoration:line-through;}
   /* Две кнопки в ряд: вертикальной стопкой четыре штуки были бы выше самой
@@ -2381,7 +2400,7 @@
       margin:0 0 8px; font-family:var(--display); font-size:11px; font-weight:600;
       text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft);
     }
-    .today-heading.overdue{color:var(--high);}
+    .today-heading.overdue{color:var(--late-ink);}
     .today-heading.muted{opacity:.7;}
     .today-meeting{
       width:100%; display:flex; align-items:baseline; gap:10px; text-align:left;
