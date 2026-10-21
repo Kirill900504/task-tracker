@@ -6,7 +6,7 @@ import { actorName } from "@/lib/actorName";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { recapButtons } from "@/lib/meetingReminders";
 import { recapNudgeText } from "@/lib/meetingNudges";
-import { RECAP_GRACE_MINUTES } from "@/lib/calendarLogic";
+import { recapAfterMinutes } from "@/lib/calendarLogic";
 import { moscowNow } from "@/lib/taskLogic";
 
 // Участник просит организатора подвести итог прошедшей встречи.
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data } = await admin
     .from("meetings")
-    .select("id, title, date, time, status, result, user_id, created_by")
+    .select("id, title, date, time, duration_min, status, result, user_id, created_by")
     .eq("id", body.meetingId)
     .maybeSingle();
   const meeting = data as {
@@ -53,6 +53,7 @@ export async function POST(req: Request) {
     title: string;
     date: string | null;
     time: string | null;
+    duration_min: number | null;
     status: string | null;
     result: string | null;
     user_id: string;
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
   }
   const [hh, mm] = (meeting.time || "23:59").split(":").map(Number);
   const startUtcMs = Date.parse(meeting.date + "T00:00:00Z") + ((hh || 0) * 60 + (mm || 0)) * 60_000;
-  if (moscowNow().getTime() - startUtcMs < RECAP_GRACE_MINUTES * 60_000) {
+  if (moscowNow().getTime() - startUtcMs < recapAfterMinutes({ time: meeting.time, durationMin: meeting.duration_min }) * 60_000) {
     return NextResponse.json({ error: "Встреча ещё не закончилась" }, { status: 409 });
   }
 

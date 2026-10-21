@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { loadTaskModal, loadSectionsModal, loadLoadModal } from "@/lib/lazyWindows";
+import { loadTaskModal, loadSectionsModal } from "@/lib/lazyWindows";
 
 // Доска задач: четыре столбца-состояния, фильтры над ними и карточка
 // задачи.
@@ -33,7 +33,6 @@ import type { useTaskParticipants } from "@/hooks/useTaskParticipants";
 import { useSectionAssignees } from "@/hooks/useSectionAssignees";
 import { hasDeclined, taskStage } from "@/lib/taskProgress";
 import { cardKind } from "@/lib/taskCardKind";
-import { peopleLoad } from "@/lib/peoplePanel";
 import type { useToasts } from "@/hooks/useToasts";
 import SectionTabs from "./SectionTabs";
 import { useAsk } from "@/components/Ask";
@@ -42,7 +41,6 @@ import Icon from "./Icon";
 import { isCreatedByMe, isMine } from "@/lib/ownership";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel } from "@/lib/authorName";
-import { withoutSelfMark } from "@/lib/actorName";
 import { useUnreadTaskComments } from "@/hooks/useUnreadTaskComments";
 import { noteParticipantChange } from "@/lib/participantNote";
 import { humanError } from "@/lib/humanError";
@@ -56,7 +54,6 @@ import { grow, shrink } from "@/lib/smoothHeight";
 // (lib/lazyWindows: почему и как).
 const TaskModal = dynamic(loadTaskModal, { ssr: false });
 const SectionsModal = dynamic(loadSectionsModal, { ssr: false });
-const LoadModal = dynamic(loadLoadModal, { ssr: false });
 
 export default function TasksPanel({
   tasks,
@@ -81,8 +78,6 @@ export default function TasksPanel({
   myUserId = "",
   myMemberAssigneeId = "",
   ownerId = "",
-  filterAssignee,
-  onFilterAssigneeChange,
   justCreatedId,
   mobileColumn,
 }: {
@@ -161,8 +156,6 @@ export default function TasksPanel({
   ownerId?: string;
   // Фильтр по исполнителю живёт снаружи: тот же выбор делает панель
   // «Люди», и две копии одного состояния разошлись бы в первый же день.
-  filterAssignee: string;
-  onFilterAssigneeChange: (name: string) => void;
   justCreatedId?: string | null;
   // На телефоне это теперь ВЕСЬ раздел, а не переключатель внутри одного —
   // слова Кирилла 23.09.2026: «убрать кнопки «новые задачи», «в работе» и
@@ -202,9 +195,6 @@ export default function TasksPanel({
   const [filterSection, setFilterSection] = useSavedSetting("board.section", "all");
   // Окно «Разделы»: названия, ответственные, удаление. Только у админа.
   const [sectionsOpen, setSectionsOpen] = useState(false);
-  // Окно «Загрузка»: кто чем занят и у кого горит. Раньше стояло панелью в
-  // правой колонке (см. LoadModal — там же причина переезда).
-  const [loadOpen, setLoadOpen] = useState(false);
   const [modalState, setModalState] = useState<{ open: boolean; task: Task | null; prefill?: TaskPrefill }>({ open: false, task: null });
   const isMobile = useIsMobile();
   // Мини-приложение мессенджера бывает шире порога «телефон» (Telegram для
@@ -336,13 +326,6 @@ export default function TasksPanel({
   // кнопки, две из которых ничего не меняют.
   const sharedBoard = tasks.some((t) => !authored(t) || roleOn(t) !== "none");
 
-  // Загрузка людей — считается здесь, а не только в окне: от неё зависит,
-  // показывать ли вообще кнопку и какую цифру на ней писать. Цифра — это
-  // число тех, у кого есть о чём говорить (горит, молчит или ждёт
-  // приёмки), а не число людей: «14» на кнопке не новость, «2» — новость.
-  const load = useMemo(() => peopleLoad(allTasks ?? tasks, assignees, participants.forTask), [allTasks, tasks, assignees, participants.forTask]);
-  const peopleWithWork = load.length;
-  const hotPeople = load.filter((p) => p.overdue > 0 || p.silent > 0 || p.review > 0).length;
 
   const sectionById = useMemo(() => new Map(sections.map((s) => [s.id, s])), [sections]);
   // «3/5» шагов чек-листа на кубике (миграция 0059) — одна выборка на доску.
@@ -372,7 +355,6 @@ export default function TasksPanel({
   const snoozedView = showSnoozed && snoozedCount > 0;
   const filtered = tasks.filter((t) => {
     if (snoozedView ? !snoozedMine(t) : snoozedMine(t)) return false;
-    if (filterAssignee !== "all" && t.assignee !== filterAssignee) return false;
     if (onlyOverdue && !isOverdue(t)) return false;
     if (sharedBoard && !matchesBoardFilter(boardFilter, t, roleOn(t), myUserId)) return false;
     if (filterSection !== "all" && (t.sectionId || "") !== filterSection) return false;
@@ -858,46 +840,6 @@ export default function TasksPanel({
               {isMobile ? <Icon name="plus" size={18} /> : <>+<span className="fp-word nt-word"> Новая задача</span></>}
             </button>
             <div className="search-wrap" id="quickAddSlot" />
-            {/* «Загрузка» вместо фильтра по исполнителю.
-
-                Слова Кирилла 20.09.2026: «фильтр по исполнителю получается
-                не нужен, если добавил блок загрузка». Он прав — это был
-                один и тот же вопрос, заданный дважды: список из
-                четырнадцати имён без единой цифры рядом и список тех же
-                людей с цифрами. Осталось второе, и оно же фильтрует.
-
-                Кнопки нет вовсе, пока поручать некому: пустое окно со
-                словами «никому ничего не поручено» — это кнопка, после
-                которой ничего не произошло. */}
-            {/* На телефоне «Загрузка» ушла из полосы в меню шапки (её место
-                заняли три кнопки, которые перечислил Кирилл). Но если
-                фильтр по человеку ВКЛЮЧЁН, пилюля возвращается: доска
-                сужена, и снять это должно быть чем — иначе человек
-                остаётся с половиной задач и без кнопки, которая
-                объясняет, почему их половина. */}
-            {peopleWithWork > 0 && (!isMobile || filterAssignee !== "all") && (
-              <span className={"load-pill" + (filterAssignee !== "all" ? " active" : "")}>
-                <button
-                  type="button"
-                  className="load-pill-main"
-                  id="loadBtn"
-                  title={filterAssignee === "all" ? "Кто чем занят" : `Показана только загрузка: ${withoutSelfMark(filterAssignee)}`}
-                  onClick={() => setLoadOpen(true)}
-                >
-                  <Icon name="users" size={14} /> {filterAssignee === "all" ? "Загрузка" : withoutSelfMark(filterAssignee)}
-                  {filterAssignee === "all" && hotPeople > 0 && <span className="filter-pill-count">{hotPeople}</span>}
-                </button>
-                {/* Снять фильтр — там же, где он виден. Иначе единственный
-                    путь обратно ко всей доске лежал бы через окно, а
-                    человек, забывший о фильтре, видел бы доску, на которой
-                    «пропали задачи». */}
-                {filterAssignee !== "all" && (
-                  <button type="button" className="load-pill-x" title="Показать задачи всех" onClick={() => onFilterAssigneeChange("all")}>
-                    <Icon name="close" size={12} />
-                  </button>
-                )}
-              </span>
-            )}
             {/* Все / Мне / Я поручил.
 
                 Это ответ на вопрос Кирилла о том, как выделять задачи, где
@@ -1101,17 +1043,6 @@ export default function TasksPanel({
           onClose={() => setSectionsOpen(false)}
           onSave={actions.saveSection}
           onDelete={(section) => void deleteSectionAsked(section)}
-        />
-      )}
-
-      {loadOpen && (
-        <LoadModal
-          tasks={allTasks ?? tasks}
-          assignees={assignees}
-          partsOf={participants.forTask}
-          selected={filterAssignee}
-          onSelect={onFilterAssigneeChange}
-          onClose={() => setLoadOpen(false)}
         />
       )}
 

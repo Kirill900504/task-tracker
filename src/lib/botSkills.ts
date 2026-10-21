@@ -415,8 +415,8 @@ export async function handleSlotCallback(admin: SupabaseClient, actor: BotActor,
 export async function createMeetingFromBot(
   admin: SupabaseClient,
   actor: BotActor,
-  input: { title: string; date: string; time: string; participants: string[]; durationMin?: number; recur?: string },
-): Promise<{ ok: boolean; text: string; id?: string }> {
+  input: { title: string; date: string; time: string; participants: string[]; durationMin?: number; recur?: string; agenda?: string[] },
+): Promise<{ ok: boolean; text: string; id?: string; buttons?: BotButton[][] }> {
   const people = [...new Set(input.participants.filter(Boolean))];
   if (input.time && inPast(input.date, input.time)) return { ok: false, text: `${fmtWhen(input.date, input.time)} уже прошло — назовите время впереди.` };
   let clash: string[] = [];
@@ -442,6 +442,12 @@ export async function createMeetingFromBot(
   });
   if (error) return { ok: false, text: "Не получилось сохранить встречу: " + error.message };
   await attachMeetingParticipants(admin, actor.spaceId, id, people);
+  // Повестка, названная вместе со встречей («обсудим смету и отпуска»), —
+  // до приглашения, чтобы уехать в нём (21.10.2026). Не записалась — встреча
+  // всё равно есть, и об этом сказано в ответе.
+  const agendaIn = (input.agenda || []).map((a) => a.trim()).filter(Boolean);
+  const agenda = agendaIn.length ? await appendAgenda(admin, actor, { id, user_id: actor.spaceId }, agendaIn) : null;
+  const agendaPoints = agenda?.ok ? agendaIn : [];
   let delivered = 0;
   if (people.length) {
     const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").eq("user_id", actor.spaceId).in("name", people);
@@ -449,14 +455,25 @@ export async function createMeetingFromBot(
     const sent = await Promise.all(
       ((data || []) as ColleagueRow[])
         .filter(notMe(actor))
-        .map((p) => sendToPerson(admin, actor.spaceId, p, meetingMessage({ title: input.title, date: input.date, time: input.time, participants: people }, from), meetingButtons(id), { kind: "meeting", itemId: id })),
+        .map((p) => sendToPerson(admin, actor.spaceId, p, meetingMessage({ title: input.title, date: input.date, time: input.time, participants: people }, from, agendaPoints), meetingButtons(id), { kind: "meeting", itemId: id })),
     );
     delivered = sent.filter(Boolean).length;
   }
+  const agendaLine = agenda
+    ? agenda.ok
+      ? "\n📝 Повестка:\n" + agenda.lines.join("\n")
+      : "\n⚠️ Повестку записать не получилось: " + agenda.error
+    : "";
   return {
     ok: true,
     id,
-    text: [`✓ Встреча: «${input.title}»`, fmtWhen(input.date, input.time), people.length ? "Участники: " + people.map(withoutSelfMark).join(", ") : "", delivered ? `Приглашений отправлено: ${delivered}` : ""].filter(Boolean).join("\n"),
+    text:
+      [`✓ Встреча: «${input.title}»`, fmtWhen(input.date, input.time), people.length ? "Участники: " + people.map(withoutSelfMark).join(", ") : "", delivered ? `Приглашений отправлено: ${delivered}` : ""].filter(Boolean).join("\n") +
+      agendaLine +
+      // Повестку не назвали — путь к ней тут же, кнопкой: «что обсудим» лучше
+      // дописать, пока встреча ещё перед глазами.
+      (agendaPoints.length ? "" : "\n\nПовестку можно добавить кнопкой «📝 Повестка» — пункты одним сообщением, каждый с новой строки."),
+    buttons: [[agendaButton(id), { text: "📅 Открыть встречу", data: encodeCallback("meeting", "oshow", id) }]],
   };
 }
 
@@ -526,14 +543,71 @@ export async function addAgenda(ctx: SkillContext, input: Record<string, unknown
   const got = await oneMeeting(ctx, String(input.query || ""));
   if ("reply" in got) return got.reply;
   const m = got.meeting;
-  const { data: last } = await ctx.admin.from("meeting_agenda").select("position").eq("meeting_id", m.id).order("position", { ascending: false }).limit(1);
-  const start = ((last || []) as { position: number }[])[0]?.position ?? -1;
-  const author = ctx.actor.isOwner ? ctx.actor.spaceId : ctx.actor.userId;
-  const { error } = await ctx.admin.from("meeting_agenda").insert(items.map((text, i) => ({ meeting_id: m.id, text, position: start + 1 + i, author_id: author, user_id: m.user_id })));
-  if (error) return { text: "Не получилось добавить в повестку: " + error.message };
-  const { data: all } = await ctx.admin.from("meeting_agenda").select("text").eq("meeting_id", m.id).order("position");
-  const lines = ((all || []) as { text: string }[]).map((a, i) => `${i + 1}. ${a.text}`);
-  return { text: `📝 Повестка «${m.title}» (${fmtWhen(m.date, m.time || "")}):\n${lines.join("\n")}`, buttons: [[{ text: "📅 Открыть встречу", data: encodeCallback("meeting", "oshow", m.id) }]] };
+  const done = await appendAgenda(ctx.admin, ctx.actor, m, items);
+  if (!done.ok) return { text: "Не получилось добавить в повестку: " + done.error };
+  return { text: `📝 Повестка «${m.title}» (${fmtWhen(m.date, m.time || "")}):\n${done.lines.join("\n")}`, buttons: [[{ text: "📅 Открыть встречу", data: encodeCallback("meeting", "oshow", m.id) }]] };
+}
+
+// Дописать пункты в конец повестки — одно место на все двери бота: фразу
+// «на планёрку добавь пункт…», повестку, названную вместе со встречей, и
+// кнопку «📝 Повестка» (ответ следующим сообщением). Возвращает всю
+// повестку строками «1. …» — человек видит итог, а не только добавленное.
+export async function appendAgenda(
+  admin: SupabaseClient,
+  actor: BotActor,
+  m: { id: string; user_id: string },
+  texts: string[],
+): Promise<{ ok: true; lines: string[] } | { ok: false; error: string }> {
+  const items = texts.map((t) => t.trim().slice(0, 500)).filter(Boolean);
+  if (items.length) {
+    const { data: last } = await admin.from("meeting_agenda").select("position").eq("meeting_id", m.id).order("position", { ascending: false }).limit(1);
+    const start = ((last || []) as { position: number }[])[0]?.position ?? -1;
+    const author = actor.isOwner ? actor.spaceId : actor.userId;
+    const { error } = await admin.from("meeting_agenda").insert(items.map((text, i) => ({ meeting_id: m.id, text, position: start + 1 + i, author_id: author, user_id: m.user_id })));
+    if (error) return { ok: false, error: error.message };
+  }
+  const { data: all } = await admin.from("meeting_agenda").select("text").eq("meeting_id", m.id).order("position").order("created_at");
+  return { ok: true, lines: ((all || []) as { text: string }[]).map((a, i) => `${i + 1}. ${a.text}`) };
+}
+
+// Пункты повестки, присланные одним сообщением: каждый с новой строки, или
+// через «;», или списком «1. … 2. …». Запятая НЕ режет — «смета, подписи и
+// сроки» один пункт чаще, чем три.
+export function splitAgendaText(text: string): string[] {
+  return text
+    .split(/\r?\n|;/)
+    .map((s) => s.replace(/^\s*(?:\d+[.)]|[-•*–—])\s*/, "").trim())
+    .filter(Boolean);
+}
+
+// Ответ на «📝 Повестка»: пункты одним сообщением. Встреча ищется заново и
+// по автору — память чата могла пережить и закрытие встречи, и смену её
+// организатора.
+export async function agendaFromReply(admin: SupabaseClient, actor: BotActor, meetingId: string, text: string): Promise<{ text: string; buttons: BotButton[][] }> {
+  const back = [[{ text: "📅 Открыть встречу", data: encodeCallback("meeting", "oshow", meetingId) }], ...navRow("assigner")];
+  const { data } = await admin
+    .from("meetings")
+    .select("id, title, date, time, user_id, status")
+    .eq("id", meetingId)
+    .match(actorScope(actor))
+    .or(authorFilter(actor))
+    .is("deleted_at", null)
+    .maybeSingle();
+  const m = data as { id: string; title: string; date: string; time: string | null; user_id: string; status: string } | null;
+  if (!m) return { text: "Встреча не найдена — повестку не записал.", buttons: navRow("assigner") };
+  if (m.status === "success" || m.status === "no_result") return { text: "🔒 Встреча уже закрыта — повестку не меняю.", buttons: back };
+  const items = splitAgendaText(text);
+  if (!items.length) return { text: "Не увидел ни одного пункта.", buttons: back };
+  const done = await appendAgenda(admin, actor, m, items);
+  if (!done.ok) return { text: "Не получилось добавить в повестку: " + done.error, buttons: back };
+  return { text: `📝 Повестка «${m.title}» (${fmtWhen(m.date, m.time || "")}):\n${done.lines.join("\n")}`, buttons: [[agendaButton(m.id)], ...back] };
+}
+
+// Кнопка под созданной встречей и в её карточке у организатора: следующее
+// сообщение — пункты повестки (pending `meeting_agenda`, разбор в
+// botPipeline.assignerPending).
+export function agendaButton(meetingId: string): BotButton {
+  return { text: "📝 Повестка", data: encodeCallback("meeting", "magd", meetingId) };
 }
 
 // =================================================================== 9. чек-лист

@@ -200,6 +200,10 @@ export async function POST(req: Request) {
     if (!linked.length) {
       return NextResponse.json({ error: nobodyReachable(unlinked, "Некому отправлять"), unreachable: unlinked });
     }
+    // Повестка, заданная в форме, едет в приглашении (форма пишет её ДО
+    // этого вызова — см. MeetingsPanel.handleModalSave).
+    const { data: agendaRows } = await admin.from("meeting_agenda").select("text").eq("meeting_id", id).order("position").order("created_at");
+    const agenda = ((agendaRows || []) as { text: string }[]).map((r) => r.text);
     const results = await Promise.all(
       linked.map((person) =>
         // Встреча-опрос (миграция 0062): вместо «буду / не смогу» — варианты
@@ -207,8 +211,8 @@ export async function POST(req: Request) {
         deliver(
           person,
           isPoll(meeting)
-            ? `📅 Встреча от ${from}:\n\n${meeting.title}\n\nВремя ещё выбирается — отметьте все варианты, которые вам подходят:`
-            : meetingMessage(meeting, from),
+            ? `📅 Встреча от ${from}:\n\n${meeting.title}${agenda.length ? "\n\nПовестка:\n" + agenda.map((a, i) => `${i + 1}. ${a}`).join("\n") : ""}\n\nВремя ещё выбирается — отметьте все варианты, которые вам подходят:`
+            : meetingMessage(meeting, from, agenda),
           isPoll(meeting) ? pollButtons(meeting.id as string, (meeting.slot_options as SlotOption[]) || [], []) : meetingButtons(meeting.id as string),
           {
           admin,

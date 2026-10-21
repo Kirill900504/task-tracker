@@ -110,11 +110,17 @@ export function taskMessage(
 export function meetingMessage(
   meeting: { title: string; date: string; time?: string | null; participants?: string[] },
   from: string,
+  agenda: string[] = [],
 ): string {
   const lines = [`📅 Встреча от ${from}:`, "", meeting.title, "", fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "")];
   const others = (meeting.participants || []).filter(Boolean);
   // «(я)» — пометка для одного человека, а читают сообщение все.
   if (others.length > 1) lines.push("Участники: " + others.map(withoutSelfMark).join(", "));
+  // Повестка, заданная при создании (21.10.2026), — в самом приглашении:
+  // «что обсудим» решает, готовиться ли к встрече, и узнавать это по
+  // кнопке в трекере значит не узнать вовсе.
+  const points = agenda.map((a) => a.trim()).filter(Boolean);
+  if (points.length) lines.push("", "Повестка:", ...points.map((a, i) => `${i + 1}. ${a}`));
   return lines.join("\n");
 }
 

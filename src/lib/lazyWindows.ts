@@ -30,14 +30,12 @@ export const loadSectionsModal = () => import("@/components/tracker/SectionsModa
 export const loadMeetingTasksSheet = () => import("@/components/tracker/MeetingTasksSheet");
 export const loadSentIdeasModal = () => import("@/components/tracker/SentIdeasModal");
 export const loadDoneListModal = () => import("@/components/tracker/DoneListModal");
-export const loadLoadModal = () => import("@/components/tracker/LoadModal");
 export const loadIdeaReviewModal = () => import("@/components/tracker/IdeaReviewModal");
 
 const ALL = [
   // Первыми — то, что открывают чаще всего.
   loadTaskModal,
   loadMeetingModal,
-  loadLoadModal,
   loadDoneListModal,
   loadAccountModal,
   loadTeamModal,

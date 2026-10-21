@@ -5,7 +5,7 @@ import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { encodeCallback, type CallbackAction, type ColleagueRow } from "@/lib/colleagues";
 import { fmtDate } from "@/lib/taskDisplay";
 import { progressLabel, type TaskParticipant } from "@/lib/taskProgress";
-import { effectiveApproval, ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, personReply, type OwnerReply } from "@/lib/ownerQueries";
+import { effectiveApproval, ownerIdeasReply, ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav, type OwnerReply } from "@/lib/ownerQueries";
 import { applyReview } from "@/lib/reviewWork";
 import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
 import { closeMeeting, closedMeetingText, recordRecapButtons } from "@/lib/meetingRecap";
@@ -282,6 +282,11 @@ export async function ownerMeetingCard(admin: SupabaseClient, actor: BotActor, m
   if (yes.length) lines.push("", "✅ Будут: " + yes.map((r) => r.name + (r.late ? " (опоздает)" : "")).join(", "));
   if (no.length) lines.push("❌ Не смогут: " + no.map((r) => (r.reason ? `${r.name} — ${r.reason}` : r.name)).join(", "));
   if (silent.length) lines.push("❓ Молчат: " + silent.map((r) => r.name).join(", "));
+  // Повестка — в карточке, раз её задают при создании (21.10.2026): «что
+  // обсудим» нужно ровно тогда, когда встречу открыли.
+  const { data: agendaRows } = await admin.from("meeting_agenda").select("text").eq("meeting_id", meetingId).order("position").order("created_at");
+  const agenda = ((agendaRows || []) as { text: string }[]).map((a, i) => `${i + 1}. ${a.text}`);
+  if (agenda.length) lines.push("", "Повестка:", ...agenda);
   if (meeting.result) lines.push("", "📝 " + meeting.result);
 
   // У предложенной встречи вопрос другой, чем у назначенной: не «как
@@ -325,6 +330,9 @@ export async function ownerMeetingCard(admin: SupabaseClient, actor: BotActor, m
       { text: "📅 Перенести", data: encodeCallback("meeting", "mv", meetingId) },
       { text: "🚫 Отменить", data: encodeCallback("meeting", "mvxok", meetingId) },
     ]);
+    // Та же кнопка, что под только что созданной встречей
+    // (botSkills.agendaButton), — данные одни, разбор в botMoveFlow.
+    actions.push([{ text: "📝 Повестка", data: encodeCallback("meeting", "magd", meetingId) }]);
   }
 
   return {
@@ -373,7 +381,10 @@ export async function handleOwnerCallback(
   // словами, и экран у обоих один.
   if (isMoveAction(action)) return handleMoveCallback(admin, actor, action);
 
-  if (action.action === "omenu") {
+  // `oper` — карточка человека из удалённого раздела «👥 Люди» (21.10.2026:
+  // сводка о чужой загрузке противоречит конфиденциальности). Кнопка ещё
+  // живёт в старых сообщениях, и молчать ей нельзя — отвечает меню.
+  if (action.action === "omenu" || action.action === "oper") {
     const menu = ownerMenu();
     return { toast: "Меню", say: menu.text, sayButtons: menu.buttons };
   }
@@ -516,12 +527,6 @@ export async function handleOwnerCallback(
       askReturn: { taskId: task.id, title: task.title },
       say: `↩ ${taskRef(task)}\n\nНапишите следующим сообщением, что именно доделать, — отправлю исполнителям.`,
     };
-  }
-
-  // ——— Человек: что на нём и что ему ещё поручить.
-  if (action.action === "oper" && action.kind === "task") {
-    const reply = await personReply(admin, actor, action.id, today);
-    return { toast: "Открываю", say: reply.text, sayButtons: reply.buttons };
   }
 
   // «Поручить ему» — тот же мастер, но человек уже выбран: спрашиваем

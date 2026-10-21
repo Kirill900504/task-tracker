@@ -31,8 +31,9 @@ import { busyPeople } from "@/lib/meetingTime";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useDropHandler } from "./dnd/TrackerDnd";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useMinuteClock } from "@/hooks/useMinuteClock";
 import type { RecapItem, RecapTask } from "./MeetingTasksSheet";
-import { loadAgenda, type AgendaItem } from "@/hooks/useMeetingAgenda";
+import { loadAgenda, saveAgendaDraft, type AgendaItem } from "@/hooks/useMeetingAgenda";
 
 // Окна — отдельными кусками, подгружаются фоном после первого кадра
 // (lib/lazyWindows: почему и как).
@@ -204,7 +205,7 @@ export default function MeetingsPanel({
     });
   }
 
-  function handleModalSave(m: Meeting) {
+  function handleModalSave(m: Meeting, agenda?: string[]) {
     const before = modalMeeting;
     actions.saveMeeting(m);
     // Новая встреча сохранена — значит перенос состоялся: старую закрываем
@@ -217,7 +218,15 @@ export default function MeetingsPanel({
       movedSavedRef.current = true;
       closeAsMoved(movingFrom, m);
     }
-    inviteNewcomers(m, !movingFrom);
+    // Повестка из формы пишется ДО приглашения: оно читает её из базы и
+    // несёт пункты людям (api/telegram/send). Не записалась — приглашение
+    // всё равно уходит: встреча без повестки лучше встречи без людей.
+    if (!before && agenda?.length) {
+      const move = !!movingFrom;
+      void saveAgendaDraft(m.id, agenda).then(() => inviteNewcomers(m, !move));
+    } else {
+      inviteNewcomers(m, !movingFrom);
+    }
     if (before) void bumpVoteRoundIfMoved(m.id, before, m);
 
     // Встреча, выросшая из задачи: отметка в обсуждении обеих. Строка в
@@ -272,6 +281,9 @@ export default function MeetingsPanel({
   // отдельном окне по иконке с галочкой: подмешанные сюда, они превращали
   // список встреч в архив, в котором ближайшая теряется.
   const all = sortMeetingsForList(meetings, false);
+  // Время встречи выходит само, без единого изменения в данных — поэтому
+  // группа «Нужен итог» пересчитывается по часам (см. useMinuteClock).
+  const now = useMinuteClock();
   // Прошедшие без итога — наверх и отдельно. Это единственные встречи в
   // списке, которые чего-то ждут ОТ ВАС: остальные просто впереди.
   //
@@ -280,7 +292,7 @@ export default function MeetingsPanel({
   // висела жёлтым «нужен итог» без единой кнопки — требование, которое он
   // выполнить не может (QA-проход 06.10.2026). Для него она остаётся в
   // общем списке, а итога ждут от организатора.
-  const needRecap = all.filter((m) => awaitsRecap(m) && isMine(m, myUserId));
+  const needRecap = all.filter((m) => awaitsRecap(m, now) && isMine(m, myUserId));
   // Новые реплики в обсуждении каждой встречи списка — значком на карточке.
   const unread = useUnreadTaskComments(all.map((m) => m.id), "meeting");
   const sorted = all.filter((m) => !needRecap.includes(m));
@@ -823,6 +835,7 @@ export default function MeetingsPanel({
                       time: from.time || "",
                       participants: from.participants.slice(),
                       recur: from.recur || "none",
+                      agendaFrom: from.id,
                     },
                   });
                 }

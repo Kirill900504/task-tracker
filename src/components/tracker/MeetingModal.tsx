@@ -32,7 +32,8 @@ import ChipChoice from "./ChipChoice";
 import ItemFacts from "./ItemFacts";
 import ExpandableText from "./ExpandableText";
 import MeetingAgenda from "./MeetingAgenda";
-import type { AgendaItem } from "@/hooks/useMeetingAgenda";
+import { loadAgenda, type AgendaItem } from "@/hooks/useMeetingAgenda";
+import AgendaDraft from "./AgendaDraft";
 import { WORKDAY_SLOTS, busyPeople, defaultMeetingStart, startsInPast } from "@/lib/meetingTime";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel, authorRawName } from "@/lib/authorName";
@@ -100,7 +101,9 @@ export default function MeetingModal({
   meeting: Meeting | null;
   prefill?: MeetingPrefill;
   assignees: string[];
-  onSave: (m: Meeting) => void;
+  // agenda — пункты повестки новой встречи (AgendaDraft): записать их можно
+  // только когда встреча доедет до базы, и делает это панель.
+  onSave: (m: Meeting, agenda?: string[]) => void;
   // true — встречу отменили (причина названа), false — передумали.
   onDelete: () => boolean | Promise<boolean>;
   onClose: () => void;
@@ -215,6 +218,25 @@ export default function MeetingModal({
   // Опрос времени (миграция 0062): кроме выбранного — ещё варианты. Есть хоть
   // один — встреча заводится предложением, и участники отмечают удобные.
   const [extraSlots, setExtraSlots] = useState<{ date: string; time: string }[]>([]);
+  // Повестка новой встречи (AgendaDraft): пункты и то, что набрано в поле.
+  const [agendaDraft, setAgendaDraft] = useState<string[]>([]);
+  const [agendaText, setAgendaText] = useState("");
+  // Перенос несёт повестку прежней встречи: встреча не состоялась, и
+  // обсудить надо то же самое. Пункты читаются из базы (у прежней встречи
+  // они уже там), и подставляются, только если человек ещё ничего не
+  // набрал сам — его правка сильнее подсказки.
+  const agendaFrom = !meeting ? prefill?.agendaFrom : undefined;
+  useEffect(() => {
+    if (!agendaFrom) return;
+    let alive = true;
+    void loadAgenda(agendaFrom).then((items) => {
+      if (!alive || !items?.length) return;
+      setAgendaDraft((cur) => (cur.length ? cur : items.map((i) => i.text)));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [agendaFrom]);
   // Кого в день встречи не будет (миграция 0047) — по самой дате встречи,
   // а не по сегодняшней: отпуск до пятницы встрече в понедельник не мешает.
   const { colleagues: team } = useColleagues();
@@ -386,7 +408,7 @@ export default function MeetingModal({
       // Ради этой колонки и была миграция 0037 — итог встречи должен
       // дописаться в ту самую задачу, а не в найденную по тексту реплики.
       fromTaskId: meeting?.fromTaskId ?? prefill?.fromTaskId ?? "",
-    });
+    }, isEditing ? undefined : [...agendaDraft, agendaText].map((a) => a.trim()).filter(Boolean));
     onClose();
   }
 
@@ -792,6 +814,11 @@ export default function MeetingModal({
                 <MicButton value={title} onChange={setTitle} title="Надиктовать название" />
               </div>
             </div>
+
+            {/* Повестка — сразу под названием, до даты: «о чём» и «что
+                обсудим» — одна мысль, а когда — уже следующая
+                (21.10.2026). */}
+            <AgendaDraft items={agendaDraft} onChange={setAgendaDraft} text={agendaText} onText={setAgendaText} />
 
             <div className="field">
               <label>Дата</label>

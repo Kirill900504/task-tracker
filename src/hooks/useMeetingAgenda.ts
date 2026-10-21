@@ -46,6 +46,28 @@ async function load(meetingId: string): Promise<AgendaItem[] | null> {
 
 export { load as loadAgenda };
 
+// Повестка, набранная в форме НОВОЙ встречи (21.10.2026: «поле повестка
+// должно быть доступно при создании любой встречи»). Встреча в эту секунду
+// ещё только едет в облако — локальное состояние истина, запись идёт своим
+// ходом, — и пункт, вставленный раньше неё, внешний ключ отверг бы молча.
+// Поэтому сперва ждём строку встречи, как useMeetingVotes.sync, и только
+// потом пишем пункты одной пачкой (у всех строк одни и те же ключи — см.
+// правило про пачки PostgREST в CLAUDE.md).
+export async function saveAgendaDraft(meetingId: string, texts: string[]): Promise<boolean> {
+  const items = texts.map((t) => t.trim().slice(0, 500)).filter(Boolean);
+  if (!items.length) return true;
+  const db = createClient();
+  let exists = false;
+  for (let attempt = 0; attempt < 12 && !exists; attempt++) {
+    const { data } = await db.from("meetings").select("id").eq("id", meetingId).maybeSingle();
+    if (data) exists = true;
+    else await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  if (!exists) return false;
+  const { error } = await db.from("meeting_agenda").insert(items.map((text, position) => ({ meeting_id: meetingId, text, position })));
+  return !error;
+}
+
 export function useMeetingAgenda(meetingId: string) {
   const [items, setItems] = useState<AgendaItem[]>([]);
   const [loaded, setLoaded] = useState(false);

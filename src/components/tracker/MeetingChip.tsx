@@ -15,6 +15,7 @@ import { prefetchComments } from "@/hooks/useItemComments";
 import { useAsk } from "@/components/Ask";
 import { isPoll } from "@/lib/meetingPollRules";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useMinuteClock } from "@/hooks/useMinuteClock";
 
 // Карточка встречи в списке — устроена как карточка задачи.
 //
@@ -124,7 +125,8 @@ export default function MeetingChip({
   const proposed = meeting.status === "proposed";
   // Прошла, а чем кончилась — не сказано. Пока итога нет, встреча не
   // уходит из списка: она ещё требует одного действия.
-  const waitingRecap = awaitsRecap(meeting);
+  const now = useMinuteClock();
+  const waitingRecap = awaitsRecap(meeting, now);
   const showQuickActions = canManage && (!meeting.status || meeting.status === "planned" || waitingRecap);
   const round = meeting.voteRound || 1;
   const live = !meeting.status || meeting.status === "planned" || meeting.status === "proposed";
