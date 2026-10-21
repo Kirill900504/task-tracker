@@ -2,6 +2,7 @@
 
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
+import AddButton from "./AddButton";
 
 // Повестка в форме НОВОЙ встречи (21.10.2026, его слова: «поле повестка
 // должно быть доступно при создании любой встречи… блок повестка должен
@@ -67,6 +68,7 @@ export default function AgendaDraft({
           singleLine
           onEnter={add}
         />
+        <AddButton id="agendaAddBtn" title="Добавить пункт" disabled={!text.trim()} onClick={add} />
         <MicButton value={text} onChange={onText} title="Надиктовать пункт повестки" />
       </div>
     </div>

@@ -19,6 +19,7 @@ import { isSelfAssignee, sanitizeAssigneeList } from "@/lib/trackerRows";
 import { withoutSelfMark } from "@/lib/actorName";
 import { uid } from "@/lib/uid";
 import MicButton from "./MicButton";
+import AddButton from "./AddButton";
 import MiniCalendar from "./MiniCalendar";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import AttachFiles from "./AttachFiles";
@@ -826,6 +827,7 @@ export default function MeetingModal({
                   singleLine
                   focusAtEnd={!isEditing && !!prefill?.fromIdeaId}
                 />
+                <AddButton id="meetingTitleAddBtn" title="Создать встречу" disabled={!title.trim()} onClick={() => void save()} />
                 <MicButton value={title} onChange={setTitle} title="Надиктовать название" />
               </div>
             </div>

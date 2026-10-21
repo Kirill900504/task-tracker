@@ -824,3 +824,22 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
   color:#fff; background:#B4513F; border-color:rgba(255,255,255,.14);
 }
 .modal .input-with-mic .field-mic-btn:disabled{opacity:.6; cursor:default;}
+/* «+» слева от микрофона (AddButton) — та же залитая фирменная кнопка, и
+   не только в окне: в строке мыслей и в быстром вводе тоже (21.10.2026,
+   «кнопку „+“ хотелось бы сделать в фирменном цвете»). Селектор двойной
+   нарочно: .field-mic-btn:hover и .idea-add-btn:disabled:hover в
+   tracker.css красят значок в фирменный цвет — на фирменной заливке это
+   невидимый плюс. Пустое поле гасит кнопку прозрачностью, а не серым:
+   форма та же, нажимать пока нечего. */
+.field-mic-btn.field-add-btn,
+.field-mic-btn.field-add-btn:hover,
+.field-mic-btn.field-add-btn:disabled:hover{
+  color:#fff; background:var(--accent); border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18);
+  transition:background .12s ease, transform .08s ease, box-shadow .12s ease, opacity .12s ease;
+}
+.field-mic-btn.field-add-btn:hover:not(:disabled){background:#4A9BBB;}
+.field-mic-btn.field-add-btn:active:not(:disabled){transform:translateY(1px); box-shadow:0 1px 3px rgba(0,0,0,.35);}
+.field-mic-btn.field-add-btn:disabled, .modal .input-with-mic .field-mic-btn.field-add-btn:disabled{opacity:.5; cursor:default; transform:none;}
+/* В быстром вводе кнопки тянутся по высоте поля, как микрофон рядом. */
+.field-mic-btn.quick-add-plus-btn{width:40px; height:auto; align-self:stretch;}
