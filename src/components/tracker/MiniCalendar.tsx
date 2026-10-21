@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLeaveGhost } from "@/lib/leaveGhost";
 import { getMonthGridDates } from "@/lib/calendarLogic";
 import { dateStr } from "@/lib/taskDisplay";
 import Icon from "./Icon";
@@ -186,13 +187,21 @@ export default function MiniCalendar({
           и останавливается: на click подложка исчезала бы раньше, чем
           нажатие доходит до самой кнопки дня, и дата не выбиралась бы
           вовсе — этим прежняя подложка и была плоха. */}
-      {open && (
-        <div className="cal-sheet-scrim" onMouseDown={() => setOpen(false)}>
-          <div className="cal-sheet" role="dialog" aria-label="Выбор даты" onMouseDown={(event) => event.stopPropagation()}>
-            {grid}
-          </div>
-        </div>
-      )}
+      {open && <CalSheet onClose={() => setOpen(false)}>{grid}</CalSheet>}
+    </div>
+  );
+}
+
+// Отдельный компонент ради одного: уходя, шторка оставляет гаснущий слепок
+// (lib/leaveGhost), как и окна, — иначе она исчезала одним кадром.
+function CalSheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLeaveGhost(ref);
+  return (
+    <div ref={ref} className="cal-sheet-scrim" onMouseDown={onClose}>
+      <div className="cal-sheet" role="dialog" aria-label="Выбор даты" onMouseDown={(event) => event.stopPropagation()}>
+        {children}
+      </div>
     </div>
   );
 }

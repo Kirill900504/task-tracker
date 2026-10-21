@@ -1025,7 +1025,17 @@
   }
   .pop-layer:popover-open{display:block;}
   .pop-layer > *{pointer-events:auto;}
-  .overlay.open{display:flex; animation:overlay-in .15s ease-out;}
+  /* Окна появляются и уходят мягко, без «пружины» в конце (21.10.2026:
+     «сделай так же плавно открытие и закрытие окон»). Кривая — та же, что
+     у раскрытия блоков (lib/smoothHeight), чтобы весь трекер двигался
+     одинаково. Уход — слепок окна с классом .closing (Modal.tsx). */
+  :root{--win-in:.24s; --win-out:.2s; --win-ease:cubic-bezier(.22,.61,.36,1);}
+  .overlay.open{display:flex; animation:overlay-in var(--win-in) ease-out;}
+  .overlay.closing{pointer-events:none; animation:overlay-out var(--win-out) ease-in forwards;}
+  .overlay.closing .modal, .overlay.closing .search-modal{animation:modal-out var(--win-out) var(--win-ease) forwards;}
+  @keyframes overlay-out{from{opacity:1;} to{opacity:0;}}
+  @keyframes modal-out{from{opacity:1; transform:none;} to{opacity:0; transform:translateY(6px) scale(.985);}}
+  @media (prefers-reduced-motion: reduce){ .overlay.closing{display:none;} }
   @keyframes overlay-in{from{opacity:0;} to{opacity:1;}}
   /* Стрелка назад — скрыта на компьютере (там есть щелчок мимо окна и
      Esc); показывается только в мобильном блоке ниже. */
@@ -1041,7 +1051,7 @@
   .modal{
     background:var(--paper); border-radius:var(--radius-lg); width:100%; max-width:580px;
     padding:20px; border:1px solid var(--line-soft); box-shadow:var(--shadow-2), var(--edge);
-    animation:modal-in .18s cubic-bezier(.2,.9,.3,1.1);
+    animation:modal-in var(--win-in) var(--win-ease);
     max-height:min(82vh, 780px); overflow-y:auto; overscroll-behavior:contain;
     /* Vertically centred when it fits, top-aligned (and scrollable) when it
        doesn't — `margin:auto` does both, which `align-items:center` alone
@@ -1874,7 +1884,10 @@
     background:rgba(12,15,17,.6); backdrop-filter:blur(2px);
     animation:cal-sheet-fade .16s ease-out;
   }
-  .cal-sheet{animation:cal-sheet-in .2s cubic-bezier(.2,.9,.3,1);}
+  .cal-sheet{animation:cal-sheet-in var(--win-in) var(--win-ease);}
+  /* Уходит так же мягко — слепком (MiniCalendar → lib/leaveGhost). */
+  .cal-sheet-scrim.closing{pointer-events:none; animation:overlay-out var(--win-out) ease-in forwards;}
+  .cal-sheet-scrim.closing .cal-sheet{animation:modal-out var(--win-out) var(--win-ease) forwards;}
   .cal-sheet .mini-cal{
     width:min(360px, 92vw); max-width:none; padding:16px;
     background:var(--paper); border:1px solid var(--line-soft); border-radius:var(--radius-lg);
@@ -2064,7 +2077,7 @@
   .search-modal{
     background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-lg);
     box-shadow:var(--shadow-2); width:100%; max-width:620px; overflow:hidden;
-    animation:modal-in .18s cubic-bezier(.2,.9,.3,1.1);
+    animation:modal-in var(--win-in) var(--win-ease);
   }
   @media (prefers-reduced-motion: reduce){ .search-modal{animation:none;} }
   .search-input{
@@ -2570,8 +2583,11 @@
     .swipe-wrap.armed-left .swipe-hint.left{opacity:1; color:var(--ink);}
 
     /* Модалка выезжает снизу, а не «вырастает» из центра */
-    .modal{animation:modal-sheet-up .2s ease-out;}
+    .modal{animation:modal-sheet-up var(--win-in) var(--win-ease);}
     @keyframes modal-sheet-up{ from{transform:translateY(24px); opacity:.6;} to{transform:none; opacity:1;} }
+    /* И уезжает туда же, откуда выехала. */
+    .overlay.closing .modal{animation:modal-sheet-down var(--win-out) var(--win-ease) forwards;}
+    @keyframes modal-sheet-down{ from{transform:none; opacity:1;} to{transform:translateY(24px); opacity:0;} }
 
     /* «⋮» на карточке задачи — то, что на десктопе делается мышью:
        порядок в колонке, перенос в другую, встреча по задаче. */
@@ -2636,7 +2652,7 @@
     width:100%; max-width:390px; background:var(--paper);
     border:1px solid var(--line); border-radius:var(--radius-lg);
     box-shadow:var(--shadow-2); padding:30px 28px 24px;
-    animation:modal-in .22s cubic-bezier(.2,.9,.3,1.1);
+    animation:modal-in var(--win-in) var(--win-ease);
   }
   @media (prefers-reduced-motion: reduce){ .auth-card{animation:none;} }
   .auth-brand{display:flex; align-items:center; gap:10px; margin-bottom:24px;}

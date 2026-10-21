@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
+import { useLeaveGhost } from "@/lib/leaveGhost";
 import Icon from "./Icon";
 
 // Одно окно на все окна трекера — и оно настоящее, браузерное.
@@ -66,6 +67,9 @@ export default function Modal({
       if (el.open) el.close();
     };
   }, []);
+
+  // Плавное закрытие — слепком в верхнем слое (lib/leaveGhost).
+  useLeaveGhost(ref, { topLayer: true });
 
   return createPortal(
     <dialog

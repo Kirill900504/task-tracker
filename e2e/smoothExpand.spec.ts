@@ -72,3 +72,30 @@ test("длинное название в шапке раскрывается п�
   expect(Math.abs(close.after.h - open.before.h)).toBeLessThan(1);
   expect(Math.abs(close.after.kicker - open.before.kicker)).toBeLessThan(1);
 });
+
+// Окно тоже уходит плавно: в момент закрытия на его месте гаснет слепок
+// (lib/leaveGhost), а само окно уже закрыто — ни его id, ни кнопок в
+// документе нет, и следующее действие ничего не ждёт.
+test("окно закрывается плавно, а не исчезает одним кадром", async ({ page }) => {
+  await login(page);
+  await page.click("#newTaskBtn");
+  await expect(page.locator("#saveTaskBtn")).toBeVisible();
+  const seen = await page.evaluate(async () => {
+    await new Promise((r) => setTimeout(r, 400));
+    document.querySelector<HTMLElement>("#cancelBtn")!.click();
+    await new Promise((r) => setTimeout(r, 90));
+    // Слепок спрятан в закрытом теневом дереве: селекторам его не найти
+    // (иначе ломались бы поиски по классу) — виден только его хозяин.
+    const mid = {
+      ghost: !!document.querySelector("[data-leaving-window]"),
+      visibleToSelectors: !!document.querySelector(".overlay.closing, .modal ~ .modal"),
+      realGone: !document.querySelector("#saveTaskBtn"),
+    };
+    await new Promise((r) => setTimeout(r, 400));
+    return { ...mid, after: !!document.querySelector("[data-leaving-window]") };
+  });
+  expect(seen.realGone).toBe(true);
+  expect(seen.ghost).toBe(true);
+  expect(seen.visibleToSelectors).toBe(false);
+  expect(seen.after).toBe(false);
+});
