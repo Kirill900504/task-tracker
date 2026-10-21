@@ -296,6 +296,11 @@ export default function TaskModal({
   // Приёмка по выбору (миграция 0060): «Без приёмки» — отчёт всех
   // исполнителей закрывает задачу сам. Выбирается только при постановке.
   const [needsReview, setNeedsReview] = useState(() => task?.needsReview !== false);
+  // «Каждый сдаёт сам» (миграция 0067, задача №111): у работы вроде «каждый
+  // изучает книгу» отчёта за всех не бывает, и кнопки «Сделал: всю задачу»
+  // тогда нет. Выбирается при постановке и только при нескольких
+  // исполнителях — у одного «свою часть» и «всю задачу» одно и то же.
+  const [eachOwn, setEachOwn] = useState(() => task?.eachOwn === true);
   // Зависимость (миграция 0061): своя копия, как у срока, — снимок задачи у
   // открытого окна не обновляется.
   const [blockedBy, setBlockedBy] = useState(() => task?.blockedBy || "");
@@ -303,6 +308,7 @@ export default function TaskModal({
   // Выбор нужен, только когда работу делает кто-то кроме меня: свою задачу
   // и так закрывает собственный отчёт (closeIfEveryoneReported).
   const othersExecute = pending.some((p) => p.role === "executor" && p.assigneeId !== myAssigneeId);
+  const severalExecute = pending.filter((p) => p.role === "executor").length > 1;
   // Принудительное закрытие — один запрос за раз (тот же приём, что busy
   // у приёмки в TeamCompact).
   const [closingBusy, setClosingBusy] = useState(false);
@@ -595,6 +601,7 @@ export default function TaskModal({
       manualOrder: task?.manualOrder ?? null,
       completedAt: task?.completedAt ?? "",
       needsReview: task ? task.needsReview !== false : !othersExecute || needsReview,
+      eachOwn: task ? task.eachOwn === true : severalExecute && eachOwn,
       blockedBy: task ? task.blockedBy || "" : blockedBy,
     };
     // Файлы к описанию новой задачи — в корзину ДО сохранения: задача,
@@ -870,7 +877,8 @@ export default function TaskModal({
                   me={myPart}
                   closed={task.status === "done" || task.approvalState === "accepted"}
                   onReview={stage === "awaiting_review"}
-                  othersPending={progressNow.pendingNames.length - (myPart.role === "executor" && !myPart.doneAt && !myPart.declinedAt ? 1 : 0)}
+                  // «Каждый сдаёт сам» — развилки «свою часть / всю задачу» нет.
+                  othersPending={task.eachOwn ? 0 : progressNow.pendingNames.length - (myPart.role === "executor" && !myPart.doneAt && !myPart.declinedAt ? 1 : 0)}
                   deadline={task.deadline || ""}
                   returnedComment={task.approvalState === "returned" ? task.approvalComment || "" : ""}
                   onAccept={() => onAcceptWork?.(myPart.id) ?? Promise.resolve()}
@@ -969,6 +977,7 @@ export default function TaskModal({
                                     и читалась отдельно от слов). */}
                                 <span className="progress-line">{progressText}</span>
                                 {task.needsReview === false && <span className="fact-note progress-note">без приёмки — закроется отчётом</span>}
+                                {task.eachOwn && <span className="fact-note progress-note">каждый сдаёт сам</span>}
                               </>
                             ),
                           },
@@ -1167,6 +1176,21 @@ export default function TaskModal({
               options={[
                 { value: "yes", label: "Принимаю сам" },
                 { value: "no", label: "Без приёмки", title: "Когда все исполнители отчитаются, задача закроется сама" },
+              ]}
+            />
+          </div>
+        )}
+
+        {severalExecute && (
+          <div className="field" id="fEachOwnField">
+            <label>Как сдают</label>
+            <ChipChoice
+              id="fEachOwn"
+              value={eachOwn ? "own" : "any"}
+              onSelect={(v) => setEachOwn(v === "own")}
+              options={[
+                { value: "any", label: "Можно сдать за всех", title: "Исполнитель может сдать задачу целиком, не дожидаясь остальных" },
+                { value: "own", label: "Каждый сдаёт сам", title: "Работа у каждого своя: сдать задачу за других нельзя" },
               ]}
             />
           </div>

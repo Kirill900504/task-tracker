@@ -8,9 +8,11 @@ import ActionMenu from "./ActionMenu";
 import SendMenu from "./SendMenu";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
+import AddButton from "./AddButton";
 import Icon from "./Icon";
 import PopLayer from "./PopLayer";
 import { stateLabel, type SentTo } from "@/lib/ideaRecipients";
+import { postOrQueue } from "@/lib/outbox";
 
 // «09.10.2026 13:47» → «09.10 13:47», если год текущий: в нижнем ряду мысли
 // рядом с тремя кнопками словами каждый символ на счету, а свой год читается
@@ -124,15 +126,11 @@ export default function IdeaItem({
   async function takeIntoWork() {
     setTaking(true);
     try {
-      const res = await fetch("/api/workspace/report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "take_idea", ideaId: idea.id }),
-      });
-      const data = await res.json().catch(() => null);
-      noteResult(!res.ok || !data || data.error ? data?.error || "Не получилось взять в работу" : "Готово — задача заведена на вас");
-    } catch {
-      noteResult("Не получилось взять в работу");
+      // Нет связи — просьба ждёт сети в очереди (lib/outbox) и уйдёт сама.
+      const result = await postOrQueue("/api/workspace/report", { action: "take_idea", ideaId: idea.id }, "Не получилось взять в работу");
+      noteResult(result.queued ? "Нет связи — задача заведётся, когда появится сеть" : "Готово — задача заведена на вас");
+    } catch (err) {
+      noteResult(err instanceof Error ? err.message : "Не получилось взять в работу");
     } finally {
       setTaking(false);
     }
@@ -205,6 +203,7 @@ export default function IdeaItem({
                   if (e.key === "Escape") cancel();
                 }}
               />
+              <AddButton title="Сохранить мысль" disabled={!draft.trim()} onClick={save} />
               <MicButton value={draft} onChange={setDraft} title="Надиктовать мысль" />
             </div>
           ) : (

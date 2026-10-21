@@ -748,6 +748,10 @@ export default function ItemChat({
                             {timeLabel(c.createdAt)}
                             {c.editedAt ? " · изм." : ""}
                             {SOURCE_MARK[c.source] || ""}
+                            {/* Без связи реплика ждёт сети и уйдёт сама
+                                (lib/outbox) — это надо видеть, иначе её
+                                примут за доставленную. */}
+                            {c.waiting ? " · ждёт сети" : ""}
                           </span>
 
                           {/* Быстрые реакции — при наведении, одним нажатием

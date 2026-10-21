@@ -13,6 +13,7 @@ import type { Attachment } from "@/hooks/useItemComments";
 import { uploadResultFiles } from "@/lib/resultFiles";
 import { postJson } from "@/lib/postJson";
 import type { TaskParticipant, TaskParticipantRole } from "@/lib/taskProgress";
+import { OUTBOX_SENT_EVENT, pendingPosts } from "@/lib/outbox";
 
 // Кто на задаче: исполнители, соисполнители, наблюдатели.
 //
@@ -144,6 +145,41 @@ function writeCache(grouped: Record<string, Participant[]>, people: PersonOption
   }
 }
 
+// Ответы, которые ещё в очереди (lib/outbox), — поверх прочитанного из
+// базы. Без этого перечитывание (подписка, догон) честно приносило «ещё не
+// ответил», и «Сделал», нажатое без связи, исчезало с экрана, хотя оно
+// никуда не делось и уйдёт, как только появится сеть. Сеть, которая режет
+// только наш сайт, — ровно такой случай: база читается, а маршрут нет.
+function withPending(grouped: Record<string, Participant[]>): Record<string, Participant[]> {
+  const queued = [...pendingPosts("/api/workspace/report"), ...pendingPosts("/api/workspace/review")];
+  if (!queued.length) return grouped;
+  const next: Record<string, Participant[]> = {};
+  for (const [taskId, list] of Object.entries(grouped)) next[taskId] = list.map((p) => ({ ...p }));
+  const each = (fn: (p: Participant, taskId: string) => void) => {
+    for (const [taskId, list] of Object.entries(next)) for (const p of list) fn(p, taskId);
+  };
+  const clear = { doneAt: null, doneComment: null, doneFiles: [], declinedAt: null, declineReason: null };
+  // По порядку нажатий: очередь уходит так же.
+  for (const e of queued.sort((a, b) => a.at - b.at)) {
+    const body = e.body;
+    if (e.url === "/api/workspace/report") {
+      const patch = answerPatch(body as AnswerPayload, new Date(e.at).toISOString());
+      if (patch) each((p) => void (p.id === body.participantId && Object.assign(p, patch)));
+      continue;
+    }
+    const action = String(body.action || "");
+    const ids = Array.isArray(body.participantIds) ? (body.participantIds as string[]) : null;
+    if (action === "return") {
+      each((p, taskId) => void (taskId === body.taskId && (ids ? ids.includes(p.id) : p.role === "executor") && Object.assign(p, clear)));
+    } else if (action === "return_one") {
+      each((p) => void (p.id === body.participantId && Object.assign(p, clear)));
+    } else if (action === "moved" || action === "kept") {
+      each((p) => void (p.id === body.participantId && Object.assign(p, { rescheduleTo: null, rescheduleReason: null })));
+    }
+  }
+  return next;
+}
+
 export function useTaskParticipants() {
   // Начальное значение — прошлый ответ, если он есть: см. readCache.
   // Читается РОВНО один раз, в ленивом инициализаторе, и это не стиль.
@@ -155,7 +191,7 @@ export function useTaskParticipants() {
   // открывается». Поймано своим же e2e через двадцать минут после того,
   // как кэш был написан.
   const [cached] = useState(() => (typeof window === "undefined" ? null : readCache()));
-  const [byTask, setByTask] = useState<Record<string, Participant[]>>(() => cached?.grouped ?? {});
+  const [byTask, setByTask] = useState<Record<string, Participant[]>>(() => withPending(cached?.grouped ?? {}));
   const [people, setPeople] = useState<PersonOption[]>(() => cached?.people ?? []);
   const [loading, setLoading] = useState(!cached);
 
@@ -207,7 +243,7 @@ export function useTaskParticipants() {
       (grouped[raw.task_id] ||= []).push(p);
     }
     return {
-      grouped,
+      grouped: withPending(grouped),
       // Порядок — тот, который назвал Кирилл, а не алфавитный: списки людей
       // во всём трекере должны читаться одинаково (см. peopleOrder.ts).
       people: sortByPeopleOrder(((assignees || []) as PersonOption[]).map((a) => ({ id: a.id, name: a.name })), (p) => p.name),
@@ -279,11 +315,14 @@ export function useTaskParticipants() {
     // в «Новых» после того, как человек нажал «Принял» в мессенджере.
     // Отсюда тот же догон, что и у самих задач (см. lib/revive.ts).
     const stopRevive = onRevive(reload);
+    // Ответ из очереди ушёл (или сервер его отверг) — сверить экран с базой.
+    window.addEventListener(OUTBOX_SENT_EVENT, reload);
 
     return () => {
       cancelled = true;
       reader.stop();
       stopRevive();
+      window.removeEventListener(OUTBOX_SENT_EVENT, reload);
       void db.removeChannel(channel);
     };
   }, [fetchAll]);
@@ -512,8 +551,8 @@ export function useTaskParticipants() {
           return next;
         });
       }
-      // Не дошло — экран возвращается к базе, иначе отмеченное заранее
-      // «Сделал» так и стоит, хотя в базе ничего нет (lib/postJson).
+      // Отказ сервера — экран возвращается к базе. Не дошло вовсе — ответ
+      // ждёт сети в очереди и остаётся на экране (lib/outbox).
       await postJson("/api/workspace/report", payload, { fallback: "Не получилось отправить ответ", onFail: load });
       void load();
     },

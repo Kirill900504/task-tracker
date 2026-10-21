@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
+import { pickSelfExecutor } from "./helpers";
 
 // «+» слева от микрофона у каждого поля, из которого что-то заводится, и в
 // фирменной заливке (21.10.2026, его слова: «слева от микрофона такую же
@@ -123,4 +124,67 @@ test.describe("на телефоне", () => {
       },
     );
   });
+});
+
+// Поля ПРАВКИ — тоже с «+» (21.10.2026: «почему при заполнении итога встреч
+// не добавил??? я же просил добавить везде»). Правка мысли, описание открытой
+// задачи и итог встречи: «+» стоит, залит и записывает набранное.
+test("«+» и в полях правки: мысль, описание задачи, итог встречи", async ({ page }) => {
+  test.setTimeout(120_000);
+  const stamp = Date.now();
+  await login(page);
+  await expect(page.locator("#newTaskBtn")).toBeVisible();
+
+  // Правка своей мысли.
+  const thought = `Мысль для правки ${stamp}`;
+  await page.fill("#ideaInput", thought);
+  await page.press("#ideaInput", "Enter");
+  const idea = page.locator(".idea-item", { hasText: thought });
+  await idea.locator(".idea-text").click();
+  const ideaRow = idea.locator(".input-with-mic");
+  await expectBrandPlusBeforeMic(ideaRow);
+  await ideaRow.locator("textarea").press("End");
+  await ideaRow.locator("textarea").pressSequentially(" правка");
+  await ideaRow.locator(".field-add-btn").click();
+  await expect(page.locator(".idea-item", { hasText: `${thought} правка` }).locator(".idea-text")).toBeVisible();
+
+  // Описание открытой задачи.
+  const title = `E2E плюс описание ${stamp}`;
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator(".task", { hasText: title });
+  await expect(card).toBeVisible();
+  await card.locator(".task-title, .title").first().click();
+  const modal = page.locator("dialog[open]");
+  await modal.locator("#editDescBtn").click();
+  await expectBrandPlusBeforeMic(modal.locator("#taskDesc .input-with-mic"));
+  await page.fill("#taskDescEdit", "Описание плюсом");
+  await modal.locator("#descAddBtn").click();
+  await expect(page.locator("#taskDescEdit")).toHaveCount(0);
+  await expect(modal.locator("#taskDesc")).toContainText("Описание плюсом");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("dialog[open]")).toHaveCount(0);
+
+  // Итог назначенной встречи.
+  const mTitle = `E2E плюс итог ${stamp}`;
+  await page.click("#addMeetingBtn");
+  await page.fill("#mTitle", mTitle);
+  await page.locator("#meetingOverlay .deadline-row .participant-chip", { hasText: "Завтра" }).click();
+  await page.locator("#mParticipants .participant-chip").first().click();
+  await page.locator("#mTimeGrid .time-slot:enabled:not(.selected)").first().click();
+  await page.click("#meetingSaveBtn");
+  const chip = page.locator(".meeting-chip", { hasText: mTitle });
+  await expect(chip).toBeVisible();
+  await chip.locator(".mtitle").click();
+  const resultRow = page.locator(".input-with-mic", { has: page.locator("#mResult") });
+  await expectBrandPlusBeforeMic(resultRow);
+  await expect(page.locator("#resultAddBtn")).toBeDisabled();
+  await page.fill("#mResult", "Решили плюсом");
+  await page.click("#resultAddBtn");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#meetingOverlay")).toHaveCount(0);
+  await chip.locator(".mtitle").click();
+  await expect(page.locator("#mResult")).toHaveValue("Решили плюсом");
 });

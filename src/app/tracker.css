@@ -3888,14 +3888,3 @@
   .section-tab{padding:3px 4px; font-size:11px;}
 }
 
-/* Сеть не пускает к серверу трекера (VersionWatch). Сверху и поверх всего:
-   это объяснение всех «зависших» кнопок разом, и прятать его некуда. */
-.server-unreachable{
-  position:fixed; left:50%; top:10px; transform:translateX(-50%); z-index:2147483000;
-  width:min(640px, calc(100vw - 32px)); box-sizing:border-box;
-  padding:10px 14px; border-radius:var(--radius-md);
-  background:var(--high-bg); border:1px solid rgba(224,122,95,.55);
-  color:#F2C9BC; font-size:13px; line-height:1.45;
-  box-shadow:0 8px 24px rgba(0,0,0,.35);
-}
-.server-unreachable b{color:var(--ink);}
