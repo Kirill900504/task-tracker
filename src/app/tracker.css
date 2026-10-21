@@ -884,10 +884,13 @@
     background:var(--paper-soft); color:var(--ink-soft); border:1px solid var(--line);
   }
   /* Число непрочитанных реплик — плашкой, тем же тоном, что у пилюли
-     тостов, чтобы не спорить цветом с остальными значками угла. */
+     тостов, чтобы не спорить цветом с остальными значками угла. Число
+     настоящее, без «9+» (21.10.2026, его слова: «должно отражать реальное
+     кол-во сообщений»): плашка растёт вширь сама, min-width держит круг. */
   .task-mark.unread{
-    min-width:16px; height:16px; padding:0 3px; border-radius:999px;
+    min-width:16px; height:16px; padding:0 4px; border-radius:999px;
     background:var(--accent); color:#F3F8FA; font-size:10px;
+    font-variant-numeric:tabular-nums;
   }
   .check{
     width:18px; height:18px; border-radius:var(--radius-xs); border:1.5px solid var(--line);

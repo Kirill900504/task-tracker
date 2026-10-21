@@ -365,7 +365,7 @@ export default function TaskCard({
             <span className="task-marks">
               {!!unreadCount && (
                 <span className="task-mark unread" title={`${unreadCount} новых сообщений в обсуждении`}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
+                  {unreadCount}
                 </span>
               )}
               {/* Отметки отношения ко мне — цветным значком со словом, в

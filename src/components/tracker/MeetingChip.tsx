@@ -227,7 +227,7 @@ export default function MeetingChip({
           <span className="mtitle">{meeting.title}</span>
           {!!unreadCount && (
             <span className="task-mark unread" title={`${unreadCount} новых сообщений в обсуждении`}>
-              {unreadCount > 9 ? "9+" : unreadCount}
+              {unreadCount}
             </span>
           )}
           {meeting.status === "success" && (
