@@ -1106,7 +1106,10 @@ export default function TaskModal({
                 <label>Описание (необязательно)</label>
                 <div className="input-with-mic">
                   <AutoGrowTextarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} minRows={2} maxRows={12} />
-                  <AddButton title="Создать задачу" disabled={saving || !form.title.trim()} onClick={() => void save()} />
+                  {/* «+» здесь нет нарочно: описание новой задачи пишется
+                      вместе с ней, своей записи у него нет, и «+» у этого
+                      поля заводил задачу целиком — то есть читался как
+                      «сохранить описание», а делал другое (21.10.2026). */}
                   <MicButton value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} title="Надиктовать описание" />
                 </div>
                 {/* Документы к описанию — техзадание, макет, скриншот

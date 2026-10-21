@@ -67,13 +67,16 @@ async function checkForms(page: Page, openIdeas: () => Promise<void>, openMeetin
   await expect(page.locator("#ideaInput")).toHaveValue("");
   await page.locator(".idea-add").screenshot({ path: test.info().outputPath("ideas.png") });
 
-  // Новая задача: «+» у названия и у описания.
+  // Новая задача: «+» у названия. У описания его нет: там он заводил
+  // задачу целиком, а читался как «сохранить описание».
   await openTasks();
   await page.click("#newTaskBtn");
   await expectBrandPlusBeforeMic(page.locator(".field", { has: page.locator("#fTitle") }).locator(".input-with-mic"));
   await expect(page.locator("#titleAddBtn")).toBeDisabled();
   await page.click("#addDescBtn");
-  await expectBrandPlusBeforeMic(page.locator(".field", { has: page.locator("#fDesc") }).locator(".input-with-mic"));
+  const descRow = page.locator(".field", { has: page.locator("#fDesc") }).locator(".input-with-mic");
+  await expect(descRow.locator(".field-mic-btn:not(.field-add-btn)")).toBeVisible();
+  await expect(descRow.locator(".field-add-btn")).toHaveCount(0);
   // На телефоне × спрятан за стрелкой «назад» — Escape закрывает везде.
   await page.keyboard.press("Escape");
   await expect(page.locator("#fTitle")).toHaveCount(0);
