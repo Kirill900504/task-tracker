@@ -5,6 +5,7 @@ import { speechErrorText, useSpeechInput } from "@/hooks/useSpeechInput";
 import { useAsk } from "@/components/Ask";
 import { createPortal } from "react-dom";
 import Icon from "@/components/tracker/Icon";
+import AddButton from "@/components/tracker/AddButton";
 import { withoutSelfMark } from "@/lib/actorName";
 
 export type TaskFields = {
@@ -404,6 +405,7 @@ export default function QuickAdd({
               disabled={status === "loading"}
               style={INPUT_STYLE}
             />
+            <AddButton type="submit" className="quick-add-plus-btn" title="Добавить" disabled={status === "loading" || !text.trim()} />
             {speech.supported && (
               <button
                 type="button"

@@ -264,7 +264,7 @@ export default function IdeasPanel({
             напечатано, тем же движением, что и везде в трекере. */}
         <button
           type="button"
-          className="field-mic-btn idea-add-btn"
+          className="field-mic-btn field-add-btn idea-add-btn"
           title="Добавить мысль"
           disabled={!text.trim()}
           onClick={add}

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { coalescer } from "@/lib/coalesce";
 import { onRevive } from "@/lib/revive";
 import { describeDbError } from "@/lib/syncError";
+import { writeQueue } from "@/lib/writeQueue";
 
 // Повестка встречи (миграция 0048). Своя таблица рядом со встречей, как
 // голоса и обсуждение: пункты дописывают все участники, а движок
@@ -72,16 +73,26 @@ export function useMeetingAgenda(meetingId: string) {
   const [items, setItems] = useState<AgendaItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  // Записи — одной очередью, а перечитанное не перекрывает летящее
+  // (lib/writeQueue): иначе второй пункт, набранный сразу за первым,
+  // пропадал на секунду — его стирало перечитывание от эха первого.
+  const [queue] = useState(() => writeQueue(setError));
 
   useEffect(() => {
     if (!meetingId) return;
     let cancelled = false;
-    const reader = coalescer(async () => {
-      const next = await load(meetingId);
-      if (cancelled || !next) return;
-      setItems(next);
-      setLoaded(true);
-    });
+    const reader = coalescer(
+      queue.guard(
+        () => load(meetingId),
+        (next) => {
+          if (cancelled) return;
+          setItems(next);
+          setLoaded(true);
+        },
+        () => reader.soon(),
+      ),
+    );
+    queue.onSettled(reader.soon);
     void reader.now();
     const db = createClient();
     // Уникальное имя канала — по той же причине, что в useMeetingVotes.
@@ -94,83 +105,78 @@ export function useMeetingAgenda(meetingId: string) {
     const stopRevive = onRevive(reader.soon);
     return () => {
       cancelled = true;
+      queue.onSettled(() => {});
       reader.stop();
       stopRevive();
       void db.removeChannel(channel);
     };
-  }, [meetingId]);
+  }, [meetingId, queue]);
 
-  // Экран меняется раньше базы, перечитывается — только если запись не прошла.
-  const fail = useCallback(
-    async (message: string) => {
-      setError(message);
-      const fresh = await load(meetingId);
-      if (fresh) setItems(fresh);
-    },
-    [meetingId],
-  );
+  const write = queue.write;
 
   const add = useCallback(
-    async (text: string) => {
+    (text: string) => {
       const clean = text.trim();
-      if (!clean) return;
+      if (!clean) return Promise.resolve();
       setError("");
       const position = items.length ? Math.max(...items.map((i) => i.position)) + 1 : 0;
       const temp: AgendaItem = { id: "tmp-" + Math.random().toString(36).slice(2), text: clean, note: "", position, authorId: "" };
       setItems((list) => [...list, temp]);
-      // Запрос Supabase ленив: он уходит в сеть на КАЖДЫЙ вызов `.then`.
-      // Здесь его ждут двое — временный номер ниже и сама эта функция, — и
-      // пока каждый ждал построитель напрямую, одно нажатие Enter писало
-      // пункт ДВАЖДЫ (две строки через 10 мс; e2e 08.10.2026 нашёл вторую
-      // кнопку «В задачу»). Поэтому построитель превращается в обещание
-      // ровно один раз, и оба ждут уже его.
-      const request = Promise.resolve(
-        createClient()
-          .from("meeting_agenda")
-          .insert({ meeting_id: meetingId, text: clean, position })
-          .select("id, text, note, position, author_id")
-          .maybeSingle(),
-      );
-      realIds.set(
-        temp.id,
-        request.then(
-          ({ data }) => (data as Row | null)?.id ?? null,
-          () => null,
-        ),
-      );
-      const { data, error: err } = await request;
-      if (err || !data) return fail("Пункт не сохранился: " + (err ? describeDbError(err) : "нет ответа"));
-      const r = data as Row;
-      // Итог, записанный, пока пункт ехал, не теряется при подмене номера.
-      setItems((list) =>
-        list.map((i) => (i.id === temp.id ? { id: r.id, text: r.text, note: i.note || r.note || "", position: r.position, authorId: r.author_id } : i)),
-      );
+      // Временный номер ждёт настоящего: итог или «Убрать», нажатые, пока
+      // пункт ехал, встают в ту же очередь и получат его. Построитель
+      // Supabase ждётся здесь ровно один раз — на каждый `.then` он уходит
+      // в сеть заново (08.10.2026 одно нажатие Enter писало пункт дважды).
+      let settle: (id: string | null) => void = () => {};
+      realIds.set(temp.id, new Promise<string | null>((resolve) => (settle = resolve)));
+      return write(async () => {
+        try {
+          const { data, error: err } = await createClient()
+            .from("meeting_agenda")
+            .insert({ meeting_id: meetingId, text: clean, position })
+            .select("id, text, note, position, author_id")
+            .maybeSingle();
+          const r = data as Row | null;
+          settle(r?.id ?? null);
+          if (err || !r) return "Пункт не сохранился: " + (err ? describeDbError(err) : "нет ответа");
+          // Итог, записанный, пока пункт ехал, не теряется при подмене номера.
+          setItems((list) =>
+            list.map((i) => (i.id === temp.id ? { id: r.id, text: r.text, note: i.note || r.note || "", position: r.position, authorId: r.author_id } : i)),
+          );
+          return null;
+        } finally {
+          settle(null);
+        }
+      });
     },
-    [items, meetingId, fail],
+    [items, meetingId, write],
   );
 
   const setNote = useCallback(
-    async (id: string, note: string) => {
+    (id: string, note: string) => {
       setError("");
       setItems((list) => list.map((i) => (i.id === id ? { ...i, note } : i)));
-      const real = await realId(id);
-      if (!real) return fail("Пункт ещё не сохранился — итог не записан");
-      const { error: err } = await createClient().from("meeting_agenda").update({ note: note.trim() }).eq("id", real);
-      if (err) await fail("Итог по пункту не сохранился: " + describeDbError(err));
+      return write(async () => {
+        const real = await realId(id);
+        if (!real) return "Пункт ещё не сохранился — итог не записан";
+        const { error: err } = await createClient().from("meeting_agenda").update({ note: note.trim() }).eq("id", real);
+        return err ? "Итог по пункту не сохранился: " + describeDbError(err) : null;
+      });
     },
-    [fail],
+    [write],
   );
 
   const remove = useCallback(
-    async (id: string) => {
+    (id: string) => {
       setError("");
       setItems((list) => list.filter((i) => i.id !== id));
-      const real = await realId(id);
-      if (!real) return;
-      const { error: err } = await createClient().from("meeting_agenda").delete().eq("id", real);
-      if (err) await fail("Пункт не убрался: " + describeDbError(err));
+      return write(async () => {
+        const real = await realId(id);
+        if (!real) return null;
+        const { error: err } = await createClient().from("meeting_agenda").delete().eq("id", real);
+        return err ? "Пункт не убрался: " + describeDbError(err) : null;
+      });
     },
-    [fail],
+    [write],
   );
 
   return { items, loaded, error, add, setNote, remove };

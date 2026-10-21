@@ -444,14 +444,17 @@ export function useTaskParticipants() {
   // Ответ, который возврат снимает, исчезает с экрана сразу — так же, как
   // ответ исполнителя появляется сразу (answerPatch). Отказ сервера
   // перечитывает участие и тем возвращает экран к правде.
-  const clearAnswers = useCallback((taskId: string, participantId?: string) => {
+  // participantIds — только эти строки (частичный возврат); без них — все
+  // исполнители.
+  const clearAnswers = useCallback((taskId: string, participantIds?: string | string[]) => {
+    const only = participantIds === undefined ? null : Array.isArray(participantIds) ? participantIds : [participantIds];
     setByTask((prev) => {
       const list = prev[taskId];
       if (!list) return prev;
       return {
         ...prev,
         [taskId]: list.map((p) =>
-          (participantId ? p.id === participantId : p.role === "executor")
+          (only ? only.includes(p.id) : p.role === "executor")
             ? { ...p, doneAt: null, doneComment: null, doneFiles: [], declinedAt: null, declineReason: null }
             : p,
         ),
@@ -460,11 +463,11 @@ export function useTaskParticipants() {
   }, []);
 
   const review = useCallback(
-    async (action: "approve" | "return" | "force" | "reopen", taskId: string, comment: string) => {
-      if (action === "return") clearAnswers(taskId);
+    async (action: "approve" | "return" | "force" | "reopen" | "wait", taskId: string, comment: string, participantIds?: string[]) => {
+      if (action === "return") clearAnswers(taskId, participantIds?.length ? participantIds : undefined);
       await postJson(
         "/api/workspace/review",
-        { action, taskId, comment },
+        { action, taskId, comment, ...(participantIds?.length ? { participantIds } : {}) },
         { fallback: "Не получилось", onFail: () => (action === "return" ? void load() : undefined) },
       );
       // Приёмка и принудительное закрытие закрывают задачу на сервере —
@@ -556,7 +559,15 @@ export function useTaskParticipants() {
   );
 
   const approve = useCallback((taskId: string, comment: string) => review("approve", taskId, comment), [review]);
-  const returnForRework = useCallback((taskId: string, comment: string) => review("return", taskId, comment), [review]);
+  // participantIds — кому именно вернуть (строки участия); пусто — всем,
+  // кто ответил.
+  const returnForRework = useCallback(
+    (taskId: string, comment: string, participantIds?: string[]) => review("return", taskId, comment, participantIds),
+    [review],
+  );
+  // «Дождаться всех»: задачу сдали целиком, а постановщик ждёт отчёт от
+  // каждого. Ничьи ответы не снимаются.
+  const waitForAll = useCallback((taskId: string, comment = "") => review("wait", taskId, comment), [review]);
   const forceClose = useCallback((taskId: string, reason: string) => review("force", taskId, reason), [review]);
   // Вернуть одному исполнителю, не дожидаясь остальных (см. return_one в
   // /api/workspace/review).
@@ -605,6 +616,7 @@ export function useTaskParticipants() {
       approve,
       returnForRework,
       returnOne,
+      waitForAll,
       forceClose,
       reopen,
       acceptWork,
@@ -627,6 +639,7 @@ export function useTaskParticipants() {
       approve,
       returnForRework,
       returnOne,
+      waitForAll,
       forceClose,
       reopen,
       acceptWork,

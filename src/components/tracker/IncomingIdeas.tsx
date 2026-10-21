@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { IdeaRecipientRow } from "@/lib/ideaRecipients";
 import { formatIdeaCreatedAt } from "@/lib/trackerRows";
 import Icon from "./Icon";
+import { humanError } from "@/lib/humanError";
 
 // «Прислали вам» — приёмка чужих мыслей в самом трекере.
 //
@@ -71,7 +72,7 @@ export default function IncomingIdeas({
       if (keep) onKeep(row);
     } catch (e) {
       onAnswered(row, "failed");
-      setError({ id: row.id, text: e instanceof Error ? e.message : "Не получилось ответить" });
+      setError({ id: row.id, text: humanError(e, "Не получилось ответить") });
     } finally {
       setBusy(null);
     }

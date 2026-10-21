@@ -1412,6 +1412,11 @@
   .ask-modal .field{margin-bottom:0;}
   /* Готовые ответы над полем — те же пилюли, что в AnswerForm. */
   .ask-quick{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px;}
+  /* Кому вернуть на доработку: подпись в тон меткам полей, кнопки людей ниже. */
+  .ask-pick-label{font-size:var(--label-size); font-weight:var(--label-weight); color:var(--ink-label); margin:0 0 6px;}
+  /* Люди и готовые фразы ниже — оба ряды кнопок; линия не даёт прочитать
+     их одним списком. */
+  .ask-pick{padding-bottom:4px; margin-bottom:12px; border-bottom:1px solid var(--line-soft);}
   .ask-modal textarea{min-height:88px;}
   .ask-problem{
     margin-top:10px; padding:8px 10px; border-radius:var(--radius-sm);

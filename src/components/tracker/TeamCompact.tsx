@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ApprovalState } from "@/types/tracker";
-import { taskProgress, taskStage } from "@/lib/taskProgress";
+import { hasDeclined, taskProgress, taskStage } from "@/lib/taskProgress";
 import type { Participant } from "@/hooks/useTaskParticipants";
 import { useAsk } from "@/components/Ask";
 import { answerWithFiles } from "@/lib/answerFiles";
@@ -34,6 +34,7 @@ export default function TeamCompact({
   approvalComment,
   onApproveWork,
   onReturnWork,
+  onWaitForAll,
   onReopenWork,
   onCloseUnfulfilled,
   onAcceptReschedule,
@@ -47,7 +48,11 @@ export default function TeamCompact({
   approvalState: ApprovalState;
   approvalComment?: string;
   onApproveWork: (comment: string) => void | Promise<void>;
-  onReturnWork: (comment: string) => void | Promise<void>;
+  // participantIds — кому именно вернуть (строки участия). Без них — всем,
+  // кто ответил: так у задачи на одного исполнителя.
+  onReturnWork: (comment: string, participantIds?: string[]) => void | Promise<void>;
+  // «Дождаться всех»: сдали целиком, а отчёт нужен от каждого.
+  onWaitForAll?: () => void | Promise<void>;
   onReopenWork: (comment: string) => void | Promise<void>;
   // Тот же маршрут, что «Принудительное закрытие» в шапке (action force);
   // сервер сам называет такое закрытие «невыполненной», раз отчётов нет.
@@ -97,22 +102,45 @@ export default function TeamCompact({
     }
   }
 
+  // Вернуть можно только ответившим — отчёт или отказ, то, что возврат и
+  // снимает. Кто ещё молчит, тот и так в работе.
+  const answeredExecutors = participants.filter((p) => p.role === "executor" && (p.doneAt || hasDeclined(p)));
+
   async function handleReturn() {
     if (busy) return;
+    // Кому вернуть — выбирает постановщик (21.10.2026, задача №111):
+    // возврат снимал отчёты у всех, и трое, чьей работой он был доволен,
+    // снова видели «Сделал». Один ответивший — выбирать не из чего, и
+    // вопроса «кому» нет вовсе. Несколько — никто не отмечен заранее:
+    // возврат стоит человеку переделанной работы, и решение «кому» должно
+    // быть нажатием, а не согласием с подстановкой.
+    const several = answeredExecutors.length > 1;
     const answer = await ask.askWithFiles({
       title: "Вернуть на доработку",
       question: "Что доделать?",
-      note: "Это увидят исполнители — и это единственное, что объясняет возврат.",
+      note: several
+        ? "Отчёты тех, кого не отметили, останутся принятыми — им ничего переделывать не придётся. Объяснение увидят те, кому возвращаете."
+        : "Это увидят исполнители — и это единственное, что объясняет возврат.",
       multiline: true,
       okText: "Вернуть",
       quick: QUICK_RETURN,
       required: "Возврат без объяснения бессмысленен — напишите, что не так.",
+      pick: several
+        ? {
+            label: "Кому вернуть",
+            options: answeredExecutors.map((p) => ({ value: p.id, label: shown(p.name), hint: p.doneAt ? "сдал" : "не может" })),
+            selected: [],
+            required: "Отметьте, кому вернуть на доработку.",
+          }
+        : undefined,
     });
     if (answer === null || busy) return;
     const comment = answer.text;
+    // Отмечены все ответившие — это обычный возврат, без списка.
+    const ids = several && answer.picked.length < answeredExecutors.length ? answer.picked : undefined;
     setBusy(true);
     try {
-      await answerWithFiles({ kind: "task", id: taskId }, answer.files, "Документы к возврату на доработку", () => onReturnWork(comment.trim()));
+      await answerWithFiles({ kind: "task", id: taskId }, answer.files, "Документы к возврату на доработку", () => onReturnWork(comment.trim(), ids));
     } finally {
       setBusy(false);
     }
@@ -140,6 +168,18 @@ export default function TeamCompact({
     setBusy(true);
     try {
       await answerWithFiles({ kind: "task", id: taskId }, answer.files, "Документы к закрытию невыполненной", () => onCloseUnfulfilled(comment.trim()));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // «Дождаться всех» — без вопроса: решение не требует объяснения, ничьих
+  // ответов не снимает, а тем, кого ждут, сервер говорит сам.
+  async function handleWait() {
+    if (busy || !onWaitForAll) return;
+    setBusy(true);
+    try {
+      await onWaitForAll();
     } finally {
       setBusy(false);
     }
@@ -177,6 +217,9 @@ export default function TeamCompact({
   const closingOwn = selfOnly && progress.doneCount === 1 && progress.declined.length === 0;
   const returned = stage === "returned" && !!approvalComment;
   const nothingHandedIn = progress.total > 0 && progress.doneCount === 0 && progress.declined.length === 0;
+  // На приёмке, а кто-то из исполнителей ещё молчит — значит, задачу сдали
+  // целиком (closeIfEveryoneReported, whole). Только тогда есть кого ждать.
+  const waitable = progress.doneCount > 0 && progress.pendingNames.length > 0;
 
   if (!asks.length && !returned && stage !== "awaiting_review" && stage !== "done") return null;
 
@@ -228,8 +271,11 @@ export default function TeamCompact({
             {/* Кто-то ещё не ответил, а задача на приёмке — значит, её сдали
                 целиком (закрытие «за всех», closeIfEveryoneReported). Писать
                 здесь «все отчитались» было бы неправдой о тех, кто молчит. */}
-            {progress.declined.length === 0 && progress.pendingNames.length > 0
-              ? `Задачу целиком сдал${progress.doneNames.length > 1 ? "и" : ""}: ${progress.doneNames.map(shown).join(", ")}. Принимаете работу?`
+            {/* Сдавший целиком — один из отчитавшихся, а не все они:
+                «целиком сдали: четверо» было неправдой о троих, которые
+                сдавали только свою часть (задача №111). */}
+            {waitable
+              ? `Задачу сдали целиком, хотя ответили не все. Отчитались: ${progress.doneNames.map(shown).join(", ")}. Ещё не ответили: ${progress.pendingNames.map(shown).join(", ")}.`
               : progress.declined.length === 0
               ? "Все исполнители отчитались. Принимаете работу?"
               : progress.doneCount === 0
@@ -245,6 +291,13 @@ export default function TeamCompact({
             <button className="btn btn-small" type="button" disabled={busy} onClick={() => void handleReturn()}>
               {progress.declined.length ? "Вернуть с объяснением" : "Вернуть на доработку"}
             </button>
+            {/* Сдали «за всех», а работа у каждого своя: задача снова ждёт
+                молчащих, ничьи отчёты не снимаются, на приёмку вернётся сама. */}
+            {waitable && onWaitForAll && (
+              <button className="btn btn-small" type="button" id="waitForAllBtn" disabled={busy} onClick={() => void handleWait()}>
+                Дождаться всех
+              </button>
+            )}
             {/* Только когда сдавать нечего: если хоть один отчёт есть, решение
                 — «Принять» (с комментарием о том, кто не смог). */}
             {progress.declined.length > 0 && progress.doneCount === 0 && (

@@ -18,6 +18,7 @@ import PeoplePicker, { type PickedPerson } from "./PeoplePicker";
 import ChipChoice from "./ChipChoice";
 import MiniCalendar from "./MiniCalendar";
 import MicButton from "./MicButton";
+import AddButton from "./AddButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
@@ -123,6 +124,7 @@ export default function TaskModal({
   onRemoveParticipant,
   onApproveWork,
   onReturnWork,
+  onWaitForAll,
   onReturnOne,
   onForceCloseWork,
   onReopenWork,
@@ -160,7 +162,9 @@ export default function TaskModal({
   onSetParticipantRole: (participantId: string, role: TaskParticipantRole) => void;
   onRemoveParticipant: (participantId: string) => void;
   onApproveWork: (comment: string) => void;
-  onReturnWork: (comment: string) => void;
+  // participantIds — кому именно вернуть; без них — всем, кто ответил.
+  onReturnWork: (comment: string, participantIds?: string[]) => void;
+  onWaitForAll?: () => void | Promise<void>;
   onReturnOne?: (participantId: string, comment: string) => void | Promise<void>;
   onForceCloseWork: (reason: string) => void;
   onReopenWork: (comment: string) => void;
@@ -850,6 +854,7 @@ export default function TaskModal({
                   approvalComment={task.approvalComment}
                   onApproveWork={onApproveWork}
                   onReturnWork={onReturnWork}
+                  onWaitForAll={onWaitForAll}
                   onReopenWork={onReopenWork}
                   onCloseUnfulfilled={onForceCloseWork}
                   closed={closed}
@@ -1079,6 +1084,7 @@ export default function TaskModal({
                   // дополнения или редактирования»).
                   focusAtEnd={!task && !!prefill?.fromIdeaId}
                 />
+                <AddButton id="titleAddBtn" title="Создать задачу" disabled={saving || !form.title.trim()} onClick={() => void save()} />
                 <MicButton value={form.title} onChange={(text) => setForm((f) => ({ ...f, title: text }))} title="Надиктовать название" />
               </div>
             </div>
@@ -1091,6 +1097,7 @@ export default function TaskModal({
                 <label>Описание (необязательно)</label>
                 <div className="input-with-mic">
                   <AutoGrowTextarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} minRows={2} maxRows={12} />
+                  <AddButton title="Создать задачу" disabled={saving || !form.title.trim()} onClick={() => void save()} />
                   <MicButton value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} title="Надиктовать описание" />
                 </div>
                 {/* Документы к описанию — техзадание, макет, скриншот

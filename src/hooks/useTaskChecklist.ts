@@ -5,13 +5,16 @@ import { createClient } from "@/lib/supabase/client";
 import { coalescer } from "@/lib/coalesce";
 import { onRevive } from "@/lib/revive";
 import { describeDbError } from "@/lib/syncError";
+import { me } from "@/lib/me";
+import { writeQueue } from "@/lib/writeQueue";
 
 // Чек-лист задачи (миграция 0059) — своя таблица рядом с задачей, как
 // повестка у встречи (useMeetingAgenda): шаги отмечают исполнители, а
 // строку задачи пишет только постановщик через движок синхронизации.
 //
-// Экран меняется раньше базы, перечитывается — только если запись не
-// прошла (правило «Кнопка меняет экран, а потом базу» в CLAUDE.md).
+// Экран меняется раньше базы (правило «Кнопка меняет экран, а потом базу»
+// в CLAUDE.md); база догоняет очередью, и пока та не опустела, прочитанное
+// с сервера экран не перекрывает.
 
 export type ChecklistItem = { id: string; text: string; done: boolean; position: number; authorId: string };
 
@@ -41,15 +44,25 @@ export function useTaskChecklist(taskId: string) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
 
+  // Записи — одной очередью, а перечитанное не перекрывает летящее
+  // (lib/writeQueue: «нажал, а галка сама отжалась обратно», 21.10.2026).
+  const [queue] = useState(() => writeQueue(setError));
+
   useEffect(() => {
     if (!taskId) return;
     let cancelled = false;
-    const reader = coalescer(async () => {
-      const next = await load(taskId);
-      if (cancelled || !next) return;
-      setItems(next);
-      setLoaded(true);
-    });
+    const reader = coalescer(
+      queue.guard(
+        () => load(taskId),
+        (next) => {
+          if (cancelled) return;
+          setItems(next);
+          setLoaded(true);
+        },
+        () => reader.soon(),
+      ),
+    );
+    queue.onSettled(reader.soon);
     void reader.now();
     const db = createClient();
     const channel = db
@@ -61,75 +74,75 @@ export function useTaskChecklist(taskId: string) {
     const stopRevive = onRevive(reader.soon);
     return () => {
       cancelled = true;
+      queue.onSettled(() => {});
       reader.stop();
       stopRevive();
       void db.removeChannel(channel);
     };
-  }, [taskId]);
+  }, [taskId, queue]);
 
-  const fail = useCallback(
-    async (message: string) => {
-      setError(message);
-      const fresh = await load(taskId);
-      if (fresh) setItems(fresh);
-    },
-    [taskId],
-  );
+  const write = queue.write;
 
   const add = useCallback(
-    async (text: string) => {
+    (text: string) => {
       const clean = text.trim();
-      if (!clean) return;
+      if (!clean) return Promise.resolve();
       setError("");
       const position = items.length ? Math.max(...items.map((i) => i.position)) + 1 : 0;
       const temp: ChecklistItem = { id: "tmp-" + Math.random().toString(36).slice(2), text: clean, done: false, position, authorId: "" };
       setItems((list) => [...list, temp]);
-      // Построитель Supabase ленив и уходит в сеть на каждый `.then` — ждут
-      // его двое, поэтому он один раз превращается в обещание (CLAUDE.md).
-      const request = Promise.resolve(
-        createClient().from("task_checklist").insert({ task_id: taskId, text: clean, position }).select("id, text, done, position, author_id").maybeSingle(),
-      );
-      realIds.set(
-        temp.id,
-        request.then(
-          ({ data }) => (data as Row | null)?.id ?? null,
-          () => null,
-        ),
-      );
-      const { data, error: err } = await request;
-      if (err || !data) return fail("Шаг не сохранился: " + (err ? describeDbError(err) : "нет ответа"));
-      const r = data as Row;
-      setItems((list) => list.map((i) => (i.id === temp.id ? { ...i, id: r.id, authorId: r.author_id } : i)));
+      let settle: (id: string | null) => void = () => {};
+      realIds.set(temp.id, new Promise<string | null>((resolve) => (settle = resolve)));
+      return write(async () => {
+        try {
+          const { data, error: err } = await createClient()
+            .from("task_checklist")
+            .insert({ task_id: taskId, text: clean, position })
+            .select("id, text, done, position, author_id")
+            .maybeSingle();
+          const r = data as Row | null;
+          settle(r?.id ?? null);
+          if (err || !r) return "Шаг не сохранился: " + (err ? describeDbError(err) : "нет ответа");
+          setItems((list) => list.map((i) => (i.id === temp.id ? { ...i, id: r.id, authorId: r.author_id } : i)));
+          return null;
+        } finally {
+          settle(null);
+        }
+      });
     },
-    [items, taskId, fail],
+    [items, taskId, write],
   );
 
   const toggle = useCallback(
-    async (id: string, done: boolean) => {
+    (id: string, done: boolean) => {
       setError("");
       setItems((list) => list.map((i) => (i.id === id ? { ...i, done } : i)));
-      const real = await realId(id);
-      if (!real) return fail("Шаг ещё не сохранился — отметка не записана");
-      const { data: me } = await createClient().auth.getSession();
-      const { error: err } = await createClient()
-        .from("task_checklist")
-        .update({ done, done_at: done ? new Date().toISOString() : null, done_by: done ? me.session?.user.id ?? null : null })
-        .eq("id", real);
-      if (err) await fail("Отметка не сохранилась: " + describeDbError(err));
+      return write(async () => {
+        const real = await realId(id);
+        if (!real) return "Шаг ещё не сохранился — отметка не записана";
+        const { userId } = await me();
+        const { error: err } = await createClient()
+          .from("task_checklist")
+          .update({ done, done_at: done ? new Date().toISOString() : null, done_by: done ? userId || null : null })
+          .eq("id", real);
+        return err ? "Отметка не сохранилась: " + describeDbError(err) : null;
+      });
     },
-    [fail],
+    [write],
   );
 
   const remove = useCallback(
-    async (id: string) => {
+    (id: string) => {
       setError("");
       setItems((list) => list.filter((i) => i.id !== id));
-      const real = await realId(id);
-      if (!real) return;
-      const { error: err } = await createClient().from("task_checklist").delete().eq("id", real);
-      if (err) await fail("Шаг не убрался: " + describeDbError(err));
+      return write(async () => {
+        const real = await realId(id);
+        if (!real) return null;
+        const { error: err } = await createClient().from("task_checklist").delete().eq("id", real);
+        return err ? "Шаг не убрался: " + describeDbError(err) : null;
+      });
     },
-    [fail],
+    [write],
   );
 
   return { items, loaded, error, add, toggle, remove };
@@ -151,7 +164,10 @@ export function useChecklistCounts(): Record<string, { done: number; total: numb
         c.total++;
         if (r.done) c.done++;
       }
-      setCounts(next);
+      // Доска перерисовывается целиком на каждый новый объект, а событие
+      // подписки приходит на любую галочку любой задачи, — одинаковое не
+      // кладём (та же мера, что `sameLists` у движка синхронизации).
+      setCounts((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     });
     void reader.now();
     const db = createClient();

@@ -99,3 +99,26 @@ test("окно закрывается плавно, а не исчезает о�
   expect(seen.visibleToSelectors).toBe(false);
   expect(seen.after).toBe(false);
 });
+
+// Влезшее название не нажимается вовсе (21.10.2026: «когда название влазит
+// в стандартную рамку, оно было не кликабельно… двигаются разделы, на
+// миллиметры»). Развёрнутая рамка на долю пикселя выше свёрнутой, и
+// нажатие по короткому названию сдвигало описание и обсуждение под шапкой.
+test("короткое название в шапке не раскрывается и ничего не двигает", async ({ page }) => {
+  const stamp = Date.now();
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", "Коротко " + stamp);
+  await pickAnyExecutor(page);
+  await page.click("#saveTaskBtn");
+  const card = page.locator(".task", { hasText: String(stamp) });
+  await expect(card).toHaveCount(1);
+  await card.locator(".task-title").click();
+  const title = page.locator(".modal .item-head.one-line .item-head-title");
+  await expect(title).toHaveAttribute("data-overflow", "0");
+  expect(await title.evaluate((el) => getComputedStyle(el).cursor)).toBe("default");
+
+  const r = await clickAndSample(page);
+  expect(r.after.open).toBe(false);
+  expect(Math.abs(r.after.h - r.before.h)).toBeLessThan(0.5);
+});
