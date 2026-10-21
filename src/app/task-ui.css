@@ -760,3 +760,41 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 /* Выключено всё — колокольчик сам говорит об этом: перечёркнут и тёплым
    цветом, раз плашки, которая говорила вслух, больше нет. */
 #notifPermBtn.bell-off-all{color:var(--med); border-color:rgba(224,184,77,.45);}
+
+/* ---------- Кнопки окна задачи и встречи — одного формата ----------
+   21.10.2026, его слова: «все кнопки были по единому формату, как ты
+   сделал кнопки в созданной задаче „Отложить“ и „+“». Образец —
+   .snooze-btn: ЗАЛИТАЯ, со скруглением кнопки, внутренним бликом сверху и
+   тенью, при нажатии проседает на пиксель. Правило то же, что записано у
+   .snooze-btn: статус — контур, действие — заливка; пилюля с рамкой
+   («Добавить» у описания) и кнопка-контур («Принудительное закрытие»)
+   читались статусом, а не действием. Высоту каждая кнопка сохраняет свою:
+   в шапке 38px — под номер и ×, в строке срока 32px. */
+.item-head-btn, .desc-edit, .modal .input-with-mic .field-mic-btn, .btn-primary{
+  color:#fff; background:var(--accent); border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18);
+  transition:background .12s ease, transform .08s ease, box-shadow .12s ease;
+}
+.item-head-btn:hover, .desc-edit:hover, .modal .input-with-mic .field-mic-btn:hover, .btn-primary:hover{
+  color:#fff; background:#4A9BBB; border-color:rgba(255,255,255,.14); opacity:1;
+  box-shadow:0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18);
+}
+.item-head-btn:active, .desc-edit:active, .modal .input-with-mic .field-mic-btn:active, .btn-primary:active{
+  transform:translateY(1px); box-shadow:0 1px 3px rgba(0,0,0,.35);
+}
+.item-head-btn:disabled:hover, .btn-primary:disabled:hover{background:var(--accent); transform:none;}
+.desc-edit{
+  height:32px; padding:0 13px; border-radius:var(--radius-sm); gap:6px;
+  font-size:12.5px;
+}
+/* «Принудительное закрытие» — та же кнопка, только мягко-зелёная: решение,
+   которое закрывает работу, отличается цветом от «Повторить» и прочих. */
+.item-head-btn.force-close{color:#E6F4EB; background:#3A7A55;}
+.item-head-btn.force-close:hover{color:#fff; background:#428A60;}
+.item-head-btn.force-close:disabled:hover{background:#3A7A55;}
+/* Микрофон в окне — квадратом, как «+». Запись — та же кнопка, залитая
+   красным: что идёт запись, говорит цвет, а не другая форма. */
+.modal .input-with-mic .field-mic-btn.listening, .modal .input-with-mic .field-mic-btn.listening:hover{
+  color:#fff; background:#B4513F; border-color:rgba(255,255,255,.14);
+}
+.modal .input-with-mic .field-mic-btn:disabled{opacity:.6; cursor:default;}
