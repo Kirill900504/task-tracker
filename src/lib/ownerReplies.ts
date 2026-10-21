@@ -10,7 +10,7 @@ import { applyReview } from "@/lib/reviewWork";
 import { startNewTask, whenButtons, whoButtons } from "@/lib/ownerNewTask";
 import { closeMeeting, closedMeetingText, recordRecapButtons } from "@/lib/meetingRecap";
 import { recordEvent } from "@/lib/itemHistory";
-import { actorName } from "@/lib/actorName";
+import { actorName, withoutSelfMark } from "@/lib/actorName";
 import { actorScope, authorFilter, type BotActor } from "@/lib/botActor";
 import { latecomerText } from "@/lib/meetingNudges";
 import { sendToPerson } from "@/lib/reach";
@@ -59,7 +59,8 @@ export type OwnerOutcome = {
   // станет ими. Хранится это там же, где все незакрытые вопросы бота, —
   // в pending_action его строки (миграция 0033 сделала то же самое для
   // руководителя).
-  askReturn?: { taskId: string; title: string };
+  // participantIds — вернуть только им (строки участия), а не всем.
+  askReturn?: { taskId: string; title: string; participantIds?: string[] };
   // Шаг мастера «Поручить», который надо запомнить до следующего нажатия
   // или сообщения.
   setPending?: Record<string, unknown>;
@@ -138,6 +139,23 @@ async function loadTask(admin: SupabaseClient, actor: BotActor, taskId: string):
   return (data as TaskRow | null) || null;
 }
 
+// Исполнители, чей ответ (отчёт или отказ) можно вернуть, — с id строк
+// участия: по ним возвращают одному.
+async function answeredExecutors(admin: SupabaseClient, taskId: string): Promise<{ id: string; name: string; declined: boolean }[]> {
+  const { data } = await admin
+    .from("task_participants")
+    .select("id, done_at, declined_at, assignees(name)")
+    .eq("task_id", taskId)
+    .eq("role", "executor")
+    .or("done_at.not.is.null,declined_at.not.is.null");
+  type Row = { id: string; done_at: string | null; declined_at: string | null; assignees: { name: string } | { name: string }[] | null };
+  return ((data || []) as Row[]).map((r) => ({
+    id: r.id,
+    name: withoutSelfMark((Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || ""),
+    declined: !r.done_at,
+  }));
+}
+
 async function participantsOf(admin: SupabaseClient, taskId: string): Promise<TaskParticipant[]> {
   const { data } = await admin
     .from("task_participants")
@@ -196,7 +214,12 @@ export async function ownerTaskCard(admin: SupabaseClient, actor: BotActor, task
       task.approval_state,
       people.map((p) => ({ role: p.role, done_at: p.doneAt, declined_at: p.declinedAt })),
     ) === "awaiting_review";
-  if (waiting) lines.push("", "Отчитались все — задача ждёт вашего решения.");
+  // На приёмке, а кто-то молчит — задачу сдали целиком (21.10.2026, №111).
+  // «Отчитались все» здесь было бы неправдой о молчащих.
+  const silent = people.filter((p) => p.role === "executor" && !p.doneAt && !p.declinedAt);
+  const handedWhole = waiting && silent.length > 0 && reported.length > 0;
+  if (handedWhole) lines.push("", `Задачу сдали целиком, хотя ответили не все. Ещё не ответили: ${silent.map((p) => p.name).join(", ")}.`);
+  else if (waiting) lines.push("", "Отчитались все — задача ждёт вашего решения.");
 
   // Закрытая задача отвечает на другой вопрос, и кнопки у неё другие.
   // «Продлить срок» и «Напомнить» под принятой работой предлагают
@@ -211,6 +234,7 @@ export async function ownerTaskCard(admin: SupabaseClient, actor: BotActor, task
       { text: "✅ Принять работу", data: encodeCallback("task", "ok", taskId) },
       { text: "↩ Вернуть", data: encodeCallback("task", "back", taskId) },
     ]);
+    if (handedWhole) buttons.push([{ text: "⏳ Дождаться всех", data: encodeCallback("task", "wait", taskId) }]);
   }
   if (closed) {
     buttons.push([{ text: "🔄 Открыть заново", data: encodeCallback("task", "reop", taskId) }]);
@@ -519,7 +543,67 @@ export async function handleOwnerCallback(
     };
   }
 
+  // Вернуть — КОМУ (21.10.2026, задача №111): возврат снимал отчёты у
+  // всех, и те, чьей работой постановщик доволен, снова видели «Сделал».
+  // Ответивших несколько — сперва экран «кому»: всем или одному. Выбор
+  // нескольких сразу живёт в трекере; в 64 байта кнопки он не помещается,
+  // а одного за другим вернуть можно и здесь.
   if (action.action === "back" && action.kind === "task") {
+    const task = await loadTask(admin, actor, action.id);
+    if (!task) return { toast: "Эта задача не найдена" };
+    const answered = await answeredExecutors(admin, task.id);
+    if (answered.length > 1) {
+      return {
+        toast: "Кому вернуть?",
+        // say, а не rewriteTo: «Вернуть» нажимают и под карточкой, и под
+        // сводкой, а сводку переписывать нельзя (asScreen сам превратит
+        // это в переписывание, если нажали внутри экрана).
+        say: `↩ ${taskRef(task)}\n\nКому вернуть на доработку? Отчёты остальных останутся принятыми.`,
+        sayButtons: [
+          ...answered.map((p) => [{ text: `↩ ${p.name}${p.declined ? " (не может)" : ""}`, data: encodeCallback("task", "bk1", p.id) }]),
+          [{ text: "↩ Всем ответившим", data: encodeCallback("task", "bkall", task.id) }],
+          [{ text: "← Назад", data: encodeCallback("task", "oshow", task.id) }],
+        ],
+      };
+    }
+  }
+  // Вернуть одному: id кнопки — строка участия, задача ищется через неё и
+  // проверяется тем же loadTask (свою — да, чужую — «не найдена»).
+  if (action.action === "bk1" && action.kind === "task") {
+    const { data: partRow } = await admin
+      .from("task_participants")
+      .select("id, task_id, role, done_at, declined_at, assignees(name)")
+      .eq("id", action.id)
+      .maybeSingle();
+    const part = partRow as { id: string; task_id: string; role: string; done_at: string | null; declined_at: string | null; assignees: { name: string } | { name: string }[] | null } | null;
+    const task = part ? await loadTask(admin, actor, part.task_id) : null;
+    if (!part || !task || part.role !== "executor") return { toast: "Эта задача не найдена" };
+    if (!part.done_at && !part.declined_at) return { toast: "Уже на доработке — ждём нового отчёта" };
+    const name = withoutSelfMark((Array.isArray(part.assignees) ? part.assignees[0]?.name : part.assignees?.name) || "");
+    return {
+      toast: "Что доделать?",
+      askReturn: { taskId: task.id, title: task.title, participantIds: [part.id] },
+      say: `↩ ${taskRef(task)} — ${name}\n\nНапишите следующим сообщением, что именно доделать, — отправлю только этому человеку. Отчёты остальных останутся.`,
+    };
+  }
+
+  // «Дождаться всех»: задачу сдали целиком, а отчёт нужен от каждого.
+  if (action.action === "wait" && action.kind === "task") {
+    const task = await loadTask(admin, actor, action.id);
+    if (!task) return { toast: "Эта задача не найдена" };
+    const done = await applyReview(admin, { id: task.id, title: task.title, user_id: actor.spaceId, status: task.status }, "wait", "", {
+      label: await actorName(admin, actor.spaceId, actor.userId),
+      userId: actor.userId,
+    });
+    if (!done.ok) return { toast: done.error };
+    return {
+      toast: "Ждём всех",
+      say: `⏳ ${taskRef(task)} снова в работе: ждём отчёта от каждого исполнителя. Тем, кто ещё не ответил, сказано, сданные отчёты остались.`,
+      sayButtons: [[{ text: "📋 Открыть задачу", data: encodeCallback("task", "oshow", task.id) }], ...ownerNav()],
+    };
+  }
+
+  if ((action.action === "back" || action.action === "bkall") && action.kind === "task") {
     const task = await loadTask(admin, actor, action.id);
     if (!task) return { toast: "Эта задача не найдена" };
     return {
