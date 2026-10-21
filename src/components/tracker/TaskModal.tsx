@@ -44,6 +44,8 @@ import TaskWaitsFor, { type WaitOption } from "./TaskWaitsFor";
 import { useWorkspaceRole } from "@/hooks/useWorkspaceRole";
 import AttachFiles from "./AttachFiles";
 import { QUICK_FORCE_CLOSE } from "@/lib/quickAnswers";
+import ArchivedMark from "./ArchivedMark";
+import { useArchivedPeople } from "@/hooks/useArchivedPeople";
 
 // Короткая подпись — для кнопки, полная — для подсказки под курсором: семь
 // «Понедельник…Воскресенье» подряд не помещаются никуда, а «Пн Вт Ср» читают
@@ -205,6 +207,9 @@ export default function TaskModal({
   const ask = useAsk();
   // Кто из логинов какой человек — по этому имени подписан постановщик.
   const authors = useAuthors();
+  // Убранные из команды: постановщик с пометкой «удалён», тегнуть его в
+  // обсуждении нельзя (участники — через PersonBadge, там пометка своя).
+  const isArchived = useArchivedPeople();
   // Открыли карточку — обсуждение внутри неё прочитано: значок
   // «непрочитано» на кубике доски снимается с этой задачи на этом
   // устройстве (см. useUnreadTaskComments).
@@ -907,7 +912,15 @@ export default function TaskModal({
                 badge={stage && !selfTask && <span className={"tp-stage tp-stage-" + stage}>{STAGE_LABEL[stage]}</span>}
                 rows={[
                   {
-                    left: { label: "Постановщик", value: authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name)) },
+                    left: {
+                      label: "Постановщик",
+                      value: (
+                        <>
+                          {authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name))}
+                          {isArchived(authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name))) && <ArchivedMark />}
+                        </>
+                      ),
+                    },
                     right: { label: "Дата постановки", value: whenCreated(task.createdAt || "") || "—", muted: !task.createdAt },
                   },
                   {
@@ -1042,10 +1055,11 @@ export default function TaskModal({
                 kind="task"
                 itemId={task.id}
                 readOnly={closed}
-                mentionCandidates={mentionPeople([
-                  authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name)),
-                  ...participants.map((p) => p.name),
-                ])}
+                mentionCandidates={mentionPeople(
+                  [authorLabel(task.createdBy, authors, availablePeople.map((p) => p.name)), ...participants.map((p) => p.name)].filter(
+                    (n) => !isArchived(n),
+                  ),
+                )}
               />
             </div>
           </div>

@@ -1161,6 +1161,12 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
             const name = (payload.new as { name: string }).name;
             if (!liveRef.current.assignees.includes(name)) liveRef.current.assignees = [...liveRef.current.assignees, name];
             if (!shadowRef.current.assignees.includes(name)) shadowRef.current.assignees = [...shadowRef.current.assignees, name];
+            // Переименование приходит UPDATE'ом, а прежнего имени в событии
+            // нет (у подписки только ключ строки). Новое имя добавлено выше,
+            // старое снимет догон — он сверяет список с базой целиком. Без
+            // этого в выборе людей до минуты стояли оба имени одного
+            // человека.
+            if (payload.eventType === "UPDATE") catchUpRef.current();
           }
           setAssignees(liveRef.current.assignees);
         })

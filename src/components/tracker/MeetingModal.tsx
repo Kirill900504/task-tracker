@@ -41,6 +41,8 @@ import { isCurrent, voteTally, withOrganizer } from "@/lib/meetingVotes";
 import { awaitsRecap } from "@/lib/calendarLogic";
 import { markTaskCommentsRead } from "@/hooks/useUnreadTaskComments";
 import ItemModalHead from "./ItemModalHead";
+import ArchivedMark from "./ArchivedMark";
+import { useArchivedPeople } from "@/hooks/useArchivedPeople";
 import MeetingPoll from "./MeetingPoll";
 
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
@@ -182,6 +184,10 @@ export default function MeetingModal({
   // «Назначил». У владельца created_by пуст, и это значит «он сам» — см.
   // lib/authorName.
   const authors = useAuthors();
+  // Убранные из команды: в составе прошедшей встречи они остаются с
+  // пометкой «удалён», а новую встречу («Повторить») на них не заводят —
+  // в выборе людей их нет, и снять их оттуда было бы нечем.
+  const isArchived = useArchivedPeople();
   const ask = useAsk();
   // Открыли встречу — её обсуждение прочитано на этом устройстве (значок на
   // карточке гаснет, см. useUnreadTaskComments).
@@ -393,7 +399,7 @@ export default function MeetingModal({
       // повторять» — она пишет сама, мимо формы.
       recur: isEditing ? meeting.recur ?? "none" : recur,
       title: isEditing ? meeting.title : trimmedTitle,
-      participants: isEditing ? meeting.participants : sanitizeAssigneeList(participants),
+      participants: isEditing ? meeting.participants : sanitizeAssigneeList(participants).filter((n) => !isArchived(n)),
       // Новая встреча — назначенная, всегда (см. комментарий про «Как
       // собираем» выше). У сохранённой статус остаётся её собственный.
       // Опрос — предложение с вариантами: время ничьё не занимает, пока не
@@ -684,7 +690,15 @@ export default function MeetingModal({
                 id="meetingFacts"
                 rows={[
                   {
-                    left: { label: "Назначил", value: organizer },
+                    left: {
+                      label: "Назначил",
+                      value: (
+                        <>
+                          {organizer}
+                          {isArchived(organizer) && <ArchivedMark />}
+                        </>
+                      ),
+                    },
                     right: { label: "Дата создания", value: createdLabel || "—", muted: !createdLabel },
                   },
                   {
@@ -732,6 +746,7 @@ export default function MeetingModal({
                               <span className={"fact-person vote-" + vote.state} key={name} title={vote.title}>
                                 <span className="fact-person-mark">{vote.mark}</span>
                                 {withoutSelfMark(name)}
+                                {isArchived(name) && <ArchivedMark />}
                               </span>
                             );
                           })}
@@ -781,7 +796,7 @@ export default function MeetingModal({
               <ItemChat
                 kind="meeting"
                 itemId={meeting.id}
-                mentionCandidates={mentionPeople([organizer, ...participants])}
+                mentionCandidates={mentionPeople([organizer, ...participants].filter((n) => !isArchived(n)))}
                 onAcceptProposal={canEdit && !resolved ? onAcceptProposal : undefined}
                 // Встреча с исходом — только просмотр, и обсуждение тоже
                 // (14.10.2026, как у закрытой задачи). Назад её возвращает
