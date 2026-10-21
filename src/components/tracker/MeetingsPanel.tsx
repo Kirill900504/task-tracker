@@ -31,6 +31,7 @@ import { busyPeople } from "@/lib/meetingTime";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useDropHandler } from "./dnd/TrackerDnd";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useMinuteClock } from "@/hooks/useMinuteClock";
 import type { RecapItem, RecapTask } from "./MeetingTasksSheet";
 import { loadAgenda, saveAgendaDraft, type AgendaItem } from "@/hooks/useMeetingAgenda";
 
@@ -280,6 +281,9 @@ export default function MeetingsPanel({
   // отдельном окне по иконке с галочкой: подмешанные сюда, они превращали
   // список встреч в архив, в котором ближайшая теряется.
   const all = sortMeetingsForList(meetings, false);
+  // Время встречи выходит само, без единого изменения в данных — поэтому
+  // группа «Нужен итог» пересчитывается по часам (см. useMinuteClock).
+  const now = useMinuteClock();
   // Прошедшие без итога — наверх и отдельно. Это единственные встречи в
   // списке, которые чего-то ждут ОТ ВАС: остальные просто впереди.
   //
@@ -288,7 +292,7 @@ export default function MeetingsPanel({
   // висела жёлтым «нужен итог» без единой кнопки — требование, которое он
   // выполнить не может (QA-проход 06.10.2026). Для него она остаётся в
   // общем списке, а итога ждут от организатора.
-  const needRecap = all.filter((m) => awaitsRecap(m) && isMine(m, myUserId));
+  const needRecap = all.filter((m) => awaitsRecap(m, now) && isMine(m, myUserId));
   // Новые реплики в обсуждении каждой встречи списка — значком на карточке.
   const unread = useUnreadTaskComments(all.map((m) => m.id), "meeting");
   const sorted = all.filter((m) => !needRecap.includes(m));

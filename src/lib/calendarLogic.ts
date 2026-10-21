@@ -4,6 +4,7 @@
 // unit-testable without touching the DOM.
 import type { Meeting } from "@/types/tracker";
 import { dateStr } from "./taskDisplay";
+import { normalizeDuration } from "./meetingTime";
 
 export function addDaysIso(iso: string, n: number): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -71,8 +72,13 @@ export function sortMeetingsForList(meetings: Meeting[], showResolved: boolean):
 // вопросом: бот спрашивает организатора через два часа (см. recapDue), а
 // в трекере такая встреча отделяется от будущих и просит итог.
 //
-// Час после начала, а не минута в минуту: встреча, начавшаяся в 15:00,
-// в 15:05 ещё идёт, и просить у неё итог значит мешать.
+// С КОНЦА встречи, а не через час после начала (21.10.2026). Час брался
+// «на всякий случай» — встреча в 15:00 в 15:05 ещё идёт, и просить итог
+// значит мешать. Но конец встречи известен точно: начало плюс её полчаса
+// или час (`durationMin`). С запасом в час получасовая встреча в 9:00
+// просила итог только в 10:00, и Кирилл увидел это на встрече «тест
+// просрочка»: «по истечении времени должен срабатывать триггер». Время
+// вышло — итог нужен; кроны «время вышло» считают по тому же концу.
 //
 // Закрывает встречу ИСХОД, а не текст в поле итога (16.10.2026). Поле
 // пишется само при выходе из него, и встреча с набранным итогом, но без
@@ -80,7 +86,11 @@ export function sortMeetingsForList(meetings: Meeting[], showResolved: boolean):
 // вопрос снят» прятало её: ни плашки, ни группы «Нужен итог», ни вопроса
 // бота. Кирилл увидел это на тестовой встрече, просроченной на сутки и
 // ничем не помеченной.
-export const RECAP_GRACE_MINUTES = 60;
+// Сколько минут от начала до момента, когда встреча просит итог. У встречи
+// без времени («весь день») конец — конец дня, и длительность ни при чём.
+export function recapAfterMinutes(meeting: { time?: string | null; durationMin?: unknown }): number {
+  return meeting.time ? normalizeDuration(meeting.durationMin) : 0;
+}
 
 export function awaitsRecap(meeting: Meeting, now: Date = new Date()): boolean {
   if (meeting.status && meeting.status !== "planned") return false;
@@ -89,5 +99,5 @@ export function awaitsRecap(meeting: Meeting, now: Date = new Date()): boolean {
   const start = new Date(meeting.date + "T00:00:00");
   if (Number.isNaN(start.getTime())) return false;
   start.setHours(Number.isNaN(hh) ? 23 : hh, Number.isNaN(mm) ? 59 : mm, 0, 0);
-  return now.getTime() - start.getTime() >= RECAP_GRACE_MINUTES * 60_000;
+  return now.getTime() - start.getTime() >= recapAfterMinutes(meeting) * 60_000;
 }

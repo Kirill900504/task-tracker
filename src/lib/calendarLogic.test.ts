@@ -95,8 +95,21 @@ describe("awaitsRecap", () => {
     resolvedAt: "",
   };
 
-  it("через час после начала встреча просит итог", () => {
-    expect(awaitsRecap(base, new Date("2026-09-21T11:30:00"))).toBe(true);
+  it("получасовая просит итог ровно в минуту окончания", () => {
+    expect(awaitsRecap(base, new Date("2026-09-21T10:30:00"))).toBe(true);
+    expect(awaitsRecap(base, new Date("2026-09-21T10:29:00"))).toBe(false);
+  });
+
+  it("часовая — через час: конец считается по её длительности", () => {
+    const hour = { ...base, durationMin: 60 };
+    expect(awaitsRecap(hour, new Date("2026-09-21T10:45:00"))).toBe(false);
+    expect(awaitsRecap(hour, new Date("2026-09-21T11:00:00"))).toBe(true);
+  });
+
+  it("встреча без длительности считается получасовой", () => {
+    const { durationMin: _unused, ...plain } = base;
+    void _unused;
+    expect(awaitsRecap(plain, new Date("2026-09-21T10:30:00"))).toBe(true);
   });
 
   it("пока она идёт — не просит", () => {
