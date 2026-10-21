@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { SERVER_UNREACHABLE_EVENT } from "@/lib/postJson";
+import { useEffect } from "react";
+import { SERVER_UNREACHABLE_EVENT, setServerUnreachable } from "@/lib/outbox";
 
 // Открытое окно узнаёт о новой версии и перезагружается само.
 //
@@ -28,11 +28,17 @@ import { SERVER_UNREACHABLE_EVENT } from "@/lib/postJson";
 // Снаружи это выглядит как работающий трекер, у которого «зависают»
 // кнопки: читать можно, писать в чат можно, а ответы, приёмка и
 // обновления не уходят. Сказать об этом может только само окно, поэтому
-// после двух неудач подряд при живой сети встаёт плашка с тем, что
-// делать. Её снимает первый же удачный ответ.
+// после двух неудач подряд при живой сети это становится известно
+// очереди ответов (lib/outbox), а она показывает значок в шапке рядом с
+// числом ждущих ответов (ConnectionStatus). Снимает его первый же
+// удачный ответ — и он же отправляет накопленное.
+//
+// Красной плашки поверх трекера больше нет (21.10.2026): с очередью
+// ответы без связи не теряются, а уходят сами, и пугать человека нечем —
+// по тому же правилу «нет связи» с 24.09.2026 живёт значком.
 const BUILT = process.env.NEXT_PUBLIC_RELEASE || "";
 const EVERY_MS = 5 * 60_000;
-// Пока плашка стоит, проверяем чаще: человек переключил сеть — и через
+// Пока значок стоит, проверяем чаще: человек переключил сеть — и через
 // полминуты должен увидеть, что помогло.
 const RETRY_MS = 30_000;
 
@@ -43,8 +49,6 @@ function busy(): boolean {
 }
 
 export default function VersionWatch() {
-  const [unreachable, setUnreachable] = useState(false);
-
   useEffect(() => {
     const local = !BUILT || BUILT === "локальная сборка";
     let stale = false;
@@ -59,12 +63,12 @@ export default function VersionWatch() {
           const res = await fetch("/api/version", { cache: "no-store" });
           const body = (await res.json()) as { release?: string };
           misses = 0;
-          setUnreachable(false);
+          setServerUnreachable(false);
           // Локальная сборка номера не имеет — сравнивать не с чем.
           stale = !local && !!body.release && body.release !== BUILT;
         } catch {
           misses += 1;
-          if (misses >= 2) setUnreachable(true);
+          if (misses >= 2) setServerUnreachable(true);
           if (retry) clearTimeout(retry);
           retry = setTimeout(() => void check(), RETRY_MS);
           return;
@@ -77,7 +81,7 @@ export default function VersionWatch() {
       if (document.visibilityState === "visible") void check();
     };
     // Кнопка не дошла до сервера — проверяем сразу, а не через пять минут:
-    // плашка должна встать рядом с отказом, пока человек на него смотрит.
+    // значок должен встать рядом с отказом, пока человек на него смотрит.
     const onUnreachable = () => {
       misses = Math.max(misses, 1);
       void check();
@@ -99,12 +103,5 @@ export default function VersionWatch() {
     };
   }, []);
 
-  if (!unreachable) return null;
-  return (
-    <div className="server-unreachable" role="alert" id="serverUnreachable">
-      <b>Трекер не достаёт до своего сервера из этой сети.</b> Задачи видны, но ответы, приёмка и обновления
-      трекера сейчас не уходят. Переключитесь на другой интернет — мобильный или другой Wi‑Fi; плашка исчезнет
-      сама, когда связь появится.
-    </div>
-  );
+  return null;
 }

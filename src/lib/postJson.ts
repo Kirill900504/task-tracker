@@ -2,47 +2,33 @@
 //
 // Every answer button in the tracker changes the screen BEFORE the route
 // answers (lib/answerPatch, «кнопка меняет экран, а потом базу»), and
-// every caller rolls the screen back when the route refuses. What none of
-// them rolled back was the request that never arrived: `fetch` throws
-// «Failed to fetch» instead of returning a response, the throw skipped the
-// line that re-reads the truth, and the screen kept the optimistic «Сделал»
-// for good. 21.10.2026 Евгений Макаров wrote «закрыл задачу… думал она
-// закрылась» about #113 — twice, a week apart, and there is not a single
-// report of his in the database. Станислав Синецкий did the same on #111
-// on Monday, and learned it from the overdue reminder.
+// every caller rolls the screen back when the route refuses. 21.10.2026
+// Евгений Макаров wrote «закрыл задачу… думал она закрылась» about #113 —
+// twice, a week apart, and there was not a single report of his in the
+// database: `fetch` threw «Failed to fetch», and the throw skipped the line
+// that re-reads the truth, so the optimistic «Сделал» stayed for good.
 //
-// So the rule lives here: the caller passes `onFail`, and it runs on ANY
-// failure — refusal and lost connection alike — before the error goes up.
-// The error itself is Russian and says outright that nothing was sent.
-import { NETWORK_TEXT } from "./humanError";
+// The first fix rolled the screen back on a lost connection too. The same
+// day Кирилл asked for the opposite and the better thing: «трекер работал и
+// накапливал изменения в режиме без интернета». So a request that never
+// ARRIVED is not a refusal any more — it goes to the outbox (lib/outbox),
+// stays on screen and leaves by itself when the network is back; null is
+// returned instead of the route's answer. `onFail` runs only on a real
+// refusal, which still throws the route's reason in Russian.
+import { postOrQueue, SERVER_UNREACHABLE_EVENT } from "./outbox";
 
-export const NOT_SENT_TEXT = `Ответ НЕ ушёл. ${NETWORK_TEXT}`;
-
-// Lost connection is also a question about the NETWORK, not this button:
-// VersionWatch hears this and checks whether the site is reachable at all.
-export const SERVER_UNREACHABLE_EVENT = "rokas:server-unreachable";
+export { SERVER_UNREACHABLE_EVENT };
 
 export async function postJson<T = Record<string, unknown>>(
   url: string,
-  body: unknown,
+  body: Record<string, unknown>,
   opts: { fallback: string; onFail?: () => unknown | Promise<unknown> },
-): Promise<T> {
-  let res: Response;
+): Promise<T | null> {
   try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch {
+    const result = await postOrQueue<T>(url, body, opts.fallback);
+    return result.queued ? null : result.data;
+  } catch (err) {
     await opts.onFail?.();
-    if (typeof window !== "undefined") window.dispatchEvent(new Event(SERVER_UNREACHABLE_EVENT));
-    throw new Error(NOT_SENT_TEXT);
+    throw err;
   }
-  const data = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!res.ok || !data || data.error) {
-    await opts.onFail?.();
-    throw new Error(data?.error || opts.fallback);
-  }
-  return data;
 }

@@ -21,6 +21,7 @@ import SharedIdeaItem from "./SharedIdeaItem";
 import { prefetchIdeaInbox, useIdeaRecipients } from "@/hooks/useIdeaRecipients";
 import { authorLabel } from "@/lib/authorName";
 import { incomingFor, sentAwayIds, sentToByIdea, sharedWithMe, type IdeaRecipientRow } from "@/lib/ideaRecipients";
+import { postOrQueue } from "@/lib/outbox";
 
 // Окна — отдельными кусками, подгружаются фоном после первого кадра
 // (lib/lazyWindows: почему и как).
@@ -150,19 +151,15 @@ export default function IdeasPanel({
       author,
       done: (itemId) => {
         answered(row, kind === "task" ? "taken" : "seen");
-        void fetch("/api/workspace/report", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            kind === "task"
-              ? { action: "idea_task", recipientId: row.id, taskId: itemId }
-              : { action: "idea_meeting", recipientId: row.id, meetingId: itemId },
-          ),
-        })
-          .then((res) => {
-            if (!res.ok) answered(row, "failed");
-          })
-          .catch(() => answered(row, "failed"));
+        // Без связи отметка ждёт сети в очереди (lib/outbox), а не
+        // объявляется неудачей: задача или встреча уже заведена.
+        postOrQueue(
+          "/api/workspace/report",
+          kind === "task"
+            ? { action: "idea_task", recipientId: row.id, taskId: itemId }
+            : { action: "idea_meeting", recipientId: row.id, meetingId: itemId },
+          "Не получилось",
+        ).catch(() => answered(row, "failed"));
       },
     });
   }

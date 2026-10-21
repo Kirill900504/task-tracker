@@ -15,7 +15,8 @@
 // вернётся; второй остаётся, пока не отпустят руками), и путать их в одном
 // значке значило бы стирать то различие, ради которого они вообще разведены
 // в разных таблицах (offline — состояние сессии, sync_errors — база).
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { outboxServerSnapshot, outboxSnapshot, serverUnreachable, subscribeOutbox } from "@/lib/outbox";
 import { createClient } from "@/lib/supabase/client";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import PopLayer from "./PopLayer";
@@ -32,12 +33,27 @@ function unreadable(message: string): boolean {
 
 type Open = "offline" | "errors" | null;
 
+// «действие» / «действия» / «действий».
+function actionsWord(n: number): string {
+  const d = n % 10;
+  const h = n % 100;
+  if (d === 1 && h !== 11) return "действие";
+  if (d >= 2 && d <= 4 && (h < 12 || h > 14)) return "действия";
+  return "действий";
+}
+
 export default function ConnectionStatus({ offline }: { offline: boolean }) {
   const [errors, setErrors] = useState<{ ids: string[]; count: number; message: string } | null>(null);
   const [open, setOpen] = useState<Open>(null);
   const offlineBtnRef = useRef<HTMLButtonElement | null>(null);
   const errorBtnRef = useRef<HTMLButtonElement | null>(null);
   const popRef = useRef<HTMLDivElement | null>(null);
+  // Ответы, ждущие сети, и сервер, до которого эта сеть не доходит
+  // (lib/outbox, VersionWatch). Значок у всех трёх состояний один: для
+  // человека это один факт — «сейчас не уходит, но не потеряется».
+  const waiting = useSyncExternalStore(subscribeOutbox, outboxSnapshot, outboxServerSnapshot).length;
+  const noServer = useSyncExternalStore(subscribeOutbox, serverUnreachable, () => false);
+  const showOffline = offline || noServer || waiting > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +88,7 @@ export default function ConnectionStatus({ offline }: { offline: boolean }) {
     el.style.right = Math.max(8, window.innerWidth - anchor.right) + "px";
   }, [open]);
 
-  if (!offline && !errors) return null;
+  if (!showOffline && !errors) return null;
 
   function dismissErrors() {
     if (!errors) return;
@@ -84,17 +100,22 @@ export default function ConnectionStatus({ offline }: { offline: boolean }) {
 
   return (
     <>
-      {offline && (
+      {showOffline && (
         <button
           type="button"
           id="connOfflineBtn"
           className="btn btn-icon conn-status-btn conn-status-offline"
           ref={offlineBtnRef}
-          title="Нет связи с облаком — показываю сохранённую копию"
+          title={
+            offline || noServer
+              ? `Нет связи${waiting ? ` — ждут отправки: ${waiting}` : ""}`
+              : `Отправляю сделанное без связи: ${waiting}`
+          }
           aria-label="Нет связи с облаком"
           onClick={() => setOpen((v) => (v === "offline" ? null : "offline"))}
         >
           <Icon name="cloud-off" size={15} />
+          {waiting > 0 && <span className="conn-status-badge">{waiting}</span>}
         </button>
       )}
       {errors && (
@@ -116,8 +137,13 @@ export default function ConnectionStatus({ offline }: { offline: boolean }) {
           <div className="export-backdrop" onClick={() => setOpen(null)} />
           <div ref={popRef} className="export-menu conn-status-pop" style={{ top: -9999, right: 8 }}>
             {open === "offline" ? (
-              <p className="conn-status-text">
-                Нет связи с облаком — показываю сохранённую копию. Всё, что записываете, отправится, как только связь вернётся.
+              <p className="conn-status-text" id="connOfflineText">
+                {offline
+                  ? "Нет связи с облаком — показываю сохранённую копию. Работайте как обычно: всё, что записываете и на что отвечаете, сохранится здесь и отправится само, как только связь вернётся."
+                  : noServer
+                    ? "Трекер не достаёт до своего сервера из этой сети. Работайте как обычно: ответы, приёмка и итоги встреч не потеряются — они уйдут сами, как только сервер ответит. Если это надолго, переключитесь на другой интернет — мобильный или другой Wi‑Fi."
+                    : "Связь вернулась — отправляю то, что сделано без неё."}
+                {waiting > 0 && ` Ждут отправки: ${waiting} ${actionsWord(waiting)}.`}
               </p>
             ) : (
               errors && (

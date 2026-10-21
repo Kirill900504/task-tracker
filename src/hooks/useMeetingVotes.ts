@@ -8,6 +8,7 @@ import { postJson } from "@/lib/postJson";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { me } from "@/lib/me";
 import type { MeetingVote } from "@/lib/meetingVotes";
+import { OUTBOX_SENT_EVENT, pendingPosts } from "@/lib/outbox";
 
 // Кто придёт, кто не сможет и кто не ответил.
 //
@@ -45,6 +46,29 @@ function nameOf(row: Row): string {
   return Array.isArray(a) ? a[0]?.name || "" : a.name || "";
 }
 
+// Голоса, ждущие сети (lib/outbox), — поверх прочитанного: иначе первое же
+// перечитывание стирало бы «Буду», нажатое без связи.
+function withPendingVotes(grouped: Record<string, MeetingVoteRow[]>): Record<string, MeetingVoteRow[]> {
+  const votes = pendingPosts("/api/workspace/report").filter((e) => e.body.action === "vote");
+  if (!votes.length) return grouped;
+  const next: Record<string, MeetingVoteRow[]> = {};
+  for (const [id, rows] of Object.entries(grouped)) {
+    next[id] = rows.map((r) => {
+      const last = votes.filter((e) => e.body.participantId === r.id).at(-1);
+      if (!last) return r;
+      const response = String(last.body.response);
+      return {
+        ...r,
+        response: response === "no" ? "no" : "yes",
+        late: response === "late",
+        reason: response === "no" ? String(last.body.comment || "") : null,
+        round: Math.max(r.round, 999),
+      };
+    });
+  }
+  return next;
+}
+
 export function useMeetingVotes() {
   const [byMeeting, setByMeeting] = useState<Record<string, MeetingVoteRow[]>>({});
   const [peopleByName, setPeopleByName] = useState<Record<string, string>>({});
@@ -73,7 +97,7 @@ export function useMeetingVotes() {
     }
     const names: Record<string, string> = {};
     for (const a of ((assignees || []) as { id: string; name: string }[])) names[a.name] = a.id;
-    return { grouped, names };
+    return { grouped: withPendingVotes(grouped), names };
   }, []);
 
   useEffect(() => {
@@ -115,11 +139,13 @@ export function useMeetingVotes() {
     // умирает молча, а «Буду / Опоздаю / Не смогу» соседа после этого не
     // появляется до перезагрузки страницы.
     const stopRevive = onRevive(reader.soon);
+    window.addEventListener(OUTBOX_SENT_EVENT, reader.soon);
 
     return () => {
       cancelled = true;
       reader.stop();
       stopRevive();
+      window.removeEventListener(OUTBOX_SENT_EVENT, reader.soon);
       void db.removeChannel(channel);
     };
   }, [fetchAll]);
@@ -229,8 +255,8 @@ export function useMeetingVotes() {
         }
         return next;
       });
-      // Не дошло — «Буду» откатывается к базе, а не остаётся на экране
-      // ответом, которого нет (lib/postJson).
+      // Отказ — «Буду» откатывается к базе. Не дошло — ждёт сети в
+      // очереди и остаётся на экране (lib/outbox).
       await postJson(
         "/api/workspace/report",
         { action: "vote", participantId, response, comment: reason },

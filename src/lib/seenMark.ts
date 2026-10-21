@@ -1,3 +1,5 @@
+import { queuePost } from "@/lib/outbox";
+
 // «Видел»: человек открыл задачу или встречу, в которой он участвует.
 //
 // Отметку пишет маршрут (/api/workspace/report, action «seen», миграция
@@ -12,11 +14,7 @@ const sent = new Set<string>();
 export function markSeen(kind: "task" | "meeting", participantId: string | undefined | null) {
   if (!participantId || sent.has(kind + participantId)) return;
   sent.add(kind + participantId);
-  void fetch("/api/workspace/report", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "seen", kind, participantId }),
-  }).catch(() => {
-    sent.delete(kind + participantId);
-  });
+  // Без связи отметка ждёт в очереди (lib/outbox): «видел» без интернета —
+  // тоже «видел», и постановщик должен об этом узнать.
+  queuePost("/api/workspace/report", { action: "seen", kind, participantId });
 }

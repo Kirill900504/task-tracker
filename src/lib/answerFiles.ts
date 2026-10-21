@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { BUCKET, type Attachment } from "@/hooks/useItemComments";
 import { me } from "@/lib/me";
+import { queuePost } from "@/lib/outbox";
 
 // Документы к ЛЮБОМУ ответу, кроме отчёта: отказ, просьба о переносе,
 // «не смогу» на встречу, итог встречи, приёмка, возврат, волевое закрытие.
@@ -60,11 +61,7 @@ async function post(item: AnswerItem, label: string, attachments: Attachment[]):
   // Рассылка — тем же маршрутом, что у обычного сообщения: правило «кому
   // сказать» одно (commentDelivery). Не дошла — скажет утренняя сводка.
   if (data?.id) {
-    void fetch("/api/workspace/comment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ commentId: data.id }),
-    }).catch(() => {});
+    queuePost("/api/workspace/comment", { commentId: data.id });
   }
 }
 

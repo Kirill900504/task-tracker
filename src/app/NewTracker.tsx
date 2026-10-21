@@ -15,6 +15,7 @@ import SearchOverlay from "@/components/tracker/SearchOverlay";
 import { useEffect, useMemo, useState } from "react";
 import { useTrackerData } from "@/hooks/useTrackerData";
 import { useToasts } from "@/hooks/useToasts";
+import { OUTBOX_DROPPED_EVENT, startOutbox } from "@/lib/outbox";
 import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useDesktopAlerts } from "@/hooks/useDesktopAlerts";
@@ -309,6 +310,23 @@ export default function NewTracker() {
     window.addEventListener(OPEN_TASK_NUMBER_EVENT, open);
     return () => window.removeEventListener(OPEN_TASK_NUMBER_EVENT, open);
   }, [visibleTasks, toasts]);
+  // Очередь ответов без связи (lib/outbox): запускается здесь, один раз на
+  // трекер, и говорит вслух, если сервер, до которого ответ наконец дошёл,
+  // его отверг — иначе ответ, который человек видел на экране, исчез бы
+  // молча.
+  const { showToast } = toasts;
+  useEffect(() => {
+    const stop = startOutbox();
+    function dropped(e: Event) {
+      const error = (e as CustomEvent<{ error: string }>).detail?.error || "";
+      showToast("Ответ, отправленный без связи, не принят", error);
+    }
+    window.addEventListener(OUTBOX_DROPPED_EVENT, dropped);
+    return () => {
+      stop();
+      window.removeEventListener(OUTBOX_DROPPED_EVENT, dropped);
+    };
+  }, [showToast]);
   // Кто сейчас смотрит на трекер — своя строка в шапке, с меню личного
   // кабинета. Слова Кирилла 23.09.2026: «чтоб каждый видел, что они сидят
   // под личным аккаунтом в системе». Без этого экран у всех четырнадцати

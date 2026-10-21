@@ -49,6 +49,7 @@ import { openTaskChoices } from "@/lib/answerRules";
 import { isSelfTask } from "@/lib/selfTask";
 import { QUICK_APPROVE, QUICK_FORCE_CLOSE } from "@/lib/quickAnswers";
 import { grow, shrink } from "@/lib/smoothHeight";
+import { queuePost } from "@/lib/outbox";
 
 // Окна — отдельными кусками, подгружаются фоном после первого кадра
 // (lib/lazyWindows: почему и как).
@@ -1083,11 +1084,7 @@ export default function TasksPanel({
             // Только у уже заведённой задачи и только когда дата правда
             // изменилась: у новой сообщать нечего, её ещё никто не видел.
             if (modalTask && (t.deadline || "") !== wasDeadline) {
-              void fetch("/api/workspace/review", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "deadline", taskId: t.id, date: t.deadline || "", comment: wasDeadline }),
-              }).catch(() => {});
+              queuePost("/api/workspace/review", { action: "deadline", taskId: t.id, date: t.deadline || "", comment: wasDeadline });
             }
             // Задача только что создана — строки участия заводятся и по
             // имени из поля «Исполнитель», и по всем, кого добавили рядом.
@@ -1126,11 +1123,7 @@ export default function TasksPanel({
             const next = { ...current, ...patch };
             actions.saveTask(next);
             if ("deadline" in patch && (next.deadline || "") !== (current.deadline || "")) {
-              void fetch("/api/workspace/review", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "deadline", taskId: next.id, date: next.deadline || "", comment: current.deadline || "" }),
-              }).catch(() => {});
+              queuePost("/api/workspace/review", { action: "deadline", taskId: next.id, date: next.deadline || "", comment: current.deadline || "" });
             }
           }}
           onDelete={() => modalTask && deleteTask(modalTask)}

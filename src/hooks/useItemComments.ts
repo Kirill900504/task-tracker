@@ -1,11 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { onRevive } from "@/lib/revive";
 import { me } from "@/lib/me";
 import { withoutSelfMark } from "@/lib/actorName";
 import { describeDbError } from "@/lib/syncError";
+import {
+  newId,
+  OUTBOX_SENT_EVENT,
+  outboxServerSnapshot,
+  outboxSnapshot,
+  queueInsert,
+  queuePost,
+  subscribeOutbox,
+} from "@/lib/outbox";
 
 // Обсуждение внутри задачи или встречи.
 //
@@ -65,6 +74,8 @@ export type Comment = {
   // только в этой вкладке: его нельзя ни править, ни убрать — у него ещё нет
   // адреса, по которому это делают.
   sending?: boolean;
+  // Связи нет — реплика лежит в очереди (lib/outbox) и уйдёт сама.
+  waiting?: boolean;
   // Сообщение, на которое отвечают/которое цитируют — то же самое действие
   // под двумя именами (см. миграцию 0040). Пусто, если это обычная реплика.
   // Убранное позже цитируемое сообщение оставляет здесь null, а не рвёт
@@ -283,12 +294,14 @@ export async function postProposal(meetingId: string, date: string, time: string
   feedCache.delete(cacheKey("meeting", meetingId));
   const savedId = (data as { id: string } | null)?.id;
   if (savedId) {
-    void fetch("/api/workspace/comment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ commentId: savedId }),
-    }).catch(() => {});
+    queuePost("/api/workspace/comment", { commentId: savedId });
   }
+}
+
+// Отказ, за которым нет ответа базы, — это сеть: supabase-js кладёт
+// «Failed to fetch» в message и оставляет code пустым.
+function isOffline(error: { message?: string; code?: string }): boolean {
+  return !error.code && /fetch|network|load failed/i.test(error.message || "");
 }
 
 export function useItemComments(kind: ItemKind, itemId: string) {
@@ -346,10 +359,13 @@ export function useItemComments(kind: ItemKind, itemId: string) {
     // открытую карточку, не должна ждать перезагрузки. Реже, чем у доски:
     // лента тянет за собой подписанные ссылки на файлы.
     const stopRevive = onRevive(pull, { everyMs: 120_000 });
+    // Реплика из очереди ушла — перечитать, чтобы встала настоящая строка.
+    window.addEventListener(OUTBOX_SENT_EVENT, pull);
 
     return () => {
       cancelled = true;
       stopRevive();
+      window.removeEventListener(OUTBOX_SENT_EVENT, pull);
       void db.removeChannel(channel);
     };
   }, [fetchAll, kind, itemId]);
@@ -382,6 +398,9 @@ export function useItemComments(kind: ItemKind, itemId: string) {
       }
 
       const row = {
+        // id задаётся здесь, а не базой: реплика, ушедшая в очередь без
+        // связи, при повторе не должна лечь второй (lib/outbox).
+        id: newId(),
         item_kind: kind,
         item_id: itemId,
         body: text,
@@ -418,9 +437,18 @@ export function useItemComments(kind: ItemKind, itemId: string) {
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
         ({ data: saved, error } = await db.from("item_comments").insert(row).select("id").maybeSingle());
-        if (error && /does not exist/i.test(error.message)) {
-          throw new Error("Задача ещё не сохранилась в облаке — проверьте связь и отправьте сообщение ещё раз.");
-        }
+      }
+      // Связи нет, или задача, заведённая без неё, ещё не доехала до облака,
+      // — реплика ложится в очередь и уйдёт сама вместе с рассылкой
+      // (lib/outbox). С файлами так нельзя: их надо сперва загрузить, а
+      // загрузка без связи уже отказала выше.
+      if (error && !files.length && (isOffline(error) || /does not exist/i.test(error.message))) {
+        queueInsert("item_comments", row, { url: "/api/workspace/comment", body: { commentId: row.id } });
+        setOutbox((prev) => prev.filter((o) => o.local.id !== localId));
+        return;
+      }
+      if (error && /does not exist/i.test(error.message)) {
+        throw new Error("Задача ещё не сохранилась в облаке — проверьте связь и отправьте сообщение ещё раз.");
       }
       // Сообщение, которое не сохранилось, не должно исчезнуть молча: чаще
       // всего это задача, ещё не доехавшая до облака, и человеку надо дать
@@ -450,13 +478,7 @@ export function useItemComments(kind: ItemKind, itemId: string) {
       // ради которой всё это и переписано.
       const savedId = (saved as { id: string } | null)?.id;
       if (savedId) {
-        void fetch("/api/workspace/comment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ commentId: savedId }),
-        }).catch(() => {
-          // Связь. Сводка догонит.
-        });
+        queuePost("/api/workspace/comment", { commentId: savedId });
       }
 
       // Серверная строка приехала — местную копию можно убирать, но только
@@ -590,17 +612,47 @@ export function useItemComments(kind: ItemKind, itemId: string) {
   // Подмены при этом всё равно не видно: местная копия исчезает ровно
   // тогда, когда её серверная строка появляется в ленте, а текст на экране
   // не меняется.
+  // Реплики из очереди этого обсуждения — их видно и после того, как окно
+  // закрыли и открыли снова: очередь живёт в браузере, а не в этом хуке.
+  const queue = useSyncExternalStore(subscribeOutbox, outboxSnapshot, outboxServerSnapshot);
+  const queued = useMemo(
+    () =>
+      queue.flatMap((e): Comment[] => {
+        if (e.kind !== "insert" || e.row.item_id !== itemId || e.row.item_kind !== kind) return [];
+        const replyId = (e.row.reply_to as string | null) || null;
+        const quoted = replyId ? comments.find((c) => c.id === replyId) : null;
+        return [
+          {
+            id: String(e.row.id),
+            body: String(e.row.body || ""),
+            attachments: [],
+            createdAt: new Date(e.at).toISOString(),
+            editedAt: null,
+            authorName: "Вы",
+            mine: true,
+            source: "app",
+            system: false,
+            reactions: [],
+            sending: true,
+            waiting: true,
+            replyTo: quoted ? { id: quoted.id, body: quoted.body, authorName: quoted.authorName } : null,
+          },
+        ];
+      }),
+    [queue, itemId, kind, comments],
+  );
+
   const visible = useMemo(() => {
-    if (!outbox.length) return comments;
     const arrived = new Set(comments.map((c) => c.id));
     const waiting = outbox.filter((o) => !(o.serverId && arrived.has(o.serverId)));
-    if (!waiting.length) return comments;
+    const offline = queued.filter((c) => !arrived.has(c.id));
+    if (!waiting.length && !offline.length) return comments;
     // ISO-строки сравниваются как текст — они устроены так, что лексический
     // порядок совпадает с временным. Сортировка стабильна в V8 (и того же
     // требует спецификация ES2019+), так что сообщения одной секунды не
     // перемешиваются между собой.
-    return [...comments, ...waiting.map((o) => o.local)].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
-  }, [comments, outbox]);
+    return [...comments, ...waiting.map((o) => o.local), ...offline].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
+  }, [comments, outbox, queued]);
 
   return { comments: visible, loading, send, edit, remove, react };
 }

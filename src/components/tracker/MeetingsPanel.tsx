@@ -34,6 +34,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useMinuteClock } from "@/hooks/useMinuteClock";
 import type { RecapItem, RecapTask } from "./MeetingTasksSheet";
 import { loadAgenda, saveAgendaDraft, type AgendaItem } from "@/hooks/useMeetingAgenda";
+import { queuePost } from "@/lib/outbox";
 
 // Окна — отдельными кусками, подгружаются фоном после первого кадра
 // (lib/lazyWindows: почему и как).
@@ -197,11 +198,7 @@ export default function MeetingsPanel({
       // ждут и не позвали, не придёт, и виноват будет трекер. Ночью
       // молчим — встреча всё равно попадёт в утреннюю сводку.
       if (!announce || !added.length || isQuietHour()) return;
-      void fetch("/api/telegram/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "meeting", id: m.id, to: added }),
-      }).catch(() => {});
+      queuePost("/api/telegram/send", { kind: "meeting", id: m.id, to: added });
     });
   }
 
@@ -334,7 +331,7 @@ export default function MeetingsPanel({
       window.removeEventListener("pagehide", onHide);
       if (sent) return;
       sent = true;
-      void fetch("/api/workspace/meeting-cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload }).catch(() => {});
+      queuePost("/api/workspace/meeting-cancel", JSON.parse(payload));
     }
     clock.timer = setTimeout(send, 6500);
     window.addEventListener("pagehide", onHide, { once: true });
@@ -439,11 +436,7 @@ export default function MeetingsPanel({
     // Проверяются именно два исхода, а не «всё, кроме planned»: у статуса
     // есть и «предложена», и её рассылать итогом нечем.
     if (status === "success" || status === "no_result") {
-      void fetch("/api/workspace/recap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meetingId: m.id, result: resultText.trim(), outcome: status }),
-      }).catch(() => {});
+      queuePost("/api/workspace/recap", { meetingId: m.id, result: resultText.trim(), outcome: status });
     }
     toasts.showToast(status === "planned" ? "Встреча возвращена в план" : "Итог встречи сохранён и отправлен участникам", m.title, () =>
       actions.saveMeeting({ ...m, ...prev }),
@@ -545,11 +538,7 @@ export default function MeetingsPanel({
     // оставить след.
     const note = (resultNote ?? "").trim();
     const timer = setTimeout(() => {
-      void fetch("/api/workspace/meeting-moved", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromId: m.id, toId: followUp.id, note }),
-      }).catch(() => {});
+      queuePost("/api/workspace/meeting-moved", { fromId: m.id, toId: followUp.id, note });
     }, 6500);
     toasts.showToast("Встреча перенесена", m.title, () => {
       clearTimeout(timer);
