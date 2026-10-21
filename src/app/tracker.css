@@ -650,43 +650,6 @@
   .filter-pill.done:hover{color:var(--success); border-color:var(--success);}
   .filter-pill.done.active{background:var(--success); border-color:var(--success); color:#0B2116; box-shadow:var(--shadow-1);}
 
-  /* «Загрузка» — та же пилюля, но из двух кнопок: имя открывает окно, ✕
-     снимает фильтр. Крестик живёт ВНУТРИ пилюли, а не отдельной кнопкой
-     рядом: снятие фильтра относится к нему одному, и стоять оно должно
-     там же, где видно, что фильтр включён. Пока фильтра нет, крестика
-     нет тоже — и пилюля неотличима от соседних. */
-  /* Ширина у пилюли постоянная, и это правило, а не вкус: внутри неё
-     текст меняется («Загрузка» → имя человека) и появляется крестик, то
-     есть при каждом выборе полоса кнопок справа уезжала бы. Слова Кирилла
-     20.09.2026: «не хочу, чтобы нажатие одной кнопки двигало другие
-     кнопки или разделы». Поэтому ширина задана, длинное имя обрезается
-     многоточием, а место под крестик зарезервировано всегда. */
-  .load-pill{
-    position:relative; display:inline-flex; align-items:center;
-    width:164px; flex:none; border:1px solid var(--line-soft); border-radius:999px;
-    background:var(--paper-soft); box-shadow:var(--edge); overflow:hidden;
-    transition:border-color .15s ease, background .15s ease;
-  }
-  .load-pill:hover{border-color:var(--ink-soft);}
-  .load-pill.active{background:var(--accent-soft); border-color:var(--accent);}
-  .load-pill-main{
-    display:inline-flex; align-items:center; gap:6px; min-height:34px; width:100%;
-    padding:8px 30px 8px 14px; border:none; background:none; cursor:pointer;
-    font-family:var(--display); font-weight:600; font-size:12.5px; white-space:nowrap;
-    color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis;
-  }
-  .load-pill:hover .load-pill-main{color:var(--ink);}
-  .load-pill.active .load-pill-main{color:var(--accent);}
-  .load-pill-x{
-    position:absolute; right:0; top:0; bottom:0;
-    display:inline-flex; align-items:center; justify-content:center;
-    width:30px; border:none; background:none; cursor:pointer; color:var(--ink-soft);
-  }
-  .load-pill-x:hover{color:var(--high);}
-
-  /* Окно «Загрузка». Уже карточки задачи: в нём одна колонка строк, и
-     широкое окно растянуло бы имя от края до края. */
-  .load-modal{max-width:520px;}
   /* Разбор мыслей (lib/ideaReview): строка в панели и окно по одной мысли. */
   .idea-review-strip{display:block; width:100%; margin:6px 0 8px; padding:9px 12px; text-align:left; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--accent-soft); color:inherit; font:inherit; font-size:13px; cursor:pointer;}
   .idea-review-strip:hover{box-shadow:0 0 0 3px var(--accent-soft);}
@@ -2231,28 +2194,6 @@
     border-left:3px solid var(--line); border-radius:0 var(--radius-xs) var(--radius-xs) 0;
   }
 
-  /* Окно «Загрузка»: строка на человека, вся строка — кнопка-фильтр.
-     Цифры справа в одну колонку и табличными цифрами, чтобы четырнадцать
-     строк читались столбиком, а не лесенкой. */
-  /* Имя строкой, цифры со словами под ним. В строку они больше не
-     помещаются — «2 просрочено · 1 без ответа» длиннее, чем «⚠2 🔕1», и
-     это ровно та длина, которой не хватало, чтобы панель читалась без
-     расшифровки. */
-  .people-row{
-    display:flex; flex-direction:column; align-items:flex-start; gap:3px;
-    width:100%; padding:8px 10px; margin-bottom:4px; text-align:left;
-    border:1px solid transparent; border-radius:var(--radius-sm);
-    background:none; cursor:pointer; font-family:var(--sans); color:var(--ink);
-  }
-  .people-row:hover{background:var(--paper-soft); border-color:var(--line-soft);}
-  .people-row.selected{background:var(--accent-soft); border-color:var(--accent);}
-  .people-name{font-size:13px; font-weight:600; min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .people-nums{display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-variant-numeric:tabular-nums lining-nums;}
-  .people-num{font-size:12px; color:var(--ink-soft); display:inline-flex; align-items:center; gap:3px;}
-  .people-num.bad{color:var(--high);}
-  .people-num.warn{color:var(--ink-soft);}
-  .people-num.ok{color:var(--accent);}
-
   /* Очередь приёмки на телефоне: строка на задачу, вся строка — кнопка.
      Мелкая стрелка или значок справа промахивается пальцем, а задачу
      открывают именно затем, чтобы принять или вернуть. */
@@ -3459,15 +3400,6 @@
   .idea-take:hover:not(:disabled){background:var(--accent); color:#F3F8FA;}
   .idea-take:disabled{opacity:.6; cursor:default;}
 
-  /* «Ещё N — у кого всё идёт»: спокойные строки в «Загрузке» свёрнуты,
-     потому что четырнадцать ровных строк прячут две горящие. */
-  .people-more{
-    width:100%; text-align:left; cursor:pointer; margin-top:4px;
-    background:none; border:none; font:inherit; font-size:12px;
-    color:var(--ink-soft); padding:6px 4px; min-height:32px;
-  }
-  .people-more:hover{color:var(--accent);}
-
   /* Мне / Я поручил / Все — один сегментированный переключатель, а не три
      отдельные кнопки: это один вопрос с тремя ответами, и выглядеть он
      должен как один орган управления. */
@@ -3691,7 +3623,7 @@
     .today-heading, .fact-label, .mobile-main .panel-title{font-size:12.5px;}
     .task-meta, .meeting-chip .mdate, .meeting-chip .mtime, .meeting-chip .mpeople,
     .result-when, .results-note, .done-list-note, .search-hit-meta, .search-group,
-    .people-num, .tp-stage, .chat-event-time, .chat-mini, .pill, .team-status{font-size:13px;}
+    .tp-stage, .chat-event-time, .chat-mini, .pill, .team-status{font-size:13px;}
     .field-hint, .tp-hint, .team-hint, .subtitle{font-size:13.5px;}
     .idea-text{font-size:15px;}
   }
@@ -3836,8 +3768,6 @@
   .toolbar .btn-primary{padding:7px 12px;}
   .toolbar .filter-pill{padding:6px 10px; gap:5px;}
   .toolbar .view-switch-btn{padding:0 9px;}
-  .load-pill{width:140px;}
-  .load-pill-main{min-height:32px; padding:6px 28px 6px 10px;}
   .section-tabs{flex-wrap:nowrap; gap:4px; margin:0 0 8px; padding:1px; overflow-x:auto; scrollbar-width:none;}
   .section-tabs::-webkit-scrollbar{display:none;}
   .section-tab{padding:5px 11px;}
@@ -3863,7 +3793,6 @@
 @container (max-width:980px){
   .section-tab{padding:3px 5px; font-size:11.5px;}
   .toolbar .view-switch-btn{padding:0 7px;}
-  .load-pill{width:120px;}
 }
 /* Телефон 390px: в полосе бывает пять кнопок («+», три вида, «горит»,
    «отложено»), и при прежних полях последняя уходила за край. Высота

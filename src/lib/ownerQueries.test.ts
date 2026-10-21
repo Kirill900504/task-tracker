@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { effectiveApproval, ownerMenu, ownerNav, peopleLoadReply, type OwnerTaskRow } from "./ownerQueries";
+import { effectiveApproval, ownerMenu, ownerNav, type OwnerTaskRow } from "./ownerQueries";
+import { overdueOn } from "./taskLogic";
 import { addDays, EXTEND_OPTIONS, extendButtons } from "./ownerReplies";
 import { resolveWhen, startNewTask, whenButtons } from "./ownerNewTask";
 
@@ -32,37 +33,6 @@ describe("меню владельца", () => {
     // Без этого каждый список — тупик, из которого выходят прокруткой
     // переписки назад.
     expect(ownerNav().flat().map((b) => b.text).join(" ")).toContain("Меню");
-  });
-});
-
-describe("загрузка людей", () => {
-  const today = "2026-09-21";
-
-  it("считает просроченное отдельно от того, что ждёт приёмки", () => {
-    const reply = peopleLoadReply(
-      [
-        task({ assignee: "Аня", deadline: "2026-09-10" }),
-        task({ id: "t2", assignee: "Аня", approvalState: "awaiting_review" }),
-        task({ id: "t3", assignee: "Борис" }),
-      ],
-      today,
-    );
-    expect(reply.text).toContain("Аня");
-    expect(reply.text).toContain("1 просрочено");
-    expect(reply.text).toContain("1 на приёмке");
-    expect(reply.text).toContain("Борис");
-  });
-
-  it("сверху тот, у кого горит", () => {
-    const reply = peopleLoadReply(
-      [task({ assignee: "Спокойный" }), task({ id: "t2", assignee: "Горящий", deadline: "2026-09-01" })],
-      today,
-    );
-    expect(reply.text.indexOf("Горящий")).toBeLessThan(reply.text.indexOf("Спокойный"));
-  });
-
-  it("молчит, когда поручать было некому", () => {
-    expect(peopleLoadReply([], today).text).toContain("Никому ничего не поручено");
   });
 });
 
@@ -126,12 +96,10 @@ describe("мастер «Поручить»", () => {
 // 24.09 висела в боте «просроченной», а на доске — нет.
 describe("просрочка в боте — по правилу доски", () => {
   it("ежедневная задача с давней датой не просрочена", () => {
-    const reply = peopleLoadReply([task({ deadline: "2026-09-24", recurKind: "daily" })], "2026-10-14");
-    expect(reply.text).not.toContain("просроч");
+    expect(overdueOn(task({ deadline: "2026-09-24", recurKind: "daily" }).row, "2026-10-14")).toBe(false);
   });
   it("разовая с прошедшим сроком — просрочена", () => {
-    const reply = peopleLoadReply([task({ deadline: "2026-09-24" })], "2026-10-14");
-    expect(reply.text).toContain("просроч");
+    expect(overdueOn(task({ deadline: "2026-09-24" }).row, "2026-10-14")).toBe(true);
   });
 });
 
