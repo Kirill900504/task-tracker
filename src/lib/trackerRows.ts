@@ -49,6 +49,8 @@ export type TaskRow = {
   deadline_moves?: number | null;
   // Приёмка по выбору (миграция 0060). Пишет синхронизация — всегда.
   needs_review?: boolean;
+  // «Каждый сдаёт сам» (миграция 0067). Пишет синхронизация — всегда.
+  each_own?: boolean;
   // Зависимость (миграция 0061). Пишет синхронизация — всегда.
   blocked_by?: string | null;
 };
@@ -137,6 +139,7 @@ export function taskToRow(t: Task): TaskRow {
     snoozed_until: t.snoozedUntil || null,
     desc_files: t.descFiles || [],
     needs_review: t.needsReview !== false,
+    each_own: !!t.eachOwn,
     blocked_by: t.blockedBy || null,
     // deleted_at is deliberately NOT part of this row — see softDeleteRow()/
     // restoreRow() in useTrackerData.ts for why an ordinary upsert must
@@ -176,6 +179,7 @@ export function taskFromRow(r: TaskRow): Task {
     firstDeadline: r.first_deadline || "",
     deadlineMoves: r.deadline_moves ?? 0,
     needsReview: r.needs_review !== false,
+    eachOwn: r.each_own === true,
     blockedBy: r.blocked_by || "",
   };
 }

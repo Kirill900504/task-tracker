@@ -249,7 +249,7 @@ async function colleagueCallback(
   if (action.kind === "task") {
     const { data: task } = await admin
       .from("tasks")
-      .select("id, title, number, assignee, user_id, status, created_by, approval_state, deadline")
+      .select("id, title, number, assignee, user_id, status, created_by, approval_state, deadline, each_own")
       .eq("id", action.id)
       .is("deleted_at", null)
       .maybeSingle();
@@ -359,7 +359,9 @@ async function colleagueCallback(
     // полностью»). Свою часть — ждём остальных; всю задачу — она уходит на
     // приёмку сразу. Ни с одним исполнителем, ни когда остальные уже
     // ответили, вопроса нет: обе кнопки сделали бы одно и то же.
-    if (action.action === "done" && participant?.role === "executor") {
+    // У задачи «каждый сдаёт сам» (миграция 0067) развилки нет: сдать
+    // работу за других нельзя по смыслу.
+    if (action.action === "done" && participant?.role === "executor" && task.each_own !== true) {
       const { data: others } = await admin
         .from("task_participants")
         .select("id")
@@ -384,7 +386,9 @@ async function colleagueCallback(
     }
 
     if (isDone) {
-      const whole = action.action === "dall";
+      // Старая кнопка «Всю задачу» под сообщением у задачи «каждый сдаёт
+      // сам» сдаёт только свою часть — как и маршрут трекера.
+      const whole = action.action === "dall" && task.each_own !== true;
       if (participant) {
         // done_comment stays empty on purpose: it is what the next message
         // from this person fills (see handleColleagueText). An unfinished
