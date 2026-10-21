@@ -34,10 +34,13 @@ import { taskRef } from "@/lib/taskRef";
 import { navRow } from "@/lib/botMenu";
 import { isYes } from "@/lib/telegramManage";
 import { contextBlock, lessonActor, lessonsBlock, lessonsFor, recentDialog, recordingTransport, rememberLine, saveLesson, type DialogLine, type ReplyContext } from "@/lib/botMemory";
-import { applyMove, cancelMeetingFromBot, moveFromTypedWhen, planCancelFromText, planMoveFromText, type CancelConfirmPending, type CancelPending, type MovePending } from "@/lib/botMoveFlow";
+import { applyMove, cancelMeetingFromBot, moveFromTypedWhen, planCancelFromText, planMoveFromText, type AgendaPending, type CancelConfirmPending, type CancelPending, type MovePending } from "@/lib/botMoveFlow";
 import { parseMeetingRepeat, parseTaskRepeat, parseWhen, repeatLabel } from "@/lib/botWhen";
 import {
   addAgenda,
+  splitAgendaText,
+  agendaFromReply,
+  appendAgenda,
   createMeetingFromBot,
   editChecklist,
   ideaToTask,
@@ -107,6 +110,14 @@ function passesThrough(waiting: unknown, trimmed: string): boolean {
   if (kind === "move_item" || kind === "meeting_cancel_confirm" || kind === "bot_confirm" || kind === "slot_pick") return true;
   if (kind === "bulk_move") return !isYes(trimmed) && !SAID_NO.test(trimmed);
   return false;
+}
+
+// Пункты повестки, названные вместе со встречей (поле agenda разбора,
+// lib/quickAdd). Модель отдаёт список; строка — тоже ответ, её режем.
+function agendaOf(input: Record<string, unknown>): string[] {
+  const raw = input.agenda;
+  const list = Array.isArray(raw) ? raw.filter((a): a is string => typeof a === "string") : typeof raw === "string" ? splitAgendaText(raw) : [];
+  return list.map((a) => a.trim().slice(0, 500)).filter(Boolean).slice(0, 20);
 }
 
 function isOwnerReply(p: unknown): p is OwnerReplyPending {
@@ -336,9 +347,13 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
         time: row.time,
         participants: (row.participants as unknown[]).filter((n): n is string => typeof n === "string"),
         recur: parseMeetingRepeat(String(input.repeat || "")) || "none",
+        agenda: agendaOf(input),
       });
       const recur = made.ok ? parseMeetingRepeat(String(input.repeat || "")) : null;
-      await say(ctx, made.text + (recur ? "\n🔁 Повтор: " + ({ weekly: "каждую неделю", biweekly: "раз в две недели", monthly: "каждый месяц" } as const)[recur] : "") + droppedNote(droppedNames));
+      const reply = made.text + (recur ? "\n🔁 Повтор: " + ({ weekly: "каждую неделю", biweekly: "раз в две недели", monthly: "каждый месяц" } as const)[recur] : "") + droppedNote(droppedNames);
+      // Под созданной встречей — «📝 Повестка» и «Открыть встречу»: что
+      // обсудим, дописывают сразу, пока встреча перед глазами (21.10.2026).
+      await ctx.transport.send(ctx.chatId, reply, made.buttons ? { buttons: screenButtons([...made.buttons, ...navRow("assigner")]) } : undefined);
       return;
     }
     // Две встречи на одно время с одним человеком запрещены и отсюда — то
@@ -380,6 +395,12 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     );
     const lines = [`✓ Встреча: «${row.title}»`, `${fmtDate(row.date)}${row.time ? ", " + row.time : ""}`];
     if (invited.attached.length) lines.push("Участники: " + invited.attached.map(withoutSelfMark).join(", "));
+    const agenda = agendaOf(input);
+    if (agenda.length) {
+      const owner: BotActor = { userId, spaceId: userId, assigneeId: "", isOwner: true };
+      const done = await appendAgenda(ctx.admin, owner, { id: row.id, user_id: userId }, agenda);
+      lines.push(done.ok ? "📝 Повестка:\n" + done.lines.join("\n") : "⚠️ Повестку записать не получилось: " + done.error);
+    }
     await say(ctx, lines.join("\n") + droppedNote(droppedNames) + assignNote(invited));
     return;
   }
@@ -802,6 +823,17 @@ async function offerTask(
 // Возвращает true, если сообщение было ответом на вопрос: тогда
 // вызывающий на этом и останавливается.
 async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknown, trimmed: string): Promise<boolean> {
+  // Повестка встречи ждёт пункты (кнопка «📝 Повестка» — lib/botMoveFlow).
+  if ((waiting as AgendaPending).kind === "meeting_agenda") {
+    if (SAID_NO.test(trimmed)) {
+      await say(ctx, "Хорошо, повестку не трогаю.");
+      return true;
+    }
+    const reply = await agendaFromReply(ctx.admin, actor, (waiting as AgendaPending).id, trimmed);
+    await ctx.transport.send(ctx.chatId, reply.text, { buttons: screenButtons(reply.buttons) });
+    return true;
+  }
+
   // Отмена встречи ждёт причину (кнопка «🚫 Отменить» — lib/botMoveFlow).
   if ((waiting as CancelPending).kind === "meeting_cancel") {
     if (SAID_NO.test(trimmed)) {
@@ -838,7 +870,7 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
       return true;
     }
     const made = await createMeetingFromBot(ctx.admin, actor, { title: trimmed.slice(0, 200), date: pending.date, time: pending.time!, participants: pending.people });
-    await ctx.transport.send(ctx.chatId, made.text, { buttons: made.id ? screenButtons([[{ text: "📅 Открыть встречу", data: encodeCallback("meeting", "oshow", made.id) }], ...navRow("assigner")]) : navRow("assigner") });
+    await ctx.transport.send(ctx.chatId, made.text, { buttons: made.buttons ? screenButtons([...made.buttons, ...navRow("assigner")]) : navRow("assigner") });
     return true;
   }
 

@@ -32,7 +32,7 @@ import { withoutSelfMark } from "@/lib/actorName";
 import { useDropHandler } from "./dnd/TrackerDnd";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { RecapItem, RecapTask } from "./MeetingTasksSheet";
-import { loadAgenda, type AgendaItem } from "@/hooks/useMeetingAgenda";
+import { loadAgenda, saveAgendaDraft, type AgendaItem } from "@/hooks/useMeetingAgenda";
 
 // Окна — отдельными кусками, подгружаются фоном после первого кадра
 // (lib/lazyWindows: почему и как).
@@ -204,7 +204,7 @@ export default function MeetingsPanel({
     });
   }
 
-  function handleModalSave(m: Meeting) {
+  function handleModalSave(m: Meeting, agenda?: string[]) {
     const before = modalMeeting;
     actions.saveMeeting(m);
     // Новая встреча сохранена — значит перенос состоялся: старую закрываем
@@ -217,7 +217,15 @@ export default function MeetingsPanel({
       movedSavedRef.current = true;
       closeAsMoved(movingFrom, m);
     }
-    inviteNewcomers(m, !movingFrom);
+    // Повестка из формы пишется ДО приглашения: оно читает её из базы и
+    // несёт пункты людям (api/telegram/send). Не записалась — приглашение
+    // всё равно уходит: встреча без повестки лучше встречи без людей.
+    if (!before && agenda?.length) {
+      const move = !!movingFrom;
+      void saveAgendaDraft(m.id, agenda).then(() => inviteNewcomers(m, !move));
+    } else {
+      inviteNewcomers(m, !movingFrom);
+    }
     if (before) void bumpVoteRoundIfMoved(m.id, before, m);
 
     // Встреча, выросшая из задачи: отметка в обсуждении обеих. Строка в
@@ -823,6 +831,7 @@ export default function MeetingsPanel({
                       time: from.time || "",
                       participants: from.participants.slice(),
                       recur: from.recur || "none",
+                      agendaFrom: from.id,
                     },
                   });
                 }

@@ -3363,6 +3363,17 @@
   .agenda-text{overflow-wrap:anywhere;}
   .agenda-note{margin-top:2px; font-size:13px; color:var(--success);}
   .agenda-actions{display:flex; gap:6px; margin-top:4px;}
+  /* Повестка в форме новой встречи (AgendaDraft): пункт и × в одну строку. */
+  .agenda-draft-list{gap:4px; margin:2px 0 6px;}
+  .agenda-draft-item > .agenda-text{display:inline;}
+  .agenda-draft-item{display:list-item;}
+  /* × — заметная кнопка под палец, а не значок в 10px рядом с текстом. */
+  .agenda-draft-item .chat-mini{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:26px; height:26px; margin-left:6px; vertical-align:middle;
+    font-size:17px; line-height:1; border-radius:var(--radius-xs);
+  }
+  .agenda-draft-item .chat-mini:hover{background:var(--paper-soft); text-decoration:none;}
   .ms-answer-text{
     width:100%; resize:vertical; min-height:70px;
     padding:9px 10px; border-radius:var(--radius-sm);

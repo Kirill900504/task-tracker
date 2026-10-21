@@ -860,6 +860,32 @@ try {
   await say("на планёрку проверочную добавь пункт про закупки");
   const { data: agenda } = await admin.from("meeting_agenda").select("text").eq("meeting_id", skillMeeting);
   check("повестка: «добавь пункт про закупки»", (agenda || []).some((a) => /закуп/i.test(a.text)), agenda);
+
+  // Повестка при создании (21.10.2026): названа во фразе о встрече — и
+  // кнопкой «📝 Повестка» после неё, пунктами одним сообщением.
+  await say(`назначь встречу ${msk(5).split("-").reverse().join(".")} в 11:30 Ревизия склада, повестка: остатки обуви; график инвентаризации`);
+  const { data: withAgenda } = await admin.from("meetings").select("id").eq("user_id", userId).eq("title", "Ревизия склада").is("deleted_at", null).order("created_at", { ascending: false }).limit(1);
+  const agendaMeetingId = (withAgenda || [])[0]?.id;
+  const { data: agenda2 } = agendaMeetingId ? await admin.from("meeting_agenda").select("text").eq("meeting_id", agendaMeetingId).order("position") : { data: [] };
+  check(
+    "встреча с повесткой одной фразой — два пункта",
+    !!agendaMeetingId && (agenda2 || []).length === 2 && /обув/i.test(agenda2[0]?.text || "") && /инвентар/i.test(agenda2[1]?.text || ""),
+    { withAgenda, agenda2 },
+  );
+  if (agendaMeetingId) {
+    await post(
+      "/api/telegram/webhook",
+      { update_id: Math.floor(Math.random() * 1e9), callback_query: { id: "cbqagd", data: "m:magd:" + agendaMeetingId, message: { chat: { id: tgChat }, message_id: 21 } } },
+      { "x-telegram-bot-api-secret-token": tgSecret },
+    );
+    const agendaPending = await pendingNow();
+    check("«📝 Повестка» ждёт пункты", agendaPending?.kind === "meeting_agenda" && agendaPending?.id === agendaMeetingId, agendaPending);
+    await say("1. Списание брака\n2. Кто ведёт склад в ноябре");
+    const { data: agenda3 } = await admin.from("meeting_agenda").select("text").eq("meeting_id", agendaMeetingId).order("position");
+    check("и следующее сообщение — пункты в конец повестки", (agenda3 || []).map((a) => a.text).join("|").endsWith("Списание брака|Кто ведёт склад в ноябре"), agenda3);
+    check("и вопрос снят", !(await pendingNow()), await pendingNow());
+    await admin.from("meetings").delete().eq("id", agendaMeetingId);
+  }
   await say("добавь Проверочного Коллегу на планёрку проверочную");
   const peoplePending = await pendingNow();
   check("состав встречи: спрашивает «да»", peoplePending?.kind === "bot_confirm" && peoplePending?.op?.type === "meeting_people", peoplePending);

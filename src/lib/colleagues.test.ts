@@ -85,6 +85,12 @@ describe("what a colleague receives", () => {
     expect(text).toContain("Никита, Игорь");
   });
 
+  it("lists the agenda in the invitation, numbered, and says nothing without one", () => {
+    const text = meetingMessage({ title: "Планёрка", date: "2026-09-10", time: "11:00" }, "Кирилл", ["Смета", " ", "Отпуска"]);
+    expect(text).toContain("Повестка:\n1. Смета\n2. Отпуска");
+    expect(meetingMessage({ title: "Планёрка", date: "2026-09-10" }, "Кирилл")).not.toContain("Повестка");
+  });
+
   it("does not list participants when there is only the one recipient", () => {
     const text = meetingMessage({ title: "Разговор", date: "2026-09-10", participants: ["Никита"] }, "Кирилл");
     expect(text).not.toContain("Участники");

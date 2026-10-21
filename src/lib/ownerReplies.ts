@@ -282,6 +282,11 @@ export async function ownerMeetingCard(admin: SupabaseClient, actor: BotActor, m
   if (yes.length) lines.push("", "✅ Будут: " + yes.map((r) => r.name + (r.late ? " (опоздает)" : "")).join(", "));
   if (no.length) lines.push("❌ Не смогут: " + no.map((r) => (r.reason ? `${r.name} — ${r.reason}` : r.name)).join(", "));
   if (silent.length) lines.push("❓ Молчат: " + silent.map((r) => r.name).join(", "));
+  // Повестка — в карточке, раз её задают при создании (21.10.2026): «что
+  // обсудим» нужно ровно тогда, когда встречу открыли.
+  const { data: agendaRows } = await admin.from("meeting_agenda").select("text").eq("meeting_id", meetingId).order("position").order("created_at");
+  const agenda = ((agendaRows || []) as { text: string }[]).map((a, i) => `${i + 1}. ${a.text}`);
+  if (agenda.length) lines.push("", "Повестка:", ...agenda);
   if (meeting.result) lines.push("", "📝 " + meeting.result);
 
   // У предложенной встречи вопрос другой, чем у назначенной: не «как
@@ -325,6 +330,9 @@ export async function ownerMeetingCard(admin: SupabaseClient, actor: BotActor, m
       { text: "📅 Перенести", data: encodeCallback("meeting", "mv", meetingId) },
       { text: "🚫 Отменить", data: encodeCallback("meeting", "mvxok", meetingId) },
     ]);
+    // Та же кнопка, что под только что созданной встречей
+    // (botSkills.agendaButton), — данные одни, разбор в botMoveFlow.
+    actions.push([{ text: "📝 Повестка", data: encodeCallback("meeting", "magd", meetingId) }]);
   }
 
   return {

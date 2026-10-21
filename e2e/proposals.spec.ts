@@ -188,6 +188,33 @@ test("«Повторить» у закрытой задачи открывает
   await page.keyboard.press("Escape");
 });
 
+test("повестка задаётся в форме новой встречи, между названием и датой, и доезжает до базы", async ({ page }) => {
+  await login(page);
+  const title = "Повестка при создании " + Date.now();
+  await page.click("#addMeetingBtn");
+  await page.fill("#mTitle", title);
+  // Место поля — его слова 21.10.2026: «между названием встречи и датой».
+  const titleBox = await page.locator("#mTitle").boundingBox();
+  const agendaBox = await page.locator("#mAgenda").boundingBox();
+  const dateBox = await page.locator(".modal label", { hasText: /^Дата$/ }).boundingBox();
+  expect(agendaBox!.y).toBeGreaterThan(titleBox!.y);
+  expect(dateBox!.y).toBeGreaterThan(agendaBox!.y);
+  await page.fill("#mAgenda", "Смета");
+  await page.locator("#mAgenda").press("Enter");
+  await expect(page.locator("#agendaDraft .agenda-item", { hasText: "Смета" })).toBeVisible();
+  // Второй пункт НЕ добавлен Enter'ом — форма обязана забрать его сама.
+  await page.fill("#mAgenda", "Отпуска");
+  await page.click("#meetingSaveBtn");
+  await expect(page.locator(".meeting-chip", { hasText: title })).toBeVisible();
+  let meetingId: string | undefined;
+  await expect
+    .poll(async () => (meetingId = (await admin.from("meetings").select("id").eq("user_id", ownerId).eq("title", title).maybeSingle()).data?.id), { timeout: 20_000 })
+    .toBeTruthy();
+  await expect
+    .poll(async () => ((await admin.from("meeting_agenda").select("text").eq("meeting_id", meetingId).order("position")).data || []).map((r) => r.text), { timeout: 20_000 })
+    .toEqual(["Смета", "Отпуска"]);
+});
+
 test("повестка: пункт дописывается, получает итог и становится задачей", async ({ page }) => {
   await login(page);
   const title = "Повестка " + Date.now();

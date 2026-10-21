@@ -204,6 +204,8 @@ export interface MeetingPrefill {
   fromIdeaId?: string;
   // Перенос через форму несёт правило повтора прежней встречи.
   recur?: MeetingRecur;
+  // …и её повестку: id встречи, чьи пункты подставить в форму.
+  agendaFrom?: string;
 }
 
 export interface PanelLayout {

@@ -73,7 +73,12 @@ export type MovePending = {
 
 export type CancelPending = { kind: "meeting_cancel"; id: string; title: string; at: string };
 
-export const MOVE_ACTIONS = new Set(["mv", "mvd", "mvgo", "mvask", "mvx", "mvxok"]);
+// AgendaPending — кнопка «📝 Повестка» (21.10.2026): следующее сообщение —
+// пункты повестки встречи. Живёт здесь, рядом с отменой, потому что
+// устроена так же: нажатие у встречи организатора → вопрос → ответ словами.
+export type AgendaPending = { kind: "meeting_agenda"; id: string; title: string; at: string };
+
+export const MOVE_ACTIONS = new Set(["mv", "mvd", "mvgo", "mvask", "mvx", "mvxok", "magd"]);
 
 export function isMoveAction(action: CallbackAction): boolean {
   return (action.kind === "meeting" || action.kind === "task") && MOVE_ACTIONS.has(action.action);
@@ -432,6 +437,20 @@ export async function handleMoveCallback(admin: SupabaseClient, actor: BotActor,
       toast: "Почему отменяем?",
       say: `🚫 Отменить встречу «${m.title}» (${meetingWhen(m)})?\n\nНапишите одним сообщением причину — её получат участники. Передумали — нажмите «Не отменять».`,
       sayButtons: [[{ text: "↩ Не отменять", data: encodeCallback("meeting", "oshow", m.id) }]],
+      setPending: pending,
+    };
+  }
+
+  // Повестка: следующее сообщение — пункты (разбор в botPipeline).
+  if (action.action === "magd" && kind === "meeting") {
+    const m = await loadMeeting(admin, actor, target.id);
+    if (!m) return { toast: "Повестку из бота ведёт тот, кто назначил встречу" };
+    if (m.status === "success" || m.status === "no_result") return { toast: "Встреча уже закрыта" };
+    const pending: AgendaPending = { kind: "meeting_agenda", id: m.id, title: m.title, at: new Date().toISOString() };
+    return {
+      toast: "Что обсудим?",
+      say: `📝 Повестка встречи «${m.title}» (${meetingWhen(m)}).\n\nНапишите пункты одним сообщением — каждый с новой строки. Они добавятся в конец повестки.`,
+      sayButtons: [[{ text: "↩ Не добавлять", data: encodeCallback("meeting", "mvx", m.id) }]],
       setPending: pending,
     };
   }
