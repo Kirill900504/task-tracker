@@ -890,6 +890,8 @@ async function selfTaskOf(
 // an answer. That keeps the flow to one table and means an unanswered
 // question simply shows up in the tracker as «сделал (без комментария)» —
 // visible, rather than lost in a queue somebody has to remember to drain.
+const CHECKLIST_HINT = /(отмет|отмеч|галочк|чек-?лист|пункт|вычеркн)/i;
+
 export async function handleColleagueText(
   admin: SupabaseClient,
   colleague: { id: string; name: string; user_id: string },
@@ -944,6 +946,17 @@ export async function handleColleagueText(
     const meetingReason = await handleMeetingReason(admin, colleague, body);
     if (meetingReason) return meetingReason;
     // Угадывание обсуждения — только для тех, кто поручать не может.
+    // Отметка в чек-листе словами (20.10.2026) — у коллеги без входа в
+    // трекер; руководителя разбирает его половина (botPipeline.offerTask).
+    // Модель зовётся, только если во фразе есть слово про отметку: иначе
+    // каждая реплика в обсуждение ждала бы GigaChat. Модуль подгружается
+    // здесь же — нажатиям кнопок, которые тоже идут через этот файл, он
+    // не нужен.
+    if (!canDictate && CHECKLIST_HINT.test(body)) {
+      const { checklistForPerson } = await import("@/lib/botSkills");
+      const ticked = await checklistForPerson(admin, colleague, body);
+      if (ticked) return { reply: ticked.text, buttons: ticked.buttons };
+    }
     return canDictate ? null : handleChatMessage(admin, colleague, body, source);
   }
 

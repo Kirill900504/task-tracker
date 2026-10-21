@@ -850,6 +850,32 @@ try {
   await say("по смете склада отметь подпись");
   const { data: cl2 } = await admin.from("task_checklist").select("text, done").eq("task_id", skillTask).order("position");
   check("чек-лист: «отметь подпись» — отмечен ровно он", (cl2 || []).filter((i) => i.done).length === 1 && /подпис/i.test((cl2 || []).find((i) => i.done)?.text || ""), cl2);
+  // Исполнитель без входа в трекер отмечает словами (20.10.2026) — и фраза
+  // не уходит репликой в обсуждение задачи.
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "по смете склада отметь цены" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: cl3 } = await admin.from("task_checklist").select("text, done").eq("task_id", skillTask).order("position");
+  const { data: clChat } = await admin.from("item_comments").select("body").eq("item_id", skillTask).ilike("body", "%отметь цены%");
+  // Что ответил бот — из памяти разговора: по нему видно, куда ушла фраза.
+  const { data: clSaid } = await admin.from("bot_dialog").select("role, body").eq("chat_id", colleagueChat).order("id", { ascending: false }).limit(2);
+  check("исполнитель словами: «по смете отметь цены» — отмечено", (cl3 || []).every((i) => i.done), { cl3, clSaid });
+  check("и это не легло репликой в обсуждение", !(clChat || []).length, clChat);
+  // То же у исполнителя БЕЗ входа в трекер — его текст разбирает другая
+  // половина бота (colleagueReplies). Членство на время снимается.
+  await admin.from("task_checklist").insert({ task_id: skillTask, text: "Отправить в банк", position: 10, author_id: userId, user_id: userId });
+  await admin.from("workspace_members").update({ status: "disabled" }).eq("assignee_id", assignee.id);
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "по смете склада отметь отправить в банк" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  await admin.from("workspace_members").update({ status: "active" }).eq("assignee_id", assignee.id);
+  const { data: cl4 } = await admin.from("task_checklist").select("text, done").eq("task_id", skillTask).eq("text", "Отправить в банк").maybeSingle();
+  const { data: cl4Said } = await admin.from("bot_dialog").select("role, body").eq("chat_id", colleagueChat).order("id", { ascending: false }).limit(2);
+  check("исполнитель без входа: «отметь отправить в банк» — отмечено", cl4?.done === true, { cl4, cl4Said });
 
   await say("напомни завтра в 9 про смету склада");
   const { data: rem } = await admin.from("bot_reminders").select("due_at, body").eq("chat_id", tgChat);
