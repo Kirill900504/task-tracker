@@ -576,6 +576,16 @@ export default function MeetingModal({
                         if (meeting && result.trim() !== (meeting.result || "").trim()) onSave({ ...meeting, result: result.trim() });
                       }}
                     />
+                    {/* «+» записывает набранный итог — то же, что выход из
+                        поля; исход («Успех / Провал») выбирают кнопками ниже. */}
+                    <AddButton
+                      id="resultAddBtn"
+                      title="Записать итог"
+                      disabled={!result.trim()}
+                      onClick={() => {
+                        if (meeting && result.trim() !== (meeting.result || "").trim()) onSave({ ...meeting, result: result.trim() });
+                      }}
+                    />
                     <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
                   </div>
                   <AttachFiles files={recapFiles} onChange={setRecapFiles} onError={setRecapError} />

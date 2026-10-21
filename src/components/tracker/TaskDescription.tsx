@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import MicButton from "./MicButton";
+import AddButton from "./AddButton";
 import ExpandableText from "./ExpandableText";
 import ResultFiles, { type ResultFile } from "./ResultFiles";
 import Icon from "./Icon";
@@ -151,6 +152,14 @@ export default function TaskDescription({
             placeholder="Детали, контекст, что считать результатом…"
             autoFocus
             focusAtEnd
+          />
+          <AddButton
+            id="descAddBtn"
+            title="Записать описание"
+            onClick={() => {
+              flush();
+              setEditing(false);
+            }}
           />
           <MicButton value={draft} onChange={change} title="Надиктовать описание" />
         </div>
