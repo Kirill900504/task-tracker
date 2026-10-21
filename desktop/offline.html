@@ -12,7 +12,7 @@
         display: flex; align-items: center; justify-content: center;
         background: #232b2e; color: #e8edef;
         font-family: "Segoe UI", system-ui, sans-serif;
-        text-align: center; padding: 24px;
+        text-align: center; padding: 24px; box-sizing: border-box;
       }
       .box { max-width: 460px; }
       h1 { font-size: 22px; font-weight: 700; margin: 0 0 12px; }
@@ -28,8 +28,10 @@
     <div class="box">
       <h1>Нет связи</h1>
       <p>
-        Трекер не открылся: интернет сейчас недоступен. Задачи и встречи на месте —
-        как только связь появится, всё откроется как обычно.
+        Трекер не открылся: нет интернета, или эта сеть не пускает к трекеру. Если
+        интернет работает, подключитесь к другой сети — например, раздайте интернет
+        с телефона. Задачи и встречи на месте: как только связь появится, всё
+        откроется как обычно.
       </p>
       <button id="retry" type="button">Попробовать снова</button>
     </div>

@@ -19,6 +19,7 @@
 import { _electron as electron } from "../node_modules/@playwright/test/index.mjs";
 import { fileURLToPath } from "node:url";
 import { mkdtempSync } from "node:fs";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -92,6 +93,12 @@ const check = (ok, what) => {
   check((await win.locator("#password").count()) === 1, "поле пароля на месте");
   const title = await win.title();
   check(title.length > 0, "у окна есть заголовок: " + title);
+  // The same painted-frame question as below: a page that loaded but never
+  // reached the screen reads as an app that hung on its splash.
+  const painted = await app.evaluate(async ({ BrowserWindow }) =>
+    (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().length,
+  );
+  check(painted > 0, "форма входа нарисована в окне");
 
   await shot(win, path.join(here, "smoke-login.png"));
 
@@ -118,23 +125,87 @@ const check = (ok, what) => {
 }
 
 // ---- 2: no connection, nothing cached --------------------------------------
-{
-  // Port 1 is never listening, so the load fails the way a dead network does,
-  // and the worker has never run in this profile — exactly a first launch
-  // offline, which is the case with no cached shell to fall back on.
-  const app = await electron.launch({ args: launchArgs, executablePath, env: { ...process.env, ROKAS_URL: "http://127.0.0.1:1" } });
-  const win = await app.firstWindow();
-  await win.waitForLoadState("domcontentloaded");
-  await win.waitForTimeout(3000);
-
-  console.log("Окно без связи:");
-  const text = await win.locator("body").innerText();
-  check(/Нет связи/.test(text), "показана русская страница «Нет связи»");
-  check((await win.locator("#retry").count()) === 1, "есть кнопка «Попробовать снова»");
-
-  await shot(win, path.join(here, "smoke-offline.png"));
+//
+// Three ways a network says no, because each fails differently: nothing
+// listening (port 1, refused); a filter that resets the connection — the
+// way Russian networks cut vercel.app by name (Евгений Макаров, 21.10.2026);
+// and one that accepts and then says nothing at all (the watchdog in
+// main.js). Each profile is fresh, so no worker has ever run: a first
+// launch offline, with no cached shell to fall back on.
+//
+// The check is the PAINTED FRAME, not the page text. Until 21.10.2026 this
+// block read innerText, which said «Нет связи» while the screen still showed
+// the splash: after a failed load the Electron window never painted another
+// page, and the empty capture was written off in shot() above as «окно не
+// отдало кадр». Here an empty frame is the failure.
+const sinks = [];
+for (const mode of ["refused", "reset", "hang"]) {
+  let url = "http://127.0.0.1:1";
+  if (mode !== "refused") {
+    const server = net.createServer((sock) => {
+      if (mode === "reset") sock.resetAndDestroy();
+      else sinks.push(sock);
+    });
+    await new Promise((r) => server.listen(0, "127.0.0.1", r));
+    sinks.push(server);
+    url = `https://127.0.0.1:${server.address().port}`;
+  }
+  const own = mkdtempSync(path.join(tmpdir(), "rokas-smoke-"));
+  const app = await electron.launch({ args: [here, `--user-data-dir=${own}`], executablePath, env: { ...process.env, ROKAS_URL: url } });
+  await app.firstWindow();
+  console.log(`Окно без связи (${mode}):`);
+  let state = { text: "", retry: false, painted: 0, windows: 0 };
+  const until = Date.now() + (mode === "hang" ? 40000 : 10000);
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 1000));
+    // The window is replaced on failure (main.js, showOffline), and a probe
+    // that lands in that instant loses its window mid-call; the next one
+    // finds the new window.
+    state = await app.evaluate(async ({ BrowserWindow }) => {
+      const all = BrowserWindow.getAllWindows();
+      const w = all[all.length - 1];
+      // A page whose navigation is still pending answers executeJavaScript
+      // only when that navigation ends — for a silent network, never.
+      const read = (js) =>
+        Promise.race([w.webContents.executeJavaScript(js).catch(() => null), new Promise((r) => setTimeout(() => r(null), 1500))]);
+      return {
+        text: (await read("document.body ? document.body.innerText : ''")) || "",
+        retry: !!(await read("!!document.getElementById('retry')")),
+        painted: (await w.webContents.capturePage()).toPNG().length,
+        windows: all.length,
+      };
+    }).catch(() => state);
+    if (/Нет связи/.test(state.text) && state.painted > 0) break;
+  }
+  check(/Нет связи/.test(state.text), "показана русская страница «Нет связи»");
+  check(state.retry, "есть кнопка «Попробовать снова»");
+  check(state.painted > 0, "страница нарисована в окне, а не только загружена");
+  check(state.windows === 1, "окно одно");
+  if (mode === "reset") {
+    const all = app.windows();
+    await shot(all[all.length - 1], path.join(here, "smoke-offline.png"));
+    // «Попробовать снова» в той же сети падает снова — и обязано снова
+    // оказаться на нарисованной странице, а не на испорченном окне.
+    await app.evaluate(({ BrowserWindow }) => {
+      const ws = BrowserWindow.getAllWindows();
+      void ws[ws.length - 1].webContents.executeJavaScript("document.getElementById('retry').click()");
+    });
+    let again = { painted: 0, windows: 0, text: "" };
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      again = await app.evaluate(async ({ BrowserWindow }) => {
+        const ws = BrowserWindow.getAllWindows();
+        const w = ws[ws.length - 1];
+        const text = await Promise.race([w.webContents.executeJavaScript("document.body.innerText").catch(() => ""), new Promise((r) => setTimeout(() => r(""), 1500))]);
+        return { painted: (await w.webContents.capturePage()).toPNG().length, windows: ws.length, text };
+      }).catch(() => again);
+      if (again.painted > 0 && /Нет связи/.test(again.text) && again.windows === 1) break;
+    }
+    check(again.painted > 0 && /Нет связи/.test(again.text) && again.windows === 1, "«Попробовать снова» без связи снова показывает нарисованную страницу");
+  }
   await app.close();
 }
+for (const s of sinks) (s.destroy || s.close).call(s);
 
 console.log(failures.length ? `\nНе прошло: ${failures.length}` : "\nВсё прошло");
 process.exit(failures.length ? 1 : 0);

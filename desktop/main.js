@@ -83,10 +83,32 @@ function saveWindowState(win) {
 
 let mainWindow = null;
 
-function createWindow() {
+// Нет связи — НОВОЕ окно, а не переход в прежнем.
+//
+// 21.10.2026 Евгений Макаров (его сеть не пускает к vercel.app) видел
+// бесконечное «Открываю трекер…» при заголовке окна «Нет связи»: страница
+// была загружена, а на экране осталась заставка, без кнопки «Попробовать
+// снова». Снимок окна оказался пустым кадром — и не только у этой
+// страницы: после неудачной загрузки окно Electron не рисует больше НИ
+// ОДНОЙ страницы, даже заставку, а та же страница в новом окне рисуется
+// сразу. smoke.mjs этого не видел, потому что читал текст страницы, а не
+// кадр. Поэтому окно заменяется: новое того же размера и места открывается
+// сразу на странице «Нет связи», прежнее закрывается.
+function showOffline(oldWin, failedUrl) {
+  // «Попробовать снова» с той же страницы, упавшее снова, — тоже сюда: окно
+  // после неудачи испорчено одинаково, с какой бы страницы ни уходило.
+  if (oldWin.isDestroyed()) return;
+  saveWindowState(oldWin);
+  const maximized = oldWin.isMaximized();
+  createWindow(failedUrl);
+  if (maximized && mainWindow) mainWindow.maximize();
+  oldWin.destroy();
+}
+
+function createWindow(offlineFor = null) {
   const state = readWindowState();
 
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: state.width,
     height: state.height,
     x: state.x,
@@ -124,32 +146,32 @@ function createWindow() {
   // сама, а моста между ней и оболочкой нет нарочно (см. webPreferences),
   // поэтому она подаёт знак переходом внутри страницы на адрес с меткой
   // #rokas-raise (useDesktopAlerts.raiseWindow), и метку тут же снимает.
-  mainWindow.webContents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
+  win.webContents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
     if (!isMainFrame || !url.endsWith("#rokas-raise")) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
   });
 
-  if (state.maximized) mainWindow.maximize();
+  if (state.maximized) win.maximize();
 
-  mainWindow.once("ready-to-show", () => mainWindow.show());
-  mainWindow.on("close", () => saveWindowState(mainWindow));
-  mainWindow.on("closed", () => {
-    mainWindow = null;
+  win.once("ready-to-show", () => win.show());
+  win.on("close", () => saveWindowState(win));
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null;
   });
 
   // Anything outside our own origin — a Telegram link, a MAX chat, a file a
   // colleague attached on some other host — belongs in the person's real
   // browser, where their logins already are. Opening it inside this window
   // would trap them in an app with no address bar and no way back.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith(APP_ORIGIN)) return { action: "allow" };
     void shell.openExternal(url);
     return { action: "deny" };
   });
 
-  mainWindow.webContents.on("will-navigate", (event, url) => {
+  win.webContents.on("will-navigate", (event, url) => {
     if (url.startsWith(APP_ORIGIN)) return;
     event.preventDefault();
     void shell.openExternal(url);
@@ -159,21 +181,33 @@ function createWindow() {
   // itself with its own Russian page, but it can only do that once it has
   // been installed. On a first-ever launch offline there is no worker yet,
   // and Chromium's own error page is English and looks like a broken app.
-  mainWindow.webContents.on("did-fail-load", (event, errorCode, _desc, failedUrl, isMainFrame) => {
+  win.webContents.on("did-fail-load", (event, errorCode, _desc, failedUrl, isMainFrame) => {
     // -3 is ERR_ABORTED, which is what a redirect or a cancelled navigation
     // reports; it is not a failure anyone needs to see.
     if (!isMainFrame || errorCode === -3) return;
-    void mainWindow.loadFile(path.join(__dirname, "offline.html"), { query: { url: failedUrl } });
-    // И показать окно. Оно ждёт "ready-to-show", чтобы не мигать пустой
-    // рамкой, пока грузится сайт, — но у страницы, загруженной ВМЕСТО
-    // упавшей, это событие может не прийти вовсе, и первый запуск без
-    // сети тогда выглядит как приложение, которое запустилось и не
-    // открылось: значок в панели задач есть, окна нет. Показ стоит
-    // ДО ожидания загрузки, а не после: сама страница лежит рядом на
-    // диске и рисуется мгновенно, а вот обещание loadFile при отменённой
-    // навигации может не исполниться никогда.
-    if (!mainWindow.isDestroyed() && !mainWindow.isVisible()) mainWindow.show();
+    showOffline(win, failedUrl);
   });
+
+  // Сеть, которая режет vercel.app по имени, не всегда обрывает
+  // соединение — бывает, что она его молча держит, и тогда отказа нет
+  // вовсе: заставка висит, пока Chromium не сдастся сам, а это минуты.
+  // Двадцать секунд без единого кадра сайта — это тот же отказ, и
+  // человеку показывается то же самое. Копия из кэша воркера приходит
+  // за доли секунды, так что медленную, но живую сеть это не задевает.
+  // Сторож заводится на КАЖДЫЙ уход на сайт — с заставки и с «Попробовать
+  // снова» — и снимается первым кадром сайта.
+  let watchdog = null;
+  win.webContents.on("did-start-navigation", (details) => {
+    if (!details.isMainFrame || details.isSameDocument || details.url.startsWith("file:")) return;
+    clearTimeout(watchdog);
+    watchdog = setTimeout(() => {
+      if (!win.isDestroyed()) showOffline(win, details.url);
+    }, 20_000);
+  });
+  win.webContents.on("dom-ready", () => {
+    if (!win.webContents.getURL().startsWith("file:")) clearTimeout(watchdog);
+  });
+  win.on("closed", () => clearTimeout(watchdog));
 
   // Сначала заставка, лежащая рядом на диске, и только потом сайт.
   //
@@ -189,11 +223,18 @@ function createWindow() {
   // окно появляется сразу со знаком и строкой «Открываю трекер…». Сайт
   // грузится следом, поверх неё. Держать её дольше нечем и незачем —
   // она исчезает в тот момент, когда трекер готов показать себя.
-  void mainWindow.loadFile(path.join(__dirname, "splash.html")).then(() => {
-    if (mainWindow.isDestroyed()) return;
-    if (!mainWindow.isVisible()) mainWindow.show();
-    void mainWindow.loadURL(APP_URL);
+  mainWindow = win;
+  if (offlineFor) {
+    void win.loadFile(path.join(__dirname, "offline.html"), { query: { url: offlineFor } });
+    win.show();
+    return win;
+  }
+  void win.loadFile(path.join(__dirname, "splash.html")).then(() => {
+    if (win.isDestroyed()) return;
+    if (!win.isVisible()) win.show();
+    void win.loadURL(APP_URL);
   });
+  return win;
 }
 
 // One window, always. Launching the app again — from the taskbar, from the
