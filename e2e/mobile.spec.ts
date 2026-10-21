@@ -39,9 +39,9 @@ test("the phone gets its own shell: compact header, tabs, and tasks first", asyn
   await clearBoard();
   await login(page);
 
-  // The desktop header — logo, quote and eight buttons — is not there.
+  // The desktop header — logo, date and the buttons — is not there.
   await expect(page.locator("#mobileHeader")).toBeVisible();
-  await expect(page.locator(".header-quote")).toHaveCount(0);
+  await expect(page.locator(".header-row")).toHaveCount(0);
 
   // Сессия начинается с задач: «он же всегда должен быть главной
   // страницей и с него начинаться каждая сессия» (20.09.2026).

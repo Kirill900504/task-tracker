@@ -39,10 +39,7 @@ export default function BootSkeleton() {
     <div className="skel" aria-hidden>
       <div className="skel-head">
         <div className="skel-logo" />
-        <div className="skel-head-text">
-          <Line w="120px" h={18} />
-          <Line w="180px" h={11} />
-        </div>
+        <Line w="180px" h={11} />
       </div>
 
       <div className="skel-layout">

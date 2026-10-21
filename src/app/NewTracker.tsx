@@ -45,7 +45,6 @@ import { mergeResult } from "@/lib/meetingLink";
 import MobileShell, { DEFAULT_MOBILE_TAB, type MobileTab } from "@/components/tracker/MobileShell";
 import { peopleLoad } from "@/lib/peoplePanel";
 import MobileHeader from "@/components/tracker/MobileHeader";
-import HeaderQuote from "@/components/tracker/HeaderQuote";
 import ReviewScreen, { awaitingReview } from "@/components/tracker/ReviewScreen";
 import { columnOf } from "@/lib/kanban";
 import { isSelfTask } from "@/lib/selfTask";
@@ -1033,17 +1032,16 @@ export default function NewTracker() {
           <div className="brand">
             {/* eslint-disable-next-line @next/next/no-img-element -- same plain <img> the legacy markup used; next/image adds nothing for a fixed-size local logo */}
             <img className="brand-logo" src="/favicon.png" alt="РОКАС" />
-            <div>
-              <h1>РОКАС</h1>
-              <div className="subtitle" id="dateNow">
-                {clockText}
-              </div>
+            <div className="subtitle" id="dateNow">
+              {clockText}
             </div>
           </div>
-          {/* Одна строка на любом мониторе — кегль цитата подбирает себе
-              сама, замером. На телефоне её нет вовсе: там своя шапка
-              (MobileHeader), и эта ветка не отрисовывается. */}
-          <HeaderQuote />
+          {/* Ни названия, ни цитаты: шапка — узкая полоса «знак · дата ·
+              кнопки». Слова Кирилла 21.10.2026 — «надпись всё же убрать,
+              оставить логотип, дату и время… сделать эту полоску максимально
+              узкую, чтобы больше оставалось под рабочее пространство».
+              Название повторяло знак рядом с ним, а цитата одна держала
+              высоту шапки и второй ряд на узком окне. */}
           <div className="header-btns">
             {/* Search and notifications are icons only: the words were the
                 widest thing in the header and said nothing the magnifier and
