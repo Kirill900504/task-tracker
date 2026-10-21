@@ -1192,7 +1192,23 @@ export default function TasksPanel({
             // сработало?», который Кирилл задавал вслух.
             closeModal();
           }}
-          onReturnWork={async (comment) => {
+          onWaitForAll={async () => {
+            if (!modalTask) return;
+            // Задача снова ждёт молчащих — на экране сразу, как и возврат;
+            // приёмка — колонка сервера, отсюда в базу не уедет.
+            const current = (allTasks ?? tasks).find((x) => x.id === modalTask.id) || modalTask;
+            actions.saveTask({ ...current, approvalState: "open" });
+            closeModal();
+            try {
+              await participants.waitForAll(modalTask.id);
+              toasts.showToast("Ждём отчёта от каждого", "Тем, кто ещё не ответил, сказано. Сданные отчёты остались.");
+            } catch (e) {
+              const now = (allTasks ?? tasks).find((x) => x.id === modalTask.id) || current;
+              actions.saveTask({ ...now, approvalState: current.approvalState });
+              toasts.showToast(humanError(e, "Не получилось"));
+            }
+          }}
+          onReturnWork={async (comment, participantIds) => {
             if (!modalTask) return;
             // Возврат виден в ту же секунду, а не после ответа сервера.
             // 14.10.2026: задача после возврата оставалась «На приёмке»,
@@ -1208,7 +1224,7 @@ export default function TasksPanel({
             // а не вас.
             closeModal();
             try {
-              await participants.returnForRework(modalTask.id, comment);
+              await participants.returnForRework(modalTask.id, comment, participantIds);
             } catch (e) {
               const now = (allTasks ?? tasks).find((x) => x.id === modalTask.id) || current;
               actions.saveTask({ ...now, ...before });

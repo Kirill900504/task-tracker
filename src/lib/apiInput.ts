@@ -79,10 +79,13 @@ export const reportInput = z.object({
 });
 
 export const reviewInput = z.object({
-  action: z.enum(["approve", "return", "return_one", "force", "reopen", "moved", "kept", "deadline"]),
+  action: z.enum(["approve", "return", "return_one", "wait", "force", "reopen", "moved", "kept", "deadline"]),
   taskId: ID,
   comment: z.string().max(4000).optional(),
   participantId: UUID.optional(),
+  // «return» по выбранным исполнителям (строки участия). Нет — всем, кто
+  // ответил, как раньше.
+  participantIds: z.array(UUID).max(50).optional(),
   // null здесь значимо: «снять срок» — это не то же самое, что «не трогать».
   date: ISO_DATE.nullable().optional(),
 });

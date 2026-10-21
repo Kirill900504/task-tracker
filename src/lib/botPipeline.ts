@@ -60,7 +60,8 @@ import { dateStr, moscowNow } from "@/lib/taskLogic";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
 // мессенджере, а закрывает следующее сообщение владельца.
-type ReturnPending = { kind: "review_return"; taskId: string; title: string };
+// participantIds — вернуть только им (кнопка «↩ Имя» на экране «кому»).
+type ReturnPending = { kind: "review_return"; taskId: string; title: string; participantIds?: string[] };
 type RecapPending = { kind: "meeting_recap"; meetingId: string; title: string };
 // Куда адресован следующий текст постановщика: кнопка «💬 Ответить» под
 // карточкой. Без неё его свободный текст — поручение, а не реплика, и
@@ -972,7 +973,7 @@ async function assignerPending(ctx: BotContext, actor: BotActor, waiting: unknow
     const done = await applyReview(ctx.admin, task, "return", trimmed, {
       label: await actorName(ctx.admin, task.user_id, actor.userId),
       userId: actor.userId,
-    });
+    }, false, undefined, ask.participantIds);
     await say(ctx, done.ok ? `↩ Вернул ${taskRef(task)} на доработку — исполнителям сказано.` : done.error);
     return true;
   }

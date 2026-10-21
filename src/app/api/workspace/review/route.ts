@@ -282,6 +282,7 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
     { label: await actorName(admin, task.user_id, user.id), userId: user.id },
     false,
     (job) => after(job),
+    body.action === "return" ? body.participantIds : undefined,
   );
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
   return NextResponse.json({ ok: true });

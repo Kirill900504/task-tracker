@@ -170,7 +170,7 @@ try {
     return data?.id;
   }
   async function taskRow(id) {
-    return (await admin.from("tasks").select("status, approval_state, completed_at, deadline, created_by").eq("id", id).maybeSingle()).data;
+    return (await admin.from("tasks").select("status, approval_state, approval_comment, completed_at, deadline, created_by").eq("id", id).maybeSingle()).data;
   }
 
   // Что каждый ДОЛЖЕН видеть — накапливается по ходу и сверяется в конце.
@@ -336,6 +336,43 @@ try {
     check("посторонний не видит ни строки обсуждения", !(oSees || []).length, oSees);
     const ok = await post(boss, "/api/workspace/review", { action: "approve", taskId: big.id, comment: "Принято" });
     check("постановщик принимает задачу на команду", ok.status === 200 && (await taskRow(big.id))?.status === "done", ok);
+  }
+
+  // ── Задача №111: работа у каждого своя ─────────────────────────────────
+  // 21.10.2026: шестеро изучали книгу, один нажал «сдал целиком» за всех,
+  // а возврат снимал отчёты у каждого. Теперь — «дождаться всех» и возврат
+  // выбранным, и чужие отчёты при этом не трогаются.
+  section("Групповая задача: «дождаться всех» и возврат одному");
+  {
+    const [lead, e1, e2, e3] = [u[9], u[0], u[1], u[2]];
+    const g = await makeTask(lead, { title: "Каждый читает книгу сам", executors: [e1, e2, e3] });
+    check(`${lead.name} ставит задачу на троих`, !g.error, g.error);
+    seeTask(g.id, lead, e1, e2, e3);
+    const [q1, q2, q3] = [await partOf(g.id, e1), await partOf(g.id, e2), await partOf(g.id, e3)];
+    const doneAt = async (p) => (await admin.from("task_participants").select("done_at").eq("id", p).maybeSingle()).data?.done_at;
+    await post(e1, "/api/workspace/report", { action: "done", participantId: q1, comment: "Прочитал свою часть" });
+    const whole = await post(e2, "/api/workspace/report", { action: "done", participantId: q2, comment: "Сдаю целиком", whole: true });
+    check("«сдал целиком» уводит на приёмку", whole.body?.awaitingReview === true, whole);
+    const wait = await post(lead, "/api/workspace/review", { action: "wait", taskId: g.id });
+    const afterWait = await taskRow(g.id);
+    check("«дождаться всех» снимает приёмку", wait.status === 200 && afterWait?.approval_state === "open", { wait, afterWait });
+    check("и не трогает ничьих отчётов", !!(await doneAt(q1)) && !!(await doneAt(q2)));
+    const foreignWait = await post(e1, "/api/workspace/review", { action: "wait", taskId: g.id });
+    check("исполнитель «дождаться всех» не нажимает", foreignWait.status === 403, foreignWait);
+    const last = await post(e3, "/api/workspace/report", { action: "done", participantId: q3, comment: "И я прочитал" });
+    check("ответил последний — задача снова на приёмке сама", last.body?.awaitingReview === true, last);
+    const notAnswered = await post(lead, "/api/workspace/review", { action: "return", taskId: g.id, comment: "x", participantIds: [randomUUID()] });
+    check("вернуть чужому этой задачи нельзя", notAnswered.status >= 400, notAnswered);
+    const ret = await post(lead, "/api/workspace/review", { action: "return", taskId: g.id, comment: "Сделано не полностью", participantIds: [q2] });
+    const afterRet = await taskRow(g.id);
+    check("возврат одному проходит", ret.status === 200 && afterRet?.approval_state === "returned", { ret, afterRet });
+    check("отчёт вернувшегося снят", !(await doneAt(q2)));
+    check("отчёты остальных остались", !!(await doneAt(q1)) && !!(await doneAt(q3)));
+    check("плашка называет, кому вернули", String(afterRet?.approval_comment || "").startsWith(e2.name.replace(/\s*\(я\)\s*$/, "")), afterRet?.approval_comment);
+    const again = await post(e2, "/api/workspace/report", { action: "done", participantId: q2, comment: "Доделал" });
+    check("вернувшийся доделал — снова на приёмке, остальные ничего не нажимали", again.body?.awaitingReview === true, again);
+    const ok = await post(lead, "/api/workspace/review", { action: "approve", taskId: g.id, comment: "Все прочитали" });
+    check("и принята", ok.status === 200 && (await taskRow(g.id))?.status === "done", ok);
   }
 
   // ── Встречи ─────────────────────────────────────────────────────────────
