@@ -203,6 +203,7 @@ async function routeBotCallback(
         kind: "review_return",
         taskId: outcome.askReturn.taskId,
         title: outcome.askReturn.title,
+        ...(outcome.askReturn.participantIds?.length ? { participantIds: outcome.askReturn.participantIds } : {}),
       });
     }
     // Шаг мастера «Поручить»: кому выбрали — помним до выбора срока.

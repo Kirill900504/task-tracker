@@ -3,6 +3,7 @@ import { replyButtons, taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
 import { taskRef } from "@/lib/taskRef";
+import { withoutSelfMark } from "@/lib/actorName";
 
 // Решение постановщика — одно на трекер и на бота.
 //
@@ -22,7 +23,10 @@ import { taskRef } from "@/lib/taskRef";
 // Маршрут остаётся тем, чем был: он проверяет, что решение принимает тот,
 // кто вправе, — и зовёт это. Бот делает то же самое своей проверкой.
 
-export type ReviewAction = "approve" | "return" | "force" | "reopen";
+// "wait" — «Дождаться всех»: задачу сдали целиком, пока остальные ещё не
+// ответили, а постановщик хочет отчёт от каждого (см. ниже, у самого
+// действия).
+export type ReviewAction = "approve" | "return" | "force" | "reopen" | "wait";
 
 export type ReviewResult = { ok: true } | { ok: false; error: string };
 
@@ -59,14 +63,56 @@ export async function applyReview(
   // «Вернуть», ждал его целиком, прежде чем окно закрывалось. Решение
   // записано в базу до ответа — это и есть то, что ему нужно знать сразу.
   defer?: (job: () => Promise<void>) => void,
+  // Возврат на доработку ВЫБРАННЫМ исполнителям (id строк участия). Без
+  // него — всем, кто ответил, как было всегда.
+  only?: string[],
 ): Promise<ReviewResult> {
+  // Кому сказать о возврате. Пусто — всем исполнителям и соисполнителям.
+  let recipients: string[] | undefined;
   const tell = async (a: ReviewAction, t: string, unfulfilled = false) => {
     if (quiet) return;
-    if (defer) defer(() => tellExecutors(admin, task, a, t, unfulfilled));
-    else await tellExecutors(admin, task, a, t, unfulfilled);
+    const to = recipients;
+    if (defer) defer(() => tellExecutors(admin, task, a, t, unfulfilled, to));
+    else await tellExecutors(admin, task, a, t, unfulfilled, to);
   };
   const text = comment.trim();
   if (action === "return" && !text) return { ok: false, error: "Напишите, что доделать" };
+
+  // «Дождаться всех» (21.10.2026). Задача №111 на шестерых: каждый
+  // изучает книгу сам, трое отчитались, четвёртый случайно нажал «сдал
+  // задачу целиком» — и задача ушла на приёмку, не дождавшись двоих. Ни
+  // принять (за двоих никто не отчитывался), ни вернуть (возврат снимал
+  // отчёты у всех четверых) было нельзя без вреда. Его слова: «дождаться
+  // выполнения всех участников, тогда задача возвращается в прежний статус
+  // и дожидается выполнения оставшихся». Ни один ответ при этом не
+  // трогается: сданное остаётся сданным, а на приёмку задача вернётся
+  // сама, когда ответит последний (closeIfEveryoneReported).
+  if (action === "wait") {
+    const [{ data: rows }, { data: state }] = await Promise.all([
+      admin.from("task_participants").select("assignee_id, done_at, declined_at").eq("task_id", task.id).eq("role", "executor"),
+      admin.from("tasks").select("approval_state").eq("id", task.id).maybeSingle(),
+    ]);
+    // Второе нажатие (вторая вкладка, старая кнопка в мессенджере) — не
+    // второе решение: задача уже ждёт, и второго сообщения людям не надо.
+    if ((state as { approval_state?: string } | null)?.approval_state !== "awaiting_review") return { ok: true };
+    const silent = ((rows || []) as { assignee_id: string; done_at: string | null; declined_at: string | null }[]).filter(
+      (r) => !r.done_at && !r.declined_at,
+    );
+    if (!silent.length) return { ok: false, error: "Ждать некого — ответили все исполнители" };
+    await admin.from("tasks").update({ approval_state: "open" }).eq("id", task.id).eq("approval_state", "awaiting_review");
+    await recordEvent(admin, {
+      actorUserId: who.userId,
+      userId: task.user_id,
+      kind: "task",
+      itemId: task.id,
+      text: `⏳ ${who.label} ждёт отчёта от каждого исполнителя${text ? ": " + text : ""}`,
+    });
+    // Сказать тем, кого ждут: задачу они видели «на приёмке» и могли
+    // решить, что их часть больше не нужна.
+    recipients = silent.map((r) => r.assignee_id);
+    await tell("wait", text);
+    return { ok: true };
+  }
   if (action === "force" && !text) return { ok: false, error: "Нужна причина" };
 
   // Приёмка и волевое закрытие оба ЗАКРЫВАЮТ задачу — и второй такой же
@@ -92,15 +138,33 @@ export async function applyReview(
   // самом и вторая строка в хронике, которая читается как «вернули
   // дважды». Поэтому возврат требует хотя бы одного ответа (отчёта или
   // отказа) — того, что он и снимет.
+  //
+  // И возвращают КОНКРЕТНЫМ людям (21.10.2026, задача №111): возврат снимал
+  // отчёты у всех исполнителей разом, и трое, чьей работой постановщик был
+  // доволен, снова видели «Сделал» — «заставляет их снова тыкать
+  // „выполнил“». Теперь снимается ответ только у тех, кого выбрали; чужие
+  // отчёты остаются, и на приёмку задача вернётся, когда ответят
+  // вернувшиеся (closeIfEveryoneReported считает всех, а сданное уже сдано).
+  let returning: { id: string; assignee_id: string; name: string }[] = [];
+  let partial = false;
   if (action === "return") {
-    const { data: answered } = await admin
+    const { data: rows } = await admin
       .from("task_participants")
-      .select("id")
+      .select("id, assignee_id, done_at, declined_at, assignees(name)")
       .eq("task_id", task.id)
-      .eq("role", "executor")
-      .or("done_at.not.is.null,declined_at.not.is.null")
-      .limit(1);
-    if (!answered?.length) return { ok: false, error: "Уже возвращено на доработку — ждём нового отчёта" };
+      .eq("role", "executor");
+    type Row = { id: string; assignee_id: string; done_at: string | null; declined_at: string | null; assignees: { name: string } | { name: string }[] | null };
+    const all = (rows || []) as Row[];
+    const nameOf = (r: Row) => withoutSelfMark((Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "");
+    const answered = all.filter((r) => r.done_at || r.declined_at);
+    const chosen = only?.length ? answered.filter((r) => only.includes(r.id)) : answered;
+    if (!chosen.length) return { ok: false, error: "Уже возвращено на доработку — ждём нового отчёта" };
+    returning = chosen.map((r) => ({ id: r.id, assignee_id: r.assignee_id, name: nameOf(r) }));
+    partial = chosen.length < all.length;
+    // Частичный возврат говорит только тем, кому вернули: остальным он не
+    // адресован, и «Вернули на доработку» у человека, чей отчёт приняли,
+    // читается как ровно обратное.
+    if (partial) recipients = chosen.map((r) => r.assignee_id);
   }
 
   // Принять можно только сданную работу. «Принять» в карточке появляется,
@@ -193,7 +257,12 @@ export async function applyReview(
       .update({ approval_state: "accepted", approval_comment: text || null, approved_at: now, ...closed })
       .eq("id", task.id);
   } else if (action === "return") {
-    await admin.from("tasks").update({ approval_state: "returned", approval_comment: text, approved_at: null }).eq("id", task.id);
+    // Кому вернули — в самом объяснении, которое висит плашкой над
+    // задачей: «Возвращено на доработку: Евгений Макаров: сделано не
+    // полностью». Иначе остальные читали бы её как сказанное им.
+    const names = returning.map((r) => r.name).filter(Boolean).join(", ");
+    const shownComment = partial && names ? `${names} — ${text}` : text;
+    await admin.from("tasks").update({ approval_state: "returned", approval_comment: shownComment, approved_at: null }).eq("id", task.id);
     // Отчёты И отказы обнуляются: иначе задача осталась бы «ответили все»,
     // и приёмка предложилась бы снова, ничего не изменив.
     //
@@ -206,8 +275,10 @@ export async function applyReview(
     await admin
       .from("task_participants")
       .update({ done_at: null, done_comment: null, done_files: [], declined_at: null, decline_reason: null })
-      .eq("task_id", task.id)
-      .eq("role", "executor");
+      .in(
+        "id",
+        returning.map((r) => r.id),
+      );
   } else if (action === "reopen") {
     await admin.from("tasks").update(REOPEN_PATCH).eq("id", task.id);
   } else {
@@ -227,7 +298,7 @@ export async function applyReview(
     itemId: task.id,
     text:
       action === "return"
-        ? `↩ ${who.label} вернул на доработку: ${text}`
+        ? `↩ ${who.label} вернул на доработку${partial ? " " + returning.map((r) => r.name).join(", ") : ""}: ${text}`
         : action === "approve"
           ? `✅ ${who.label} принял работу${text ? ": " + text : ""}`
           : action === "reopen"
@@ -249,6 +320,8 @@ async function tellExecutors(
   action: ReviewAction,
   comment: string,
   unfulfilled = false,
+  // Только этим людям (assignee_id): частичный возврат и «дождаться всех».
+  only?: string[],
 ): Promise<void> {
   // Номер спрашивается здесь, а не у вызывающих: зовут сюда пять дверей
   // (трекер, бот, итог встречи…), и каждая знает задачу в своём объёме.
@@ -257,7 +330,7 @@ async function tellExecutors(
     admin.from("tasks").select("number").eq("id", task.id).maybeSingle(),
   ]);
   const named = taskRef({ title: task.title, number: (numRow as { number?: number | null } | null)?.number ?? null });
-  const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
+  const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id).filter((id) => !only || only.includes(id));
   if (!ids.length) return;
 
   const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
@@ -269,14 +342,16 @@ async function tellExecutors(
         ? `✅ Принято: ${named}${comment ? "\n\n" + comment : ""}`
         : action === "reopen"
           ? `🔄 Задачу открыли заново: ${named}${comment ? "\n\n" + comment : ""}`
-          : `🔒 Задача закрыта${unfulfilled ? " невыполненной" : ""}: ${named}\n\n${comment}`;
+          : action === "wait"
+            ? `⏳ Ждём и вашего отчёта: ${named}\n\nЗадачу сдали целиком, но постановщик хочет отчёт от каждого исполнителя.${comment ? "\n\n" + comment : ""}`
+            : `🔒 Задача закрыта${unfulfilled ? " невыполненной" : ""}: ${named}\n\n${comment}`;
 
   // Под возвратом — кнопки, которыми на него отвечают: сообщение, которым
   // задачу присылали, к этому моменту уже переписано, и отчитаться заново
   // было бы нечем. То же самое у заново открытой задачи: по ней снова
   // ждут отчёта. После приёмки ждать нечего — остаётся «Ответить».
   const buttons =
-    action === "return" || action === "reopen" ? taskButtons(task.id, "executor") : replyButtons("task", task.id);
+    action === "return" || action === "reopen" || action === "wait" ? taskButtons(task.id, "executor") : replyButtons("task", task.id);
 
   // Через sendToPerson, а не по чату из строки человека: исполнителем
   // бывает и владелец, а его чат живёт не в этой строке, и рассылка,

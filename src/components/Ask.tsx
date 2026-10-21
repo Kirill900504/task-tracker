@@ -52,11 +52,23 @@ export type AskOptions = {
   // Готовые ответы кнопками над полем (lib/quickAnswers). Нажатие вставляет
   // фразу, а не отправляет — как в AnswerForm.
   quick?: string[];
+  // Выбор людей кнопками над полем — «кому вернуть на доработку»
+  // (21.10.2026). Одно окно, а не два подряд: кого и за что решают вместе,
+  // и вопрос «что доделать» без ответа «кому» не значит ничего.
+  pick?: AskPick;
+};
+
+export type AskPick = {
+  label: string;
+  options: { value: string; label: string; hint?: string }[];
+  selected: string[];
+  // Ни одного не выбрали — окно не закрывается и говорит это.
+  required?: string;
 };
 
 // Ответ окна с документами. Файлы ещё НЕ загружены — куда их класть,
 // решает тот, кто спрашивал (обычно lib/answerFiles).
-export type AskWithFiles = { text: string; files: File[] };
+export type AskWithFiles = { text: string; files: File[]; picked: string[] };
 
 export type ConfirmOptions = {
   title?: string;
@@ -115,7 +127,7 @@ const FALLBACK: AskApi = {
   ask: async (o) => (typeof window === "undefined" ? null : window.prompt(o.question, o.value || "")),
   askWithFiles: async (o) => {
     const text = typeof window === "undefined" ? null : window.prompt(o.question, o.value || "");
-    return text === null ? null : { text, files: [] };
+    return text === null ? null : { text, files: [], picked: o.pick?.selected || [] };
   },
   confirm: async (o) => (typeof window === "undefined" ? false : window.confirm(o.question)),
   say: async (o) => {
@@ -140,6 +152,15 @@ export default function AskProvider({ children }: { children: ReactNode }) {
     filesRef.current = next;
     setFiles(next);
   }
+  // Выбранные люди — по той же причине в ref: читаются в момент ответа.
+  const [picked, setPicked] = useState<string[]>([]);
+  const pickedRef = useRef<string[]>([]);
+  function togglePick(value: string) {
+    const next = pickedRef.current.includes(value) ? pickedRef.current.filter((v) => v !== value) : [...pickedRef.current, value];
+    pickedRef.current = next;
+    setPicked(next);
+    setProblem("");
+  }
   // Ответ обещан промисом, и отдать его надо ровно один раз — даже если окно
   // закроют мимо кнопки (Esc, клик по фону).
   const pendingRef = useRef<Pending | null>(null);
@@ -150,6 +171,9 @@ export default function AskProvider({ children }: { children: ReactNode }) {
     setProblem("");
     filesRef.current = [];
     setFiles([]);
+    const initialPick = next.kind === "ask" ? next.pick?.selected || [] : [];
+    pickedRef.current = initialPick;
+    setPicked(initialPick);
     setPending(next);
   }, []);
 
@@ -168,7 +192,7 @@ export default function AskProvider({ children }: { children: ReactNode }) {
               files: true,
               // Файлы забираются из ref в момент ответа: окно одно на всё
               // приложение, и следующий вопрос сбросит их при открытии.
-              resolve: (text) => resolve(text === null ? null : { text, files: filesRef.current }),
+              resolve: (text) => resolve(text === null ? null : { text, files: filesRef.current, picked: pickedRef.current }),
             },
             options.value || "",
           ),
@@ -200,6 +224,10 @@ export default function AskProvider({ children }: { children: ReactNode }) {
     if (!current) return;
     if (current.kind === "ask") {
       const value = text.trim();
+      if (current.pick?.required && !pickedRef.current.length) {
+        setProblem(current.pick.required);
+        return;
+      }
       // Обязательный ответ проверяется здесь, а не вторым окном после
       // закрытия первого: человек видит подсказку там же, где пишет.
       if (current.required && !value) {
@@ -276,6 +304,28 @@ export default function AskProvider({ children }: { children: ReactNode }) {
                 </a>
               )}
               {pending.kind === "say" && pending.code && <div className="ask-code">{pending.code}</div>}
+
+              {pending.kind === "ask" && pending.pick && (
+                <div className="field ask-pick">
+                  <div className="ask-pick-label">{pending.pick.label}</div>
+                  <div className="ask-quick">
+                    {pending.pick.options.map((o) => (
+                      <button
+                        key={o.value}
+                        type="button"
+                        className={"participant-chip" + (picked.includes(o.value) ? " selected" : "")}
+                        aria-pressed={picked.includes(o.value)}
+                        data-pick={o.value}
+                        title={o.hint || undefined}
+                        onClick={() => togglePick(o.value)}
+                      >
+                        {o.label}
+                        {o.hint && <span className="chip-role"> · {o.hint}</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {pending.kind === "ask" && pending.quick && pending.quick.length > 0 && (
                 <div className="ask-quick">

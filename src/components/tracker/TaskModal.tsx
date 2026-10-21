@@ -123,6 +123,7 @@ export default function TaskModal({
   onRemoveParticipant,
   onApproveWork,
   onReturnWork,
+  onWaitForAll,
   onReturnOne,
   onForceCloseWork,
   onReopenWork,
@@ -160,7 +161,9 @@ export default function TaskModal({
   onSetParticipantRole: (participantId: string, role: TaskParticipantRole) => void;
   onRemoveParticipant: (participantId: string) => void;
   onApproveWork: (comment: string) => void;
-  onReturnWork: (comment: string) => void;
+  // participantIds — кому именно вернуть; без них — всем, кто ответил.
+  onReturnWork: (comment: string, participantIds?: string[]) => void;
+  onWaitForAll?: () => void | Promise<void>;
   onReturnOne?: (participantId: string, comment: string) => void | Promise<void>;
   onForceCloseWork: (reason: string) => void;
   onReopenWork: (comment: string) => void;
@@ -850,6 +853,7 @@ export default function TaskModal({
                   approvalComment={task.approvalComment}
                   onApproveWork={onApproveWork}
                   onReturnWork={onReturnWork}
+                  onWaitForAll={onWaitForAll}
                   onReopenWork={onReopenWork}
                   onCloseUnfulfilled={onForceCloseWork}
                   closed={closed}
