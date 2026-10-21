@@ -74,6 +74,20 @@ test("срок обязателен, чек-лист, #номер и счёт п
       return (data || []).map((r) => (r.done ? 1 : 0) as number).sort().join("");
     }, { timeout: 30_000 })
     .toBe("01");
+  // Быстрые нажатия подряд (21.10.2026: «нажал, а галка сама отжалась
+  // обратно»): эхо первой записи будило перечитывание, которое приносило
+  // базу без ещё летящей второй. Четыре нажатия без пауз возвращают то же
+  // состояние — и экран, и база обязаны его удержать, а не моргнуть.
+  const checkOf = (text: string) => page.locator("#taskChecklist .checklist-item", { hasText: text }).locator(".check");
+  await checkOf("Второй шаг").click();
+  await checkOf("Второй шаг").click();
+  await checkOf("Первый шаг").click();
+  await checkOf("Первый шаг").click();
+  await page.waitForTimeout(3000);
+  await expect(checkOf("Первый шаг")).toHaveAttribute("aria-pressed", "true");
+  await expect(checkOf("Второй шаг")).toHaveAttribute("aria-pressed", "false");
+  const { data: afterBurst } = await admin.from("task_checklist").select("text, done").eq("task_id", firstRow.id);
+  expect(Object.fromEntries((afterBurst || []).map((r) => [r.text, r.done]))).toEqual({ "Первый шаг": true, "Второй шаг": false });
   await page.keyboard.press("Escape");
   await expect(card.locator(".task-checklist")).toHaveText("1/2", { timeout: 30_000 });
   // Число переносов — рядом со сроком.
