@@ -5,6 +5,7 @@ import Icon from "./Icon";
 import { useSlotVotes } from "@/hooks/useSlotVotes";
 import { slotLabel, type SlotOption } from "@/lib/meetingPollRules";
 import { withoutSelfMark } from "@/lib/actorName";
+import { humanError } from "@/lib/humanError";
 
 // Варианты времени у встречи-опроса (миграция 0062, lib/meetingPoll).
 //
@@ -51,7 +52,7 @@ export default function MeetingPoll({
       if (data.scheduled) onScheduled(data.scheduled);
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(humanError(e, "Не получилось"));
       setMine(null);
     } finally {
       setBusy(false);

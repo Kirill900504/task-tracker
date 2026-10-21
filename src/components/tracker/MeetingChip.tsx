@@ -18,6 +18,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useMinuteClock } from "@/hooks/useMinuteClock";
 import { useArchivedPeople } from "@/hooks/useArchivedPeople";
 import ArchivedMark from "./ArchivedMark";
+import { humanError } from "@/lib/humanError";
 
 // Карточка встречи в списке — устроена как карточка задачи.
 //
@@ -177,7 +178,7 @@ export default function MeetingChip({
       }
     } catch (err) {
       setNudge("idle");
-      await ask.say({ title: "Не получилось", question: err instanceof Error ? err.message : String(err) });
+      await ask.say({ title: "Не получилось", question: humanError(err, "Не получилось") });
     }
   }
 
