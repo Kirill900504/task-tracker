@@ -27,8 +27,14 @@ async function expectBrandPlusBeforeMic(row: Locator) {
   await expect(plus).toBeVisible();
   const mic = row.locator(".field-mic-btn:not(.field-add-btn)");
   if (await mic.count()) {
-    const p = (await plus.boundingBox())!;
-    const m = (await mic.boundingBox())!;
+    // Оба прямоугольника — в ОДНОМ кадре: окно появляется с анимацией, и
+    // два отдельных замера попадали в разные её моменты.
+    const [p, m] = await row.evaluate((el) =>
+      [".field-add-btn", ".field-mic-btn:not(.field-add-btn)"].map((sel) => {
+        const r = el.querySelector(sel)!.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width };
+      }),
+    );
     expect(p.x + p.width).toBeLessThanOrEqual(m.x + 1);
     expect(Math.abs(p.y - m.y)).toBeLessThan(2);
   }
