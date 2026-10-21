@@ -8,7 +8,7 @@ import { userFilePath } from "./userFile";
 // список адресатов, который сам следит за командой (21.10.2026).
 //
 // Проверяется то, что можно было сломать незаметно: ряд «дата · Создать ·
-// Отправить · Завершить» переносится на вторую строку при обычной ширине
+// Отправить · Поделиться» переносится на вторую строку при обычной ширине
 // окна (это и был бы «не помещается»), меню «Отправить» показывает
 // убранного человека или не показывает добавленного без перезагрузки, а
 // убранный исполнитель на задаче выглядит живым коллегой.
@@ -44,7 +44,10 @@ test("мысль: дата и три действия словами — одн�
   const item = await addIdea(page, `E2E мысль с кнопками ${Date.now()}`);
   await expect(item.locator(".idea-act", { hasText: "Создать" })).toBeVisible();
   await expect(item.locator(".idea-act", { hasText: "Отправить" })).toBeVisible();
-  await expect(item.locator(".idea-act", { hasText: "Завершить" })).toBeVisible();
+  await expect(item.locator(".idea-act", { hasText: "Поделиться" })).toBeVisible();
+  // «Завершить» — зелёная галочка в углу рядом с флажком, не словом в ряду.
+  await expect(item.locator(".idea-corner .idea-check")).toBeVisible();
+  await expect(item.locator(".idea-act", { hasText: "Завершить" })).toHaveCount(0);
 
   for (const width of [1920, 1600, 1440, 1366, 1280]) {
     await page.setViewportSize({ width, height: 900 });
@@ -67,7 +70,7 @@ test("мысль: дата и три действия словами — одн�
   await expect(item.locator(".idea-flag")).toHaveAttribute("aria-pressed", "true");
   if (process.env.SHOT_DIR) await item.screenshot({ path: `${process.env.SHOT_DIR}/idea-important.png` });
 
-  // «Завершить» вычёркивает мысль из рабочего списка.
+  // Галочка вычёркивает мысль из рабочего списка.
   await item.locator(".idea-check").click();
   await expect(item).toHaveCount(0);
 });
