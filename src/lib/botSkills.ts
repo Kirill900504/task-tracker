@@ -6,7 +6,7 @@ import { actorScope, authorFilter } from "@/lib/botActor";
 import { findItems, type TaskToMove } from "@/lib/botMoveFlow";
 import { MEETING_MOVE_COLUMNS, inPast, type MeetingToMove } from "@/lib/itemMove";
 import { dayLabel, fmtWhen, parseDue, parseWhen } from "@/lib/botWhen";
-import { bestMatches } from "@/lib/itemMatch";
+import { bestMatches, coverage } from "@/lib/itemMatch";
 import { navRow } from "@/lib/botMenu";
 import { applyReview } from "@/lib/reviewWork";
 import { actorName, withoutSelfMark } from "@/lib/actorName";
@@ -18,7 +18,7 @@ import { isSelfAssignee } from "@/lib/trackerRows";
 import { dateStr, moscowNow, overdueOn } from "@/lib/taskLogic";
 import { ownerTasks } from "@/lib/ownerQueries";
 import { createTaskFromBot } from "@/lib/ownerNewTask";
-import { nameWasSaid, resolveKnownName } from "@/lib/quickAdd";
+import { nameWasSaid, parseQuickAdd, resolveKnownName } from "@/lib/quickAdd";
 import { numbered, taskRef } from "@/lib/taskRef";
 import { fmtDate } from "@/lib/taskDisplay";
 import { plural } from "@/lib/plural";
@@ -537,21 +537,108 @@ export async function addAgenda(ctx: SkillContext, input: Record<string, unknown
 }
 
 // =================================================================== 9. чек-лист
+//
+// Чек-лист ведут постановщик, исполнители и соисполнители, наблюдатель
+// смотрит (миграция 0059, так же в трекере). До 20.10.2026 бот искал
+// задачу только среди ПОСТАВЛЕННЫХ человеком — и исполнитель, ради которого
+// чек-лист и заводят, отметить пункт словами не мог. Его слова: «сделай,
+// чтобы исполнитель тоже мог отмечать чек-лист словами». Теперь задача
+// ищется и среди тех, где человек исполнитель или соисполнитель, — в том
+// числе у коллеги без входа в трекер (checklistForPerson ниже). Добавлять
+// пункты может только тот, у кого есть вход: у строки чек-листа автор —
+// учётная запись, и приписать пункт чужому имени было бы подлогом.
 
-export async function editChecklist(ctx: SkillContext, input: Record<string, unknown>): Promise<SkillReply> {
+type ChecklistWho = { spaceId: string; authId: string | null; assigneeId: string | null; actor: BotActor | null };
+type ChecklistTask = { id: string; title: string; number: number | null; user_id: string };
+
+async function selfRowId(admin: SupabaseClient, spaceId: string): Promise<string | null> {
+  const { data } = await admin.from("assignees").select("id").eq("user_id", spaceId).like("name", "%(я)").order("created_at").limit(1).maybeSingle();
+  return (data as { id: string } | null)?.id || null;
+}
+
+// Открытые задачи, где этот человек ведёт чек-лист: поставленные им и те,
+// где он исполнитель или соисполнитель. Закрытые — только просмотр
+// (lib/closedItem), их здесь нет.
+async function checklistTasks(admin: SupabaseClient, who: ChecklistWho): Promise<ChecklistTask[]> {
+  const out = new Map<string, ChecklistTask>();
+  const cols = "id, title, number, user_id, status, approval_state";
+  type Raw = ChecklistTask & { status: string | null; approval_state: string | null };
+  const open = (t: Raw) => t.status !== "done" && t.approval_state !== "accepted";
+  if (who.actor) {
+    const { data } = await admin.from("tasks").select(cols).match(actorScope(who.actor)).or(authorFilter(who.actor)).is("deleted_at", null).limit(200);
+    for (const t of (data || []) as Raw[]) if (open(t)) out.set(t.id, t);
+  }
+  if (who.assigneeId) {
+    const { data: parts } = await admin.from("task_participants").select("task_id").eq("assignee_id", who.assigneeId).in("role", ["executor", "coexecutor"]);
+    const ids = ((parts || []) as { task_id: string }[]).map((p) => p.task_id).filter((id) => !out.has(id));
+    if (ids.length) {
+      const { data } = await admin.from("tasks").select(cols).in("id", ids).eq("user_id", who.spaceId).is("deleted_at", null);
+      for (const t of (data || []) as Raw[]) if (open(t)) out.set(t.id, t);
+    }
+  }
+  return [...out.values()];
+}
+
+async function runChecklist(
+  admin: SupabaseClient,
+  who: ChecklistWho,
+  input: Record<string, unknown>,
+  reply: SkillContext["reply"],
+  phrase: string,
+): Promise<SkillReply> {
   const add = list(input.add).map((s) => s.slice(0, 500));
   const done = list(input.done);
-  if (!add.length && !done.length) return { text: "Что добавить в чек-лист или отметить? Например: «к смете пункты: цены, подпись»." };
-  const got = await oneTask(ctx, String(input.query || ""), "вести чек-лист");
-  if ("reply" in got) return got.reply;
-  const t = got.task;
-  const author = ctx.actor.isOwner ? ctx.actor.spaceId : ctx.actor.userId;
-  const { data: rows } = await ctx.admin.from("task_checklist").select("id, text, position, done").eq("task_id", t.id).order("position");
+  // «Отметь цены» модель порой кладёт в add, а не в done (поймано
+  // test:bots 21.10.2026: в чек-листе появился второй пункт «цены»). Глагол
+  // отметки во фразе решает за неё — см. ниже, где add сверяется с тем,
+  // что в чек-листе уже есть.
+  // Узко нарочно: «выполнить проверку» или «отметить в 1С» — это пункты, а
+  // не отметка, и широкое «выполн|отмет» перестало бы их заводить.
+  const tick = /(отметь|отмечаю|отметил[аи]?(?![а-я])|готово|сделал[аи]?(?![а-я])|сделано|выполнил[аи]?(?![а-я])|выполнено|вычеркн|галочк)/i.test(phrase);
+  if (tick) for (const a of add) if (!done.includes(a)) done.push(a);
+  if (!add.length && !done.length) return { text: "Что добавить в чек-лист или отметить? Например: «к смете пункты: цены, подпись» или «по смете отметь подпись»." };
+
+  const tasks = await checklistTasks(admin, who);
+  const query = String(input.query || "").trim();
+  let hits: ChecklistTask[] = [];
+  if (reply?.item?.kind === "task") hits = tasks.filter((t) => t.id === reply.item!.id);
+  if (!hits.length && query) hits = bestMatches(tasks, query);
+  if (!hits.length && reply?.text?.trim()) {
+    const scored = tasks.map((t) => ({ t, s: coverage(t.title, reply.text) })).filter((x) => x.s >= 0.6).sort((a, b) => b.s - a.s);
+    if (scored.length) hits = scored.filter((x) => x.s >= scored[0].s - 0.001).map((x) => x.t);
+  }
+  // Не назвали задачу, а пункт с таким текстом есть ровно в одной — она.
+  if (!hits.length && !query && done.length && tasks.length) {
+    const { data: rows } = await admin.from("task_checklist").select("task_id, text").in("task_id", tasks.map((t) => t.id)).eq("done", false);
+    const owners = new Set(
+      ((rows || []) as { task_id: string; text: string }[]).filter((r) => done.some((d) => bestMatches([{ title: r.text }], d).length)).map((r) => r.task_id),
+    );
+    if (owners.size === 1) hits = tasks.filter((t) => owners.has(t.id));
+  }
+  const button = (t: ChecklistTask) => [{ text: `☑️ ${short(numbered(t), 32)}`, data: encodeCallback("task", who.actor ? "oshow" : "show", t.id) }];
+  if (!hits.length) {
+    if (!tasks.length) return { text: "Не нашёл открытых задач, где вы ведёте чек-лист (поставили сами, исполнитель или соисполнитель)." };
+    return { text: `Не понял, в какой задаче${query ? ` «${query}»` : ""}. Назовите её — например: «по смете отметь подпись». Ваши задачи:`, buttons: tasks.slice(0, 6).map(button) };
+  }
+  if (hits.length > 1) return { text: "Нашёл несколько задач — в какой? Назовите её точнее:", buttons: hits.slice(0, 6).map(button) };
+  const t = hits[0];
+
+  const { data: rows } = await admin.from("task_checklist").select("id, text, position, done").eq("task_id", t.id).order("position");
   const items = (rows || []) as { id: string; text: string; position: number; done: boolean }[];
-  if (add.length) {
-    const start = items.length ? Math.max(...items.map((i) => i.position)) + 1 : 0;
-    const { error } = await ctx.admin.from("task_checklist").insert(add.map((text, i) => ({ task_id: t.id, text, position: start + i, author_id: author, user_id: t.user_id })));
-    if (error) return { text: "Не получилось добавить пункты: " + error.message };
+  const notes: string[] = [];
+  // Пункт, который в чек-листе уже есть, второй раз не заводится: при
+  // глаголе отметки он отмечается (он уже в done выше), без него — просто
+  // пропускается.
+  const fresh = add.filter((a) => !items.some((i) => i.text.trim().toLowerCase() === a.trim().toLowerCase() || bestMatches([{ title: i.text }], a, 1).length));
+  const addNow = tick ? [] : fresh;
+  if (addNow.length) {
+    if (!who.authId) {
+      notes.push("Добавлять пункты можно из трекера или попросив постановщика — отмечать готовые можно и здесь.");
+    } else {
+      const start = items.length ? Math.max(...items.map((i) => i.position)) + 1 : 0;
+      const { error } = await admin.from("task_checklist").insert(addNow.map((text, i) => ({ task_id: t.id, text, position: start + i, author_id: who.authId, user_id: t.user_id })));
+      if (error) return { text: "Не получилось добавить пункты: " + error.message };
+    }
   }
   const missed: string[] = [];
   for (const d of done) {
@@ -560,15 +647,43 @@ export async function editChecklist(ctx: SkillContext, input: Record<string, unk
       missed.push(d);
       continue;
     }
-    await ctx.admin.from("task_checklist").update({ done: true, done_by: author, done_at: new Date().toISOString() }).eq("id", hit[0].id);
+    await admin.from("task_checklist").update({ done: true, done_by: who.authId, done_at: new Date().toISOString() }).eq("id", hit[0].id);
   }
-  const { data: after } = await ctx.admin.from("task_checklist").select("text, done").eq("task_id", t.id).order("position");
+  const { data: after } = await admin.from("task_checklist").select("text, done").eq("task_id", t.id).order("position");
   const now = (after || []) as { text: string; done: boolean }[];
   const ready = now.filter((i) => i.done).length;
+  if (missed.length) notes.push(`⚠ Не нашёл среди неотмеченных: ${missed.join(", ")}`);
   return {
-    text: `☑️ ${taskRef(t)} — ${ready}/${now.length}\n${now.map((i) => `${i.done ? "✅" : "▫️"} ${i.text}`).join("\n")}${missed.length ? `\n⚠ Не нашёл пункт: ${missed.join(", ")}` : ""}`,
-    buttons: [[{ text: "📋 Открыть задачу", data: encodeCallback("task", "oshow", t.id) }]],
+    text: `☑️ ${taskRef(t)} — ${ready}/${now.length}\n${now.map((i) => `${i.done ? "✅" : "▫️"} ${i.text}`).join("\n")}${notes.length ? "\n" + notes.join("\n") : ""}`,
+    buttons: [button(t)],
   };
+}
+
+export async function editChecklist(ctx: SkillContext, input: Record<string, unknown>): Promise<SkillReply> {
+  const a = ctx.actor;
+  const assigneeId = a.isOwner ? await selfRowId(ctx.admin, a.spaceId) : a.assigneeId || null;
+  return runChecklist(ctx.admin, { spaceId: a.spaceId, authId: a.isOwner ? a.spaceId : a.userId, assigneeId, actor: a }, input, ctx.reply, ctx.phrase);
+}
+
+// Коллега без входа в трекер: его свободный текст обычно уходит репликой в
+// обсуждение. Фразу про чек-лист разбирает модель, и если это он — пункт
+// отмечается, а не пишется в ленту. Не чек-лист — null, и разбор идёт
+// дальше как раньше.
+export async function checklistForPerson(
+  admin: SupabaseClient,
+  person: { id: string; name: string; user_id: string },
+  text: string,
+): Promise<SkillReply | null> {
+  const known = await knownPeople(admin, person.user_id);
+  let items;
+  try {
+    ({ items } = await parseQuickAdd(text, known));
+  } catch {
+    return null;
+  }
+  const item = items.find((it) => it.tool === "checklist");
+  if (!item) return null;
+  return runChecklist(admin, { spaceId: person.user_id, authId: null, assigneeId: person.id, actor: null }, item.input, null, text);
 }
 
 // ================================================================ 10. поторопить
