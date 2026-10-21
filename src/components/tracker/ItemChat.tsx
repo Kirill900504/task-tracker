@@ -13,6 +13,8 @@ import { useColleagues } from "@/hooks/useColleagues";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { ChatMuteButton } from "./AlertsButton";
 import EmojiPicker from "./EmojiPicker";
+import ArchivedMark from "./ArchivedMark";
+import { useArchivedPeople } from "@/hooks/useArchivedPeople";
 import { insertAt, nearBottom, OPEN_TASK_NUMBER_EVENT, splitLinks } from "@/lib/chatText";
 
 // Обсуждение задачи там же, где задача.
@@ -244,6 +246,8 @@ export default function ItemChat({
   const { colleagues } = useColleagues();
   const ownerName = colleagues.find((c) => isSelfAssignee(c.name))?.name ?? "";
   const ask = useAsk();
+  // Реплика убранного из команды остаётся в переписке — с пометкой у имени.
+  const isArchived = useArchivedPeople();
   const [draft, setDraft] = useState("");
   const [mentionCursor, setMentionCursor] = useState<{ query: string | null; index: number }>({ query: null, index: 0 });
   // Escape прячет подсказку для ЭТОГО набранного текста; следующая же буква
@@ -631,6 +635,7 @@ export default function ItemChat({
                       {!c.mine && !sameAuthor && (
                         <div className="chat-author" style={{ color: colorOf(c.authorName) }}>
                           {c.authorName}
+                          {isArchived(c.authorName) && <ArchivedMark />}
                         </div>
                       )}
 

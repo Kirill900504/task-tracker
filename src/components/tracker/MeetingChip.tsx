@@ -16,6 +16,8 @@ import { useAsk } from "@/components/Ask";
 import { isPoll } from "@/lib/meetingPollRules";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useMinuteClock } from "@/hooks/useMinuteClock";
+import { useArchivedPeople } from "@/hooks/useArchivedPeople";
+import ArchivedMark from "./ArchivedMark";
 
 // Карточка встречи в списке — устроена как карточка задачи.
 //
@@ -116,6 +118,8 @@ export default function MeetingChip({
     setPeek(null);
   }
   const participants = sanitizeAssigneeList(meeting.participants);
+  // Убранный из команды остаётся в составе прошедшей встречи — с пометкой.
+  const isArchived = useArchivedPeople();
   // Who answered «Буду» in Telegram — shown against the participant count,
   // so a glance says how many are actually coming.
   const confirmed = (meeting.confirmedBy || []).filter((name) => participants.includes(name));
@@ -457,6 +461,7 @@ export default function MeetingChip({
                     ) : null}
                   </span>
                   {withoutSelfMark(p)}
+                  {isArchived(p) && <ArchivedMark />}
                 </div>
               );
             })}

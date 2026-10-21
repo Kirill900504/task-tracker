@@ -43,7 +43,9 @@ async function recipientsByName(
 ): Promise<{ linked: Recipient[]; unlinked: string[]; self: string[] }> {
   const wanted = names.filter(Boolean);
   if (!wanted.length) return { linked: [], unlinked: [], self: [] };
-  const { data } = await supabase.from("assignees").select("id, name, user_id, telegram_chat_id, max_user_id").in("name", wanted);
+  // Убранный из команды (миграция 0055) — не адресат, даже если имя пришло
+  // из меню, открытого до того, как его убрали.
+  const { data } = await supabase.from("assignees").select("id, name, user_id, telegram_chat_id, max_user_id").in("name", wanted).is("archived_at", null);
   const rows = (data || []) as (ColleagueRow & { user_id: string })[];
   const linked: Recipient[] = [];
   const unlinked: string[] = [];
@@ -244,7 +246,7 @@ export async function POST(req: Request) {
     // только подключённых к мессенджеру, и половина команды для мысли не
     // существовала вовсе.
     const { data: unlinkedRows } = unlinked.length
-      ? await supabase.from("assignees").select("id, name").in("name", unlinked)
+      ? await supabase.from("assignees").select("id, name").in("name", unlinked).is("archived_at", null)
       : { data: [] };
     const known = (unlinkedRows || []) as { id: string; name: string }[];
     // «Сохранить мысль» — только тем, у кого есть свой список мыслей, то
