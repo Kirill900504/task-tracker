@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { coalescer } from "@/lib/coalesce";
 import { onRevive } from "@/lib/revive";
 import { describeDbError } from "@/lib/syncError";
 import { me } from "@/lib/me";
+import { writeQueue } from "@/lib/writeQueue";
 
 // Чек-лист задачи (миграция 0059) — своя таблица рядом с задачей, как
 // повестка у встречи (useMeetingAgenda): шаги отмечают исполнители, а
@@ -43,34 +44,25 @@ export function useTaskChecklist(taskId: string) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
 
-  // Галочка «сама отжималась обратно» (21.10.2026): перечитывание, которое
-  // будит эхо подписки от ПЕРВОГО нажатия, приносило таблицу без второго,
-  // ещё летящего, — и экран честно рисовал базу поверх нажатого. Поэтому,
-  // пока хоть одна запись в пути, прочитанное на экран не кладётся вовсе, а
-  // чтение, начатое до последней правки, выбрасывается (`edits`): оно не
-  // может знать о ней. Очередь опустела — одно чтение, и всё сходится.
-  // Записи идут одной очередью: два быстрых нажатия на одну галочку обязаны
-  // дойти до базы в том же порядке, иначе последнее слово за сетью, а не за
-  // человеком.
-  const sync = useRef({ inFlight: 0, edits: 0, queue: Promise.resolve() as Promise<unknown>, reread: () => {} });
+  // Записи — одной очередью, а перечитанное не перекрывает летящее
+  // (lib/writeQueue: «нажал, а галка сама отжалась обратно», 21.10.2026).
+  const [queue] = useState(() => writeQueue(setError));
 
   useEffect(() => {
     if (!taskId) return;
     let cancelled = false;
-    const state = sync.current;
-    const reader = coalescer(async () => {
-      const startedAt = state.edits;
-      const next = await load(taskId);
-      if (cancelled || !next) return;
-      if (state.inFlight > 0) return; // очередь допишется и перечитает сама
-      if (state.edits !== startedAt) {
-        reader.soon();
-        return;
-      }
-      setItems(next);
-      setLoaded(true);
-    });
-    state.reread = reader.soon;
+    const reader = coalescer(
+      queue.guard(
+        () => load(taskId),
+        (next) => {
+          if (cancelled) return;
+          setItems(next);
+          setLoaded(true);
+        },
+        () => reader.soon(),
+      ),
+    );
+    queue.onSettled(reader.soon);
     void reader.now();
     const db = createClient();
     const channel = db
@@ -82,35 +74,14 @@ export function useTaskChecklist(taskId: string) {
     const stopRevive = onRevive(reader.soon);
     return () => {
       cancelled = true;
-      state.reread = () => {};
+      queue.onSettled(() => {});
       reader.stop();
       stopRevive();
       void db.removeChannel(channel);
     };
-  }, [taskId]);
+  }, [taskId, queue]);
 
-  // Экран уже поправлен; запись встаёт в очередь. Отказ показывается
-  // словами, а экран возвращается к базе тем же перечитыванием, что идёт и
-  // после удачи, — отдельного «отката» не нужно.
-  const write = useCallback((job: () => Promise<string | null>) => {
-    const state = sync.current;
-    state.edits++;
-    state.inFlight++;
-    const run = state.queue.then(async () => {
-      let message: string | null;
-      try {
-        message = await job();
-      } catch (e) {
-        message = e instanceof Error ? e.message : String(e);
-      }
-      if (message) setError(message);
-    });
-    state.queue = run;
-    return run.finally(() => {
-      state.inFlight--;
-      if (state.inFlight === 0) state.reread();
-    });
-  }, []);
+  const write = queue.write;
 
   const add = useCallback(
     (text: string) => {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { IdeaRecipientRow } from "@/lib/ideaRecipients";
 import { formatIdeaCreatedAt } from "@/lib/trackerRows";
 import Icon from "./Icon";
+import { humanError } from "@/lib/humanError";
 
 // Мысль, которой со мной ПОДЕЛИЛИСЬ (миграция 0051).
 //
@@ -42,7 +43,7 @@ export default function SharedIdeaItem({
       if (!res.ok || !data || data.error) throw new Error(data?.error || "Не получилось");
     } catch (e) {
       onAnswered(row, "failed");
-      setError(e instanceof Error ? e.message : "Не получилось");
+      setError(humanError(e, "Не получилось"));
     } finally {
       setBusy(false);
     }
