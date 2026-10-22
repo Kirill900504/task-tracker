@@ -135,7 +135,20 @@ test("присланную мысль принимают в трекере, а �
     await expect(sharedIn.getByRole("button", { name, exact: true })).toBeVisible();
     await expect(incoming.getByRole("button", { name, exact: true })).toBeVisible();
   }
-  await expect(incoming.getByRole("button", { name: "Прочитать" })).toHaveText("👌");
+  await expect(incoming.getByRole("button", { name: "Прочитать" })).toHaveText("ОК👌");
+  // Все четыре — в одну строку и ни одна не срезана, в том числе в самой
+  // узкой колонке мыслей (окно 1920, «все кнопки действий в одну строку!»).
+  for (const width of [1920, 1280]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const row of [incoming, sharedIn]) {
+      const fit = await row.locator(".received-idea-actions").evaluate((el) => {
+        const btns = [...el.querySelectorAll<HTMLElement>("button")];
+        const tops = new Set(btns.map((b) => Math.round(b.getBoundingClientRect().top)));
+        return { oneRow: tops.size === 1, clipped: btns.filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent) };
+      });
+      expect(fit, `ширина окна ${width}`).toEqual({ oneRow: true, clipped: [] });
+    }
+  }
 
   // Отправленная своя ушла из списка — в окно «Отправленные», где видно,
   // кто что ответил.

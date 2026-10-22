@@ -13,7 +13,7 @@ import { humanError } from "@/lib/humanError";
 // «В работу» (сразу задача на меня) и ×, и два ряда об одном расходились.
 //
 // Форма — .idea-act, ровно как «Создать / Отправить / Поделиться» под
-// своей мыслью; «В работу» подкрашено, как главное.
+// своей мыслью; подкрашено «Сохранить в мысли».
 export default function ReceivedIdeaActions({
   row,
   onAnswered,
@@ -62,24 +62,11 @@ export default function ReceivedIdeaActions({
 
   return (
     <>
+      {/* Порядок и подсветка — его же, вторым кругом тем же днём: «ОК👌»
+          левее всех, подсвечено «Сохранить в мысли», а «В работу» обычная.
+          Имя «ОК👌» для чтения с экрана — словом «Прочитать»: так её
+          находят и e2e. */}
       <div className="idea-actions received-idea-actions">
-        <button
-          type="button"
-          className="idea-act idea-take-act"
-          disabled={busy}
-          title="Завести задачу — себе или коллеге"
-          onClick={() => onToTask(row)}
-        >
-          В работу
-        </button>
-        <button type="button" className="idea-act" disabled={busy} title="Назначить встречу по этой мысли" onClick={() => onToMeeting(row)}>
-          Встреча
-        </button>
-        <button type="button" className="idea-act" disabled={busy} title="Сохранить копию в свои мысли" onClick={() => void answer("keep_idea")}>
-          Сохранить в мысли
-        </button>
-        {/* Имя кнопки для чтения с экрана — словом: «👌» вслух ничего не
-            говорит, а e2e находят кнопку по нему же. */}
         <button
           type="button"
           className="idea-act idea-ok-act"
@@ -88,7 +75,22 @@ export default function ReceivedIdeaActions({
           aria-label="Прочитать"
           onClick={() => void answer("ack_idea")}
         >
-          👌
+          ОК👌
+        </button>
+        <button type="button" className="idea-act" disabled={busy} title="Завести задачу — себе или коллеге" onClick={() => onToTask(row)}>
+          В работу
+        </button>
+        <button type="button" className="idea-act" disabled={busy} title="Назначить встречу по этой мысли" onClick={() => onToMeeting(row)}>
+          Встреча
+        </button>
+        <button
+          type="button"
+          className="idea-act idea-take-act"
+          disabled={busy}
+          title="Сохранить копию в свои мысли"
+          onClick={() => void answer("keep_idea")}
+        >
+          Сохранить в мысли
         </button>
       </div>
       {error && <div className="send-result">{error}</div>}
