@@ -617,7 +617,7 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .overlay{overflow-x:hidden; overscroll-behavior:contain;}
 @media (max-width:800px){
   .modal{max-width:100vw; overflow-x:clip;}
-  .modal .participant-grid, .modal .chip-choice, .modal .deadline-row{flex-wrap:wrap;}
+  .modal .participant-grid, .modal .chip-choice{flex-wrap:wrap;}
 
   /* Стрелка назад едет вместе с прокруткой и заметна (14.10.2026: «должна
      ползти по ходу всего проматывания задачи… и быть более яркая и
@@ -863,3 +863,31 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .field-mic-btn.field-add-btn:disabled, .modal .input-with-mic .field-mic-btn.field-add-btn:disabled{opacity:.5; cursor:default; transform:none;}
 /* В быстром вводе кнопки тянутся по высоте поля, как микрофон рядом. */
 .field-mic-btn.quick-add-plus-btn{width:40px; height:auto; align-self:stretch;}
+
+/* Строка срока — ОДНОЙ строкой всегда (22.10.2026, его слова: «поле
+   строк в одну строку все кнопки умеси!!!» — и про строку «Срок» в
+   задаче, и про «Отложить до…»). Это ряд, который читают слева направо:
+   дата, готовые дни, «Отложить»; перенос уводил последнюю кнопку под
+   ряд, и она читалась отдельным полем. Место берётся так: промежутки и
+   отступы уже, год у даты спрятан (срок почти всегда в этом году, а
+   открытый календарь его показывает), на узком экране «Отложить» —
+   одним значком, а пустой календарь в окне вопроса — без подписи.
+   Контейнерным запросом это не сделать: он делает ряд точкой отсчёта
+   для fixed-потомков, и шторка календаря (.cal-sheet-scrim) сжалась бы
+   до размера ряда. Последний запас — кнопки сжимаются с многоточием,
+   а не выталкивают соседа за край. */
+.deadline-row{flex-wrap:nowrap; gap:4px;}
+.deadline-row .mini-cal-year{display:none;}
+.deadline-row .participant-chip, .deadline-row .mini-cal-trigger{
+  padding:7px 10px; white-space:nowrap; flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
+}
+.deadline-row .snooze-btn{padding:0 10px; gap:5px;}
+/* В «Отложить до…» подписи у дней длиннее («Завтра, пт 23.10»): окно
+   шире ровно на столько, чтобы три кнопки встали в ряд. */
+.modal.ask-modal:has(.ask-calendar){max-width:480px;}
+@media (max-width:560px){
+  .deadline-row .participant-chip, .deadline-row .mini-cal-trigger{padding:7px 8px;}
+  .deadline-row .snooze-btn{padding:0 9px;}
+  .deadline-row .snooze-btn span{display:none;}
+  .ask-calendar .mini-cal-trigger.empty .mini-cal-label{display:none;}
+}

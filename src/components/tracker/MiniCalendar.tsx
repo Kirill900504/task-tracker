@@ -158,11 +158,23 @@ export default function MiniCalendar({
     <div className="mini-cal-wrap" id={id} data-value={value}>
       <button
         type="button"
-        className={"mini-cal-trigger" + (open ? " open" : "")}
+        className={"mini-cal-trigger" + (open ? " open" : "") + (value ? "" : " empty")}
         onClick={() => setOpen((v) => !v)}
         title="Выбрать дату"
       >
-        <Icon name="calendar" size={15} /> {value ? value.split("-").reverse().join(".") : "Выбрать дату"}
+        <Icon name="calendar" size={15} />{" "}
+        {/* Год — отдельным куском: в строке срока (.deadline-row) он
+            прячется, чтобы ряд кнопок уместился в одну строку (22.10.2026). */}
+        <span className="mini-cal-label">
+          {value ? (
+            <>
+              {value.slice(8, 10)}.{value.slice(5, 7)}
+              <span className="mini-cal-year">.{value.slice(0, 4)}</span>
+            </>
+          ) : (
+            "Выбрать дату"
+          )}
+        </span>
       </button>
       {/* Календарь — шторка поверх формы, а не вставка в неё.
           Слова Кирилла 20.09.2026: «чтобы календарь не расширял окна
