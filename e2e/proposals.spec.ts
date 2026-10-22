@@ -270,7 +270,7 @@ test("«Отложить…» убирает задачу с доски авто
   await expect(page.locator("#selfDeadline #snoozeTaskBtn")).toBeVisible();
   await page.click("#snoozeTaskBtn");
   // День выбирают календарём, как срок; рядом — «Завтра» и «Через неделю».
-  await expect(page.locator(".ask-modal #snoozeCal")).toBeVisible();
+  await expect(page.locator(".ask-modal #snoozeCal .mini-cal-trigger")).toBeVisible();
   await expect(page.locator(".ask-modal").getByRole("button", { name: /^Через неделю,/ })).toBeVisible();
   await page.locator(".ask-modal").getByRole("button", { name: /^Завтра,/ }).click();
   await expect(card).toBeHidden();

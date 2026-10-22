@@ -45,15 +45,19 @@ test("своя задача: в карточке только срок, без �
 
 // Строка «Срок» и окно «Отложить до…» — одной строкой (22.10.2026: «поле
 // строк в одну строку все кнопки умеси!!!»). Меряет браузер: все кнопки
-// ряда на одной высоте и ряд не шире своего места — и на ПК, и на телефоне.
+// ряда на одной линии и ряд не шире своего места — и на ПК, и на телефоне.
+// Сравниваются СЕРЕДИНЫ кнопок, а не верхние края: кнопки разной высоты
+// выровнены по центру, и их верх законно расходится на пару пикселей.
 async function oneLine(row: import("@playwright/test").Locator) {
   return row.evaluate((el) => {
-    const tops = [...el.children]
-      .filter((c) => (c as HTMLElement).offsetParent !== null || getComputedStyle(c).display === "contents")
+    const mids = [...el.children]
       .flatMap((c) => (getComputedStyle(c).display === "contents" ? [...c.children] : [c]))
-      .filter((c) => !(c as HTMLElement).classList.contains("cal-sheet-scrim"))
-      .map((c) => Math.round(c.getBoundingClientRect().top));
-    return { rows: new Set(tops).size, fits: el.scrollWidth <= el.clientWidth + 1 };
+      .filter((c) => !c.classList.contains("cal-sheet-scrim") && c.getBoundingClientRect().height > 0)
+      .map((c) => {
+        const r = c.getBoundingClientRect();
+        return r.top + r.height / 2;
+      });
+    return { rows: mids.every((m) => Math.abs(m - mids[0]) < 4) ? 1 : 2, fits: el.scrollWidth <= el.clientWidth + 1 };
   });
 }
 
@@ -63,16 +67,20 @@ for (const size of [
 ]) {
   test(`строка срока и «Отложить до…» — в одну строку (${size.name})`, async ({ page }) => {
     const title = `E2E строка ${size.name} ${Date.now()}`;
-    await login(page);
-    await page.click("#newTaskBtn");
+    await page.setViewportSize({ width: size.width, height: size.height });
+    // Свой вход, а не login(): оболочка телефона поднимается дольше пяти
+    // секунд, которые login() даёт кнопке «+».
+    await page.goto("/login");
+    await page.fill("#email", email);
+    await page.fill("#password", password);
+    await page.click('button[type="submit"]');
+    await expect(page.locator("#newTaskBtn:visible")).toBeVisible({ timeout: 20_000 });
+    await page.click("#newTaskBtn:visible");
     await page.fill("#fTitle", title);
     await pickSelfExecutor(page);
     await page.click("#saveTaskBtn");
     const card = page.locator(".task", { hasText: title });
     await expect(card).toBeVisible();
-    await page.setViewportSize({ width: size.width, height: size.height });
-    await page.reload();
-    await expect(card).toBeVisible({ timeout: 20_000 });
     await card.locator(".task-title, .title").first().click();
     const row = page.locator("#selfDeadline .deadline-row");
     await expect(row).toBeVisible({ timeout: 20_000 });
