@@ -164,6 +164,11 @@ test("моё поручение, моя личная, поручили мне, �
     await expect.poll(shown).toBe("co,watch");
     await btn("helping").click();
     await expect.poll(shown).toBe("self,outgoing,incoming,co,watch");
+    // «Личные» — только задача самому себе (22.10.2026).
+    await btn("personal").click();
+    await expect.poll(shown).toBe("self");
+    await btn("personal").click();
+    await expect.poll(shown).toBe("self,outgoing,incoming,co,watch");
     await btn("assigned").click();
     await btn("mine").click();
     await expect.poll(shown).toBe("self,outgoing,incoming");

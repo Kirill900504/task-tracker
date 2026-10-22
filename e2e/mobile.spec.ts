@@ -167,6 +167,14 @@ test("один «+» сверху в каждом разделе, нижняя �
   await expect(filter("assigned")).toBeVisible();
   await expect(filter("mine")).toBeVisible();
   await expect(filter("helping")).toBeVisible();
+  await expect(filter("personal")).toBeVisible();
+  // Четыре фильтра рядом с «+» и «горит» — полоса всё равно целиком
+  // (22.10.2026 добавились «Личные»).
+  const barOverflow = await page.evaluate(() => {
+    const el = [...document.querySelectorAll(".toolbar")].find((e) => (e as HTMLElement).offsetParent !== null)!;
+    return el.scrollWidth - el.clientWidth;
+  });
+  expect(barOverflow).toBeLessThanOrEqual(1);
   // «Помогаю» прячет задачу, где я исполнитель; отжатие возвращает её.
   await filter("helping").click();
   await expect(card).toHaveCount(0);

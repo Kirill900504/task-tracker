@@ -15,19 +15,33 @@ import { isMine } from "@/lib/ownership";
 // Отсюда правило: ни одна не нажата — вся доска; нажатые складываются
 // (задача видна, если подходит хотя бы под одну). Задача самому себе
 // попадает и в «Я поручил», и в «Мне» — она и то и другое.
-export type BoardFilterKey = "assigned" | "mine" | "helping";
+//
+// «Личные» (22.10.2026, его слова: «фильтрацию по личным задачам которые
+// делаешь на себя») — ровно задачи самому себе, то есть то, что кубик
+// подписывает «Личная задача» (lib/selfTask). Отдельной кнопкой, потому что
+// «Я поручил» и «Мне» их не отделяют: в первой они тонут среди поручений
+// другим, во второй — среди поручений от других.
+export type BoardFilterKey = "assigned" | "mine" | "helping" | "personal";
 
 export const BOARD_FILTERS: { key: BoardFilterKey; label: string; title: string }[] = [
   { key: "assigned", label: "Я поручил", title: "Задачи, которые поставили вы" },
   { key: "mine", label: "Мне", title: "Задачи, где вы исполнитель" },
   { key: "helping", label: "Помогаю", title: "Задачи, где вы соисполнитель или наблюдатель" },
+  { key: "personal", label: "Личные", title: "Личные задачи — которые вы поставили себе" },
 ];
 
-export function matchesBoardFilter(keys: BoardFilterKey[], task: Task, role: MyRole, myUserId: string): boolean {
+export function matchesBoardFilter(
+  keys: BoardFilterKey[],
+  task: Task,
+  role: MyRole,
+  myUserId: string,
+  selfTask = false,
+): boolean {
   if (!keys.length) return true;
   return keys.some((key) => {
     if (key === "assigned") return isMine(task, myUserId);
     if (key === "mine") return role === "executor";
+    if (key === "personal") return selfTask;
     return role === "coexecutor" || role === "watcher";
   });
 }

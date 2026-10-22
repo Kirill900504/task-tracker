@@ -238,6 +238,11 @@
   /* 28px is the height the text buttons next to it come out at with
      their 6px padding — the two sit on exactly the same line. */
   .header-btns .btn-icon{padding:0; width:30px; height:28px; font-size:14px;}
+  /* «Просрочено» и «Отложено» в шапке — той же высоты 28px, что кнопки
+     рядом. Обёртка без своей коробки: пустая (доска ещё не пришла) она не
+     должна оставлять лишний промежуток в ряду. */
+  .header-board-pills{display:contents;}
+  .header-btns .filter-pill{height:28px; padding:0 10px; gap:5px; font-size:12px;}
   .btn-icon:disabled{cursor:default;}
   .btn-icon:disabled:hover{box-shadow:none;}
   .btn.active{border-color:var(--accent); color:var(--accent); background:var(--accent-soft);}
@@ -3859,8 +3864,9 @@
   .task{padding:12px 10px; margin-bottom:6px;}
 }
 /* Доске тесно (окно 1366 и уже, или две колонки) — сперва уходят СЛОВА, а
-   не кнопки: у «Просрочено», «Отложено», «Завершённые» остаются значок и
-   число, слово — в подсказке. Срезанная краем кнопка читается как
+   не кнопки: у «Новая задача» остаётся «+», слово — в подсказке
+   («Просрочено» и «Отложено» с 22.10.2026 в шапке, а «Завершённые»
+   подписано всегда — его слово fp-word не носит). Срезанная краем кнопка читается как
    поломка; значок со счётчиком говорит то же самое (так уже сделано на
    телефоне). Разделы при этом плотнее. Ширину считает сама доска
    (@container по .dash-panel), а не окно. */
