@@ -416,6 +416,17 @@ try {
   await mgrSay("я вернулся");
   const { data: backRow } = await admin.from("assignees").select("away_until").eq("id", assignee.id).maybeSingle();
   check("«я вернулся» — отметка снята", !backRow?.away_until, backRow);
+  // 22.10.2026, «максимально общительная версия»: на «спасибо» бот отвечал
+  // справкой или «Не понял, что сделать». Теперь — живой репликой
+  // (lib/botTalk), и это видно по последней строке разговора.
+  await mgrSay("спасибо, ты очень выручаешь");
+  const { data: thanked } = await admin.from("bot_dialog").select("body").eq("chat_id", colleagueChat).eq("role", "bot").order("id", { ascending: false }).limit(1);
+  const thankReply = thanked?.[0]?.body || "";
+  check(
+    "на «спасибо» — живой ответ, а не справка",
+    !!thankReply && !/Не понял|вот что я умею/.test(thankReply),
+    thankReply,
+  );
 
   const { data: pendingGone } = await admin.from("assignees").select("pending_action").eq("id", assignee.id).maybeSingle();
   check("память подтверждения освобождается", pendingGone?.pending_action === null, pendingGone);

@@ -10,8 +10,9 @@ import { checkRateLimit } from "@/lib/rateLimit";
 import { matchQueryCommand, replyForQuery } from "@/lib/telegramQueries";
 import { handleManageItem, resolvePendingAction, type ManageAction, type ManageItemType, type PendingAction } from "@/lib/telegramManage";
 import { logAiAction } from "@/lib/aiActionLog";
-import { buildTrackerContext } from "@/lib/trackerContext";
+import { buildTrackerContext, trackerPulse } from "@/lib/trackerContext";
 import { answerTrackerQuestion } from "@/lib/telegramAssistant";
+import { firstName, talkReply } from "@/lib/botTalk";
 import { extractMeetingNotes } from "@/lib/meetingNotes";
 import { findMeetingForNotes } from "@/lib/meetingLink";
 import { planBulkMove, describePlan, type BulkScope } from "@/lib/bulkActions";
@@ -240,7 +241,15 @@ async function remember(ctx: BotContext, patch: Record<string, unknown>) {
 // Что ещё нужно разбору, кроме самой фразы: кто пишет (перенос ищет только
 // его встречи и задачи), на что он ответил и что сказал целиком — фраза
 // едет в память переноса, чтобы подтверждённая стала уроком.
-type ToolExtra = { actor: BotActor; reply: ReplyContext | null; phrase: string };
+// `dialog` — недавний разговор: ответ на вопрос и живая реплика читают его,
+// чтобы «а у Игоря?» и «спасибо» были продолжением, а не началом.
+type ToolExtra = { actor: BotActor; reply: ReplyContext | null; phrase: string; dialog?: DialogLine[] };
+
+// Как обратиться к пишущему: его имя в трекере, первое слово.
+async function speakerName(ctx: BotContext, extra?: ToolExtra): Promise<string> {
+  if (!extra) return "";
+  return firstName(await actorName(ctx.admin, extra.actor.spaceId, extra.actor.userId, ""));
+}
 
 // Кто смотрит, если это не владелец: вопрос и поиск отвечают о ЕГО делах
 // (lib/telegramQueries.Viewer), а не о пространстве владельца.
@@ -582,8 +591,27 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
     // Two-step on purpose: the parse above only decided "this is a question".
     // The answer needs the user's actual data, which is fetched here and
     // handed to the model as a read-only snapshot (see trackerContext).
-    const context = await buildTrackerContext(ctx.admin, userId, viewerOf(extra));
-    await say(ctx, await answerTrackerQuestion(question, context));
+    const [context, name] = await Promise.all([buildTrackerContext(ctx.admin, userId, viewerOf(extra)), speakerName(ctx, extra)]);
+    await say(ctx, await answerTrackerQuestion(question, context, { name, dialog: extra?.dialog }));
+    return;
+  }
+
+  // Живая реплика — «привет», «спасибо», «устал» (lib/botTalk). Отвечает
+  // модель, но о делах говорит только то, что посчитал код, и под ответом
+  // кнопки ровно к тому, о чём он сказал: горит — «Просрочено», есть дела
+  // на сегодня — «Сегодня». Кнопки обычные, не экранные: нажатие открывает
+  // список новым сообщением, а разговор остаётся в чате как был.
+  if (tool === "small_talk") {
+    const phrase = extra?.phrase || "";
+    const [pulse, name] = await Promise.all([
+      trackerPulse(ctx.admin, userId, viewerOf(extra)).catch(() => null),
+      speakerName(ctx, extra),
+    ]);
+    const text = await talkReply(phrase, { name, pulse, dialog: extra?.dialog || [], role: "assigner" });
+    const quick: BotButton[] = [];
+    if (pulse?.overdue) quick.push({ text: "⚠ Просрочено", data: encodeCallback("task", "olist", "overdue") });
+    if (pulse && (pulse.todayTasks || pulse.todayMeetings)) quick.push({ text: "📌 Сегодня", data: encodeCallback("task", "olist", "today") });
+    await ctx.transport.send(ctx.chatId, text, { buttons: [...(quick.length ? [quick] : []), ...navRow("assigner")] });
     return;
   }
 
@@ -758,7 +786,7 @@ async function offerTask(
   const move = items.find((it) => it.tool === "move_item" || it.tool === "cancel_meeting" || !!SKILLS[it.tool]);
   if (move) {
     const actor: BotActor = { userId: memberId, spaceId: colleague.user_id, assigneeId: colleague.id, isOwner: false };
-    await respondToTool(ctx, colleague.user_id, move.tool, move.input, [], { actor, reply, phrase: text });
+    await respondToTool(ctx, colleague.user_id, move.tool, move.input, [], { actor, reply, phrase: text, dialog });
     return true;
   }
 
@@ -771,11 +799,11 @@ async function offerTask(
   // (viewerOf). manage_item сюда нарочно не идёт: его выборка написана
   // по пространству и для руководителя нашла бы чужое — закрыть или
   // удалить задачу он может в её карточке.
-  const ACTOR_TOOLS = ["create_meeting", "create_idea", "answer_question", "search_tracker"];
+  const ACTOR_TOOLS = ["create_meeting", "create_idea", "answer_question", "search_tracker", "small_talk"];
   const others = items.filter((it) => ACTOR_TOOLS.includes(it.tool));
   if (others.length) {
     const actor: BotActor = { userId: memberId, spaceId: colleague.user_id, assigneeId: colleague.id, isOwner: false };
-    for (const it of others) await respondToTool(ctx, colleague.user_id, it.tool, it.input, it.droppedNames, { actor, reply, phrase: text });
+    for (const it of others) await respondToTool(ctx, colleague.user_id, it.tool, it.input, it.droppedNames, { actor, reply, phrase: text, dialog });
   }
 
   const tasks = items
@@ -1343,7 +1371,7 @@ export async function handleText(baseCtx: BotContext, text: string, reply: Reply
     // whole message over an unclear fragment.
     const finalItems = isSingleClarify ? toProcess : toProcess.filter((it) => it.tool !== "ask_clarifying_question");
     for (const it of finalItems) {
-      await respondToTool(ctx, account.user_id, it.tool, it.input, it.droppedNames, { actor: asOwner, reply, phrase: effectiveText });
+      await respondToTool(ctx, account.user_id, it.tool, it.input, it.droppedNames, { actor: asOwner, reply, phrase: effectiveText, dialog: memory.dialog });
     }
     await logAiAction(ctx.admin, {
       userId: account.user_id,
@@ -1361,10 +1389,16 @@ export async function handleText(baseCtx: BotContext, text: string, reply: Reply
     // edit. A real failure there falls through to the error message.
     try {
       const context = await buildTrackerContext(ctx.admin, account.user_id);
-      await say(ctx, await answerTrackerQuestion(effectiveText, context));
+      await say(ctx, await answerTrackerQuestion(effectiveText, context, { dialog: memory.dialog }));
       await logAiAction(ctx.admin, { userId: account.user_id, source: ctx.channel.id, inputText: effectiveText, success: true, resultSummary: "answer_question (fallback)" });
     } catch {
-      await say(ctx, "Не получилось разобрать сообщение: " + message);
+      // Текст ошибки модели («GigaChat completion … 503») человеку ничего не
+      // говорит — он уходит в журнал ниже, а в чат идёт то, что делать.
+      await ctx.transport.send(
+        ctx.chatId,
+        "Помощник сейчас не отвечает — попробуйте через минуту. Списки и действия работают кнопками:",
+        { buttons: navRow("assigner") },
+      );
       await logAiAction(ctx.admin, { userId: account.user_id, source: ctx.channel.id, inputText: effectiveText, success: false, errorMessage: message });
     }
   }

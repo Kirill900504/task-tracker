@@ -46,8 +46,11 @@ function taskLine(t: TaskRow, today: string): string {
   return `- ${t.title}${bits.length ? " (" + bits.join(", ") + ")" : ""}`;
 }
 
-// `viewer` — руководитель, спрашивающий о своих делах (lib/telegramQueries.Viewer).
-export async function buildTrackerContext(admin: SupabaseClient, userId: string, viewer?: Viewer): Promise<string> {
+// One read of "what this person is involved in", shared by the full
+// snapshot below and the short pulse a greeting gets (trackerPulse): two
+// copies of the scope filter would drift, and the one that drifted would
+// be the one that shows somebody else's work.
+async function loadSnapshot(admin: SupabaseClient, userId: string, viewer?: Viewer) {
   const now = moscowNow();
   const today = dateStr(now);
 
@@ -97,6 +100,41 @@ export async function buildTrackerContext(admin: SupabaseClient, userId: string,
   const planned = meetings.filter((m) => !m.status || m.status === "planned");
   const past = meetings.filter((m) => m.status && m.status !== "planned");
   const ideas = (ideaRes.data || []) as IdeaContextRow[];
+  return { now, today, allTasks, open, overdue, openRest, doneRecent, meetings, planned, past, ideas };
+}
+
+// What a greeting is allowed to say about the day, counted here. The bot
+// answering «Привет» with «сегодня две встречи и одна просрочка — начнём с
+// неё?» is the whole point of a tracker that talks back, and the numbers in
+// that sentence are facts: the model only wraps them (botTalk checks it
+// kept them).
+export type TrackerPulse = {
+  todayTasks: number;
+  todayMeetings: number;
+  overdue: number;
+  // The nearest meeting still ahead today, if any — «в 15:00 планёрка».
+  nextMeeting: { time: string; title: string } | null;
+};
+
+export async function trackerPulse(admin: SupabaseClient, userId: string, viewer?: Viewer): Promise<TrackerPulse> {
+  const { now, today, open, overdue, meetings } = await loadSnapshot(admin, userId, viewer);
+  const todayTasks = open.filter((t) => t.deadline === today || (t.recur !== "none" && isDueToday(t, now, today)));
+  const todayMeetings = meetings
+    .filter((m) => m.date === today && (!m.status || m.status === "planned"))
+    .sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
+  const clock = now.toISOString().slice(11, 16);
+  const next = todayMeetings.find((m) => m.time && m.time.slice(0, 5) >= clock);
+  return {
+    todayTasks: todayTasks.length,
+    todayMeetings: todayMeetings.length,
+    overdue: overdue.length,
+    nextMeeting: next ? { time: next.time.slice(0, 5), title: next.title } : null,
+  };
+}
+
+// `viewer` — руководитель, спрашивающий о своих делах (lib/telegramQueries.Viewer).
+export async function buildTrackerContext(admin: SupabaseClient, userId: string, viewer?: Viewer): Promise<string> {
+  const { now, today, open, overdue, openRest, doneRecent, meetings, planned, past, ideas } = await loadSnapshot(admin, userId, viewer);
 
   // Counting and date arithmetic are done here, in code, and handed over as
   // finished facts. Left to the model they came out wrong in testing — it

@@ -3,8 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { logAiAction } from "@/lib/aiActionLog";
-import { buildTrackerContext } from "@/lib/trackerContext";
+import { buildTrackerContext, trackerPulse } from "@/lib/trackerContext";
 import { answerTrackerQuestion } from "@/lib/telegramAssistant";
+import { talkReply } from "@/lib/botTalk";
 import { extractMeetingNotes } from "@/lib/meetingNotes";
 import { findMeetingForNotes } from "@/lib/meetingLink";
 
@@ -58,6 +59,16 @@ export async function POST(req: Request) {
       const context = await buildTrackerContext(supabase, user.id);
       const answer = await answerTrackerQuestion(question, context);
       await logAiAction(supabase, { userId: user.id, source: "web", inputText: text, success: true, resultSummary: "answer_question" });
+      return NextResponse.json({ items: [{ tool: "answer_question", input: { answer }, droppedNames: [] }] });
+    }
+
+    // «Привет» и «спасибо» в строке быстрого ввода — тот же живой ответ,
+    // что в боте (lib/botTalk), показанный так же, как ответ на вопрос:
+    // строка не знает отдельного вида для разговора, и он ей не нужен.
+    if (result.items.length === 1 && result.items[0].tool === "small_talk") {
+      const pulse = await trackerPulse(supabase, user.id).catch(() => null);
+      const answer = await talkReply(text, { name: "", pulse, dialog: [], role: "assigner" });
+      await logAiAction(supabase, { userId: user.id, source: "web", inputText: text, success: true, resultSummary: "small_talk" });
       return NextResponse.json({ items: [{ tool: "answer_question", input: { answer }, droppedNames: [] }] });
     }
 
