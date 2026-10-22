@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cardKind } from "./taskCardKind";
 import { dueInfo } from "./dueLabel";
-import { personState, shortName, initialsOf } from "./personBadge";
+import { personState, initialsOf } from "./personBadge";
 
 describe("cardKind — чем задача является для меня", () => {
   // Главная ошибка прежнего вида: фирменная заливка шла исполнителю, и
@@ -63,9 +63,6 @@ describe("personState — кто на каком этапе", () => {
 
 describe("имя коротко", () => {
   it("имя и буква фамилии, без «(я)»", () => {
-    expect(shortName("Никита Козлов")).toBe("Никита К.");
-    expect(shortName("Кирилл Кучеренко (я)")).toBe("Кирилл К.");
-    expect(shortName("Аня")).toBe("Аня");
     expect(initialsOf("Кирилл Кучеренко (я)")).toBe("КК");
   });
 });

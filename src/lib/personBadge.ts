@@ -30,14 +30,6 @@ export function personState(p: Pick<TaskParticipant, "doneAt" | "declinedAt" | "
   return "waiting";
 }
 
-// «Никита Козлов» → «Никита К.»: на кубике шесть полных имён не помещаются
-// никак, а имя с буквой фамилии узнаётся так же быстро.
-export function shortName(name: string): string {
-  const words = withoutSelfMark(name).split(/\s+/).filter(Boolean);
-  if (words.length < 2) return words[0] || "";
-  return `${words[0]} ${words[1][0]}.`;
-}
-
 export function initialsOf(name: string): string {
   const words = withoutSelfMark(name).replace(/\(.*?\)/g, "").trim().split(/\s+/).filter(Boolean);
   if (!words.length) return "?";

@@ -161,7 +161,7 @@ export default function TaskPeople({
                 // приступал» у него читалось бы упрёком.
                 const raw = selfTask || p.role === "watcher" ? undefined : personState(p);
                 const state = raw === "unreachable" && meId && p.assigneeId === meId ? "waiting" : raw;
-                const badge = <PersonBadge name={p.name} state={state} showName short={false} roleNote={ROLE_WORD[p.role]} stateWord />;
+                const badge = <PersonBadge name={p.name} state={state} showName roleNote={ROLE_WORD[p.role]} stateWord />;
                 return canEdit ? (
                   <button
                     type="button"

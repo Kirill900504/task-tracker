@@ -304,7 +304,10 @@ export default function TaskCard({
                   +{hidden.length}
                 </span>
               )}
-              {fallbackName && <span className="task-assignee">{fallbackName}</span>}
+              {/* Тем же кружком, что и исполнитель со строкой участия: иначе
+                  одна и та же фамилия на соседних кубиках выглядела то
+                  кружком, то голым цветным текстом. */}
+              {fallbackName && <PersonBadge name={fallbackName} showName />}
             </div>
           )
         )}

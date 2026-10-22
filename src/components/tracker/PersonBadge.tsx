@@ -2,7 +2,7 @@
 
 import { useId } from "react";
 import Icon, { type IconName } from "./Icon";
-import { colorOf, initialsOf, PERSON_STATE_LABEL, shortName, type PersonState } from "@/lib/personBadge";
+import { colorOf, initialsOf, PERSON_STATE_LABEL, type PersonState } from "@/lib/personBadge";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useArchivedPeople } from "@/hooks/useArchivedPeople";
 import ArchivedMark from "./ArchivedMark";
@@ -53,7 +53,6 @@ export default function PersonBadge({
   name,
   state: stateIn,
   showName = false,
-  short = true,
   roleNote,
   stateWord = false,
 }: {
@@ -61,9 +60,11 @@ export default function PersonBadge({
   // Без состояния — просто человек (постановщик, наблюдатель).
   state?: PersonState;
   // Имя рядом с кружком. На кубике его показывают, пока людей мало: два
-  // имени читаются, шесть — уже нет, и тогда остаются кружки.
+  // имени читаются, шесть — уже нет, и тогда остаются кружки. Имя всегда
+  // полное, «Имя Фамилия»: сокращение «Кирилл К.» на кубике рядом с полным
+  // именем в соседнем выглядело как два разных человека (22.10.2026: «имя
+  // фамилия у всех отображались без сокращений»).
   showName?: boolean;
-  short?: boolean;
   // «соисполнитель», «наблюдатель» — в подсказку.
   roleNote?: string;
   // Этап ещё и словом рядом с именем — в окне задачи, где место есть, а
@@ -95,7 +96,7 @@ export default function PersonBadge({
           </span>
         )}
       </span>
-      {showName && <span className="pbadge-name">{short ? shortName(full) : full}</span>}
+      {showName && <span className="pbadge-name">{full}</span>}
       {showName && archived && <ArchivedMark />}
       {stateWord && state && <span className="pbadge-word">{PERSON_STATE_LABEL[state]}</span>}
     </span>
