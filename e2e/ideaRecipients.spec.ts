@@ -130,6 +130,12 @@ test("присланную мысль принимают в трекере, а �
   await expect(sharedIn).toContainText("Идея акции к Новому году");
   await expect(sharedIn).toContainText("от Кирилл Тестов");
   await expect(block.locator(`[data-incoming-idea="${sharedInId}"]`)).toHaveCount(0);
+  // Ответы у поделённой те же четыре, что у присланной (22.10.2026).
+  for (const name of ["В работу", "Встреча", "Сохранить в мысли", "Прочитать"]) {
+    await expect(sharedIn.getByRole("button", { name, exact: true })).toBeVisible();
+    await expect(incoming.getByRole("button", { name, exact: true })).toBeVisible();
+  }
+  await expect(incoming.getByRole("button", { name: "Прочитать" })).toHaveText("👌");
 
   // Отправленная своя ушла из списка — в окно «Отправленные», где видно,
   // кто что ответил.

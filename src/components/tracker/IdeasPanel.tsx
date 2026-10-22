@@ -137,7 +137,13 @@ export default function IdeasPanel({
     else recipients.markLocally(row.id, { seenAt: new Date().toISOString() });
   }
 
-  // «В работу» / «Встреча» в блоке «Прислали вам». Автор — строка по его
+  // «Сохранить в мысли»: копия в мои мысли. Не через addText: тот очищает
+  // поле ввода, а в нём может лежать недописанная своя мысль.
+  function keepCopy(row: IdeaRecipientRow) {
+    actions.saveIdea({ id: uid(), text: row.idea?.text || "", important: false, done: false, createdAt: formatIdeaCreatedAt(new Date()), doneAt: "" });
+  }
+
+  // «В работу» / «Встреча» у присланной и поделённой. Автор — строка по его
   // членству, а пустой created_by — владелец, то есть строка «(я)».
   function convertIncoming(row: IdeaRecipientRow, kind: "task" | "meeting") {
     if (!onIncomingConvert) return;
@@ -276,11 +282,7 @@ export default function IdeasPanel({
         onAnswered={answered}
         onToTask={(row) => convertIncoming(row, "task")}
         onToMeeting={(row) => convertIncoming(row, "meeting")}
-        // Не через addText: тот очищает поле ввода, а в нём может лежать
-        // недописанная своя мысль.
-        onKeep={(row) =>
-          actions.saveIdea({ id: uid(), text: row.idea?.text || "", important: false, done: false, createdAt: formatIdeaCreatedAt(new Date()), doneAt: "" })
-        }
+        onKeep={keepCopy}
       />
       {showReview && !reviewTotal && (
         <button type="button" className="idea-review-strip" id="ideaReviewBtn" onClick={() => setReviewTotal(queue.length)}>
@@ -296,6 +298,9 @@ export default function IdeasPanel({
             row={row}
             from={authorLabel(row.idea?.createdBy || undefined, recipients.authors, people)}
             onAnswered={answered}
+            onKeep={keepCopy}
+            onToTask={(r) => convertIncoming(r, "task")}
+            onToMeeting={(r) => convertIncoming(r, "meeting")}
           />
         ))}
         {visible.length === 0 ? (
