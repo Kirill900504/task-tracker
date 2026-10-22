@@ -235,6 +235,16 @@ async function openWork(admin: SupabaseClient, person: Person): Promise<Work> {
   return { tasks, meetings, authoredTasks, authoredMeetings, memberId };
 }
 
+// Roles strictly below the given one — the rows a transfer may raise.
+const TASK_ROLES = ["watcher", "coexecutor", "executor"];
+const MEETING_ROLES = ["watcher", "participant", "organizer"];
+function lowerTaskRoles(role: string): string[] {
+  return TASK_ROLES.slice(0, Math.max(0, TASK_ROLES.indexOf(role)));
+}
+function lowerMeetingRoles(role: string): string[] {
+  return MEETING_ROLES.slice(0, Math.max(0, MEETING_ROLES.indexOf(role)));
+}
+
 async function transferWork(admin: SupabaseClient, ownerId: string, from: Person, to: Person, work: Work): Promise<string> {
   const fromName = withoutSelfMark(from.name);
   const toName = withoutSelfMark(to.name);
@@ -260,6 +270,18 @@ async function transferWork(admin: SupabaseClient, ownerId: string, from: Person
       .from("task_participants")
       .upsert({ task_id: t.id, assignee_id: to.id, role: t.role || "executor", user_id: ownerId }, { onConflict: "task_id,assignee_id", ignoreDuplicates: true });
     if (insError) return insError.message;
+    // ignoreDuplicates keeps the recipient's existing row, role included —
+    // and if he stood on the task as co-executor while the leaver was the
+    // executor, the task was left with nobody to answer for it (#127,
+    // 22.10.2026: no «Принял / Сделал» at all). Raise the role, never lower
+    // it; his own answers stay, they are his words.
+    const { error: upError } = await admin
+      .from("task_participants")
+      .update({ role: t.role || "executor" })
+      .eq("task_id", t.id)
+      .eq("assignee_id", to.id)
+      .in("role", lowerTaskRoles(t.role || "executor"));
+    if (upError) return upError.message;
     if (t.assignee === from.name) await admin.from("tasks").update({ assignee: to.name }).eq("id", t.id);
     await recordEvent(admin, { userId: ownerId, kind: "task", itemId: t.id, text: `${fromName} больше не в команде — задача передана: ${toName}`, actorUserId: ownerId });
   }
@@ -271,6 +293,15 @@ async function transferWork(admin: SupabaseClient, ownerId: string, from: Person
       .from("meeting_participants")
       .upsert({ meeting_id: m.id, assignee_id: to.id, role: m.role || "participant", user_id: ownerId }, { onConflict: "meeting_id,assignee_id", ignoreDuplicates: true });
     if (insError) return insError.message;
+    // Same as tasks: an organizer leaving must not leave an invited
+    // recipient as a mere watcher of a meeting nobody runs.
+    const { error: upError } = await admin
+      .from("meeting_participants")
+      .update({ role: m.role || "participant" })
+      .eq("meeting_id", m.id)
+      .eq("assignee_id", to.id)
+      .in("role", lowerMeetingRoles(m.role || "participant"));
+    if (upError) return upError.message;
     const names = m.participants.filter((n) => n !== from.name);
     if (!names.includes(to.name)) names.push(to.name);
     await admin.from("meetings").update({ participants: names }).eq("id", m.id);
