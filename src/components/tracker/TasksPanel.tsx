@@ -19,7 +19,7 @@ import { isSnoozed, snoozeDay } from "@/lib/snooze";
 import { chooseSnooze } from "./snoozeAsk";
 import { KANBAN_COLUMNS, columnOf, moveBetween, type KanbanColumn } from "@/lib/kanban";
 import { myRoleOn, showsOverdue } from "@/lib/myRole";
-import { BOARD_FILTERS, cleanBoardFilter, matchesBoardFilter, toggleBoardFilter } from "@/lib/boardFilter";
+import { BOARD_FILTERS, cleanBoardFilter, matchesBoardFilter, toggleBoardFilter, type BoardFilterKey } from "@/lib/boardFilter";
 import { useSavedSetting } from "@/hooks/useSavedSetting";
 import { useChecklistCounts } from "@/hooks/useTaskChecklist";
 import { moveWithin } from "@/lib/dndOrder";
@@ -327,12 +327,17 @@ export default function TasksPanel({
 
   // Цифра на кнопке считается по всем задачам, а не по отфильтрованным:
   // иначе, включив фильтр, она показывала бы сама себя.
-  const overdueCount = tasks.filter((t) => isOverdue(t)).length;
-  // Сколько горит в том, что поручил я. Отдельная цифра, потому что
-  // отдельный вопрос: своё просроченное — «я не успел», чужое — «пора
-  // толкнуть». Стоит на переключателе, а не краской на карточках: у
-  // постановщика четырнадцати человек доска иначе краснеет целиком.
-  const assignedOverdue = tasks.filter((t) => authored(t) && isOverdue(t) && roleOn(t) === "none").length;
+  const overdueTasks = tasks.filter((t) => isOverdue(t));
+  const overdueCount = overdueTasks.length;
+  // Сколько горит под КАЖДОЙ кнопкой фильтра — ровно столько, сколько
+  // просроченных покажет нажатие на неё (тем же matchesBoardFilter).
+  // Раньше цифра стояла только на «Я поручил» и считала одни поручения
+  // другим, без задач себе: 22.10.2026 Кирилл увидел «Просрочено 4», «Я
+  // поручил 2» и пустое «Мне» и спросил, куда делись остальные две. Задача
+  // себе попадает в несколько кнопок сразу, поэтому сумма цифр может быть
+  // больше общей — но каждая честна по отдельности.
+  const overdueBy = (key: BoardFilterKey) =>
+    overdueTasks.filter((t) => matchesBoardFilter([key], t, roleOn(t), myUserId, selfOf(t))).length;
   // Есть ли вообще чужие поручения. Пока их нет, переключатель вида — три
   // кнопки, две из которых ничего не меняют.
   const sharedBoard = tasks.some((t) => !authored(t) || roleOn(t) !== "none");
@@ -940,6 +945,7 @@ export default function TasksPanel({
               <div className="view-switch" role="group" aria-label="Чьи задачи показывать — можно нажать несколько">
                 {BOARD_FILTERS.map((f) => {
                   const on = boardFilter.includes(f.key);
+                  const burning = overdueBy(f.key);
                   return (
                     <button
                       key={f.key}
@@ -951,7 +957,7 @@ export default function TasksPanel({
                       onClick={() => setSavedFilter((prev: unknown) => toggleBoardFilter(cleanBoardFilter(prev), f.key))}
                     >
                       {f.label}
-                      {f.key === "assigned" && assignedOverdue > 0 && <span className="filter-pill-count">{assignedOverdue}</span>}
+                      {burning > 0 && <span className="filter-pill-count">{burning}</span>}
                     </button>
                   );
                 })}
