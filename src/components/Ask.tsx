@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import Modal from "@/components/tracker/Modal";
 import ItemModalHead from "@/components/tracker/ItemModalHead";
 import AttachFiles from "@/components/tracker/AttachFiles";
+import MiniCalendar from "@/components/tracker/MiniCalendar";
 
 // Все вопросы трекера — одним окном трекера.
 //
@@ -99,6 +100,11 @@ export type ChooseOptions = {
   note?: string;
   options: ChooseOption[];
   cancelText?: string;
+  // Выбор дня: календарь и рядом готовые дни кнопками — та же строка, что
+  // у срока задачи и даты встречи (`.deadline-row`). Ответ — дата ISO;
+  // день в календаре и кнопка отвечают сразу, без «ОК». Первым это
+  // понадобилось «Отложить до…» (22.10.2026).
+  calendar?: { id?: string; value?: string; minDate?: string; quick: ChooseOption[] };
 };
 
 type Pending =
@@ -305,6 +311,28 @@ export default function AskProvider({ children }: { children: ReactNode }) {
               )}
               {pending.kind === "say" && pending.code && <div className="ask-code">{pending.code}</div>}
 
+              {pending.kind === "choose" && pending.calendar && (
+                <div className="deadline-row ask-calendar">
+                  <MiniCalendar
+                    popover
+                    id={pending.calendar.id}
+                    value={pending.calendar.value || ""}
+                    minDate={pending.calendar.minDate}
+                    onChange={(iso) => close({ kind: "choose", value: iso })}
+                  />
+                  {pending.calendar.quick.map((q) => (
+                    <button
+                      key={q.value}
+                      type="button"
+                      className={"participant-chip" + (q.value === pending.calendar?.value ? " selected" : "")}
+                      onClick={() => close({ kind: "choose", value: q.value })}
+                    >
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {pending.kind === "ask" && pending.pick && (
                 <div className="field ask-pick">
                   <div className="ask-pick-label">{pending.pick.label}</div>
@@ -394,6 +422,9 @@ export default function AskProvider({ children }: { children: ReactNode }) {
 
               {problem && <div className="ask-problem">{problem}</div>}
 
+              {/* Выбор дня, где готовых ответов внизу нет, обходится без
+                  пустой полосы кнопок. */}
+              {!(pending.kind === "choose" && !pending.options.length && !pending.cancelText) && (
               <div className="modal-actions ask-actions">
                 {pending.kind === "choose" ? (
                   <>
@@ -432,6 +463,7 @@ export default function AskProvider({ children }: { children: ReactNode }) {
                   </>
                 )}
               </div>
+              )}
             </div>
           </Modal>
         )}
