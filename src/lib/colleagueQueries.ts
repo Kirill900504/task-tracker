@@ -481,7 +481,7 @@ export async function taskCard(
   const own = (await selfTaskIds(admin, task.user_id, [taskId])).has(taskId);
 
   const lines = [`📋 ${numbered(task)}`];
-  if (task.description) lines.push("", task.description);
+  // No description — see taskMessage in colleagues.ts.
 
   const meta: string[] = [];
   if (own) meta.push("личная задача");

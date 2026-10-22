@@ -100,7 +100,11 @@ export function taskMessage(
   // называют в ответ, и «#42» в трекере ищется поиском.
   const num = task.number != null ? ` #${task.number}` : "";
   const lines = [from === null ? `📋 Личная задача${num}:` : `📋 Задача${num} от ${from}:`, "", task.title];
-  if (task.description) lines.push("", task.description);
+  // The description is deliberately left out of every bot message (22.10.2026,
+  // his words: «при оповещениях не выводи описания задачи»): a long one
+  // buried the decision buttons and the comment that came with the change.
+  // Messages carry the title, the state and what was said; the description
+  // lives in the task.
   const bits: string[] = [];
   if (task.deadline) bits.push("срок: " + fmtDate(task.deadline));
   if (bits.length) lines.push("", bits.join(" · "));

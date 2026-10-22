@@ -195,7 +195,7 @@ export async function ownerTaskCard(admin: SupabaseClient, actor: BotActor, task
   const people = await participantsOf(admin, taskId);
 
   const lines = [`📋 ${numbered(task)}`];
-  if (task.description) lines.push("", task.description);
+  // No description — see taskMessage in colleagues.ts.
   const facts: string[] = [];
   if (task.deadline) facts.push("срок " + fmtDate(task.deadline));
   if (task.assignee) facts.push("исполнитель: " + task.assignee);

@@ -72,6 +72,12 @@ describe("what a colleague receives", () => {
     expect(text).not.toContain("важно");
   });
 
+  it("never carries the description (22.10.2026)", () => {
+    const text = taskMessage({ title: "Смета", description: "Длинное описание с подробностями" }, "Кирилл");
+    expect(text).toContain("Смета");
+    expect(text).not.toContain("Длинное описание");
+  });
+
   it("leaves out what a task does not have", () => {
     const text = taskMessage({ title: "Купить воду" }, "Кирилл");
     expect(text).toContain("Купить воду");
