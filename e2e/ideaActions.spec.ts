@@ -64,6 +64,21 @@ test("мысль: дата и три действия словами — одн�
     if (process.env.SHOT_DIR) await item.screenshot({ path: `${process.env.SHOT_DIR}/idea-${width}.png` });
   }
 
+  // Повторный запуск: «Отправить» и «Поделиться» стоят с первого кадра, а не
+  // через секунду после «Создать» (22.10.2026, снимок Кирилла). Запрос
+  // списка команды нарочно задерживается — кнопки обязаны прийти из кэша
+  // прошлого запуска (lib/sharedStore, `persist`), а не из сети.
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await page.route(/\/rest\/v1\/assignees\?.*telegram_chat_id/, async (route) => {
+    await new Promise((r) => setTimeout(r, 10_000));
+    await route.continue().catch(() => {});
+  });
+  await page.reload();
+  await expect(item).toBeVisible({ timeout: 30_000 });
+  await expect(item.locator(".idea-act", { hasText: "Отправить" })).toBeVisible({ timeout: 3_000 });
+  await expect(item.locator(".idea-act", { hasText: "Поделиться" })).toBeVisible({ timeout: 3_000 });
+  await page.unroute(/\/rest\/v1\/assignees\?.*telegram_chat_id/);
+
   // Флажок говорит своё состояние: нажали — мысль важная, карточка красная.
   await item.locator(".idea-flag").click();
   await expect(item).toHaveClass(/important/);
