@@ -17,10 +17,9 @@ import MicButton from "./MicButton";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { ideasToReview, isReviewDay, reviewWeek } from "@/lib/ideaReview";
 import IncomingIdeas from "./IncomingIdeas";
-import SharedIdeaItem from "./SharedIdeaItem";
 import { prefetchIdeaInbox, useIdeaRecipients } from "@/hooks/useIdeaRecipients";
 import { authorLabel } from "@/lib/authorName";
-import { incomingFor, sentAwayIds, sentToByIdea, sharedWithMe, type IdeaRecipientRow } from "@/lib/ideaRecipients";
+import { incomingFor, sentAwayIds, sentToByIdea, type IdeaRecipientRow } from "@/lib/ideaRecipients";
 import { postOrQueue } from "@/lib/outbox";
 
 // Окна — отдельными кусками, подгружаются фоном после первого кадра
@@ -117,7 +116,6 @@ export default function IdeasPanel({
   const recipients = useIdeaRecipients();
   const sentTo = sentToByIdea(recipients.rows, recipients.names);
   const incoming = incomingFor(recipients.rows, recipients.myAssigneeId, myUserId);
-  const shared = sharedWithMe(recipients.rows, recipients.myAssigneeId, myUserId);
   const people = Object.values(recipients.names);
   // «Отправить» отдаёт мысль: из рабочего списка она уходит в окно
   // «Отправленные» (решение Кирилла 23.09.2026, миграция 0051). Поделённая
@@ -220,7 +218,7 @@ export default function IdeasPanel({
       {!isMobile && (
         <div className="dash-panel-head">
           <div className="panel-title">
-            Идеи и мысли <span className={"count" + (visible.length + shared.length === 0 ? " zero" : "")}>{visible.length + shared.length}</span>
+            Идеи и мысли <span className={"count" + (visible.length === 0 ? " zero" : "")}>{visible.length}</span>
           </div>
           {sentList.length > 0 && (
             <button
@@ -290,23 +288,8 @@ export default function IdeasPanel({
         </button>
       )}
       <div id="ideaList">
-        {/* Поделённые со мной — сверху своих: они новые для меня, и ответа
-            не требуют, поэтому стоят в списке, а не в блоке «Прислали вам». */}
-        {shared.map((row) => (
-          <SharedIdeaItem
-            key={row.id}
-            row={row}
-            from={authorLabel(row.idea?.createdBy || undefined, recipients.authors, people)}
-            onAnswered={answered}
-            onKeep={keepCopy}
-            onToTask={(r) => convertIncoming(r, "task")}
-            onToMeeting={(r) => convertIncoming(r, "meeting")}
-          />
-        ))}
         {visible.length === 0 ? (
-          shared.length === 0 && (
-            <div className="empty">{own.length === 0 ? "Пока пусто — запишите первую мысль" : "Нет активных мыслей"}</div>
-          )
+          <div className="empty">{own.length === 0 ? "Пока пусто — запишите первую мысль" : "Нет активных мыслей"}</div>
         ) : (
           visible.map((idea) => (
             <IdeaItem

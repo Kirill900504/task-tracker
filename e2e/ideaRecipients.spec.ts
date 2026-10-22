@@ -124,12 +124,14 @@ test("присланную мысль принимают в трекере, а �
   await expect(incoming).toContainText("от Кирилл Тестов");
   await expect(incoming).not.toContainText("(я)");
 
-  // Поделённая со мной — в списке мыслей, с подписью, от кого, а не в
-  // блоке, где ждут ответа.
-  const sharedIn = page.locator(`#ideaList [data-shared-idea="${sharedInId}"]`);
+  // Поделённая со мной — в том же блоке и в том же виде, что присланная
+  // (22.10.2026: «получателю без разницы, мысль была отправлена или ей
+  // поделились»), и отдельной карточкой в списке мыслей её нет.
+  const sharedIn = block.locator(`[data-incoming-idea="${sharedInId}"]`);
   await expect(sharedIn).toContainText("Идея акции к Новому году");
   await expect(sharedIn).toContainText("от Кирилл Тестов");
-  await expect(block.locator(`[data-incoming-idea="${sharedInId}"]`)).toHaveCount(0);
+  await expect(page.locator("#ideaList").getByText("Идея акции к Новому году")).toHaveCount(0);
+  await expect(block.locator(".incoming-ideas-head .count")).toHaveText("5");
   // Ответы у поделённой те же четыре, что у присланной (22.10.2026).
   for (const name of ["В работу", "Встреча", "Сохранить в мысли", "Прочитать"]) {
     await expect(sharedIn.getByRole("button", { name, exact: true })).toBeVisible();
@@ -234,8 +236,11 @@ test("присланную мысль принимают в трекере, а �
     }, { timeout: 20_000 })
     .toBe(true);
 
-  // «Прочитать» убирает мысль из блока и записывается в базу.
+  // «Прочитать» убирает мысль из блока и записывается в базу — у
+  // поделённой точно так же; после обеих блок исчезает целиком.
   await incoming.getByRole("button", { name: "Прочитать" }).click();
+  await expect(incoming).toHaveCount(0);
+  await sharedIn.getByRole("button", { name: "Прочитать" }).click();
   await expect(block).toHaveCount(0);
   await expect
     .poll(async () => {

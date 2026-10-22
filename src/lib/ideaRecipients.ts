@@ -95,24 +95,25 @@ function aliveForMe(row: IdeaRecipientRow, myAssigneeId: string, myUserId: strin
   );
 }
 
-// Для получателя: что мне ОТПРАВИЛИ и на что я ещё не ответил. Свежее
-// сверху. Не показывается:
+// Для получателя: что мне ПРИСЛАЛИ — отправили или поделились — и на что я
+// ещё не ответил. Свежее сверху. «Отправить» и «поделиться» здесь не
+// различаются нарочно (22.10.2026, его слова: «получателю без разницы,
+// мысль была отправлена или ей поделились»): это различие автора — уходит
+// ли мысль из ЕГО списка, — а получателю пришло одно и то же, и отвечает он
+// теми же четырьмя кнопками в одном блоке «Прислали вам». Не показывается:
 // — отвеченное (взял в работу, «Сохранить» или «Принял») — приёмка окончена;
 // — удалённое или вычеркнутое автором — отвечать уже не на что;
 // — своё: мысль, которую я отправил себе сам, уже лежит в моём списке.
+// Мысль, пришедшая обоими путями, — одна строка, самая свежая.
 export function incomingFor(rows: IdeaRecipientRow[], myAssigneeId: string, myUserId: string): IdeaRecipientRow[] {
   if (!myAssigneeId) return [];
+  const seen = new Set<string>();
   return rows
-    .filter((row) => kindOf(row) === "send" && aliveForMe(row, myAssigneeId, myUserId))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
-// Для получателя: чем со мной ПОДЕЛИЛИСЬ — те же условия, но ответа никто
-// не ждёт: мысль лежит в списке, пока я её не уберу или автор не
-// вычеркнет.
-export function sharedWithMe(rows: IdeaRecipientRow[], myAssigneeId: string, myUserId: string): IdeaRecipientRow[] {
-  if (!myAssigneeId) return [];
-  return rows
-    .filter((row) => kindOf(row) === "share" && aliveForMe(row, myAssigneeId, myUserId))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .filter((row) => aliveForMe(row, myAssigneeId, myUserId))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .filter((row) => {
+      if (seen.has(row.ideaId)) return false;
+      seen.add(row.ideaId);
+      return true;
+    });
 }

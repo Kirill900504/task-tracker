@@ -3757,14 +3757,6 @@
     .received-idea-actions .idea-act{font-size:9.5px; padding:0 2px;}
   }
 
-  /* Поделённая со мной мысль (0051): строка как своя, только подпись «от
-     кого» и те же четыре ответа, что у присланной. Тот же корешок, что у
-     роли на карточке задачи, — левый край говорит «это пришло ко мне», не
-     перекрашивая фон. */
-  .idea-shared{box-shadow:inset 3px 0 0 var(--accent), var(--edge); flex-wrap:nowrap;}
-  .idea-shared-body{flex:1; min-width:0;}
-  .idea-shared .idea-text{cursor:default; overflow-wrap:anywhere;}
-  .idea-shared .idea-text:hover{text-decoration:none;}
   /* Окно «Отправленные»: под мыслью — кто и что ответил, по человеку в
      строке, иначе у пяти получателей ответы сливаются в абзац. */
   .sent-idea-text{cursor:default;}
