@@ -12,6 +12,7 @@ import { loadTaskModal, loadSectionsModal } from "@/lib/lazyWindows";
 // «как это назвали», а на «где это сейчас»: правило живёт в lib/kanban.ts,
 // панель только показывает его и разбирает перетаскивание.
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Section, Task, TaskPrefill } from "@/types/tracker";
 import { isClosed, isOverdue, isTaskDueOnDate, taskSortFn, todayStr } from "@/lib/taskDisplay";
 import { isSnoozed, snoozeDay } from "@/lib/snooze";
@@ -81,6 +82,7 @@ export default function TasksPanel({
   ownerId = "",
   justCreatedId,
   mobileColumn,
+  headerSlot,
 }: {
   // Уже сужено родителем до «моё» — где я постановщик, исполнитель,
   // соисполнитель или наблюдатель (см. NewTracker.tsx, 23.09.2026, правило
@@ -166,6 +168,14 @@ export default function TasksPanel({
   // — см. NewTracker.tsx. Без этого пропа (везде, кроме мобильных вкладок)
   // поведение прежнее — все три столбца в ряд.
   mobileColumn?: "new" | "work";
+  // Место в шапке трекера (слева от лупы), куда на компьютере уезжают
+  // «Просрочено» и «Отложено» (22.10.2026, его слова: «кнопки „Просрочено“ и
+  // „отложено“ перенести в шапку слева от значка поиска»). Портал, а не
+  // поднятое наверх состояние: оба фильтра и их счётчики считаются из ролей
+  // и авторства, которые знает только доска, и вторая копия этого расчёта в
+  // NewTracker разошлась бы с первой. Нет места (телефон — у него своя
+  // шапка с одной кнопкой) — кнопки остаются в полосе над доской.
+  headerSlot?: HTMLElement | null;
 }) {
   // «Просрочено» — не сортировка и не раздел, а вопрос «что горит»: он
   // задаётся чаще всех прочих фильтров вместе взятых.
@@ -357,7 +367,7 @@ export default function TasksPanel({
   const filtered = tasks.filter((t) => {
     if (snoozedView ? !snoozedMine(t) : snoozedMine(t)) return false;
     if (onlyOverdue && !isOverdue(t)) return false;
-    if (sharedBoard && !matchesBoardFilter(boardFilter, t, roleOn(t), myUserId)) return false;
+    if (sharedBoard && !matchesBoardFilter(boardFilter, t, roleOn(t), myUserId, selfOf(t))) return false;
     if (filterSection !== "all" && (t.sectionId || "") !== filterSection) return false;
     if (calendarFilterDate && !isTaskDueOnDate(t, new Date(calendarFilterDate + "T00:00:00"))) return false;
     return true;
@@ -809,8 +819,66 @@ export default function TasksPanel({
     );
   }
 
+  // «Просрочено» и «Отложено». На компьютере они живут в шапке трекера
+  // (headerSlot), на телефоне — в полосе над доской, как и были.
+  const pillsInHeader = !isMobile && !!headerSlot;
+  const timePills = (
+    <>
+      {/* Две кнопки вместо списка приоритетов и галочки.
+          Фильтр «Любой приоритет» открывали, чтобы найти «Высокий», —
+          но высокий приоритет и так виден на карточке цветом, а
+          настоящие вопросы к списку другие: «что горит» и «что уже
+          сделано». Поэтому просроченное и завершённые — двумя
+          нажатиями, и видно, что включено, не открывая ничего. */}
+      {/* На телефоне кнопка появляется, только когда есть о чём
+          говорить (или когда фильтр уже включён — иначе снять его
+          будет нечем). Без слова рядом пустой значок «внимание»
+          читается как непонятная круглая кнопка; с числом он
+          читается как сигнал. На компьютере она стоит всегда:
+          там есть место на слово, и полоса не должна менять состав
+          от того, просрочено сегодня что-нибудь или нет. */}
+      {(!isMobile || onlyOverdue || overdueCount > 0) && (
+      <button
+        type="button"
+        className={"filter-pill overdue" + (onlyOverdue ? " active" : "")}
+        id="filterOverdueBtn"
+        aria-pressed={onlyOverdue}
+        onClick={() => setOnlyOverdue(!onlyOverdue)}
+        title="Только просроченные"
+        aria-label="Только просроченные"
+      >
+        {/* На телефоне — без слова. Осмотр 21.09.2026: при 390px
+            полоса не помещалась, и кнопка уезжала за край с
+            обрубком «Просроченс» — обрезанная надпись читается как
+            сломанный интерфейс, а знак «внимание» со счётчиком
+            говорит ровно то же самое. Слово не потеряно: оно в
+            title и для читалки экрана. */}
+        <Icon name="warning" size={14} />
+        {!isMobile && <span className="fp-word">Просрочено</span>}
+        {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
+      </button>
+      )}
+      {snoozedCount > 0 && (
+        <button
+          type="button"
+          className={"filter-pill snoozed" + (snoozedView ? " active" : "")}
+          id="showSnoozedBtn"
+          aria-pressed={snoozedView}
+          title={snoozedView ? "Вернуться ко всей доске" : "Показать только задачи, которые вы отложили до другого дня"}
+          aria-label="Отложено"
+          onClick={() => setShowSnoozed(!snoozedView)}
+        >
+          <Icon name="clock" size={14} />
+          {!isMobile && <span className="fp-word">Отложено</span>}
+          <span className="filter-pill-count">{snoozedCount}</span>
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div className="main-col dash-panel" id="mainCol" data-panel-id="mainCol">
+      {pillsInHeader && headerSlot && createPortal(timePills, headerSlot)}
       {(() => {
         return (
           // Строки с надписью «ЗАДАЧИ» над этой панелью больше нет: она
@@ -889,55 +957,7 @@ export default function TasksPanel({
                 })}
               </div>
             )}
-            {/* Две кнопки вместо списка приоритетов и галочки.
-                Фильтр «Любой приоритет» открывали, чтобы найти «Высокий», —
-                но высокий приоритет и так виден на карточке цветом, а
-                настоящие вопросы к списку другие: «что горит» и «что уже
-                сделано». Поэтому просроченное и завершённые — двумя
-                нажатиями, и видно, что включено, не открывая ничего. */}
-            {/* На телефоне кнопка появляется, только когда есть о чём
-                говорить (или когда фильтр уже включён — иначе снять его
-                будет нечем). Без слова рядом пустой значок «внимание»
-                читается как непонятная круглая кнопка; с числом он
-                читается как сигнал. На компьютере она стоит всегда:
-                там есть место на слово, и полоса не должна менять состав
-                от того, просрочено сегодня что-нибудь или нет. */}
-            {(!isMobile || onlyOverdue || overdueCount > 0) && (
-            <button
-              type="button"
-              className={"filter-pill overdue" + (onlyOverdue ? " active" : "")}
-              id="filterOverdueBtn"
-              aria-pressed={onlyOverdue}
-              onClick={() => setOnlyOverdue(!onlyOverdue)}
-              title="Только просроченные"
-              aria-label="Только просроченные"
-            >
-              {/* На телефоне — без слова. Осмотр 21.09.2026: при 390px
-                  полоса не помещалась, и кнопка уезжала за край с
-                  обрубком «Просроченс» — обрезанная надпись читается как
-                  сломанный интерфейс, а знак «внимание» со счётчиком
-                  говорит ровно то же самое. Слово не потеряно: оно в
-                  title и для читалки экрана. */}
-              <Icon name="warning" size={14} />
-              {!isMobile && <span className="fp-word">Просрочено</span>}
-              {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
-            </button>
-            )}
-            {snoozedCount > 0 && (
-              <button
-                type="button"
-                className={"filter-pill snoozed" + (snoozedView ? " active" : "")}
-                id="showSnoozedBtn"
-                aria-pressed={snoozedView}
-                title={snoozedView ? "Вернуться ко всей доске" : "Показать только задачи, которые вы отложили до другого дня"}
-                aria-label="Отложено"
-                onClick={() => setShowSnoozed(!snoozedView)}
-              >
-                <Icon name="clock" size={14} />
-                {!isMobile && <span className="fp-word">Отложено</span>}
-                <span className="filter-pill-count">{snoozedCount}</span>
-              </button>
-            )}
+            {!pillsInHeader && timePills}
             {/* «Завершённые» — только на компьютере. Слова Кирилла
                 20.09.2026: «смотреть во всех разделах завершённые в
                 мобильной версии поскрывай, это большая информационная
@@ -961,7 +981,13 @@ export default function TasksPanel({
                     20.09.2026: «не хочу, чтобы в трекере нажатие одной кнопки
                     двигало другие кнопки или разделы». Сколько завершённых, и
                     так написано в заголовке открывшегося столбца. */}
-                <Icon name="check" size={14} /> <span className="fp-word">Завершённые</span>
+                {/* Словом всегда, а не одной галочкой (22.10.2026: «из
+                    кнопки с галочкой сделать кнопку „Завершённые“»). Галочка
+                    без слова на узкой доске не говорила, что она открывает;
+                    место под слово освободили «Просрочено» и «Отложено»,
+                    уехавшие в шапку, — поэтому fp-word, прячущий слова в
+                    тесноте, на неё больше не ставится. */}
+                <Icon name="check" size={14} /> <span>Завершённые</span>
               </button>
             )}
           </div>

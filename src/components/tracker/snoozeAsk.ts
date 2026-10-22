@@ -1,9 +1,12 @@
 import type { AskApi } from "@/components/Ask";
-import { isSnoozed, snoozeChoices, snoozeDay, snoozePastDeadline } from "@/lib/snooze";
+import { isSnoozed, snoozeChoices, snoozeDay, snoozeMinDate, snoozePastDeadline } from "@/lib/snooze";
 
 // Вопрос «до какого дня отложить» — один на все двери: кнопку в строке
 // срока внутри задачи и пункт меню карточки. Две копии этого вопроса
 // разошлись бы вариантами, а варианты здесь и есть весь механизм.
+//
+// День выбирается так же, как срок задачи: календарь и рядом «Завтра» и
+// «Через неделю» (22.10.2026). Нажатие сразу отвечает — второго «ОК» нет.
 //
 // Ответ: дата (отложить), "" (вернуть сейчас), null (передумали).
 export async function chooseSnooze(
@@ -16,12 +19,15 @@ export async function chooseSnooze(
     title: "Отложить до…",
     question: snoozed ? `Сейчас отложена до ${snoozeDay(task.snoozedUntil || "")}.` : "Когда вернуть задачу на доску?",
     note:
-      "До этого дня задача не мешает на вашей доске — найти её можно кнопкой «Отложено» над доской. В сам день она вернётся, и бот напомнит. У исполнителей всё остаётся как было." +
+      "До этого дня задача не мешает на вашей доске — найти её можно кнопкой «Отложено» вверху экрана. В сам день она вернётся, и бот напомнит. У исполнителей всё остаётся как было." +
       (task.deadline ? ` Срок — ${snoozeDay(task.deadline)}.` : ""),
-    options: [
-      ...(snoozed ? [{ value: "", label: "Вернуть на доску сейчас" }] : []),
-      ...snoozeChoices(today, task.deadline).filter((o) => o.value !== task.snoozedUntil),
-    ],
+    calendar: {
+      id: "snoozeCal",
+      value: snoozed ? task.snoozedUntil : "",
+      minDate: snoozeMinDate(today),
+      quick: snoozeChoices(today),
+    },
+    options: snoozed ? [{ value: "", label: "Вернуть на доску сейчас" }] : [],
   });
   if (choice === null) return null;
   if (snoozePastDeadline(choice, task.deadline)) {

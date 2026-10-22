@@ -274,6 +274,10 @@ export default function NewTracker() {
   const [justCreatedTaskId, setJustCreatedTaskId] = useState<string | null>(null);
   const [justCreatedMeetingId, setJustCreatedMeetingId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  // Место в шапке для «Просрочено» и «Отложено» доски. Состоянием, а не
+  // ref: доска рисует в него порталом и должна перерисоваться, когда шапка
+  // смонтировалась.
+  const [boardPillsSlot, setBoardPillsSlot] = useState<HTMLElement | null>(null);
   const [teamOpen, setTeamOpen] = useState(false);
   // Сессия начинается с задач — см. DEFAULT_MOBILE_TAB.
   const [mobileTab, setMobileTab] = useState<MobileTab>(DEFAULT_MOBILE_TAB);
@@ -779,7 +783,7 @@ export default function NewTracker() {
         // раза выписывать один и тот же список пропов значило бы завести
         // тройную копию, которая разойдётся при первой же новой задаче —
         // ровно та ошибка, от которой в этом файле уже избавлялись не раз.
-        mainCol: <TasksPanel {...mainColProps} />,
+        mainCol: <TasksPanel {...mainColProps} headerSlot={boardPillsSlot} />,
         // «Новая задача» и «открыть карточку» едут в openTaskRequest /
         // openExistingTaskId — ОДНОМ состоянии на двоих, потому что мобильный
         // экран задач теперь смонтирован дважды (mainColNew и mainColWork,
@@ -1040,6 +1044,10 @@ export default function NewTracker() {
                 наклейку из системного шрифта рисует не трекер, и рядом со
                 словом в шрифте интерфейса она выглядит приклеенной. */}
             <ConnectionStatus offline={offline} />
+            {/* Сюда доска кладёт «Просрочено» и «Отложено» (TasksPanel,
+                headerSlot): это вопросы ко всем задачам сразу, а не к
+                полосе над доской, и место им — рядом с поиском. */}
+            <div className="header-board-pills" ref={setBoardPillsSlot} />
             <button className="btn btn-icon" id="searchBtn" title="Поиск по трекеру (/)" aria-label="Поиск по трекеру" onClick={() => setSearchOpen(true)}>
               <Icon name="search" size={15} />
             </button>

@@ -269,6 +269,9 @@ test("«Отложить…» убирает задачу с доски авто
   // Кнопка — в строке срока, а не значком в шапке (20.10.2026).
   await expect(page.locator("#selfDeadline #snoozeTaskBtn")).toBeVisible();
   await page.click("#snoozeTaskBtn");
+  // День выбирают календарём, как срок; рядом — «Завтра» и «Через неделю».
+  await expect(page.locator(".ask-modal #snoozeCal")).toBeVisible();
+  await expect(page.locator(".ask-modal").getByRole("button", { name: /^Через неделю,/ })).toBeVisible();
   await page.locator(".ask-modal").getByRole("button", { name: /^Завтра,/ }).click();
   await expect(card).toBeHidden();
   await expect

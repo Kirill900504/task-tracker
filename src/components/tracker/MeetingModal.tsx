@@ -837,7 +837,6 @@ export default function MeetingModal({
                   singleLine
                   focusAtEnd={!isEditing && !!prefill?.fromIdeaId}
                 />
-                <AddButton id="meetingTitleAddBtn" title="Создать встречу" disabled={!title.trim()} onClick={() => void save()} />
                 <MicButton value={title} onChange={setTitle} title="Надиктовать название" />
               </div>
             </div>

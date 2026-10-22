@@ -67,12 +67,13 @@ async function checkForms(page: Page, openIdeas: () => Promise<void>, openMeetin
   await expect(page.locator("#ideaInput")).toHaveValue("");
   await page.locator(".idea-add").screenshot({ path: test.info().outputPath("ideas.png") });
 
-  // Новая задача: «+» у названия. У описания его нет: там он заводил
-  // задачу целиком, а читался как «сохранить описание».
+  // Новая задача: у названия и описания «+» НЕТ — там он заводил задачу
+  // целиком, повторяя «Создать», а читался как «сохранить это поле».
   await openTasks();
   await page.click("#newTaskBtn");
-  await expectBrandPlusBeforeMic(page.locator(".field", { has: page.locator("#fTitle") }).locator(".input-with-mic"));
-  await expect(page.locator("#titleAddBtn")).toBeDisabled();
+  const titleRow = page.locator(".field", { has: page.locator("#fTitle") }).locator(".input-with-mic");
+  await expect(titleRow.locator(".field-mic-btn:not(.field-add-btn)")).toBeVisible();
+  await expect(titleRow.locator(".field-add-btn")).toHaveCount(0);
   await page.click("#addDescBtn");
   const descRow = page.locator(".field", { has: page.locator("#fDesc") }).locator(".input-with-mic");
   await expect(descRow.locator(".field-mic-btn:not(.field-add-btn)")).toBeVisible();
@@ -81,10 +82,11 @@ async function checkForms(page: Page, openIdeas: () => Promise<void>, openMeetin
   await page.keyboard.press("Escape");
   await expect(page.locator("#fTitle")).toHaveCount(0);
 
-  // Новая встреча: «+» у названия и у повестки; в повестке он добавляет пункт.
+  // Новая встреча: у названия «+» нет (по той же причине), у повестки есть —
+  // там он добавляет пункт.
   await openMeetings();
   await page.click("#addMeetingBtn");
-  await expectBrandPlusBeforeMic(page.locator(".field", { has: page.locator("#mTitle") }).locator(".input-with-mic"));
+  await expect(page.locator(".field", { has: page.locator("#mTitle") }).locator(".field-add-btn")).toHaveCount(0);
   const agenda = page.locator("#agendaDraft .input-with-mic");
   await expectBrandPlusBeforeMic(agenda);
   await page.fill("#mAgenda", "Смета");

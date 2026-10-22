@@ -65,7 +65,7 @@ export default function IdeaItem({
   const { colleagues } = useColleagues();
   // Who to send this thought to is asked at the moment of sending: unlike a
   // task, a thought has no assignee of its own.
-  const [pickerAt, setPickerAt] = useState<DOMRect | null>(null);
+  const [picker, setPicker] = useState<{ at: DOMRect; mode: "send" | "share" } | null>(null);
   const [convertAt, setConvertAt] = useState<DOMRect | null>(null);
   const [sendNote, setSendNote] = useState("");
   const [taking, setTaking] = useState(false);
@@ -171,11 +171,9 @@ export default function IdeaItem({
       {...attributes}
       {...listeners}
     >
-      {/* Галочки слева больше нет: «Завершить» — словом, в общем ряду
-          действий под текстом (21.10.2026, его слова: «кнопками словами по
-          типу кнопок во встречах, только меньшими по размерам и
-          помещающимися в одну строку снизу с датой и временем»). Текст от
-          этого получил всю ширину карточки, кроме угла с «Важно» и ×. */}
+      {/* Галочки слева нет: текст занимает всю ширину карточки, кроме угла
+          с «Завершить», «Важно» и × (21.10.2026). Ряд под текстом — действия
+          словами по типу кнопок во встречах, в одну строку с датой. */}
       <div className="idea-body">
         <div className="idea-head">
           {editing ? (
@@ -220,6 +218,23 @@ export default function IdeaItem({
               автора, база откажет молча. */}
           {canEdit && !editing && (
             <div className="idea-corner">
+              {/* «Завершить» — зелёной галочкой в углу, той же формы, что
+                  флажок и ×, слева от них (21.10.2026, его слова): в нижнем
+                  ряду её место заняло «Поделиться». Залитая — мысль
+                  завершена, нажатие возвращает её. */}
+              <button
+                type="button"
+                className={"idea-check" + (idea.done ? " active" : "")}
+                title={idea.done ? "Вернуть в активные" : "Завершить мысль"}
+                aria-label={idea.done ? "Вернуть в активные" : "Завершить мысль"}
+                aria-pressed={idea.done}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleDone();
+                }}
+              >
+                <Icon name="check" size={14} />
+              </button>
               <button
                 type="button"
                 className={"idea-flag idea-important" + (idea.important ? " active" : "")}
@@ -269,8 +284,10 @@ export default function IdeaItem({
             )}
           </div>
           {/* Действия словами — та же форма, что «Успех / Провал / Перенос»
-              у встречи, только мельче. Подпись меняется только у
-              «Завершить» ↔ «Вернуть» (слова одной длины): соседи не ездят. */}
+              у встречи, только мельче. «Отправить» и «Поделиться» — две
+              кнопки, а не одна с окном «Передать мысль» после выбора
+              человека (21.10.2026): способ выбран нажатием, и меню сразу
+              спрашивает только «кому». */}
           <div className="idea-actions">
             <button
               type="button"
@@ -285,30 +302,30 @@ export default function IdeaItem({
               Создать
             </button>
             {teammates.length > 0 && (
-              <button
-                type="button"
-                className="idea-act idea-send"
-                title="Отправить коллеге или поделиться"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPickerAt(e.currentTarget.getBoundingClientRect());
-                }}
-              >
-                Отправить
-              </button>
-            )}
-            {canEdit && (
-              <button
-                type="button"
-                className={"idea-act idea-check" + (idea.done ? " checked" : "")}
-                title={idea.done ? "Вернуть в активные" : "Отметить завершённой"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleDone();
-                }}
-              >
-                {idea.done ? "Вернуть" : "Завершить"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="idea-act idea-send"
+                  title="Отправить коллеге: мысль уйдёт из вашего списка, получатель решит, что с ней делать"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPicker({ at: e.currentTarget.getBoundingClientRect(), mode: "send" });
+                  }}
+                >
+                  Отправить
+                </button>
+                <button
+                  type="button"
+                  className="idea-act idea-share"
+                  title="Поделиться: мысль останется у вас и появится в списке мыслей коллеги"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPicker({ at: e.currentTarget.getBoundingClientRect(), mode: "share" });
+                  }}
+                >
+                  Поделиться
+                </button>
+              </>
             )}
             {/* Чужая мысль, присланная мне: единственное, что с ней можно
                 сделать, — взять в работу. Заводить себе задачу из браузера
@@ -361,7 +378,9 @@ export default function IdeaItem({
           </div>
         </PopLayer>
       )}
-      {pickerAt && <SendMenu kind="idea" id={idea.id} anchor={pickerAt} onClose={() => setPickerAt(null)} onResult={noteResult} />}
+      {picker && (
+        <SendMenu kind="idea" id={idea.id} mode={picker.mode} anchor={picker.at} onClose={() => setPicker(null)} onResult={noteResult} />
+      )}
     </div>
   );
 }

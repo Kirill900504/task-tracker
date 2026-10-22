@@ -59,10 +59,17 @@
 .task.kind-outgoing{border-color:rgba(62,138,168,.7); background:var(--kind-out-bg);}
 /* Поручили мне — без заливки, рамка мягким красным и чуть толще, с
    лёгким свечением: видно издалека, но доску не красит. */
-.task.kind-incoming{border:1.5px solid var(--kind-in); box-shadow:0 0 0 1px var(--kind-in-glow), var(--edge);}
+/* 21.10.2026 — «хочу, чтобы более выделялись задачи, которые поручены мне
+   на выполнение»: рамка толще и ярче, свечение заметнее, корешок жирный и
+   метка «Мне поручено» словом. Заливки по-прежнему нет — её он у этого
+   вида снял сам 14.10.2026. */
+.task.kind-incoming{border:2px solid var(--kind-in); box-shadow:0 0 0 2px var(--kind-in-glow), 0 0 14px rgba(201,138,143,.22), var(--edge);}
 .task.kind-self{border-color:rgba(134,184,150,.28);}
 .task.kind-watch .task-title{color:var(--ink-soft);}
-.task.overdue{border-color:var(--late-line); background:var(--overdue-bg);}
+/* Просрочка своей работы — красной рамкой, без заливки (21.10.2026: «давай
+   уберём красную заливку»). Красная пилюля срока остаётся. */
+.task.overdue{border-color:var(--late-line);}
+.task.kind-incoming.overdue{border-color:var(--late);}
 .task.due-today{border-color:var(--today); background:var(--today-bg);}
 .task:hover:not(.dragging){border-color:var(--accent);}
 
@@ -70,11 +77,11 @@
 .rb-incoming{background:var(--kind-in);}
 /* «Жирная вертикальная полоска» — у личной и у «Помогаю»: их узнают по
    краю, раз заливки нет. */
-.rb-self, .rb-co{width:6px;}
+.rb-self, .rb-co, .rb-incoming{width:6px;}
 .rb-self{background:var(--kind-self);}
 .rb-co{background:var(--kind-co);}
 .rb-watch{background:var(--kind-watch);}
-.task.kind-self, .task.kind-co{padding-left:16px;}
+.task.kind-self, .task.kind-co, .task.kind-incoming{padding-left:16px;}
 
 /* ---------- Кубик: три строки ------------------------------------------
    «Квадратик принудительного закрытия должен быть в правом верхнем углу, а
@@ -198,6 +205,19 @@
 .kind-tag .icon{stroke-width:2;}
 .kind-tag-self{color:var(--kind-self-ink);}
 .kind-tag-co{color:var(--kind-co-ink);}
+.kind-tag-in{color:#E3AEB2;}
+/* «Скоро срок» — стикер сразу справа от даты срока, залитый тёплым оранжевым, чтобы его
+   замечали издалека; сама пилюля срока при этом обычная (21.10.2026). Не
+   жёлтый (его он и не хотел) и не терракота --late: та значит «уже
+   горит». */
+.task-soon-sticker{
+  display:inline-flex; align-items:center; gap:4px; padding:2px 8px 2px 6px; border-radius:var(--radius-xs);
+  font-size:11.5px; font-weight:800; white-space:nowrap; letter-spacing:.01em;
+  color:#2B1606; background:#F0A35E; border:1px solid #F6BC85;
+  box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 2px 6px rgba(240,163,94,.3);
+  transform:rotate(-2deg);
+}
+.task-soon-sticker .icon{stroke-width:2.4;}
 .kind-tag-watch{color:var(--kind-watch-ink);}
 
 /* Полное название поверх доски — по наведению на длинное. */

@@ -25,6 +25,12 @@ describe("фильтры доски складываются", () => {
     expect(matchesBoardFilter([...keys], theirs, "watcher", me)).toBe(false);
   });
 
+  it("«Личные» — только задачи самому себе", () => {
+    expect(matchesBoardFilter(["personal"], mineTask, "executor", me, true)).toBe(true);
+    expect(matchesBoardFilter(["personal"], mineTask, "none", me, false)).toBe(false);
+    expect(matchesBoardFilter(["personal"], theirs, "executor", me, false)).toBe(false);
+  });
+
   it("нажатие включает и выключает, порядок — порядок кнопок", () => {
     expect(toggleBoardFilter([], "helping")).toEqual(["helping"]);
     expect(toggleBoardFilter(["helping"], "assigned")).toEqual(["assigned", "helping"]);

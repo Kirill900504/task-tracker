@@ -137,10 +137,15 @@ test("моё поручение, моя личная, поручили мне, �
     await expect(card("co").locator(".kind-tag-co")).toHaveText("Помогаю");
     await expect(card("watch").locator(".kind-tag-watch")).toHaveText("Наблюдаю");
 
+    // Метка «Мне поручено» — словом, как у остальных видов (21.10.2026).
+    await expect(card("incoming").locator(".kind-tag-in")).toHaveText("Мне поручено");
+
     // Просрочка — два разных сигнала (выбор Кирилла 21.09.2026). Своё
-    // горящее (я исполнитель) краснеет целиком; моё поручение другому —
-    // только корешком, а фон остаётся фирменным.
+    // горящее (я исполнитель) краснеет РАМКОЙ — заливки нет с 21.10.2026
+    // («давай уберём красную заливку»); моё поручение другому — только
+    // корешком, а фон остаётся фирменным.
     await expect(card("lateMine")).toHaveClass(/overdue/, { timeout: 30_000 });
+    expect(await background(card("lateMine")), "просрочка не красит фон").toBe(bgIn);
     await expect(card("lateOut")).not.toHaveClass(/overdue/);
     expect(await background(card("lateOut"))).toBe(bgOut);
     expect(await barOf(card("lateOut"))).not.toBe(bars[1]);
@@ -158,6 +163,11 @@ test("моё поручение, моя личная, поручили мне, �
     await btn("helping").click();
     await expect.poll(shown).toBe("co,watch");
     await btn("helping").click();
+    await expect.poll(shown).toBe("self,outgoing,incoming,co,watch");
+    // «Личные» — только задача самому себе (22.10.2026).
+    await btn("personal").click();
+    await expect.poll(shown).toBe("self");
+    await btn("personal").click();
     await expect.poll(shown).toBe("self,outgoing,incoming,co,watch");
     await btn("assigned").click();
     await btn("mine").click();

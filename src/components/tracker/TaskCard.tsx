@@ -174,14 +174,23 @@ export default function TaskCard({
   }
 
   // Просрочка есть или нет — вопрос к задаче; кричать о ней этому
-  // человеку или нет — вопрос к его роли (см. lib/myRole). Заливку
+  // человеку или нет — вопрос к его роли (см. lib/myRole). Красную рамку
   // получает тот, кого срок касается, а красную пилюлю срока — все,
-  // потому что иначе «горит» ничем не отличается от «идёт».
+  // потому что иначе «горит» ничем не отличается от «идёт». Заливки у
+  // просрочки нет с 21.10.2026 (его слова: «когда просрочена задача, где я
+  // ответственный или помогаю, давай уберём красную заливку»): она
+  // перебивала вид задачи, и «поручили мне» переставало быть видно.
   const mineToDo = role === "executor" || role === "coexecutor";
   const late = isOverdue(task);
   const overdue = late && !dimOverdue && mineToDo;
   const dueToday = !late && isDueTodayHighlight(task) && !dimOverdue && mineToDo;
   const due = task.deadline ? dueInfo(task.deadline, { today: todayStr(), soon: isDueSoon(task) && !dimOverdue }) : null;
+  // «Скоро срок» — стикером справа, а пилюля срока остаётся обычной
+  // (21.10.2026, его слова: «жёлтый цвет предостережений мне не нравится,
+  // давай обычный цвет, но справа стикер об опасности, чтобы привлекал
+  // внимание»). Жёлтая пилюля читалась как ещё один цвет среди дат, а
+  // предупреждению нужна своя форма.
+  const dueSoon = due?.tone === "soon";
 
   // Корешок слева — тон того же отношения ко мне, что и весь кубик.
   // Просроченное, которое я поручил другому, отмечено красным корешком, но
@@ -300,12 +309,19 @@ export default function TaskCard({
           )
         )}
 
-        {(due || !!snoozedTill || !!checklist?.total || !!waitsFor || recurLabel(task) || stage === "blocked" || refused || stage === "returned" || awaitingReschedule || !!unreadCount || kind === "watch" || kind === "co" || kind === "self") && (
+        {(due || !!snoozedTill || !!checklist?.total || !!waitsFor || recurLabel(task) || stage === "blocked" || refused || stage === "returned" || awaitingReschedule || !!unreadCount || kind === "watch" || kind === "co" || kind === "self" || kind === "incoming") && (
           <div className="task-foot">
             {due && (
-              <span className={"task-due-pill tone-" + (dimOverdue && due.tone !== "late" ? "normal" : due.tone)} title={due.title}>
+              <span className={"task-due-pill tone-" + ((dimOverdue && due.tone !== "late") || due.tone === "soon" ? "normal" : due.tone)} title={due.title}>
                 <Icon name="calendar" size={12} />
                 {due.text}
+              </span>
+            )}
+            {/* Стикер — сразу справа от даты, к которой он относится
+                (21.10.2026: «скоро срок разместить справа от даты дедлайна»). */}
+            {dueSoon && (
+              <span className="task-soon-sticker" title={due!.title + " — срок совсем скоро"}>
+                <Icon name="warning" size={13} /> Скоро срок
               </span>
             )}
             {/* Сколько раз срок уже переносили (миграция 0058, предложение 5
@@ -375,6 +391,15 @@ export default function TaskCard({
               {kind === "self" && (
                 <span className="kind-tag kind-tag-self" title="Ваша личная задача">
                   <Icon name="user" size={15} /> Личная задача
+                </span>
+              )}
+              {/* «Поручено мне» — словом, как у остальных видов (21.10.2026:
+                  «хочу, чтобы более выделялись задачи, которые поручены мне
+                  на выполнение»). Одной рамки не хватало: её надо было
+                  сравнивать с соседними. */}
+              {kind === "incoming" && (
+                <span className="kind-tag kind-tag-in" title="Поручили вам — вы исполнитель">
+                  <Icon name="inbox" size={15} /> Мне поручено
                 </span>
               )}
               {kind === "co" && (

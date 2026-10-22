@@ -238,6 +238,11 @@
   /* 28px is the height the text buttons next to it come out at with
      their 6px padding — the two sit on exactly the same line. */
   .header-btns .btn-icon{padding:0; width:30px; height:28px; font-size:14px;}
+  /* «Просрочено» и «Отложено» в шапке — той же высоты 28px, что кнопки
+     рядом. Обёртка без своей коробки: пустая (доска ещё не пришла) она не
+     должна оставлять лишний промежуток в ряду. */
+  .header-board-pills{display:contents;}
+  .header-btns .filter-pill{height:28px; padding:0 10px; gap:5px; font-size:12px;}
   .btn-icon:disabled{cursor:default;}
   .btn-icon:disabled:hover{box-shadow:none;}
   .btn.active{border-color:var(--accent); color:var(--accent); background:var(--accent-soft);}
@@ -550,13 +555,18 @@
      важная мысль и есть голубая карточка: контур с подкраской — «можно
      отметить», сплошная заливка — «отмечено». У крестика красный только
      значок — это удаление, и его цвет с флажком не совпадает нарочно. */
-  .idea-flag, .idea-del{
+  .idea-check, .idea-flag, .idea-del{
     width:24px; height:24px; padding:0; flex:none; cursor:pointer;
     display:inline-flex; align-items:center; justify-content:center;
     border-radius:var(--radius-sm); line-height:1;
     transition:color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
   }
-  .idea-flag:active, .idea-del:active{transform:scale(.92);}
+  .idea-check:active, .idea-flag:active, .idea-del:active{transform:scale(.92);}
+  /* «Завершить» — зелёная пара к красному ×: тот же фон и рамка, цвет
+     только у значка, на наведение — заливка своим цветом. Завершённая
+     мысль — галочка залита (нажатие вернёт её в активные). */
+  .idea-check{color:var(--ok-ink); background:var(--paper-soft); border:1px solid var(--line);}
+  .idea-check:hover, .idea-check.active{color:#0D2416; background:var(--success); border-color:var(--success);}
   .idea-flag{color:var(--fin-ink); background:rgba(79,168,216,.10); border:1px solid rgba(79,168,216,.45);}
   .idea-flag:hover{background:rgba(79,168,216,.2); border-color:var(--fin);}
   .idea-flag.active{background:var(--fin); border-color:var(--fin); color:#0B2833; box-shadow:0 0 0 2px rgba(79,168,216,.22);}
@@ -573,7 +583,6 @@
     transition:color .15s ease, border-color .15s ease, background .15s ease;
   }
   .idea-act:hover:not(:disabled){color:var(--accent); border-color:var(--accent);}
-  .idea-act.idea-check:hover{color:var(--success); border-color:var(--success);}
   .idea-act.idea-take-act{color:var(--ink); background:var(--accent-soft); border-color:var(--accent);}
   .idea-act:active{transform:scale(.96);}
   .idea-act:disabled{opacity:.6; cursor:default;}
@@ -876,8 +885,8 @@
      просрочка карточку не красит. */
   /* Заливка и рамка — без border-left: левый край занят корешком роли, и
      две полосы друг на друге читались бы как одна широкая непонятного
-     цвета. Срок говорит фоном, роль — полоской. */
-  .task.overdue{border-color:var(--late-line); background:var(--overdue-bg);}
+     цвета. Срок говорит рамкой (у «сегодня» ещё и фоном), роль — полоской. */
+  .task.overdue{border-color:var(--late-line);} /* без заливки с 21.10.2026 — см. task-ui.css */
   .task.due-today{border-color:var(--today); background:var(--today-bg);}
 
   /* Раздел — полоска у ПРАВОГО края, во всю высоту кубика. Переехала
@@ -2514,7 +2523,7 @@
     /* Под палец: правило «не мельче 36px» — и для крестика встречи, и для
        значков у мысли (были 28 и 31). */
     .meeting-del{width:36px; height:36px;}
-    .idea-flag, .idea-del{width:34px; height:34px;}
+    .idea-check, .idea-flag, .idea-del{width:34px; height:34px;}
     .idea-act{min-height:34px; padding:0 9px; font-size:12px;}
     /* Под палец, а не под курсор */
     .toast{padding-right:52px;}
@@ -3855,8 +3864,9 @@
   .task{padding:12px 10px; margin-bottom:6px;}
 }
 /* Доске тесно (окно 1366 и уже, или две колонки) — сперва уходят СЛОВА, а
-   не кнопки: у «Просрочено», «Отложено», «Завершённые» остаются значок и
-   число, слово — в подсказке. Срезанная краем кнопка читается как
+   не кнопки: у «Новая задача» остаётся «+», слово — в подсказке
+   («Просрочено» и «Отложено» с 22.10.2026 в шапке, а «Завершённые»
+   подписано всегда — его слово fp-word не носит). Срезанная краем кнопка читается как
    поломка; значок со счётчиком говорит то же самое (так уже сделано на
    телефоне). Разделы при этом плотнее. Ширину считает сама доска
    (@container по .dash-panel), а не окно. */
