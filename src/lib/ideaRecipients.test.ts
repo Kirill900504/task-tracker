@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { incomingFor, recipientState, sentAwayIds, sentToByIdea, stateLabel, type IdeaRecipientRow } from "./ideaRecipients";
+import { copySourceAuthor, incomingFor, recipientState, sentAwayIds, sentToByIdea, stateLabel, type IdeaRecipientRow } from "./ideaRecipients";
 
 function row(over: Partial<IdeaRecipientRow> = {}): IdeaRecipientRow {
   return {
@@ -115,5 +115,19 @@ describe("отправить и поделиться (0051)", () => {
     expect(stateLabel("send", "none")).toBe("не ответил");
     expect(stateLabel("send", "seen")).toBe("принял");
     expect(stateLabel("share", "taken")).toBe("взял в работу");
+  });
+});
+
+describe("copySourceAuthor — от кого сохранённая копия", () => {
+  it("автор оригинала по строке рассылки; пустой created_by — владелец", () => {
+    expect(copySourceAuthor([row()], "i1")).toBe("u-manager");
+    const fromOwner = row({ idea: { text: "М", createdBy: null, createdAt: "x", done: false, deletedAt: null } });
+    expect(copySourceAuthor([fromOwner], "i1")).toBe("");
+  });
+
+  it("не копия или строки нет — отправителя не выдумываем", () => {
+    expect(copySourceAuthor([row()], undefined)).toBeUndefined();
+    expect(copySourceAuthor([row()], "other")).toBeUndefined();
+    expect(copySourceAuthor([row({ idea: null })], "i1")).toBeUndefined();
   });
 });

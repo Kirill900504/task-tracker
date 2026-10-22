@@ -86,6 +86,7 @@ export type IdeaRow = {
   created_at?: string;
   done_at: string | null;
   created_by?: string | null;
+  from_idea?: string | null;
 };
 
 export type SectionRow = {
@@ -225,7 +226,7 @@ export function meetingFromRow(r: MeetingRow): Meeting {
 }
 
 export function ideaToRow(i: Idea): IdeaRow {
-  return { id: i.id, text: i.text, important: !!i.important, done: !!i.done, done_at: i.doneAt || null };
+  return { id: i.id, text: i.text, important: !!i.important, done: !!i.done, done_at: i.doneAt || null, from_idea: i.fromIdea || null };
 }
 
 function pad(n: number): string {
@@ -243,7 +244,7 @@ export function formatIdeaCreatedAt(iso: string | Date | undefined): string {
 }
 
 export function ideaFromRow(r: IdeaRow): Idea {
-  return { id: r.id, text: r.text, important: !!r.important, done: !!r.done, createdAt: formatIdeaCreatedAt(r.created_at), doneAt: r.done_at || "", createdBy: r.created_by || "" };
+  return { id: r.id, text: r.text, important: !!r.important, done: !!r.done, createdAt: formatIdeaCreatedAt(r.created_at), doneAt: r.done_at || "", createdBy: r.created_by || "", fromIdea: r.from_idea || "" };
 }
 
 export function sectionToRow(s: Section): SectionRow {

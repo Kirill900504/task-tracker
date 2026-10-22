@@ -11,7 +11,7 @@ import MicButton from "./MicButton";
 import AddButton from "./AddButton";
 import Icon from "./Icon";
 import PopLayer from "./PopLayer";
-import { stateLabel, type SentTo } from "@/lib/ideaRecipients";
+import type { SentTo } from "@/lib/ideaRecipients";
 import { postOrQueue } from "@/lib/outbox";
 
 // «09.10.2026 13:47» → «09.10 13:47», если год текущий: в нижнем ряду мысли
@@ -43,6 +43,7 @@ export default function IdeaItem({
   onConvertToMeeting,
   highlighted,
   sentTo,
+  sender,
 }: {
   idea: Idea;
   onToggleDone: () => void;
@@ -61,6 +62,9 @@ export default function IdeaItem({
   highlighted?: boolean;
   // Кому мысль уже отправлена и что каждый ответил (lib/ideaRecipients).
   sentTo?: SentTo[];
+  // Кто мысль отправил или поделился ею — именем (IdeasPanel.senderOf).
+  // Пусто — мысль никто никому не передавал.
+  sender?: string;
 }) {
   const { colleagues } = useColleagues();
   // Who to send this thought to is asked at the moment of sending: unlike a
@@ -96,12 +100,14 @@ export default function IdeaItem({
     el.style.left = Math.max(8, Math.min(sentAnchor.left, window.innerWidth - el.offsetWidth - 8)) + "px";
   }, [sentAnchor]);
   const sent = sentTo || [];
-  // В списке автора с 0051 остаются только ПОДЕЛЁННЫЕ мысли (отправленные
-  // уходят в окно «Отправленные»), а у поделённой ответа никто не ждёт —
-  // «1/2» там читалось бы как недостача. Число ответивших показывается,
-  // только если мысль кому-то ещё и отправлена.
-  const sharedOnly = sent.length > 0 && sent.every((s) => s.kind === "share");
-  const answered = sharedOnly ? 0 : sent.filter((s) => s.kind === "send" && s.state !== "none").length;
+  // Самолётик отвечает на «от кого и кому», а не «кто что сделал»
+  // (22.10.2026, его слова: «посмотреть отправителя мысли, но статус „убрал
+  // у себя“ и другие отображать не надо»). Поэтому ни ответов во
+  // всплывашке, ни «1/2» на значке — только число получателей. Чем кто
+  // ответил, видно в окне «Отправленные». Имя дважды не пишется: в списке
+  // «Кому» один раз, даже если мысль ушла человеку и отправкой, и «поделиться».
+  const recipientNames = [...new Set(sent.map((s) => s.name))];
+  const showPlane = !!sender || recipientNames.length > 0;
 
   // Кому вообще можно передать мысль — всем, кроме себя: она доходит и в
   // список мыслей получателя в трекере, а не только в мессенджер (SendMenu,
@@ -266,7 +272,7 @@ export default function IdeaItem({
         <div className="idea-foot">
           <div className="idea-meta" title={idea.createdAt}>
             <IdeaStamp stamp={idea.createdAt} />
-            {sent.length > 0 && (
+            {showPlane && (
               <span
                 className="idea-sent"
                 data-idea-sent={idea.id}
@@ -279,7 +285,8 @@ export default function IdeaItem({
                   setSentAnchor((cur) => (cur ? null : r));
                 }}
               >
-                <Icon name="send" size={11} /> {answered ? `${answered}/${sent.length}` : sent.length}
+                <Icon name="send" size={11} />
+                {recipientNames.length > 0 && " " + recipientNames.length}
               </span>
             )}
           </div>
@@ -362,19 +369,27 @@ export default function IdeaItem({
           ]}
         />
       )}
-      {sentAnchor && sent.length > 0 && (
+      {sentAnchor && showPlane && (
         <PopLayer>
           <div ref={sentRef} className="people-tooltip idea-sent-tooltip" id="ideaSentTooltip" style={{ display: "block", top: -9999, left: -9999 }}>
-            <div className="ptitle">{sharedOnly ? "Поделились" : "Отправлено"}</div>
-            {sent.map((s) => (
-              <div className={"prow " + (s.state === "none" ? "vote-none" : "vote-yes")} key={s.name}>
-                <span className="prow-mark" aria-hidden>
-                  {s.state === "none" ? "•" : <Icon name={s.state === "taken" ? "arrow-right" : "check"} size={13} />}
-                </span>
-                <span className="prow-name">{s.name}</span>
-                <span className="prow-note">{stateLabel(s.kind, s.state)}</span>
-              </div>
-            ))}
+            {sender && (
+              <>
+                <div className="ptitle">От кого</div>
+                <div className="prow idea-sender">
+                  <span className="prow-name">{sender}</span>
+                </div>
+              </>
+            )}
+            {recipientNames.length > 0 && (
+              <>
+                <div className="ptitle idea-to-title">Кому</div>
+                {recipientNames.map((name) => (
+                  <div className="prow" key={name}>
+                    <span className="prow-name">{name}</span>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </PopLayer>
       )}

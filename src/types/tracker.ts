@@ -154,6 +154,9 @@ export interface Idea {
   doneAt: string;
   // Кто записал мысль. Только для чтения.
   createdBy?: string;
+  // Копия присланной мысли («Сохранить в мысли»): id оригинала. По нему
+  // самолётик показывает, от кого она пришла (миграция 0068).
+  fromIdea?: string;
 }
 
 export interface Section {

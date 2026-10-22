@@ -77,6 +77,18 @@ export function sentToByIdea(rows: IdeaRecipientRow[], nameById: Record<string, 
   return out;
 }
 
+// Для получателя: от кого пришла мысль, сохранённая из «Прислали вам»
+// (копия помнит id оригинала, миграция 0068). Автор оригинала — в строке
+// рассылки, которую получатель и так читает: она несёт встроенную мысль с
+// её created_by. Ответ — created_by как есть (пустой — владелец, см.
+// authorLabel) или undefined, если строки нет: тогда отправителя не знаем
+// и не выдумываем.
+export function copySourceAuthor(rows: IdeaRecipientRow[], fromIdea: string | undefined): string | undefined {
+  if (!fromIdea) return undefined;
+  const row = rows.find((r) => r.ideaId === fromIdea && r.idea);
+  return row?.idea ? row.idea.createdBy || "" : undefined;
+}
+
 // Для автора: какие мысли ОТПРАВЛЕНЫ хотя бы одному человеку. Они уходят
 // из рабочего списка в окно «Отправленные» — «отправить» и значит отдать.
 // Поделённая остаётся на месте.

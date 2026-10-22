@@ -19,7 +19,7 @@ import { ideasToReview, isReviewDay, reviewWeek } from "@/lib/ideaReview";
 import IncomingIdeas from "./IncomingIdeas";
 import { prefetchIdeaInbox, useIdeaRecipients } from "@/hooks/useIdeaRecipients";
 import { authorLabel } from "@/lib/authorName";
-import { incomingFor, sentAwayIds, sentToByIdea, type IdeaRecipientRow } from "@/lib/ideaRecipients";
+import { copySourceAuthor, incomingFor, sentAwayIds, sentToByIdea, type IdeaRecipientRow } from "@/lib/ideaRecipients";
 import { postOrQueue } from "@/lib/outbox";
 
 // Окна — отдельными кусками, подгружаются фоном после первого кадра
@@ -117,6 +117,17 @@ export default function IdeasPanel({
   const sentTo = sentToByIdea(recipients.rows, recipients.names);
   const incoming = incomingFor(recipients.rows, recipients.myAssigneeId, myUserId);
   const people = Object.values(recipients.names);
+  // Кто отправил мысль — для самолётика (22.10.2026, его слова: «через этот
+  // значок самолётика можно было посмотреть отправителя мысли»). У своей
+  // переданной — я сам; у копии, сохранённой из «Прислали вам», — автор
+  // оригинала. Мысль, которую никто никому не передавал, отправителя не имеет.
+  function senderOf(idea: Idea): string | undefined {
+    if (idea.fromIdea) {
+      const author = copySourceAuthor(recipients.rows, idea.fromIdea);
+      return author === undefined ? undefined : authorLabel(author || undefined, recipients.authors, people);
+    }
+    return sentTo[idea.id]?.length ? authorLabel(idea.createdBy || undefined, recipients.authors, people) : undefined;
+  }
   // «Отправить» отдаёт мысль: из рабочего списка она уходит в окно
   // «Отправленные» (решение Кирилла 23.09.2026, миграция 0051). Поделённая
   // остаётся на месте.
@@ -138,7 +149,7 @@ export default function IdeasPanel({
   // «Сохранить в мысли»: копия в мои мысли. Не через addText: тот очищает
   // поле ввода, а в нём может лежать недописанная своя мысль.
   function keepCopy(row: IdeaRecipientRow) {
-    actions.saveIdea({ id: uid(), text: row.idea?.text || "", important: false, done: false, createdAt: formatIdeaCreatedAt(new Date()), doneAt: "" });
+    actions.saveIdea({ id: uid(), text: row.idea?.text || "", important: false, done: false, createdAt: formatIdeaCreatedAt(new Date()), doneAt: "", fromIdea: row.ideaId });
   }
 
   // «В работу» / «Встреча» у присланной и поделённой. Автор — строка по его
@@ -306,6 +317,7 @@ export default function IdeasPanel({
               onConvertToMeeting={() => onConvertToMeeting(idea.id)}
               highlighted={highlightId === idea.id}
               sentTo={sentTo[idea.id]}
+              sender={senderOf(idea)}
             />
           ))
         )}

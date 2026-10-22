@@ -3730,6 +3730,8 @@
   .idea-sent-tooltip{max-width:min(340px, calc(100vw - 16px)); box-sizing:border-box;}
   .idea-sent-tooltip .prow{overflow:visible;}
   .idea-sent-tooltip .prow-name{min-width:0; overflow:hidden; text-overflow:ellipsis;}
+  /* «Кому» под «От кого» — отдельной группой. */
+  .idea-sent-tooltip .idea-sender + .idea-to-title{margin-top:6px;}
   .incoming-ideas{margin:0 0 8px; padding:8px; border:1px solid var(--accent); border-radius:var(--radius-md); background:var(--accent-soft);}
   .incoming-ideas-head{
     display:flex; align-items:center; gap:6px; margin-bottom:6px;

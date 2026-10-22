@@ -247,6 +247,8 @@ async function answerIdea(admin: SupabaseClient, me: Receiver | null, action: Ca
       important: false,
       done: false,
       created_by: isOwner ? null : me.userId,
+      // От кого пришла — самолётик у копии (миграция 0068).
+      from_idea: idea.id,
     });
     if (error) return { toast: "Не получилось сохранить" };
     await markAnswered();

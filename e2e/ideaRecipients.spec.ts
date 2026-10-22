@@ -172,8 +172,13 @@ test("присланную мысль принимают в трекере, а �
   await expect(tip).toBeVisible();
   await expect(tip).toContainText("Кирилл Тестов");
   await expect(tip).toContainText("Анна Проверкина");
-  await expect(tip).toContainText("убрал у себя");
-  await expect(tip).toContainText("видит");
+  // Самолётик — «от кого и кому», без ответов (22.10.2026: «статус „убрал
+  // у себя“ и другие отображать не надо»). Отправитель своей мысли — я.
+  await expect(tip.locator(".idea-sender")).toHaveText("Тест Руководитель");
+  await expect(tip).toContainText("Кому");
+  for (const status of ["убрал у себя", "видит", "принял", "не ответил", "взял в работу"]) {
+    await expect(tip).not.toContainText(status);
+  }
   await expect(tip).not.toContainText("(я)");
   // Целиком в окне, и строки не торчат за её край — «не ответил» вылезал
   // наружу (его снимок 07.10.2026).
@@ -197,7 +202,14 @@ test("присланную мысль принимают в трекере, а �
   const keep = block.locator(`[data-incoming-idea="${keepId}"]`);
   await keep.getByRole("button", { name: "Сохранить" }).click();
   await expect(keep).toHaveCount(0);
-  await expect(page.locator("#ideaList .idea-item").filter({ hasText: "Книга про переговоры — прочитать" })).toBeVisible();
+  const copy = page.locator("#ideaList .idea-item").filter({ hasText: "Книга про переговоры — прочитать" });
+  await expect(copy).toBeVisible();
+  // Копия помнит, от кого пришла: самолётик называет отправителя, а «Кому»
+  // у неё нет — её никуда не передавали (миграция 0068).
+  await copy.locator(".idea-sent").hover();
+  await expect(page.locator("#ideaSentTooltip .idea-sender")).toHaveText("Кирилл Тестов");
+  await expect(page.locator("#ideaSentTooltip")).not.toContainText("Кому");
+  await page.mouse.move(0, 0);
 
   // «Встреча» открывает обычную форму новой встречи: название из мысли,
   // автор мысли уже в составе. После «Сохранить» мысль уходит из блока, а

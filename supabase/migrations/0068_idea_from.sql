@@ -1,0 +1,14 @@
+-- A thought saved from «Прислали вам» («Сохранить в мысли», in the tracker
+-- or under the bot's message) used to become a plain thought of the
+-- recipient's: the copy kept the text and lost who had sent it. 22.10.2026
+-- Кирилл asked to see the sender behind the paper-plane mark of any thought
+-- that was sent or shared.
+--
+-- The copy remembers the ORIGINAL thought's id, not the sender's name: a
+-- name written here would be a second truth beside the people list and
+-- would drift on the first rename. The sender is the original's created_by,
+-- which the recipient already reads through its idea_recipients row
+-- (useIdeaRecipients joins it). No foreign key on purpose — the original may
+-- be deleted by its author, and a key would make the sync batch carrying the
+-- copy fail as a whole.
+alter table public.ideas add column if not exists from_idea text;
