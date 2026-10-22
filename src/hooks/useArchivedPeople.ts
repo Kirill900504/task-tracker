@@ -28,7 +28,7 @@ async function fetchArchived(): Promise<string[] | null> {
   return (data as { name: string }[]).map((r) => withoutSelfMark(r.name || "").trim()).filter(Boolean);
 }
 
-const store = createSharedStore<string[]>([], fetchArchived, ["assignees"]);
+const store = createSharedStore<string[]>([], fetchArchived, ["assignees"], "archived");
 
 export function useArchivedPeople(): (name: string | null | undefined) => boolean {
   const { data } = useSyncExternalStore(store.subscribe, store.snapshot, store.serverSnapshot);

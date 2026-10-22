@@ -39,7 +39,7 @@ async function fetchRows(): Promise<SectionAssignee[] | null> {
   }));
 }
 
-const store = createSharedStore<SectionAssignee[]>([], fetchRows, ["section_assignees"]);
+const store = createSharedStore<SectionAssignee[]>([], fetchRows, ["section_assignees"], "sections");
 
 export function prefetchSectionAssignees() {
   store.ensure();

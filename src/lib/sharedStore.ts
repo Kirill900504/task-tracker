@@ -61,17 +61,73 @@ function watchAuth() {
   });
 }
 
+// Справочник с прошлого запуска — первым кадром (22.10.2026, снимок Кирилла:
+// при открытии у каждой мысли одна кнопка «Создать», а через секунду рядом
+// встают «Отправить» и «Поделиться»). Кнопки ждали список команды из сети, а
+// жил он только в памяти вкладки, то есть каждый запуск начинался с пустого.
+// Теперь ответ лежит в localStorage под своим auth-id (его пишет
+// useWorkspaceRole — тот же приём, что у роли и участия) и отдаётся сразу;
+// сеть догоняет и заменяет его, потому что `loadedAt` у кэша нулевой и первый
+// же `ensure` идёт за правдой. Чужой auth-id — кэша нет: на общем компьютере
+// второй вошедший не должен увидеть чужую команду даже на секунду.
+function myUserId(): string {
+  try {
+    const raw = localStorage.getItem("kkt_identity");
+    return raw ? JSON.parse(raw).userId || "" : "";
+  } catch {
+    return "";
+  }
+}
+
+function readPersisted<T>(key: string): T | undefined {
+  const uid = myUserId();
+  if (!uid) return undefined;
+  try {
+    const raw = localStorage.getItem("kkt_store_" + key);
+    if (!raw) return undefined;
+    const saved = JSON.parse(raw) as { userId: string; data: T };
+    return saved.userId === uid ? saved.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writePersisted<T>(key: string, data: T) {
+  const uid = myUserId();
+  if (!uid) return;
+  try {
+    localStorage.setItem("kkt_store_" + key, JSON.stringify({ userId: uid, data }));
+  } catch {
+    /* переполнилось или приватный режим — следующий старт просто пойдёт в сеть */
+  }
+}
+
 // `watch` — таблицы, изменение которых означает, что список устарел. Это и
 // есть настоящий ответ на «а вдруг данные протухли»: человек, нажавший
 // «Start» в боте, должен появиться подключённым во всех открытых окнах сразу,
 // как появляется всё остальное в трекере. Срок годности выше — только чтобы
 // не спрашивать одно и то же по десять раз на одной отрисовке.
-export function createSharedStore<T>(empty: T, load: () => Promise<T | null>, watch: string[] = []): SharedStore<T> {
+// `persist` — имя, под которым список переживает перезапуск (см. выше).
+export function createSharedStore<T>(
+  empty: T,
+  load: () => Promise<T | null>,
+  watch: string[] = [],
+  persist?: string,
+): SharedStore<T> {
   // Один и тот же объект, пока данных нет: useSyncExternalStore сравнивает
   // снимки по ссылке и зациклится на функции, которая каждый раз возвращает
   // новый пустой массив.
   const idle: Snapshot<T> = { data: empty, loaded: false };
   let snapshot: Snapshot<T> = idle;
+  // Кэш читается при первом обращении в браузере, а не при загрузке модуля:
+  // модуль исполняется и на сервере, где localStorage нет.
+  let hydrated = !persist;
+  function hydrate() {
+    if (hydrated || typeof window === "undefined") return;
+    hydrated = true;
+    const saved = readPersisted<T>(persist!);
+    if (saved !== undefined && !snapshot.loaded) snapshot = { data: saved, loaded: true };
+  }
   let loadedAt = 0;
   let inFlight: Promise<void> | null = null;
   const listeners = new Set<() => void>();
@@ -91,6 +147,7 @@ export function createSharedStore<T>(empty: T, load: () => Promise<T | null>, wa
         // ставится, чтобы экран не завис на «Загрузка…».
         snapshot = { data: next ?? snapshot.data, loaded: true };
         loadedAt = Date.now();
+        if (persist && next != null) writePersisted(persist, next);
         emit();
       })
       .catch(() => {
@@ -138,7 +195,10 @@ export function createSharedStore<T>(empty: T, load: () => Promise<T | null>, wa
   }
 
   const store: SharedStore<T> = {
-    snapshot: () => snapshot,
+    snapshot: () => {
+      hydrate();
+      return snapshot;
+    },
     serverSnapshot: () => idle,
     subscribe(fn) {
       watchAuth();
@@ -156,6 +216,7 @@ export function createSharedStore<T>(empty: T, load: () => Promise<T | null>, wa
       emit();
     },
     ensure() {
+      hydrate();
       if (!snapshot.loaded || Date.now() - loadedAt > FRESH_MS) void refresh();
     },
     refresh,

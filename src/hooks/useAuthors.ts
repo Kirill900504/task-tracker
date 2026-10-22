@@ -43,7 +43,7 @@ async function fetchAll(): Promise<Record<string, string> | null> {
   return out;
 }
 
-const store = createSharedStore<Record<string, string>>({}, fetchAll, ["workspace_members", "assignees"]);
+const store = createSharedStore<Record<string, string>>({}, fetchAll, ["workspace_members", "assignees"], "authors");
 
 export function useAuthors(): Record<string, string> {
   const { data } = useSyncExternalStore(store.subscribe, store.snapshot, store.serverSnapshot);

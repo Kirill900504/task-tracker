@@ -37,7 +37,7 @@ async function fetchMaxBot(): Promise<string | null> {
   return (data as { max_bot_username?: string | null } | null)?.max_bot_username || "";
 }
 
-const maxBot = createSharedStore<string>("", fetchMaxBot);
+const maxBot = createSharedStore<string>("", fetchMaxBot, [], "maxbot");
 
 export function useMaxBot(): { username: string; available: boolean } {
   const { data: fromDb } = useSyncExternalStore(maxBot.subscribe, maxBot.snapshot, maxBot.serverSnapshot);

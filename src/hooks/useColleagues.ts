@@ -128,7 +128,7 @@ async function fetchColleagues(): Promise<Colleague[] | null> {
 // `assignees`, а принятое приглашение в трекер — `workspace_members`. И то и
 // другое должно быть видно в открытом окне сразу — как всё остальное в
 // трекере, а не через то время, на которое кому-то показался разумным кэш.
-const team = createSharedStore<Colleague[]>([], fetchColleagues, ["assignees", "workspace_members"]);
+const team = createSharedStore<Colleague[]>([], fetchColleagues, ["assignees", "workspace_members"], "team");
 
 // Прогрев из корня трекера. Список нужен в ту же секунду, когда нажали ✈ или
 // «Команда», а нажимают их из уже открытого экрана — значит спросить можно
