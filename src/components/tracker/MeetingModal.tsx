@@ -49,6 +49,10 @@ import MeetingPoll from "./MeetingPoll";
 // 09:00–18:00 in half-hour steps: the working day, one tap per slot.
 const TIME_SLOTS = WORKDAY_SLOTS;
 
+// Опрос времени — не больше трёх вариантов, считая выбранное в сетке
+// (22.10.2026). Больше — и голосование превращается в разбор таблицы.
+const MAX_POLL_OPTIONS = 3;
+
 // Дни, на которые встречи назначают чаще всего, — теми же тремя кнопками,
 // что и срок задачи (см. TaskModal.QUICK_DEADLINES).
 const QUICK_DAYS = [
@@ -353,7 +357,7 @@ export default function MeetingModal({
     // Варианты опроса проверяются тем же правилом занятости: вариант, на
     // который кто-то из позванных уже занят, назначиться не сможет.
     // Вариант, совпавший с выбранным временем, вариантом не считается.
-    const pollSlots = extraSlots.filter((o) => !(o.date === date && o.time === time));
+    const pollSlots = extraSlots.filter((o) => !(o.date === date && o.time === time)).slice(0, MAX_POLL_OPTIONS - 1);
     if (!isEditing && pollSlots.length) {
       for (const o of pollSlots) {
         const clash = busyPeople(dayMeetings, { date: o.date, time: o.time, durationMin, people: participants, ignore: [] });
@@ -919,37 +923,78 @@ export default function MeetingModal({
               {/* Опрос времени (предложение 9 от 13.10.2026): не знаете,
                   когда удобно всем, — добавьте ещё варианты. Участники
                   отметят удобные, и встреча назначится на лучший сама. */}
-              {!isMove && (
-                <div className="poll-form" id="pollForm">
-                  {extraSlots.map((o, i) => (
-                    <span className="participant-chip selected poll-extra" key={o.date + o.time}>
-                      {fmtDate(o.date)}, {o.time}
-                      <button type="button" className="chat-mini" aria-label="Убрать вариант" onClick={() => setExtraSlots((l) => l.filter((_, j) => j !== i))}>
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                  <button
-                    type="button"
-                    className="btn btn-small"
-                    id="addSlotBtn"
-                    disabled={!date || !time || extraSlots.length >= 4}
-                    title="Выберите другую дату или время выше и нажмите — вариант добавится к опросу"
-                    onClick={() => {
-                      if (extraSlots.some((o) => o.date === date && o.time === time)) return;
-                      setExtraSlots((l) => [...l, { date, time }]);
-                    }}
-                  >
-                    + Вариант {date && time ? `${fmtDate(date)}, ${time}` : ""}
-                  </button>
-                  {extraSlots.length > 0 && (
-                    <div className="field-hint">
-                      Опрос: участники отметят удобные варианты, и встреча назначится на тот, что подходит большинству. Первым вариантом
-                      пойдёт время, выбранное выше в момент сохранения.
+              {/* Вариантов не больше трёх (22.10.2026, его слова: «всего можно
+                  предложить 3 варианта времени»), и список показывает ровно
+                  то, что уйдёт в опрос: закреплённые кнопкой плюс время,
+                  выбранное в сетке сейчас, — оно входит в опрос и без
+                  нажатия (см. save()). Поэтому кнопка гаснет на двух
+                  закреплённых: третьим вариантом и так станет выбранное. */}
+              {!isMove && (() => {
+                const pinned = extraSlots.filter((o) => !(o.date === date && o.time === time));
+                const currentPinned = pinned.length < extraSlots.length;
+                const options = [...pinned.map((o) => ({ ...o, pinned: true })), ...(date && time ? [{ date, time, pinned: currentPinned }] : [])];
+                const polling = extraSlots.length > 0;
+                const canAdd = !!date && !!time && !currentPinned && pinned.length < MAX_POLL_OPTIONS - 1;
+                return (
+                  <div className={"poll-form" + (polling ? " active" : "")} id="pollForm">
+                    <div className="poll-form-head">
+                      <Icon name="calendar" size={14} />
+                      <span className="poll-form-title">{polling ? "Участники выберут удобное время" : "Не знаете, когда удобно всем?"}</span>
+                      {polling && (
+                        <span className="poll-form-count">
+                          {options.length} из {MAX_POLL_OPTIONS}
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
+                    {polling && (
+                      <ol className="poll-options">
+                        {options.map((o, i) => (
+                          <li className="poll-extra" key={o.date + o.time}>
+                            <span className="poll-num">{i + 1}</span>
+                            <span className="poll-when">
+                              {fmtDate(o.date)}, {o.time}
+                            </span>
+                            {o.pinned ? (
+                              <button
+                                type="button"
+                                className="chat-mini"
+                                aria-label="Убрать время"
+                                title="Убрать время"
+                                onClick={() => setExtraSlots((l) => l.filter((x) => !(x.date === o.date && x.time === o.time)))}
+                              >
+                                ×
+                              </button>
+                            ) : (
+                              <span className="poll-now">выбрано в сетке</span>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                    <div className="poll-form-foot">
+                      <button
+                        type="button"
+                        className="btn btn-small"
+                        id="addSlotBtn"
+                        disabled={!canAdd}
+                        onClick={() => {
+                          if (!canAdd) return;
+                          setExtraSlots((l) => [...l, { date, time }]);
+                        }}
+                      >
+                        + Предложить время
+                      </button>
+                      <span className="field-hint">
+                        {!polling
+                          ? `До ${MAX_POLL_OPTIONS} вариантов — участники отметят удобные, и встреча назначится сама`
+                          : options.length >= MAX_POLL_OPTIONS
+                            ? "Больше вариантов не добавить"
+                            : "Выберите в сетке ещё время"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="field participants-field" id="participantsField">

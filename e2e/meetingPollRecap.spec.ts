@@ -87,9 +87,13 @@ test("опрос времени: варианты, и организатор н�
   await login(page);
   await newMeeting(page, title);
   const first = await freeSlot(page);
+  await expect(page.locator("#addSlotBtn")).toHaveText("+ Предложить время");
   await page.click("#addSlotBtn");
   await expect(page.locator("#pollForm .poll-extra")).toHaveCount(1);
   const second = await freeSlot(page, [first]);
+  // Выбранное в сетке входит в опрос и без нажатия — список это показывает.
+  await expect(page.locator("#pollForm .poll-extra")).toHaveCount(2);
+  await expect(page.locator("#pollForm .poll-form-count")).toHaveText("2 из 3");
   await page.click("#meetingSaveBtn");
 
   // В базе — предложение с двумя вариантами: выбранное при сохранении первым.
