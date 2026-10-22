@@ -105,7 +105,7 @@ test("принятая задача открывается заново кноп
   await expect(report).toBeVisible({ timeout: 20_000 });
   await report.click();
   await page.fill("#myWorkDone", "Готово, проверяйте");
-  await page.locator(".ms-answer-actions .btn", { hasText: "Отправить отчёт" }).click();
+  await page.locator(".ms-answer-actions .btn", { hasText: "Готово" }).click();
 
   // Отчёт отправлен — карточка закрывается сама. Своя задача при этом
   // уходит не на приёмку, а сразу в «Завершённые»: принимать работу у

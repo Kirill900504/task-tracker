@@ -838,6 +838,11 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .item-head-btn.force-close{color:#E6F4EB; background:#3A7A55;}
 .item-head-btn.force-close:hover{color:#fff; background:#428A60;}
 .item-head-btn.force-close:disabled:hover{background:#3A7A55;}
+/* «Сделал» и «Готово» в отчёте исполнителя — тот же зелёный: ответ, которым работу
+   сдают, говорит цветом то же, что и решение, которым её закрывают. */
+.btn-primary.btn-done{color:#E6F4EB; background:#3A7A55;}
+.btn-primary.btn-done:hover{color:#fff; background:#428A60;}
+.btn-primary.btn-done:disabled:hover{background:#3A7A55;}
 /* Микрофон в окне — квадратом, как «+». Запись — та же кнопка, залитая
    красным: что идёт запись, говорит цвет, а не другая форма. */
 .modal .input-with-mic .field-mic-btn.listening, .modal .input-with-mic .field-mic-btn.listening:hover{

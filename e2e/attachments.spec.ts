@@ -75,7 +75,7 @@ test("фото в отчёте — миниатюра, по нажатию ок�
       mimeType: "image/png",
       buffer: readFileSync("public/favicon.png"),
     });
-    await page.locator(".ms-answer-actions .btn", { hasText: "Отправить отчёт" }).click();
+    await page.locator(".ms-answer-actions .btn", { hasText: "Готово" }).click();
     await expect(page.locator("#overlay")).toHaveCount(0, { timeout: 15_000 });
 
     const done = page.locator("#col-review .task", { hasText: title });

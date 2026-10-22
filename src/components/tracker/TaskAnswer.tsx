@@ -196,7 +196,8 @@ export default function TaskAnswer({
           question={pending === "doneAll" ? "Задача сделана целиком — что именно готово?" : split ? "Что именно сделано в вашей части?" : "Что именно сделано?"}
           placeholder="Коротко: что готово и где смотреть"
           emptyHint="Отчёт без слов — это не отчёт: постановщику нечего принимать."
-          submitLabel="Отправить отчёт"
+          submitLabel="Готово"
+          done
           quick={["Готово, проверьте", "Сделано, результат во вложении", "Сделано, подробности в обсуждении", "Сделано частично — остальное в обсуждении"]}
           withFiles
           busy={busy}
@@ -260,15 +261,15 @@ export default function TaskAnswer({
               часть ждёт остальных; вся задача уходит на приёмку сразу. */}
           {split ? (
             <>
-              <button type="button" className="btn btn-small btn-primary" id="myWorkDonePart" onClick={() => setPending("done")}>
+              <button type="button" className="btn btn-small btn-primary btn-done" id="myWorkDonePart" onClick={() => setPending("done")}>
                 <Icon name="finish" size={14} /> {doneWord}: свою часть
               </button>
-              <button type="button" className="btn btn-small btn-primary" id="myWorkDoneAll" onClick={() => setPending("doneAll")}>
+              <button type="button" className="btn btn-small btn-primary btn-done" id="myWorkDoneAll" onClick={() => setPending("doneAll")}>
                 <Icon name="finish" size={14} /> {doneWord}: всю задачу
               </button>
             </>
           ) : (
-            <button type="button" className="btn btn-small btn-primary" onClick={() => setPending("done")}>
+            <button type="button" className="btn btn-small btn-primary btn-done" onClick={() => setPending("done")}>
               <Icon name="finish" size={14} /> {doneWord}
             </button>
           )}

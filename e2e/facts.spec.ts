@@ -81,7 +81,7 @@ test("карточка задачи говорит, кто поручил, ко�
   // Отчёт исполнителя попадает в блок «Результат» — с именем и временем.
   await page.locator(".my-work .btn", { hasText: "Сделал" }).click();
   await page.fill("#myWorkDone", "Готово, проверьте");
-  await page.locator(".ms-answer-actions .btn", { hasText: "Отправить отчёт" }).click();
+  await page.locator(".ms-answer-actions .btn", { hasText: "Готово" }).click();
   // Окно закрывается само: отчёт — это итоговый результат исполнителя, и
   // висеть над ним карточке незачем (пункт 10 Кирилла).
   await expect(page.locator("#overlay")).toHaveCount(0, { timeout: 20_000 });

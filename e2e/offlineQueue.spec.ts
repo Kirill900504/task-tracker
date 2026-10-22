@@ -76,7 +76,7 @@ test("без связи «Сделал» и реплика ждут в очер�
   // «Сделал»: окно закрывается как обычно — ни слова об ошибке.
   await modal.locator(".my-work .btn", { hasText: "Сделал" }).click();
   await page.fill("#myWorkDone", "Готово без связи");
-  await modal.locator(".ms-answer-actions .btn", { hasText: "Отправить отчёт" }).click();
+  await modal.locator(".ms-answer-actions .btn", { hasText: "Готово" }).click();
   await expect(page.locator("dialog[open]#overlay")).toHaveCount(0, { timeout: 20_000 });
 
   // В базе — ничего: ответы правда не ушли. А значок говорит, сколько ждут.

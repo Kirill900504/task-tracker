@@ -24,6 +24,7 @@ export default function AnswerForm({
   placeholder,
   emptyHint,
   submitLabel,
+  done = false,
   date,
   withFiles = true,
   quick,
@@ -41,6 +42,11 @@ export default function AnswerForm({
   // должна объяснять почему, а не ругаться.
   emptyHint: string;
   submitLabel: string;
+  // Зелёная кнопка отправки — у отчёта о сделанном (22.10.2026, его слова:
+  // «вместо „отправить отчёт“ сделай зелёную кнопку „Готово“»): ответ,
+  // который закрывает работу, окрашен так же, как «Принудительное
+  // закрытие», а отказ и просьба о переносе остаются фирменными.
+  done?: boolean;
   // Есть только у просьбы о переносе: дата, на которую просят.
   date?: { label: string; initial: string };
   // Можно ли приложить документы. По умолчанию — да, у любого ответа
@@ -141,7 +147,7 @@ export default function AnswerForm({
       {withFiles && <AttachFiles files={files} onChange={setFiles} onError={setError} />}
       {error && <div className="ms-answer-error">{error}</div>}
       <div className="ms-answer-actions">
-        <button className="btn btn-small btn-primary" type="submit" disabled={busy}>
+        <button className={"btn btn-small btn-primary" + (done ? " btn-done" : "")} type="submit" disabled={busy}>
           {busy ? "Отправляю…" : submitLabel}
         </button>
         <button className="btn btn-small" type="button" onClick={onCancel} disabled={busy}>

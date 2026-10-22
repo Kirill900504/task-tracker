@@ -158,7 +158,7 @@ test("готовый ответ вставляется в отчёт одним 
     await modal.locator(".ms-answer-quick").getByRole("button", { name: "Готово, проверьте" }).click();
     await expect(modal.locator("#myWorkDone")).toHaveValue("Готово, проверьте");
     // Не отправилось само: форма на месте, кнопка отправки ждёт.
-    await expect(modal.getByRole("button", { name: "Отправить отчёт" })).toBeVisible();
+    await expect(modal.getByRole("button", { name: "Готово", exact: true })).toBeVisible();
     await fresh.context().close();
   } finally {
     if (helper?.user) await admin.auth.admin.deleteUser(helper.user.id);
