@@ -11,7 +11,7 @@ import { playCloseSound } from "@/lib/closeSound";
 import { assignPerson, waitForTaskRow } from "@/lib/assignWork";
 import type { Attachment } from "@/hooks/useItemComments";
 import { uploadResultFiles } from "@/lib/resultFiles";
-import { postJson } from "@/lib/postJson";
+import { postInBackground, postJson } from "@/lib/postJson";
 import type { TaskParticipant, TaskParticipantRole } from "@/lib/taskProgress";
 import { OUTBOX_SENT_EVENT, pendingPosts } from "@/lib/outbox";
 
@@ -532,10 +532,11 @@ export function useTaskParticipants() {
   // приёмку и сообщение постановщику — правила, и вторая их копия разошлась
   // бы с первой (так уже было, см. комментарий в самом маршруте).
   //
-  // Экран меняется сразу (lib/answerPatch), а подтверждение — следом.
-  // Отказ сервера перечитывает участие, то есть откатывает экран к правде,
-  // и бросает причину наверх, где её покажут. Успех НЕ ждёт перечитывания:
-  // его догонит подписка, а сверка уходит фоном.
+  // Экран меняется сразу (lib/answerPatch), а подтверждение — следом, и
+  // кнопку оно больше не держит (23.10.2026: «Отправляю…» висело пару
+  // секунд при уже обновлённом экране). Отказ сервера перечитывает
+  // участие, то есть откатывает экран к правде, а причину показывает
+  // тостом (postInBackground) — окно к этому моменту обычно уже закрыто.
   const answer = useCallback(
     async (payload: Record<string, unknown>) => {
       const participantId = String(payload.participantId || "");
@@ -553,8 +554,7 @@ export function useTaskParticipants() {
       }
       // Отказ сервера — экран возвращается к базе. Не дошло вовсе — ответ
       // ждёт сети в очереди и остаётся на экране (lib/outbox).
-      await postJson("/api/workspace/report", payload, { fallback: "Не получилось отправить ответ", onFail: load });
-      void load();
+      postInBackground("/api/workspace/report", payload, { fallback: "Не получилось отправить ответ", onFail: load, onDone: load });
     },
     [load],
   );

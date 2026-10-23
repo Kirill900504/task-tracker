@@ -19,6 +19,30 @@ import { postOrQueue, SERVER_UNREACHABLE_EVENT } from "./outbox";
 
 export { SERVER_UNREACHABLE_EVENT };
 
+// The same request, but nobody waits for it. 23.10.2026 Кирилл about the
+// report form: «на пару секунд прожимается кнопка „Отправляю…“… её вообще
+// видно не должно быть». The screen already shows the answer (answerPatch),
+// so making the button wait for the route's checks and writes — one to
+// three seconds from fra1 — only shows the person a delay that changes
+// nothing. A refusal still rolls the screen back through `onFail`, and since
+// the form that sent it may be closed by then, it is announced by an event
+// that the tracker turns into a toast (NewTracker), not thrown at nobody.
+export const ANSWER_REFUSED_EVENT = "rokas:answer-refused";
+
+export function postInBackground(
+  url: string,
+  body: Record<string, unknown>,
+  opts: { fallback: string; onFail?: () => unknown | Promise<unknown>; onDone?: () => unknown },
+): void {
+  postJson(url, body, opts).then(
+    () => void opts.onDone?.(),
+    (err) => {
+      const error = err instanceof Error ? err.message : opts.fallback;
+      if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(ANSWER_REFUSED_EVENT, { detail: { error } }));
+    },
+  );
+}
+
 export async function postJson<T = Record<string, unknown>>(
   url: string,
   body: Record<string, unknown>,

@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTrackerData } from "@/hooks/useTrackerData";
 import { useToasts } from "@/hooks/useToasts";
 import { OUTBOX_DROPPED_EVENT, startOutbox } from "@/lib/outbox";
+import { ANSWER_REFUSED_EVENT } from "@/lib/postJson";
 import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useDesktopAlerts } from "@/hooks/useDesktopAlerts";
@@ -325,10 +326,18 @@ export default function NewTracker() {
       const error = (e as CustomEvent<{ error: string }>).detail?.error || "";
       showToast("Ответ, отправленный без связи, не принят", error);
     }
+    // Ответ, отправленный фоном (postInBackground), сервер отверг: экран
+    // уже откатился, а форма, из которой ответили, скорее всего закрыта.
+    function refused(e: Event) {
+      const error = (e as CustomEvent<{ error: string }>).detail?.error || "";
+      showToast("Ответ не принят", error);
+    }
     window.addEventListener(OUTBOX_DROPPED_EVENT, dropped);
+    window.addEventListener(ANSWER_REFUSED_EVENT, refused);
     return () => {
       stop();
       window.removeEventListener(OUTBOX_DROPPED_EVENT, dropped);
+      window.removeEventListener(ANSWER_REFUSED_EVENT, refused);
     };
   }, [showToast]);
   // Кто сейчас смотрит на трекер — своя строка в шапке, с меню личного

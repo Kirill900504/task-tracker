@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { coalescer } from "@/lib/coalesce";
 import { createClient } from "@/lib/supabase/client";
 import { onRevive } from "@/lib/revive";
-import { postJson } from "@/lib/postJson";
+import { postInBackground } from "@/lib/postJson";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { me } from "@/lib/me";
 import type { MeetingVote } from "@/lib/meetingVotes";
@@ -256,13 +256,13 @@ export function useMeetingVotes() {
         return next;
       });
       // Отказ — «Буду» откатывается к базе. Не дошло — ждёт сети в
-      // очереди и остаётся на экране (lib/outbox).
-      await postJson(
+      // очереди и остаётся на экране (lib/outbox). Кнопку подтверждение
+      // не держит — причина отказа придёт тостом (postInBackground).
+      postInBackground(
         "/api/workspace/report",
         { action: "vote", participantId, response, comment: reason },
-        { fallback: "Не получилось ответить", onFail: reload },
+        { fallback: "Не получилось ответить", onFail: reload, onDone: reload },
       );
-      await reload();
     },
     [reload],
   );

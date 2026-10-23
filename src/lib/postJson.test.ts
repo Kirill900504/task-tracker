@@ -95,3 +95,20 @@ describe("postJson", () => {
     expect(onFail).not.toHaveBeenCalled();
   });
 });
+
+describe("postInBackground", () => {
+  // «Отправляю…» must not hold the button while the route checks and writes;
+  // a refusal still rolls the screen back and is announced, not lost.
+  it("returns at once and announces a refusal after rolling back", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "Задача закрыта" }), { status: 403 })));
+    const events: string[] = [];
+    vi.stubGlobal("window", Object.assign(new EventTarget(), { dispatchEvent: (e: Event) => (events.push((e as CustomEvent).detail?.error ?? e.type), true) }));
+    const { postInBackground } = await import("./postJson");
+    const onFail = vi.fn();
+    const onDone = vi.fn();
+    expect(postInBackground("/api/workspace/report", { action: "done" }, { fallback: "x", onFail, onDone })).toBeUndefined();
+    await vi.waitFor(() => expect(events).toContain("Задача закрыта"));
+    expect(onFail).toHaveBeenCalledOnce();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+});
