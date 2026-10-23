@@ -22,16 +22,28 @@ describe("pickSelfTasks — своя задача на сервере", () => {
     expect(set.has("t")).toBe(true);
   });
 
-  it("рядом хоть наблюдатель — обычная", () => {
+  it("рядом второй работающий — обычная", () => {
     const set = pickSelfTasks({
       tasks: [{ id: "t", created_by: "u-igor" }],
       participants: [
-        { task_id: "t", assignee_id: "a-igor", name: "Игорь" },
-        { task_id: "t", assignee_id: "a-nik", name: "Никита" },
+        { task_id: "t", assignee_id: "a-igor", name: "Игорь", role: "executor" },
+        { task_id: "t", assignee_id: "a-nik", name: "Никита", role: "coexecutor" },
       ],
       members,
     });
     expect(set.has("t")).toBe(false);
+  });
+
+  it("рядом только наблюдатель — всё равно своя", () => {
+    const set = pickSelfTasks({
+      tasks: [{ id: "t", created_by: "u-igor" }],
+      participants: [
+        { task_id: "t", assignee_id: "a-igor", name: "Игорь", role: "executor" },
+        { task_id: "t", assignee_id: "a-nik", name: "Никита", role: "watcher" },
+      ],
+      members,
+    });
+    expect(set.has("t")).toBe(true);
   });
 
   it("поручено другому — обычная; без участников — не своя", () => {

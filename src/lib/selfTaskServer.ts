@@ -4,7 +4,8 @@ import { isSelfAssignee } from "@/lib/trackerRows";
 // «Своя ли это задача» — то же правило, что lib/selfTask, только на сервере,
 // где нет «меня»: здесь «я» — это постановщик задачи.
 //
-// Своя = на задаче нет никого, кроме её постановщика (в любой роли). Крону
+// Своя = работает по задаче только её постановщик: наблюдатели в счёт не
+// идут (23.10.2026, см. lib/selfTask — правило одно, копий две). Крону
 // напоминаний это нужно, чтобы не разговаривать с человеком его же
 // задачей как чужой: «ждёт вашего ответа — Принял / Не могу» и «просрочена,
 // ответа нет, ждём: <он сам>» по задаче, которую он поставил себе, — шум,
@@ -15,7 +16,7 @@ import { isSelfAssignee } from "@/lib/trackerRows";
 
 export type SelfTaskInput = {
   tasks: { id: string; created_by: string | null }[];
-  participants: { task_id: string; assignee_id: string; name: string }[];
+  participants: { task_id: string; assignee_id: string; name: string; role?: string }[];
   members: { member_id: string; assignee_id: string | null }[];
 };
 
@@ -24,6 +25,7 @@ export function pickSelfTasks({ tasks, participants, members }: SelfTaskInput): 
   const assigneeOf = new Map(members.map((m) => [m.member_id, m.assignee_id || ""]));
   const byTask = new Map<string, { assignee_id: string; name: string }[]>();
   for (const p of participants) {
+    if (p.role === "watcher") continue;
     const list = byTask.get(p.task_id) || [];
     list.push(p);
     byTask.set(p.task_id, list);
@@ -48,15 +50,16 @@ export async function selfTaskIds(admin: SupabaseClient, ownerId: string, taskId
   if (!ids.length) return new Set();
   const [{ data: tasks }, { data: parts }, { data: members }] = await Promise.all([
     admin.from("tasks").select("id, created_by").in("id", ids),
-    admin.from("task_participants").select("task_id, assignee_id, assignees(name)").in("task_id", ids),
+    admin.from("task_participants").select("task_id, assignee_id, role, assignees(name)").in("task_id", ids),
     admin.from("workspace_members").select("member_id, assignee_id").eq("owner_id", ownerId),
   ]);
-  type PRow = { task_id: string; assignee_id: string; assignees: { name: string } | { name: string }[] | null };
+  type PRow = { task_id: string; assignee_id: string; role: string; assignees: { name: string } | { name: string }[] | null };
   return pickSelfTasks({
     tasks: (tasks || []) as SelfTaskInput["tasks"],
     participants: ((parts || []) as unknown as PRow[]).map((p) => ({
       task_id: p.task_id,
       assignee_id: p.assignee_id,
+      role: p.role,
       name: (Array.isArray(p.assignees) ? p.assignees[0]?.name : p.assignees?.name) || "",
     })),
     members: (members || []) as SelfTaskInput["members"],

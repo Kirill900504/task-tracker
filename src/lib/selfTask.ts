@@ -11,10 +11,15 @@ import type { TaskParticipant } from "@/lib/taskProgress";
 // договорились ДВА человека. Когда человек один, она превращается в
 // ритуал разговора с самим собой.
 //
-// Своя задача — та, что я поставил, и на которой нет НИКОГО, кроме меня
-// (в любой роли). Стоит добавить хоть одного человека — даже наблюдателя —
-// и задача становится обычной: появился тот, кому важно, что с ней.
-// Пустой состав — не «своя»: это задача, которой не хватает исполнителя.
+// Своя задача — та, что я поставил, и РАБОТАЮ по ней только я: исполнитель
+// и соисполнители — это я один. Наблюдатели в счёт не идут (23.10.2026:
+// Кирилл перевёл мысль в задачу на себя с наблюдателем и спросил, почему
+// она не стала личной). Наблюдатель не берёт задачу, не отчитывается и не
+// принимает работу, так что «Принял / Сделал» и приёмка при нём остаются
+// тем же разговором с самим собой. Задачу он видит как прежде, а о
+// закрытии узнаёт из хроники. Стоит добавить второго исполнителя или
+// соисполнителя — и задача обычная: работу делает уже не один человек.
+// Пустой состав — не «своя»: задаче не хватает исполнителя.
 //
 // Что из этого следует (и где):
 //   доска  — Новые → В работе → Завершённые; «На приёмке» у своей задачи
@@ -23,7 +28,12 @@ import type { TaskParticipant } from "@/lib/taskProgress";
 //            приёмки и волевого закрытия; срок двигается прямо в ней
 //            (TaskModal, TeamCompact.selfTask);
 //   закрытие — галочкой на карточке, одним нажатием, без слов.
-export function isSelfTask(participants: Pick<TaskParticipant, "assigneeId">[], myAssigneeId: string): boolean {
-  if (!myAssigneeId || participants.length === 0) return false;
-  return participants.every((p) => p.assigneeId === myAssigneeId);
+export function isSelfTask(
+  participants: (Pick<TaskParticipant, "assigneeId"> & { role?: TaskParticipant["role"] })[],
+  myAssigneeId: string,
+): boolean {
+  if (!myAssigneeId) return false;
+  const workers = participants.filter((p) => p.role !== "watcher");
+  if (workers.length === 0) return false;
+  return workers.every((p) => p.assigneeId === myAssigneeId);
 }
