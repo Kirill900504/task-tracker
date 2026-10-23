@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Task } from "@/types/tracker";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { personInput, readInput } from "@/lib/apiInput";
 import { isSelfAssignee } from "@/lib/trackerRows";
-import { todayStr } from "@/lib/taskDisplay";
+import { isClosed, todayStr } from "@/lib/taskDisplay";
 import { recordEvent } from "@/lib/itemHistory";
 import { sendToPerson } from "@/lib/reach";
 import { withoutSelfMark } from "@/lib/actorName";
@@ -187,7 +188,7 @@ async function openWork(admin: SupabaseClient, person: Person): Promise<Work> {
   const [{ data: parts }, { data: mparts }, { data: member }] = await Promise.all([
     admin
       .from("task_participants")
-      .select("id, role, task_id, tasks(id, title, number, assignee, status, deleted_at)")
+      .select("id, role, task_id, tasks(id, title, number, assignee, status, recur, approval_state, deleted_at)")
       .eq("assignee_id", person.id),
     admin
       .from("meeting_participants")
@@ -196,9 +197,16 @@ async function openWork(admin: SupabaseClient, person: Person): Promise<Work> {
     admin.from("workspace_members").select("member_id").eq("assignee_id", person.id).maybeSingle(),
   ]);
 
-  type TaskJoin = { id: string; title: string; number: number | null; assignee: string; status: string; deleted_at: string | null };
+  type TaskJoin = {
+    id: string; title: string; number: number | null; assignee: string;
+    status: string; recur: string; approval_state: string | null; deleted_at: string | null;
+  };
   type MeetingJoin = { id: string; title: string; participants: string[] | null; status: string; date: string; deleted_at: string | null };
-  const openTask = (t: TaskJoin | null) => !!t && !t.deleted_at && t.status !== "done";
+  // Closed by the same rule the board uses: a one-off task accepted before
+  // 20.09.2026 kept status in_progress, and counting it here offered to
+  // hand over work that sits in «Завершённые» and nobody can see.
+  const openTask = (t: TaskJoin | null) =>
+    !!t && !t.deleted_at && !isClosed({ status: t.status as Task["status"], recur: t.recur as Task["recur"], approvalState: t.approval_state as Task["approvalState"] });
   const openMeeting = (m: MeetingJoin | null) =>
     !!m && !m.deleted_at && (m.status === "planned" || m.status === "proposed") && m.date >= today;
 
@@ -220,7 +228,7 @@ async function openWork(admin: SupabaseClient, person: Person): Promise<Work> {
   let authoredMeetings: OpenMeeting[] = [];
   if (memberId) {
     const [{ data: at }, { data: am }] = await Promise.all([
-      admin.from("tasks").select("id, title, number, assignee, status, deleted_at").eq("created_by", memberId),
+      admin.from("tasks").select("id, title, number, assignee, status, recur, approval_state, deleted_at").eq("created_by", memberId),
       admin.from("meetings").select("id, title, participants, status, date, deleted_at").eq("created_by", memberId),
     ]);
     const mine = new Set(tasks.map((t) => t.id));
