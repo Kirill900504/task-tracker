@@ -60,6 +60,26 @@ export function stateLabel(kind: IdeaShareKind, state: RecipientState): string {
   return state === "seen" ? "принял" : "не ответил";
 }
 
+// Кто постановщик задачи, в которую получатель взял мысль «себе».
+//
+// Отправленная мысль — просьба: прислал, значит поручил, и постановщик —
+// её автор (решение 06.10.2026). Поделённая — нет: она «ответа не
+// требует», и тот, кто взял её в работу, решил это сам. Задача 142
+// (23.10.2026): Кирилл поделился мыслью со вторым аккаунтом, тот нажал
+// «В работу» — и задача, которую он считал личной, после «Сделал» упала
+// на приёмку автору мысли, хотя тот ни о чём не просил.
+//
+// Постановщик пишется так же, как везде: пусто — владелец пространства.
+// Без входа подписать задачу собой нечем — тогда остаётся автор мысли.
+export function takenIdeaAuthor(
+  kind: IdeaShareKind | null | undefined,
+  taker: { userId: string | null; spaceId: string },
+  ideaCreatedBy: string | null,
+): string | null {
+  if (kind !== "share" || !taker.userId) return ideaCreatedBy;
+  return taker.userId === taker.spaceId ? null : taker.userId;
+}
+
 export type SentTo = { name: string; state: RecipientState; kind: IdeaShareKind };
 
 // Для автора: у каждой мысли — кому она ушла, в порядке отправки. Имя без

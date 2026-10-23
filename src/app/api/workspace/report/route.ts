@@ -14,6 +14,7 @@ import { confirmIfEveryoneAgreed } from "@/lib/meetingConfirm";
 import { newTaskRow } from "@/lib/newTask";
 import { recordEvent } from "@/lib/itemHistory";
 import { isSelfAssignee } from "@/lib/trackerRows";
+import { takenIdeaAuthor, type IdeaShareKind } from "@/lib/ideaRecipients";
 import type { Notice } from "@/lib/noticeQueue";
 import { taskRef as taskLabel } from "@/lib/taskRef";
 import { lockedTaskText, lockedVoteText, openTaskChoices, voteVerdict } from "@/lib/answerRules";
@@ -102,7 +103,7 @@ export async function POST(req: Request) {
     // в одну строку, и оба её проверяют — она должна быть моя.
     const query = admin
       .from("idea_recipients")
-      .select("id, idea_id, assignee_id, converted_task_id, ideas(text, created_by)");
+      .select("id, idea_id, assignee_id, converted_task_id, kind, ideas(text, created_by)");
     const { data: rec } = body.recipientId
       ? await query.eq("id", body.recipientId).maybeSingle()
       : await query.eq("idea_id", body.ideaId as string).eq("assignee_id", m.assignee_id).maybeSingle();
@@ -112,6 +113,7 @@ export async function POST(req: Request) {
       idea_id: string;
       assignee_id: string;
       converted_task_id: string | null;
+      kind: IdeaShareKind | null;
       ideas: IdeaRef | IdeaRef[] | null;
     } | null;
     if (!recipient || recipient.assignee_id !== m.assignee_id) {
@@ -124,11 +126,13 @@ export async function POST(req: Request) {
     const title = text.trim().slice(0, 200) || "Из мысли";
     const taskId = uid();
     // Без срока: срок ставит тот, кто спросит, а не тот, кто взялся.
-    // Постановщик — автор мысли, а не взявший её: прислал он, значит он и
-    // поручил (см. ту же ветку в colleagueReplies). Пустой — владелец.
+    // Постановщик отправленной мысли — её автор: прислал он, значит он и
+    // поручил (см. ту же ветку в colleagueReplies). Поделённую взявший
+    // берёт сам — задача личная (lib/ideaRecipients.takenIdeaAuthor).
+    const createdBy = takenIdeaAuthor(recipient.kind, { userId: user.id, spaceId: m.owner_id }, idea?.created_by || null);
     const { error: taskError } = await admin
       .from("tasks")
-      .insert(newTaskRow({ id: taskId, userId: m.owner_id, title, assignee: rowName || myName, createdBy: idea?.created_by || null }));
+      .insert(newTaskRow({ id: taskId, userId: m.owner_id, title, assignee: rowName || myName, createdBy }));
     if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
 
     // upsert, а не insert: имя исполнителя стоит в самой задаче, и строку

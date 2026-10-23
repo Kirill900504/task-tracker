@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copySourceAuthor, incomingFor, recipientState, sentAwayIds, sentToByIdea, stateLabel, type IdeaRecipientRow } from "./ideaRecipients";
+import { copySourceAuthor, incomingFor, recipientState, sentAwayIds, sentToByIdea, stateLabel, takenIdeaAuthor, type IdeaRecipientRow } from "./ideaRecipients";
 
 function row(over: Partial<IdeaRecipientRow> = {}): IdeaRecipientRow {
   return {
@@ -129,5 +129,22 @@ describe("copySourceAuthor — от кого сохранённая копия",
     expect(copySourceAuthor([row()], undefined)).toBeUndefined();
     expect(copySourceAuthor([row()], "other")).toBeUndefined();
     expect(copySourceAuthor([row({ idea: null })], "i1")).toBeUndefined();
+  });
+});
+
+describe("takenIdeaAuthor — кто поставил задачу из мысли «себе»", () => {
+  const space = "u-owner";
+  it("отправленная — автор мысли: он прислал, значит поручил", () => {
+    expect(takenIdeaAuthor("send", { userId: "u-manager", spaceId: space }, null)).toBe(null);
+    expect(takenIdeaAuthor(null, { userId: "u-manager", spaceId: space }, "u-boss")).toBe("u-boss");
+  });
+  it("поделённая — сам взявший, то есть задача личная (задача 142)", () => {
+    expect(takenIdeaAuthor("share", { userId: "u-manager", spaceId: space }, null)).toBe("u-manager");
+  });
+  it("владелец, взявший поделённую, пишется пустым, как везде", () => {
+    expect(takenIdeaAuthor("share", { userId: space, spaceId: space }, "u-manager")).toBe(null);
+  });
+  it("без входа подписать собой нечем — остаётся автор мысли", () => {
+    expect(takenIdeaAuthor("share", { userId: null, spaceId: space }, "u-boss")).toBe("u-boss");
   });
 });

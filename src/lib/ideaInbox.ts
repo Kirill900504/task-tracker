@@ -16,6 +16,7 @@ import { moscowNow } from "@/lib/taskLogic";
 import { WORKDAY_SLOTS, startsInPast } from "@/lib/meetingTime";
 import { busyOnServer, busyStartsOnServer } from "@/lib/meetingBusyServer";
 import { uid } from "@/lib/uid";
+import { takenIdeaAuthor, type IdeaShareKind } from "@/lib/ideaRecipients";
 
 // Присланная мысль — четыре ответа получателя в мессенджере.
 //
@@ -475,24 +476,27 @@ async function answerIdea(admin: SupabaseClient, me: Receiver | null, action: Ca
   return { toast: "Это действие больше не доступно" };
 }
 
-// «Себе»: задача на нажавшего, принятая сразу. Постановщик — автор мысли:
-// он её прислал, значит он и поручил (решение 06.10.2026, та же ветка в
-// /api/workspace/report).
+// «Себе»: задача на нажавшего, принятая сразу. Постановщик отправленной
+// мысли — её автор: он её прислал, значит он и поручил (решение 06.10.2026,
+// та же ветка в /api/workspace/report). Поделённую нажавший берёт сам —
+// задача личная (lib/ideaRecipients.takenIdeaAuthor).
 async function takeForSelf(admin: SupabaseClient, me: Receiver, idea: IdeaRef): Promise<CallbackOutcome> {
   const { data: rec } = await admin
     .from("idea_recipients")
-    .select("converted_task_id")
+    .select("converted_task_id, kind")
     .eq("idea_id", idea.id)
     .eq("assignee_id", me.assigneeId)
     .maybeSingle();
-  if ((rec as { converted_task_id?: string | null } | null)?.converted_task_id) {
+  const row = rec as { converted_task_id?: string | null; kind?: IdeaShareKind | null } | null;
+  if (row?.converted_task_id) {
     return { toast: "Уже в работе", rewriteTo: `${head(idea)}\n\n➕ Уже взято в работу` };
   }
   const title = titleOf(idea);
   const taskId = uid();
+  const createdBy = takenIdeaAuthor(row?.kind, me, idea.createdBy);
   const { error } = await admin
     .from("tasks")
-    .insert(newTaskRow({ id: taskId, userId: me.spaceId, title, assignee: me.name, createdBy: idea.createdBy }));
+    .insert(newTaskRow({ id: taskId, userId: me.spaceId, title, assignee: me.name, createdBy }));
   if (error) return { toast: "Не получилось завести задачу" };
   // upsert: строку по имени исполнителя успевает завести триггер 0024.
   await admin
