@@ -43,6 +43,33 @@ test("своя задача: в карточке только срок, без �
   await expect(page.locator("#selfDeadline .participant-chip", { hasText: "Завтра" })).toHaveClass(/selected/);
 });
 
+// Наблюдатель рядом задачу «своей» не отменяет (23.10.2026: мысль,
+// переведённая в задачу на себя с наблюдателем, шла полной дорогой —
+// «Принял / Сделал», «Принудительное закрытие»). Работаю по ней только я.
+test("своя задача с наблюдателем — всё равно своя", async ({ page }) => {
+  const title = `E2E своя+наблюдатель ${Date.now()}`;
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  const other = page.locator('#fPeople .participant-chip:not(.chip-add):not([data-self="true"])').first();
+  await expect(other).toBeVisible({ timeout: 20_000 });
+  await other.click();
+  await page.locator(".export-menu, .action-sheet").first().locator(".export-item").filter({ hasText: /^Наблюдатель/ }).click();
+  await expect(other).toHaveClass(/role-watcher/);
+  await page.click("#saveTaskBtn");
+
+  const card = page.locator(".task", { hasText: title });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("Личная задача", { timeout: 20_000 });
+  await card.locator(".task-title, .title").first().click();
+  await expect(page.locator("#selfDeadline")).toBeVisible({ timeout: 20_000 });
+  const modal = page.locator("dialog[open]");
+  await expect(modal.getByRole("button", { name: /Принял/ })).toHaveCount(0);
+  await expect(modal.locator("#forceCloseBtn")).toHaveCount(0);
+  await expect(modal.locator("#taskPeople .tpeople-watcher .tperson")).toHaveCount(1);
+});
+
 // Строка «Срок» и окно «Отложить до…» — одной строкой (22.10.2026: «поле
 // строк в одну строку все кнопки умеси!!!»). Меряет браузер: все кнопки
 // ряда на одной линии и ряд не шире своего места — и на ПК, и на телефоне.

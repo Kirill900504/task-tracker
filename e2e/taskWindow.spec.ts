@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { pickSelfExecutor, pickWatcher } from "./helpers";
+import { pickSelfExecutor, pickCoexecutor } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // Окно заведённой задачи и кубик на доске — вид 13.10.2026.
@@ -57,9 +57,9 @@ test("окно задачи: описание с файлом, люди в св�
   });
   await expect(page.locator(".ms-answer-file", { hasText: "tz.txt" })).toBeVisible();
   await pickSelfExecutor(page);
-  // Наблюдатель — чтобы задача была не «своей»: у своей нет принудительного
+  // Соисполнитель — чтобы задача была не «своей»: у своей нет принудительного
   // закрытия (её закрывают галочкой).
-  await pickWatcher(page);
+  await pickCoexecutor(page);
   await page.click("#saveTaskBtn");
 
   // Файл и описание доехали до базы вместе с задачей.
@@ -84,7 +84,7 @@ test("окно задачи: описание с файлом, люди в св�
   await expect(modal).not.toContainText("Кто на задаче");
   await expect(modal.locator("#taskFacts #taskPeople")).toBeVisible();
   await expect(modal.locator("#taskPeople .tpeople-executor .tperson")).toHaveCount(1, { timeout: 20_000 });
-  await expect(modal.locator("#taskPeople .tpeople-watcher .tperson")).toHaveCount(1);
+  await expect(modal.locator("#taskPeople .tpeople-coexecutor .tperson")).toHaveCount(1);
   // Описание — своим блоком, с файлом.
   await expect(modal.locator("#taskDesc")).toContainText("собрать конспект");
   await expect(modal.locator("#taskDesc")).toContainText("tz.txt");

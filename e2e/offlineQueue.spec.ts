@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { pickSelfExecutor, pickWatcher } from "./helpers";
+import { pickSelfExecutor, pickCoexecutor } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // Без связи ответы копятся и уходят сами (lib/outbox).
@@ -50,11 +50,11 @@ test("без связи «Сделал» и реплика ждут в очер�
   const note = `Без связи ${Date.now()}`;
   await login(page);
 
-  // Наблюдатель — чтобы задача не была «своей»: у своей нет «Сделал».
+  // Соисполнитель — чтобы задача не была «своей»: у своей нет «Сделал».
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
   await pickSelfExecutor(page);
-  await pickWatcher(page);
+  await pickCoexecutor(page);
   await page.click("#saveTaskBtn");
   await expect.poll(async () => (await taskRow(title))?.id || "", { timeout: 30_000 }).not.toBe("");
   const taskId = (await taskRow(title))!.id;

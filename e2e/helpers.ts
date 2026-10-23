@@ -201,18 +201,20 @@ export async function handOverAuthorship(
   return { id, done: async () => void (await admin.auth.admin.deleteUser(helper.user!.id)) };
 }
 
-// Поставить рядом НАБЛЮДАТЕЛЯ — кого-то, кроме себя.
+// Поставить рядом СОИСПОЛНИТЕЛЯ — кого-то, кроме себя.
 //
-// Задача, на которой только я, — «своя» (lib/selfTask, 07.10.2026): у неё
-// нет «Сделал / Не могу», приёмки и «Открыть заново». Тесту, которому
-// нужен этот путь, но нужен один вход, хватает одного наблюдателя: он
-// делает задачу обычной, а отвечать по ней по-прежнему мне.
-export async function pickWatcher(page: Page) {
+// Задача, по которой работаю только я, — «своя» (lib/selfTask, 07.10.2026):
+// у неё нет «Сделал / Не могу», приёмки и «Открыть заново». Тесту, которому
+// нужен этот путь, но нужен один вход, хватает одного соисполнителя: он
+// делает задачу обычной, а «ответили все» считается по исполнителям, то
+// есть отвечать по-прежнему мне. Наблюдатель для этого больше не годится —
+// с 23.10.2026 задача с одними наблюдателями остаётся своей.
+export async function pickCoexecutor(page: Page) {
   const chip = page.locator('#fPeople .participant-chip:not(.chip-add):not([data-self="true"])').first();
   await expect(chip).toBeVisible({ timeout: 20_000 });
   await chip.click();
   const menu = page.locator(".export-menu, .action-sheet").first();
   await expect(menu).toBeVisible();
-  await menu.locator(".export-item").filter({ hasText: /^Наблюдатель/ }).click();
-  await expect(chip).toHaveClass(/role-watcher/);
+  await menu.locator(".export-item").filter({ hasText: /^Соисполнитель/ }).click();
+  await expect(chip).toHaveClass(/role-coexecutor/);
 }

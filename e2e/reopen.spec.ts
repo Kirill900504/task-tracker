@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { pickSelfExecutor, pickWatcher } from "./helpers";
+import { pickSelfExecutor, pickCoexecutor } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // Выход из «Завершённых» — весь путь, глазами человека.
@@ -80,9 +80,9 @@ test("принятая задача открывается заново кноп
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
   await pickSelfExecutor(page);
-  // Наблюдатель делает задачу обычной: у задачи только на себя нет ни
+  // Соисполнитель делает задачу обычной: у задачи только на себя нет ни
   // «Сделал / Не могу», ни приёмки (07.10.2026, lib/selfTask).
-  await pickWatcher(page);
+  await pickCoexecutor(page);
   await page.click("#saveTaskBtn");
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
@@ -150,9 +150,9 @@ test("отказ тоже закрывает карточку и уводит з
   await page.click("#newTaskBtn");
   await page.fill("#fTitle", title);
   await pickSelfExecutor(page);
-  // Наблюдатель делает задачу обычной: у задачи только на себя нет ни
+  // Соисполнитель делает задачу обычной: у задачи только на себя нет ни
   // «Сделал / Не могу», ни приёмки (07.10.2026, lib/selfTask).
-  await pickWatcher(page);
+  await pickCoexecutor(page);
   await page.click("#saveTaskBtn");
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
