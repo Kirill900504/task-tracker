@@ -24,6 +24,7 @@ import { createClient, isRoutedThroughProxy } from "@/lib/supabase/client";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { diffAssignees, diffRows, mergeIncoming, removeById, sameLists, snapshotList, upsertById } from "@/lib/trackerSync";
 import { describeDbError, syncFailure } from "@/lib/syncError";
+import { isNetworkError } from "@/lib/humanError";
 import { refreshRecurringStatuses } from "@/lib/taskDisplay";
 import { ideaJustClosed, meetingJustClosed, playCloseSound, taskJustClosed } from "@/lib/closeSound";
 import {
@@ -385,6 +386,14 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         // адресовано (см. lib/syncError.ts).
         const message = describeDbError(err);
         console.error("Supabase sync error:", err);
+        // A request that never reached the database is not a failure to
+        // save: the work is in the local copy and the retry below sends it
+        // as soon as the network is back. Recording it in sync_errors put a
+        // permanent «Не всё сохранилось в облако: TypeError: Failed to
+        // fetch» in the header (23.10.2026) for a write that landed fifteen
+        // seconds later. Only what the database actually REFUSED goes there.
+        const cause = err instanceof Error && err.cause !== undefined ? err.cause : err;
+        if (isNetworkError(cause)) return;
         try {
           await db.from("sync_errors").insert({ message });
         } catch {

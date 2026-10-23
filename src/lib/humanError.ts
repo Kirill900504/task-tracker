@@ -23,8 +23,19 @@ const NETWORK_PATTERNS = [
   /the internet connection appears to be offline/i,
 ];
 
+// Supabase does not throw on a dropped request: it returns an error OBJECT
+// `{ message: "TypeError: Failed to fetch", code: "" }`. A real refusal from
+// the database always carries a code, so "no code + network words" is the
+// network and nothing else.
 export function isNetworkError(e: unknown): boolean {
-  const message = e instanceof Error ? e.message : typeof e === "string" ? e : "";
+  let message = "";
+  if (e instanceof Error) message = e.message;
+  else if (typeof e === "string") message = e;
+  else if (e && typeof e === "object") {
+    const { message: m, code } = e as { message?: unknown; code?: unknown };
+    if (code) return false;
+    message = typeof m === "string" ? m : "";
+  }
   return NETWORK_PATTERNS.some((re) => re.test(message));
 }
 

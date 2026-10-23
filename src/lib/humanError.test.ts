@@ -9,6 +9,13 @@ describe("humanError", () => {
     }
   });
 
+  it("узнаёт обрыв в отказе Supabase, но не путает его с отказом базы", () => {
+    // Ровно то, что синхронизация получила 23.10.2026 на «Люди (запись)».
+    expect(isNetworkError({ message: "TypeError: Failed to fetch", details: "TypeError: Failed to fetch at sN", hint: "", code: "" })).toBe(true);
+    expect(isNetworkError({ message: "new row violates row-level security policy", code: "42501" })).toBe(false);
+    expect(isNetworkError({ message: "Failed to fetch", code: "PGRST000" })).toBe(false);
+  });
+
   it("собственное сообщение оставляет как есть", () => {
     expect(humanError(new Error("Подключить можно только свой чат"), "запасной")).toBe("Подключить можно только свой чат");
   });

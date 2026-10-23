@@ -18,6 +18,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { outboxServerSnapshot, outboxSnapshot, serverUnreachable, subscribeOutbox } from "@/lib/outbox";
 import { createClient } from "@/lib/supabase/client";
+import { isNetworkError } from "@/lib/humanError";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import PopLayer from "./PopLayer";
 import Icon from "./Icon";
@@ -64,8 +65,15 @@ export default function ConnectionStatus({ offline }: { offline: boolean }) {
       .order("created_at", { ascending: false })
       .limit(20)
       .then(({ data, error }) => {
-        if (cancelled || error || !data || !data.length) return;
-        setErrors({ ids: data.map((r) => r.id as string), count: data.length, message: (data[0].message as string) || "" });
+        if (cancelled || error || !data) return;
+        // Network drops recorded before useTrackerData stopped writing them
+        // (23.10.2026) are not refusals — the retry sent that work — so they
+        // are not shown and are quietly acknowledged.
+        const dropped = data.filter((r) => isNetworkError((r.message as string) || ""));
+        if (dropped.length) db.from("sync_errors").update({ acknowledged: true }).in("id", dropped.map((r) => r.id as string)).then(() => {});
+        const real = data.filter((r) => !dropped.includes(r));
+        if (!real.length) return;
+        setErrors({ ids: real.map((r) => r.id as string), count: real.length, message: (real[0].message as string) || "" });
       });
     return () => {
       cancelled = true;
