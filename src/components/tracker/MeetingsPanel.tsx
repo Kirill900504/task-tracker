@@ -21,7 +21,6 @@ import { currentVote } from "@/lib/answerRules";
 import { isQuietHour } from "@/lib/quietHours";
 import { linkTaskAndMeeting } from "@/lib/itemLink";
 import type { useToasts } from "@/hooks/useToasts";
-import type { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useAsk } from "@/components/Ask";
 import { answerWithFiles } from "@/lib/answerFiles";
 import { humanError } from "@/lib/humanError";
@@ -51,7 +50,6 @@ export default function MeetingsPanel({
   selectedDay,
   actions,
   toasts,
-  dateTimeConfirm,
   openMeetingRequest,
   openExistingMeetingId,
   onOpenExistingHandled,
@@ -92,7 +90,6 @@ export default function MeetingsPanel({
     restoreMeeting: (m: Meeting) => void;
   };
   toasts: ReturnType<typeof useToasts>;
-  dateTimeConfirm: ReturnType<typeof useDateTimeConfirm>;
   // Lets a sibling (the calendar) request opening the "new meeting" modal
   // for a specific date, e.g. from the date popover's "+ Встреча" button.
   openMeetingRequest: MeetingPrefill | null;
@@ -125,13 +122,20 @@ export default function MeetingsPanel({
   // Перенос, начатый из формы встречи: та встреча, которую надо закрыть как
   // перенесённую, когда новая будет сохранена.
   //
-  // Почему через форму, а не сразу, как кнопка ⇢ в списке: у назначенной
-  // встречи ни время, ни состав больше не редактируются (см. MeetingModal),
-  // и перенос остался единственным местом, где их задают. Значит он и
-  // должен спрашивать их полностью — формой, а не окном «дата и время».
-  // Быстрый ⇢ в списке при этом никуда не делся: там переносят, ничего не
-  // меняя, и два шага вместо одного были бы там потерей.
+  // Почему через форму, а не окном «дата и время»: у назначенной встречи ни
+  // время, ни состав больше не редактируются (см. MeetingModal), и перенос
+  // остался единственным местом, где их задают. Значит он и должен
+  // спрашивать их полностью. Кнопка «Перенос» на карточке в списке ведёт в
+  // ту же форму (23.10.2026, его слова: «сделать полноценное окно переноса
+  // как в большой кнопке… с возможностью менять состав участников или
+  // дополнять его») — до этого она спрашивала только дату и время, и
+  // позвать на перенесённую встречу ещё одного человека было нечем.
+  // Окно «дата и время» осталось одному перетаскиванию на день календаря:
+  // там день уже выбран рукой.
   const [movingFrom, setMovingFrom] = useState<Meeting | null>(null);
+  // Откуда открыт перенос: из окна встречи Escape возвращает в неё, из
+  // карточки в списке возвращаться некуда — окно закрывается целиком.
+  const [moveBackTo, setMoveBackTo] = useState<Meeting | null>(null);
   // Перенос УЖЕ сохранён, и окно закрывается по-настоящему.
   //
   // Ref, а не состояние, потому что читает это closeModal, вызванный формой
@@ -171,14 +175,16 @@ export default function MeetingsPanel({
     // уровень приходится помнить самим: форма переноса закрывается назад,
     // во встречу, из которой её открыли, и только следующий Escape (или
     // «Отмена») закрывает встречу.
-    if (movingFrom && !movedSavedRef.current) {
-      const back = movingFrom;
+    if (movingFrom && moveBackTo && !movedSavedRef.current) {
+      const back = moveBackTo;
       setMovingFrom(null);
+      setMoveBackTo(null);
       setModalState({ open: true, meeting: back });
       return;
     }
     movedSavedRef.current = false;
     setMovingFrom(null);
+    setMoveBackTo(null);
     setModalState({ open: false, meeting: null });
     if (openMeetingRequest !== null) onOpenMeetingHandled();
     if (openExistingMeetingId) onOpenExistingHandled?.();
@@ -571,15 +577,26 @@ export default function MeetingsPanel({
     closeAsMoved(m, followUp, resultNote);
   }
 
-  async function quickReschedule(m: Meeting) {
-    const suggestedDate = addDaysIso(m.date, 1);
-    // Состав при быстром переносе тот же, и занятость спрашивается о нём:
-    // пересечение запрещено и здесь, а не только в форме (lib/meetingTime).
-    const result = await dateTimeConfirm.ask(`Перенести встречу «${m.title}» на:`, suggestedDate, m.time || "10:00", (date, time) =>
-      busyPeople(allMeetings ?? meetings, { date, time, durationMin: m.durationMin, people: m.participants || [], ignore: [m.id] }),
-    );
-    if (!result) return;
-    reschedule(m, result.date, result.time, m.result);
+  // Форма НОВОЙ встречи, предзаполненная переносимой: по умолчанию тот же
+  // день + 1 и то же время — перенос без правок остаётся парой нажатий, а
+  // время, длительность, состав и повестку можно поправить здесь же.
+  // `fromModal` — открыта ли она из окна встречи (туда вернёт Escape).
+  function openMoveForm(from: Meeting, fromModal: boolean) {
+    setMovingFrom(from);
+    setMoveBackTo(fromModal ? from : null);
+    setModalState({
+      open: true,
+      meeting: null,
+      prefill: {
+        title: from.title,
+        date: addDaysIso(from.date, 1),
+        time: from.time || "",
+        durationMin: from.durationMin || 30,
+        participants: from.participants.slice(),
+        recur: from.recur || "none",
+        agendaFrom: from.id,
+      },
+    });
   }
 
   const recapPeople = recapSheet ? meetingPeopleForTask(recapSheet.meeting).map((p) => p.name) : [];
@@ -648,7 +665,7 @@ export default function MeetingsPanel({
               onOpen={() => setModalState({ open: true, meeting: m })}
               onDelete={() => void deleteMeeting(m)}
               onQuickStatus={(status) => void quickStatus(m, status)}
-              onQuickReschedule={() => quickReschedule(m)}
+              onQuickReschedule={() => openMoveForm(m, false)}
               votes={voteTally(shownVotes(m), m.voteRound || 1)}
               voteRows={shownVotes(m)}
               myVote={myVoteOf(m)}
@@ -672,7 +689,7 @@ export default function MeetingsPanel({
               onOpen={() => setModalState({ open: true, meeting: m })}
               onDelete={() => void deleteMeeting(m)}
               onQuickStatus={(status) => void quickStatus(m, status)}
-              onQuickReschedule={() => quickReschedule(m)}
+              onQuickReschedule={() => openMoveForm(m, false)}
               votes={voteTally(shownVotes(m), m.voteRound || 1)}
               voteRows={shownVotes(m)}
               myVote={myVoteOf(m)}
@@ -808,26 +825,7 @@ export default function MeetingsPanel({
           }
           onReschedule={
             modalMeeting && isMine(modalMeeting, myUserId)
-              ? () => {
-                  const from = modalMeeting;
-                  setMovingFrom(from);
-                  // Форма новой встречи, предзаполненная прежней: по
-                  // умолчанию тот же день + 1 и то же время — перенос без
-                  // правок остаётся парой нажатий, а поправить время или
-                  // состав можно здесь же.
-                  setModalState({
-                    open: true,
-                    meeting: null,
-                    prefill: {
-                      title: from.title,
-                      date: addDaysIso(from.date, 1),
-                      time: from.time || "",
-                      participants: from.participants.slice(),
-                      recur: from.recur || "none",
-                      agendaFrom: from.id,
-                    },
-                  });
-                }
+              ? () => openMoveForm(modalMeeting, true)
               : undefined
           }
           onRecapTasks={onCreateTasks ? (m, items) => openRecapTasks(m, items) : undefined}

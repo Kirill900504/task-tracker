@@ -765,7 +765,6 @@ export default function NewTracker() {
             selectedDay={selectedDate}
             actions={actions}
             toasts={toasts}
-            dateTimeConfirm={dateTimeConfirm}
             openMeetingRequest={openMeetingRequest}
             openExistingMeetingId={openExistingMeetingId}
             onOpenExistingHandled={() => setOpenExistingMeetingId(null)}

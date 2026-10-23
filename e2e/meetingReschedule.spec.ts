@@ -2,12 +2,12 @@ import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
 
-// Окно быстрого переноса встречи (кнопка «Перенос» в списке, 20.10.2026):
-// справа от даты — «Сегодня / Завтра / Через неделю», как в форме встречи,
-// а время — прежнее или, если в новый день оно занято у кого-то из
-// состава, следующее свободное после него. Арифметику подбора проверяет
-// src/lib/meetingTime.test.ts (rescheduleTime); здесь — что окно ею
-// пользуется и кнопки стоят в одной строке с датой.
+// Кнопка «Перенос» на карточке встречи в списке (23.10.2026) открывает ту
+// же полную форму переноса, что и кнопка в окне встречи: можно поменять и
+// дополнить состав, а не только дату и время. Время — прежнее или, если в
+// новый день оно занято у кого-то из состава, следующее свободное после
+// него. Арифметику подбора проверяет src/lib/meetingTime.test.ts
+// (rescheduleTime); здесь — что форма ею пользуется.
 
 const { email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
 
@@ -36,7 +36,7 @@ async function newMeeting(page: Page, title: string, day: string, time: string, 
   await waitForSaved(page);
 }
 
-test("перенос встречи: кнопки дней рядом с датой, занятое время сдвигается дальше", async ({ page }) => {
+test("перенос из списка: полная форма с составом, занятое время сдвигается дальше", async ({ page }) => {
   const stamp = Date.now();
   await login(page);
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -54,30 +54,24 @@ test("перенос встречи: кнопки дней рядом с дат�
   await newMeeting(page, moved, "Завтра", "11:00", person);
 
   await page.locator(".meeting-chip", { hasText: moved }).getByRole("button", { name: "Перенос" }).click();
-  const overlay = page.locator("#confirmDateTimeOverlay");
-  await expect(overlay).toBeVisible();
-
-  // Три кнопки — в одной строке с датой, справа от неё.
-  const quick = overlay.locator("#confirmDateTimeQuick .participant-chip");
-  await expect(quick).toHaveText(["Сегодня", "Завтра", "Через неделю"]);
-  const dateBox = await overlay.locator("#confirmDateTimeQuick button").first().boundingBox();
-  const weekBox = await quick.last().boundingBox();
-  expect(dateBox && weekBox && Math.abs(dateBox.y - weekBox.y) < 8 && weekBox.x > dateBox.x).toBe(true);
+  await expect(page.locator("#meetingModalTitle")).toHaveText("Перенос встречи");
+  await expect(page.locator("#mTitle")).toHaveValue(moved);
+  // Состав прежний — и его можно менять: ради этого форма и открывается.
+  await expect(page.locator("#mParticipants .participant-chip", { hasText: person })).toHaveClass(/selected/);
 
   // «Через неделю»: 11:00 там занято — выбрано следующее свободное после него.
-  await quick.last().click();
-  await expect(quick.last()).toHaveClass(/selected/);
-  const selected = overlay.locator("#confirmDateTimeTime .time-slot.selected");
+  await page.locator("#meetingOverlay .deadline-row .participant-chip", { hasText: "Через неделю" }).click();
+  const selected = page.locator("#mTimeGrid .time-slot.selected");
   await expect(selected).toHaveCount(1);
   await expect(selected).not.toHaveText("11:00");
-  await expect(selected).not.toHaveClass(/busy/);
   expect(((await selected.textContent()) || "") > "11:00").toBe(true);
-  await expect(page.locator("#confirmDateTimeOkBtn")).toBeEnabled();
 
   // А обратно на «Завтра» — снова прежние 11:00: подбор помнит время встречи.
-  await quick.nth(1).click();
+  await page.locator("#meetingOverlay .deadline-row .participant-chip", { hasText: "Завтра" }).click();
   await expect(selected).toHaveText("11:00");
 
-  await page.click("#confirmDateTimeCancelBtn");
-  await expect(overlay).toHaveCount(0);
+  // Открыта из списка — Escape закрывает форму целиком, без окна встречи.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#meetingOverlay")).toHaveCount(0);
+  await expect(page.locator(".meeting-chip", { hasText: moved })).toHaveCount(1);
 });

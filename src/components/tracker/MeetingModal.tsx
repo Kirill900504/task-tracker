@@ -35,7 +35,7 @@ import ExpandableText from "./ExpandableText";
 import MeetingAgenda from "./MeetingAgenda";
 import { loadAgenda, type AgendaItem } from "@/hooks/useMeetingAgenda";
 import AgendaDraft from "./AgendaDraft";
-import { WORKDAY_SLOTS, busyPeople, defaultMeetingStart, startsInPast } from "@/lib/meetingTime";
+import { WORKDAY_SLOTS, busyPeople, defaultMeetingStart, rescheduleTime, startsInPast } from "@/lib/meetingTime";
 import { useAuthors } from "@/hooks/useAuthors";
 import { authorLabel, authorRawName } from "@/lib/authorName";
 import { isCurrent, voteTally, withOrganizer } from "@/lib/meetingVotes";
@@ -167,7 +167,17 @@ export default function MeetingModal({
     // вчерашний день календаря; перенос «на +1 день» встречи недельной
     // давности), начинается с ближайшего слота впереди: прошлое форма всё
     // равно не примет.
-    return !meeting && startsInPast(asked.date, asked.time) ? defaultMeetingStart("", TIME_SLOTS) : asked;
+    const ahead = !meeting && startsInPast(asked.date, asked.time) ? defaultMeetingStart("", TIME_SLOTS) : asked;
+    // Перенос — прежнее время, а если оно в новый день занято у кого-то из
+    // состава, следующее свободное после него (lib/meetingTime.rescheduleTime;
+    // так же подбирало маленькое окно «Перенос», которое форма заменила).
+    if (!isMove || !prefill?.time) return ahead;
+    const people = prefill.participants ?? [];
+    const minutes = prefill.durationMin || 30;
+    return {
+      date: ahead.date,
+      time: rescheduleTime(ahead.date, prefill.time, (d, t) => busyPeople(dayMeetings, { date: d, time: t, durationMin: minutes, people, ignore: [] }), TIME_SLOTS),
+    };
   });
   const [date, setDateRaw] = useState(start.date);
   const [title, setTitle] = useState(meeting?.title ?? prefill?.title ?? "");
@@ -178,7 +188,8 @@ export default function MeetingModal({
   // сдвигается на ближайший слот впереди.
   function setDate(next: string) {
     setDateRaw(next);
-    if (startsInPast(next, time)) setTime(defaultMeetingStart(next, TIME_SLOTS).time);
+    if (isMove && prefill?.time) setTime(moveTimeOn(next));
+    else if (startsInPast(next, time)) setTime(defaultMeetingStart(next, TIME_SLOTS).time);
   }
   const [participants, setParticipants] = useState<string[]>(sanitizeAssigneeList(meeting?.participants ?? prefill?.participants ?? []));
   // Кто я в этом пространстве — нужно ровно для одного: не предлагать
@@ -222,7 +233,7 @@ export default function MeetingModal({
   // Полчаса или час. Слова Кирилла 20.09.2026: «удобный способ выбирать
   // 30 минут или час» — и это не украшение формы, а то, из чего считается
   // занятость людей: час встречи вынимает из их дня час, а не точку.
-  const [durationMin, setDurationMin] = useState<number>(meeting?.durationMin || 30);
+  const [durationMin, setDurationMin] = useState<number>(meeting?.durationMin || prefill?.durationMin || 30);
   // Повтор (миграция 0046): каждое повторение — отдельная встреча, следующую
   // заводит крон в день текущей и зовёт тех же людей (lib/meetingRepeat).
   const [recur, setRecur] = useState<MeetingRecur>(meeting?.recur ?? prefill?.recur ?? "none");
@@ -277,6 +288,12 @@ export default function MeetingModal({
   // часовая в 15:30 заходит на чужие 16:00 (lib/meetingTime.busyPeople).
   const busyNamesAt = (slotTime: string, minutes: number = durationMin): string[] =>
     busyPeople(dayMeetings, { date, time: slotTime, durationMin: minutes, people: participants, ignore: [meeting?.id] });
+  // Время переноса на другой день: от времени ПРЕЖНЕЙ встречи, а не от
+  // выбранного сейчас — «Через неделю» и обратно «Завтра» возвращает
+  // прежнее время, если оно там свободно.
+  function moveTimeOn(day: string): string {
+    return rescheduleTime(day, prefill?.time || time, (d, t) => busyPeople(dayMeetings, { date: d, time: t, durationMin, people: participants, ignore: [] }), TIME_SLOTS);
+  }
 
   // Кто из позванных занят в ВЫБРАННОЕ время — красным прямо на имени.
   //

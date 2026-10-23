@@ -212,6 +212,8 @@ export interface MeetingPrefill {
   recur?: MeetingRecur;
   // …и её повестку: id встречи, чьи пункты подставить в форму.
   agendaFrom?: string;
+  // …и длительность: переносят встречу, а не только её начало.
+  durationMin?: number;
 }
 
 export interface PanelLayout {
