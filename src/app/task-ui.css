@@ -908,3 +908,22 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
   .deadline-row .snooze-btn span{display:none;}
   .ask-calendar .mini-cal-trigger.empty .mini-cal-label{display:none;}
 }
+/* «Личная» у поля «Кто на задаче» (PeoplePicker, 23.10.2026). Зелёный —
+   тот же шалфей, что у личных задач на доске (--kind-self), чтобы кнопка
+   и карточка, которая из неё получится, говорили одним цветом. Высота
+   меньше строки подписи: появление кнопки не сдвигает поле вниз. Нажата —
+   заливка; не нажата — контур того же цвета (ширина не меняется). */
+.people-field-title{display:inline-flex; align-items:center; gap:8px; min-width:0;}
+.personal-btn{
+  font:inherit; font-size:12px; font-weight:600; line-height:1;
+  padding:4px 10px; border-radius:var(--radius-sm); cursor:pointer;
+  border:1px solid rgba(134,184,150,.55); color:var(--kind-self-ink); background:rgba(134,184,150,.08);
+  transition:background .15s, color .15s, transform .08s;
+}
+.personal-btn:hover{background:rgba(134,184,150,.18);}
+.personal-btn:active{transform:translateY(1px);}
+.personal-btn.on{
+  color:#10241A; border-color:var(--kind-self);
+  background:linear-gradient(180deg, #9CCBAA 0%, var(--kind-self) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 1px 2px rgba(0,0,0,.25);
+}

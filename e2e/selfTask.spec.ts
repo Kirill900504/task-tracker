@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { pickSelfExecutor } from "./helpers";
+import { ensureDeadline, pickSelfExecutor } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // Задача самому себе — облегчённая модель (07.10.2026, lib/selfTask):
@@ -68,6 +68,35 @@ test("своя задача с наблюдателем — всё равно с
   await expect(modal.getByRole("button", { name: /Принял/ })).toHaveCount(0);
   await expect(modal.locator("#forceCloseBtn")).toHaveCount(0);
   await expect(modal.locator("#taskPeople .tpeople-watcher .tperson")).toHaveCount(1);
+});
+
+// «Личная» у поля людей (23.10.2026): одно нажатие — я исполнитель, и
+// кнопка нажата, пока задача и правда личная. Второй исполнитель её
+// отжимает, повторное «Личная» возвращает задачу мне одному.
+test("кнопка «Личная» ставит меня единственным исполнителем", async ({ page }) => {
+  const title = `E2E кнопка личная ${Date.now()}`;
+  await login(page);
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  const btn = page.locator("#personalTaskBtn");
+  const me = page.locator('#fPeople .participant-chip[data-self="true"]').first();
+  await expect(btn).toBeVisible({ timeout: 20_000 });
+  await expect(btn).toHaveAttribute("aria-pressed", "false");
+  await btn.click();
+  await expect(me).toHaveClass(/role-executor/);
+  await expect(btn).toHaveAttribute("aria-pressed", "true");
+
+  const other = page.locator('#fPeople .participant-chip:not(.chip-add):not([data-self="true"])').first();
+  await other.click();
+  await page.locator(".export-menu, .action-sheet").first().locator(".export-item").filter({ hasText: /^Исполнитель/ }).click();
+  await expect(btn).toHaveAttribute("aria-pressed", "false");
+  await btn.click();
+  await expect(other).not.toHaveClass(/selected/);
+  await expect(btn).toHaveAttribute("aria-pressed", "true");
+
+  await ensureDeadline(page);
+  await page.click("#saveTaskBtn");
+  await expect(page.locator(".task", { hasText: title })).toContainText("Личная задача", { timeout: 20_000 });
 });
 
 // Строка «Срок» и окно «Отложить до…» — одной строкой (22.10.2026: «поле

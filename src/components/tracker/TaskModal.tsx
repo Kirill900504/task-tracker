@@ -412,6 +412,20 @@ export default function TaskModal({
     if (role === "executor" && !form.assignee.trim()) setForm((f) => ({ ...f, assignee: person.name }));
   }
 
+  // «Личная» в новой задаче: я — единственный исполнитель. Остальные
+  // работники уходят (вторым исполнителем задача уже не личная), а
+  // наблюдатели остаются — личной задачу они не мешают (lib/selfTask).
+  // Нажата повторно — снимаю себя, и поле снова пустое.
+  const meOption = myAssigneeId ? availablePeople.find((p) => p.id === myAssigneeId) || null : null;
+  function makePersonal() {
+    if (!meOption) return;
+    setPending((prev) => {
+      if (isSelfTask(prev, myAssigneeId)) return prev.filter((p) => p.assigneeId !== meOption.id);
+      const watchers = prev.filter((p) => p.role === "watcher" && p.assigneeId !== meOption.id);
+      return [{ assigneeId: meOption.id, name: meOption.name, role: "executor" }, ...watchers];
+    });
+  }
+
   function removePerson(p: PickedPerson) {
     if (!isEditing) {
       setPending((prev) => prev.filter((x) => x.assigneeId !== p.id));
@@ -1129,6 +1143,8 @@ export default function TaskModal({
                 onPick={pickPerson}
                 onRemove={removePerson}
                 onAddPerson={isAdmin ? () => void handleAddAssignee() : undefined}
+                onPersonal={!isEditing && meOption ? makePersonal : undefined}
+                personalOn={!isEditing && isSelfTask(pending, myAssigneeId)}
               />
             )}
           </>

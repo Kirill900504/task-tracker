@@ -61,6 +61,8 @@ export default function PeoplePicker({
   onAddPerson,
   label = "Кто на задаче",
   requireExecutor = true,
+  onPersonal,
+  personalOn = false,
 }: {
   people: PersonOption[];
   picked: PickedPerson[];
@@ -77,6 +79,12 @@ export default function PeoplePicker({
   // четырнадцатого.
   label?: string;
   requireExecutor?: boolean;
+  // «Личная» — одним нажатием я единственный исполнитель (23.10.2026, его
+  // слова: «кнопочку зелёненькую „Личная“ справа от „кто на задаче“»).
+  // Нажата, пока задача и правда личная (lib/selfTask), — тогда нажатие
+  // снимает меня. Решает форма: «я» знает она, а не поле.
+  onPersonal?: () => void;
+  personalOn?: boolean;
 }) {
   const [menuFor, setMenuFor] = useState<{ person: PersonOption; anchor: DOMRect } | null>(null);
   const roleOf = (id: string) => picked.find((p) => p.id === id)?.role;
@@ -121,7 +129,21 @@ export default function PeoplePicker({
   return (
     <div className="field people-field">
       <label>
-        {label}
+        <span className="people-field-title">
+          {label}
+          {onPersonal && (
+            <button
+              type="button"
+              id="personalTaskBtn"
+              className={"personal-btn" + (personalOn ? " on" : "")}
+              aria-pressed={personalOn}
+              onClick={onPersonal}
+              title={personalOn ? "Личная задача — нажмите, чтобы снять себя" : "Сделать задачу личной: исполнитель — вы"}
+            >
+              Личная
+            </button>
+          )}
+        </span>
         {requireExecutor && (
           <span className={"field-req" + (hasExecutor ? " met" : "")}>
             {hasExecutor ? "Исполнитель назначен" : "Нужен исполнитель"}
