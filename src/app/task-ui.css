@@ -910,20 +910,24 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 }
 /* «Личная» у поля «Кто на задаче» (PeoplePicker, 23.10.2026). Зелёный —
    тот же шалфей, что у личных задач на доске (--kind-self), чтобы кнопка
-   и карточка, которая из неё получится, говорили одним цветом. Высота
-   меньше строки подписи: появление кнопки не сдвигает поле вниз. Нажата —
-   заливка; не нажата — контур того же цвета (ширина не меняется). */
-.people-field-title{display:inline-flex; align-items:center; gap:8px; min-width:0;}
+   и карточка, которая из неё получится, говорили одним цветом — только
+   светлее и насыщеннее (23.10.2026, его слова: «сделай кнопку ярче и чуть
+   крупней»): бледный контур на тёмном фоне не читался кнопкой. Нажата —
+   яркая заливка; не нажата — заметная полупрозрачная заливка с контуром
+   того же цвета (ширина одна и та же). */
+.people-field-title{display:inline-flex; align-items:center; gap:10px; min-width:0;}
 .personal-btn{
-  font:inherit; font-size:12px; font-weight:600; line-height:1;
-  padding:4px 10px; border-radius:var(--radius-sm); cursor:pointer;
-  border:1px solid rgba(134,184,150,.55); color:var(--kind-self-ink); background:rgba(134,184,150,.08);
+  font:inherit; font-size:13px; font-weight:700; line-height:1;
+  padding:6px 14px; border-radius:var(--radius-sm); cursor:pointer;
+  border:1px solid #8FD3A4; color:#C6F0D3; background:rgba(110,200,140,.22);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
   transition:background .15s, color .15s, transform .08s;
 }
-.personal-btn:hover{background:rgba(134,184,150,.18);}
+.personal-btn:hover{background:rgba(110,200,140,.34); color:#E2F8E9;}
 .personal-btn:active{transform:translateY(1px);}
 .personal-btn.on{
-  color:#10241A; border-color:var(--kind-self);
-  background:linear-gradient(180deg, #9CCBAA 0%, var(--kind-self) 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 1px 2px rgba(0,0,0,.25);
+  color:#0E2618; border-color:#A8E6BA;
+  background:linear-gradient(180deg, #B4EBC5 0%, #7CCB95 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 1px 3px rgba(0,0,0,.3), 0 0 10px rgba(124,203,149,.35);
 }
+.personal-btn.on:hover{background:linear-gradient(180deg, #C2F0D0 0%, #88D4A0 100%);}
