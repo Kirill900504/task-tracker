@@ -194,6 +194,18 @@ export function useTaskParticipants() {
   const [byTask, setByTask] = useState<Record<string, Participant[]>>(() => withPending(cached?.grouped ?? {}));
   const [people, setPeople] = useState<PersonOption[]>(() => cached?.people ?? []);
   const [loading, setLoading] = useState(!cached);
+  // Состав, выбранный в окне создания, — на экране сразу, до своих строк.
+  //
+  // Строки участия появляются только после того, как задача доехала до
+  // базы (attachOnCreate ждёт её), а из них выводится всё: вид карточки,
+  // «Личная задача», столбец. Первые две секунды новая задача стояла с
+  // пустым составом и читалась как поручение — «Кирилл → Кирилл» — и
+  // только потом становилась личной (27.10.2026: «сразу должна
+  // создаваться личная»). Это заготовки: forTask подмешивает их к
+  // настоящим строкам по человеку, и снимаются они, как только
+  // attachOnCreate закончил, — иначе снятый позже человек вернулся бы на
+  // экран из заготовки.
+  const [seeded, setSeeded] = useState<Record<string, Participant[]>>({});
 
   // Fetching and applying are split on purpose: the React compiler lint
   // refuses a function that sets state being called straight from an effect
@@ -358,28 +370,63 @@ export function useTaskParticipants() {
         if (!wanted.some((w) => w.id === person.assigneeId)) wanted.push({ id: person.assigneeId, role: person.role });
       }
 
-      const already = new Set((byTask[taskId] || []).map((p) => p.assigneeId));
-      const todo = wanted.filter((w) => !already.has(w.id));
-      if (!todo.length) return [];
-
-      // Не дождались (нет связи, задача не ушла в облако) — молча выходим:
-      // участников можно добавить руками, а падать здесь незачем.
-      if (!(await waitForTaskRow(taskId))) return [];
-
-      // По одному, а не пачкой: каждая вставка ещё и пишет человеку в
-      // мессенджер, и «назначена» — то, о чём узнают порознь.
-      //
-      // И то, что она сказала, возвращается наверх. Раньше здесь стояло
-      // `await add(...)` без присваивания, и «Никита не подключён — задача
-      // до него не дошла» терялось ровно на самом частом пути: поставить
-      // задачу, вписав имя в поле. Список участников это сообщение
-      // показывал, а сохранение карточки — нет.
-      const notices: string[] = [];
-      for (const w of todo) {
-        const said = await add(taskId, w.id, w.role);
-        if (said) notices.push(said);
+      // Заготовки — из всего выбранного, включая собственную строку «(я)»:
+      // её заводит триггер, а не этот код, но и её ждать нельзя.
+      const draft = [...wanted];
+      const own = clean && isSelfAssignee(clean) ? people.find((p) => p.name === clean) : undefined;
+      if (own && !draft.some((w) => w.id === own.id)) draft.unshift({ id: own.id, role: "executor" });
+      if (draft.length) {
+        const nameOf = (id: string) => extra.find((p) => p.assigneeId === id)?.name || people.find((p) => p.id === id)?.name || "";
+        setSeeded((prev) => ({
+          ...prev,
+          [taskId]: draft.map((w) => ({
+            id: `seed-${taskId}-${w.id}`,
+            assigneeId: w.id,
+            name: nameOf(w.id),
+            role: w.role,
+            acceptedAt: null,
+            doneAt: null,
+            doneComment: null,
+            doneFiles: [],
+            declinedAt: null,
+            declineReason: null,
+            rescheduleTo: null,
+            rescheduleReason: null,
+            seenAt: null,
+          })),
+        }));
       }
-      return notices;
+      try {
+        const already = new Set((byTask[taskId] || []).map((p) => p.assigneeId));
+        const todo = wanted.filter((w) => !already.has(w.id));
+        if (!todo.length) return [];
+
+        // Не дождались (нет связи, задача не ушла в облако) — молча выходим:
+        // участников можно добавить руками, а падать здесь незачем.
+        if (!(await waitForTaskRow(taskId))) return [];
+
+        // По одному, а не пачкой: каждая вставка ещё и пишет человеку в
+        // мессенджер, и «назначена» — то, о чём узнают порознь.
+        //
+        // И то, что она сказала, возвращается наверх. Раньше здесь стояло
+        // `await add(...)` без присваивания, и «Никита не подключён — задача
+        // до него не дошла» терялось ровно на самом частом пути: поставить
+        // задачу, вписав имя в поле. Список участников это сообщение
+        // показывал, а сохранение карточки — нет.
+        const notices: string[] = [];
+        for (const w of todo) {
+          const said = await add(taskId, w.id, w.role);
+          if (said) notices.push(said);
+        }
+        return notices;
+      } finally {
+        setSeeded((prev) => {
+          if (!(taskId in prev)) return prev;
+          const next = { ...prev };
+          delete next[taskId];
+          return next;
+        });
+      }
     },
     [people, byTask, add],
   );
@@ -628,7 +675,15 @@ export function useTaskParticipants() {
   // в «Завершённых» навсегда.
   const reopen = useCallback((taskId: string, comment: string) => review("reopen", taskId, comment), [review]);
 
-  const forTask = useCallback((taskId: string) => byTask[taskId] || [], [byTask]);
+  const forTask = useCallback(
+    (taskId: string) => {
+      const real = byTask[taskId] || [];
+      const draft = seeded[taskId];
+      if (!draft) return real;
+      return [...real, ...draft.filter((d) => !real.some((p) => p.assigneeId === d.assigneeId))];
+    },
+    [byTask, seeded],
+  );
 
   // Only the people not already on the task — offering to add somebody
   // twice produces a constraint error rather than a second row.
