@@ -43,6 +43,29 @@ test("своя задача: в карточке только срок, без �
   await expect(page.locator("#selfDeadline .participant-chip", { hasText: "Завтра" })).toHaveClass(/selected/);
 });
 
+// Новая своя задача — личная с первого кадра (27.10.2026: «сперва
+// появляется как будто я постановщик другому человеку, а потом через 2 сек
+// переделывается в личную»). Состав выводится из строк участия, а они
+// пишутся только после того, как задача доехала до базы, — поэтому обе
+// записи здесь задержаны на пять секунд, и метка обязана стоять раньше.
+test("новая своя задача сразу показана личной", async ({ page }) => {
+  const title = `E2E сразу личная ${Date.now()}`;
+  await login(page);
+  await page.route(/\/rest\/v1\/(tasks|task_participants)(\?|$)/, async (route) => {
+    if (route.request().method() !== "GET") await new Promise((r) => setTimeout(r, 5000));
+    await route.continue();
+  });
+  await page.click("#newTaskBtn");
+  await page.fill("#fTitle", title);
+  await pickSelfExecutor(page);
+  await page.click("#saveTaskBtn");
+
+  const card = page.locator(".task", { hasText: title });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("Личная задача", { timeout: 1500 });
+  await expect(card.locator(".task-people")).toHaveCount(0);
+});
+
 // Наблюдатель рядом задачу «своей» не отменяет (23.10.2026: мысль,
 // переведённая в задачу на себя с наблюдателем, шла полной дорогой —
 // «Принял / Сделал», «Принудительное закрытие»). Работаю по ней только я.
