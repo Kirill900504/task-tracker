@@ -23,6 +23,10 @@ import { involvedFilter } from "@/lib/telegramQueries";
 // reads their messages — and a person with both gets both, which is the
 // point of a backup rather than a duplicate to be tidied away.
 
+// A MAX send may now wait up to half a minute for the file to be digested
+// (sendMaxDocument), once per person, so the run gets the full five minutes.
+export const maxDuration = 300;
+
 type Destination = BackupDestination;
 
 async function sendDocument(to: Destination, filename: string, content: string, caption: string) {

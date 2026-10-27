@@ -131,6 +131,11 @@ export async function sendMaxMessage(userId: number, text: string, options?: { b
 // that one is a plain fetch with a FormData body, and the other two are
 // russianFetch. Getting this backwards fails in the one way this codebase
 // has already paid for: only in production.
+// MAX's two words for «the file is uploaded but not digested yet».
+export function isStillProcessing(error: string): boolean {
+  return /not\.?ready|not\.?processed/i.test(error);
+}
+
 export async function sendMaxDocument(
   userId: number,
   filename: string,
@@ -157,8 +162,16 @@ export async function sendMaxDocument(
     // `attachment.not.ready`. That is a wait, not a failure — a backup that
     // silently did not arrive is exactly the kind of loss a backup exists to
     // prevent, so give it a few seconds before believing it.
+    //
+    // The same wait has a second name: `errors.process.attachment.file.not.processed`.
+    // It reached his chat on 26.10.2026 as «Резервная копия не отправилась»,
+    // because only `not.ready` was treated as «wait» — and it showed up only
+    // once the file had grown large enough for MAX to take longer than the
+    // first try. Both are retried, with a growing pause (about 25 s in all):
+    // a bigger file next month needs more patience, not a different rule.
     const attachment = { type: "file", payload: { token: uploaded.token } };
-    for (let attempt = 0; attempt < 5; attempt++) {
+    const waits = [1000, 2000, 3000, 4000, 5000, 5000, 5000];
+    for (let attempt = 0; ; attempt++) {
       const res = await russianFetch(`${API}/messages?user_id=${userId}`, {
         method: "POST",
         headers: headers(settings.token),
@@ -169,10 +182,10 @@ export async function sendMaxDocument(
         return { ok: true, messageId: body?.message?.body?.mid };
       }
       const error = await errorText(res);
-      if (!/not\.?ready/i.test(error)) return { ok: false, error };
-      await new Promise((r) => setTimeout(r, 1500));
+      if (!isStillProcessing(error)) return { ok: false, error };
+      if (attempt >= waits.length) return { ok: false, error: "MAX не успел обработать файл за полминуты" };
+      await new Promise((r) => setTimeout(r, waits[attempt]));
     }
-    return { ok: false, error: "MAX так и не принял файл (attachment.not.ready)" };
   } catch (e) {
     return { ok: false, error: networkError(e) };
   }
