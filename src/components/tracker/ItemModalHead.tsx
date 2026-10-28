@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { grow, shrink } from "@/lib/smoothHeight";
+import AutoGrowTextarea from "./AutoGrowTextarea";
 import Icon from "./Icon";
 
 // Шапка окна: название, действия и × в правом верхнем углу.
@@ -44,6 +45,7 @@ export default function ItemModalHead({
   onClose,
   closeId,
   plain,
+  onRename,
 }: {
   // «#111», «Встреча» — слева от названия, на той же строке.
   kicker?: ReactNode;
@@ -56,10 +58,36 @@ export default function ItemModalHead({
   closeId?: string;
   // Название без рамки — у служебных окон («Команда», «Разделы»).
   plain?: boolean;
+  // Название можно поправить — у открытой задачи её постановщику. Тогда в
+  // рамке названия стоит карандаш (28.10.2026, его слова: «сделай удобный
+  // значок в поле названия задачи, понятный! Что можно отредактировать или
+  // дополнить название задачи»). Без него название только читается.
+  onRename?: (title: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const full = typeof title === "string" ? title : undefined;
+  const renamable = !plain && !!onRename && full !== undefined;
+  // Правка идёт в той же рамке, что и название: поле встаёт на его место,
+  // Enter или щелчок мимо сохраняют, Escape отменяет — и только правку, а не
+  // окно (preventDefault снимает «запрос на закрытие» у <dialog>, см.
+  // useEscapeToClose). Пустое название не сохраняется: задача без названия
+  // на доске — пустой кубик.
+  const [draft, setDraft] = useState<string | null>(null);
+  const renaming = draft !== null;
+  const doneRef = useRef(false);
+  function startRename() {
+    if (!renamable) return;
+    doneRef.current = false;
+    setDraft(full ?? "");
+  }
+  function finishRename(save: boolean) {
+    if (doneRef.current || draft === null) return;
+    doneRef.current = true;
+    const next = draft.trim();
+    if (save && next && next !== full) onRename?.(next);
+    setDraft(null);
+  }
   // Название раскрывается плавно (21.10.2026: «большое описание плавно
   // спокойно выплывало, без резких рывков»), а номер и кнопки при этом стоят
   // на месте — шапка выровнена по верху, а не по центру, иначе они съезжали
@@ -84,7 +112,8 @@ export default function ItemModalHead({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [plain, title]);
+    // После правки рамка названия — новый узел, и мерить надо его.
+  }, [plain, title, renaming]);
   function toggle() {
     const el = titleRef.current;
     if (!open && el?.dataset.overflow !== "1") return;
@@ -98,17 +127,54 @@ export default function ItemModalHead({
           {kicker}
         </span>
       )}
-      <div className="item-head-main">
+      <div className={"item-head-main" + (renamable ? " renamable" : "")}>
         {plain && kicker && <div className="item-head-kicker">{kicker}</div>}
-        <h2
-          id={titleId}
-          ref={titleRef}
-          className={"item-head-title" + (plain ? " plain" : "") + (open ? " open" : "")}
-          title={!plain && !open ? full : undefined}
-          onClick={plain ? undefined : toggle}
-        >
-          {title}
-        </h2>
+        {renaming ? (
+          <AutoGrowTextarea
+            id="taskTitleEdit"
+            className="item-head-title-input"
+            singleLine
+            focusAtEnd
+            value={draft}
+            onChange={setDraft}
+            onEnter={() => finishRename(true)}
+            onBlur={() => finishRename(true)}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return;
+              e.preventDefault();
+              e.stopPropagation();
+              finishRename(false);
+            }}
+          />
+        ) : (
+          <>
+            <h2
+              id={titleId}
+              ref={titleRef}
+              className={"item-head-title" + (plain ? " plain" : "") + (open ? " open" : "")}
+              title={!plain && !open ? full : undefined}
+              onClick={plain ? undefined : toggle}
+              onDoubleClick={renamable ? startRename : undefined}
+            >
+              {title}
+            </h2>
+            {renamable && (
+              <button
+                type="button"
+                className="item-head-rename"
+                id="renameTaskBtn"
+                title="Изменить название"
+                aria-label="Изменить название"
+                onClick={startRename}
+              >
+                <Icon name="edit" size={16} />
+                {/* Словом — на компьютере, где место есть: значок один
+                    угадывают, со словом его читают. */}
+                <span className="item-head-rename-word">Изменить</span>
+              </button>
+            )}
+          </>
+        )}
       </div>
       <div className="item-head-actions">
         {actions}

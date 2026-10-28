@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { pickSelfExecutor, pickCoexecutor } from "./helpers";
+import { pickSelfExecutor, pickCoexecutor, CARD_CORNER } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // Без связи ответы копятся и уходят сами (lib/outbox).
@@ -60,7 +60,7 @@ test("без связи «Сделал» и реплика ждут в очер�
   const taskId = (await taskRow(title))!.id;
 
   const card = page.locator(".task", { hasText: title }).first();
-  await card.locator(".task-title").click();
+  await card.click(CARD_CORNER);
   const modal = page.locator("dialog[open]#overlay");
   await expect(modal.locator(".my-work")).toBeVisible({ timeout: 20_000 });
 

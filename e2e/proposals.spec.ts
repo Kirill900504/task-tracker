@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
-import { pickSelfExecutor } from "./helpers";
+import { pickSelfExecutor, CARD_CORNER } from "./helpers";
 
 // Сторожа к предложениям, сделанным 07.10.2026 (docs/proposals-2026-10.md):
 // номер задачи, регулярная встреча, «меня не будет». Каждое проверяется по
@@ -152,7 +152,7 @@ test("готовый ответ вставляется в отчёт одним 
     await login(fresh);
     const card = fresh.locator(`.task[data-id="${id}"]`);
     await expect(card).toBeVisible({ timeout: 30_000 });
-    await card.click();
+    await card.click(CARD_CORNER);
     const modal = fresh.locator("dialog[open]").filter({ has: fresh.locator("#modalTitle") });
     await modal.getByRole("button", { name: "Сделал" }).click({ timeout: 20_000 });
     await modal.locator(".ms-answer-quick").getByRole("button", { name: "Готово, проверьте" }).click();
@@ -265,7 +265,7 @@ test("«Отложить…» убирает задачу с доски авто
   await page.click("#saveTaskBtn");
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
-  await card.click();
+  await card.click(CARD_CORNER);
   // Кнопка — в строке срока, а не значком в шапке (20.10.2026).
   await expect(page.locator("#selfDeadline #snoozeTaskBtn")).toBeVisible();
   await page.click("#snoozeTaskBtn");
@@ -318,7 +318,7 @@ test("в окне приёмки четыре готовых ответа, и н
     await login(page);
     const card = page.locator(`.task[data-id="${id}"]`);
     await expect(card).toBeVisible({ timeout: 30_000 });
-    await card.click();
+    await card.click(CARD_CORNER);
     await page.locator(".tp-review-actions .btn", { hasText: "Принять" }).click({ timeout: 20_000 });
     const ask = page.locator(".ask-modal");
     await expect(ask.locator(".ask-quick button")).toHaveCount(4);

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { CARD_CORNER } from "./helpers";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
@@ -49,7 +50,7 @@ test("закрытая задача открывается только для �
     if ((await done.getAttribute("aria-pressed")) !== "true") await done.click();
     const card = page.locator(".task", { hasText: title });
     await expect(card).toBeVisible({ timeout: 20_000 });
-    await card.click();
+    await card.click(CARD_CORNER);
 
     await expect(page.locator("#chatClosedNote")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".chat-composer")).toHaveCount(0);

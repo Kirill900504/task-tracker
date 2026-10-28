@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { CARD_CORNER } from "./helpers";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { userFilePath } from "./userFile";
@@ -58,7 +59,7 @@ test("срок обязателен, чек-лист, #номер и счёт п
 
   // Перенос срока считается: у своей задачи срок двигается в карточке.
   const card = page.locator(".task", { hasText: first }).first();
-  await card.locator(".task-title").click();
+  await card.click(CARD_CORNER);
   await page.locator("#selfDeadline .participant-chip", { hasText: "Через неделю" }).click();
   await expect.poll(async () => (await row(first))?.deadline_moves ?? 0, { timeout: 30_000 }).toBe(1);
 
@@ -108,7 +109,7 @@ test("срок обязателен, чек-лист, #номер и счёт п
     const { data } = await admin.from("tasks").select("blocked_by").eq("user_id", userId).eq("title", second).maybeSingle();
     return (data as { blocked_by: string | null } | null)?.blocked_by || "";
   }, { timeout: 30_000 }).toBe(firstRow.id);
-  await secondCard.locator(".task-title").click();
+  await secondCard.click(CARD_CORNER);
   const box = page.locator("dialog[open] .chat-composer textarea");
   await box.fill(`см. #${firstRow.number}`);
   await box.press("Enter");

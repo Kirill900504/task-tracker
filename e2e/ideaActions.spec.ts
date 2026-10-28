@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { CARD_CORNER } from "./helpers";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -135,7 +136,7 @@ test("адресаты мысли следят за командой, убран
     await page.keyboard.press("Escape");
 
     // На задаче он остаётся — с пометкой, а не как живой коллега.
-    await page.locator(".task", { hasText: taskTitle }).first().click();
+    await page.locator(".task", { hasText: taskTitle }).first().click(CARD_CORNER);
     const person = page.locator(`#taskPeople .tperson[data-person="${name}"]`);
     await expect(person).toBeVisible({ timeout: 20_000 });
     await expect(person.locator(".archived-mark")).toHaveText("удалён");

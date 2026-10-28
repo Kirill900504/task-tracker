@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { pickSelfExecutor, pickCoexecutor } from "./helpers";
+import { pickSelfExecutor, pickCoexecutor, CARD_CORNER } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // Окно заведённой задачи и кубик на доске — вид 13.10.2026.
@@ -72,7 +72,7 @@ test("окно задачи: описание с файлом, люди в св�
   await expect(card.locator(".task-people")).toBeVisible();
   await expect(card.locator(".task-progress-short")).toHaveCount(0);
 
-  await card.locator(".task-title").click();
+  await card.click(CARD_CORNER);
   const modal = page.locator("dialog[open]#overlay");
   await expect(modal.locator("#taskFacts")).toBeVisible();
   // Название — в рамке шапки, крестик справа, снизу кнопок нет.
@@ -104,7 +104,7 @@ test("окно задачи: описание с файлом, люди в св�
   await expect.poll(async () => (await taskRow(title))?.description || "", { timeout: 30_000 }).toContain("Дополнено.");
 
   // Принудительное закрытие: без комментария нельзя, с ним — закрыта.
-  await card.locator(".task-title").click();
+  await card.click(CARD_CORNER);
   await expect(modal.locator("#forceCloseBtn")).toContainText("Принудительное закрытие");
   await modal.locator("#forceCloseBtn").click();
   await page.click("#askOkBtn");
@@ -125,7 +125,7 @@ test("поле сообщения: без ручки и не выше пяти �
   await page.fill("#fTitle", title);
   await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
-  await page.locator(".task", { hasText: title }).first().locator(".task-title").click();
+  await page.locator(".task", { hasText: title }).first().click(CARD_CORNER);
   const box = page.locator("dialog[open] .chat-composer textarea");
   await expect(box).toBeVisible();
   expect(await box.evaluate((el) => getComputedStyle(el).resize)).toBe("none");
