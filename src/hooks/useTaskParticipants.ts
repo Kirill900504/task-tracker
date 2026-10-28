@@ -431,6 +431,43 @@ export function useTaskParticipants() {
     [people, byTask, add],
   );
 
+  // Заготовка (см. `seeded`) — строка, которой в базе ещё нет, и её id
+  // маршрут отвергает («participantId — ожидался идентификатор»). А карточка
+  // с заготовкой выглядит готовой: роль, цвет, «Принял в работу» в меню — и
+  // нажать его можно в первую же секунду после создания задачи (28.10.2026
+  // так падал e2e «Принял» на телефоне, а экран откатывал ответ тостом
+  // «Ответ не принят»). Поэтому ответ по заготовке ждёт настоящую строку
+  // того же человека на той же задаче и уходит уже с её id.
+  const realParticipantId = useCallback(
+    async (participantId: string): Promise<string> => {
+      if (!participantId.startsWith("seed-")) return participantId;
+      let taskId = "";
+      let assigneeId = "";
+      for (const [t, list] of Object.entries(seeded)) {
+        const hit = list.find((p) => p.id === participantId);
+        if (hit) {
+          taskId = t;
+          assigneeId = hit.assigneeId;
+          break;
+        }
+      }
+      if (!taskId) return "";
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const { grouped } = await fetchAll();
+        const row = (grouped[taskId] || []).find((p) => p.assigneeId === assigneeId);
+        if (row) {
+          // Прочитанное — сразу на экран: следом ответ накладывается на ЭТУ
+          // строку, а её ещё нет в состоянии.
+          setByTask(grouped);
+          return row.id;
+        }
+        await new Promise((r) => setTimeout(r, 700));
+      }
+      return "";
+    },
+    [seeded, fetchAll],
+  );
+
   // Роль, снятая просьба о переносе и удаление участника меняются на экране
   // сразу, а перечитывается таблица только если запись не прошла. Раньше
   // каждое из трёх нажатий тянуло ВСЕ строки участия по всем задачам разом —
@@ -447,13 +484,16 @@ export function useTaskParticipants() {
   }, []);
 
   const setRole = useCallback(
-    async (participantId: string, role: TaskParticipantRole) => {
+    async (shownId: string, role: TaskParticipantRole) => {
+      patchParticipant(shownId, (p) => ({ ...p, role }));
+      const participantId = await realParticipantId(shownId);
+      if (!participantId) return;
       patchParticipant(participantId, (p) => ({ ...p, role }));
       const db = createClient();
       const { error } = await db.from("task_participants").update({ role }).eq("id", participantId);
       if (error) await load();
     },
-    [load, patchParticipant],
+    [load, patchParticipant, realParticipantId],
   );
 
   // Просьбу либо удовлетворяют, либо отклоняют — в обоих случаях она
@@ -479,17 +519,19 @@ export function useTaskParticipants() {
   );
 
   const remove = useCallback(
-    async (participantId: string) => {
+    async (shownId: string) => {
+      const participantId = await realParticipantId(shownId);
       setByTask((prev) => {
         const next: Record<string, Participant[]> = {};
         for (const [taskId, list] of Object.entries(prev)) next[taskId] = list.filter((p) => p.id !== participantId);
         return next;
       });
+      if (!participantId) return;
       const db = createClient();
       const { error } = await db.from("task_participants").delete().eq("id", participantId);
       if (error) await load();
     },
-    [load],
+    [load, realParticipantId],
   );
 
   // Только что заведённый человек должен появиться кнопкой сразу.
@@ -585,8 +627,10 @@ export function useTaskParticipants() {
   // участие, то есть откатывает экран к правде, а причину показывает
   // тостом (postInBackground) — окно к этому моменту обычно уже закрыто.
   const answer = useCallback(
-    async (payload: Record<string, unknown>) => {
-      const participantId = String(payload.participantId || "");
+    async (raw: Record<string, unknown>) => {
+      const participantId = await realParticipantId(String(raw.participantId || ""));
+      if (raw.participantId && !participantId) throw new Error("Задача ещё не доехала до облака — попробуйте через минуту");
+      const payload = raw.participantId ? { ...raw, participantId } : raw;
       const patch = answerPatch(payload as AnswerPayload, new Date().toISOString());
       if (participantId && patch) {
         setByTask((prev) => {
@@ -603,7 +647,7 @@ export function useTaskParticipants() {
       // ждёт сети в очереди и остаётся на экране (lib/outbox).
       postInBackground("/api/workspace/report", payload, { fallback: "Не получилось отправить ответ", onFail: load, onDone: load });
     },
-    [load],
+    [load, realParticipantId],
   );
 
   const acceptWork = useCallback((participantId: string) => answer({ action: "accept", participantId }), [answer]);
@@ -627,12 +671,16 @@ export function useTaskParticipants() {
   // отчёт не уходит вовсе: отчёт без обещанного акта хуже, чем повторная
   // попытка, потому что постановщик прочитает его как полный.
   const reportWork = useCallback(
-    async (participantId: string, comment: string, files: File[] = [], whole = false) => {
-      const attachments = files.length ? await uploadResultFiles(taskIdOf(participantId), files) : [];
+    async (shownId: string, comment: string, files: File[] = [], whole = false) => {
+      // Задача — по показанной строке: у заготовки её знает только `seeded`.
+      const taskId = taskIdOf(shownId) || Object.keys(seeded).find((t) => seeded[t].some((p) => p.id === shownId)) || "";
+      const participantId = await realParticipantId(shownId);
+      if (!participantId) throw new Error("Задача ещё не доехала до облака — попробуйте через минуту");
+      const attachments = files.length ? await uploadResultFiles(taskId, files) : [];
       // whole — «сдал задачу целиком»: на приёмку, не дожидаясь остальных.
       return answer({ action: "done", participantId, comment, attachments, ...(whole ? { whole: true } : {}) });
     },
-    [answer, taskIdOf],
+    [answer, taskIdOf, realParticipantId, seeded],
   );
   const declineWork = useCallback(
     (participantId: string, reason: string) => answer({ action: "decline", participantId, comment: reason }),
