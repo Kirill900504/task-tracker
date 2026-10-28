@@ -24,12 +24,34 @@ test("личный кабинет открывается из имени в ша
   await page.click("#accountBtn");
   const modal = page.locator(".account-modal");
   await expect(modal).toBeVisible();
-  await expect(modal.getByRole("heading", { name: "Вход с компьютера" })).toBeVisible();
+  await expect(modal.getByRole("heading", { name: "Мои данные" })).toBeVisible();
   await expect(modal.getByRole("heading", { name: "Мессенджеры" })).toBeVisible();
   // Почта, с которой вошли, — в поле: её больше нигде в трекере не увидеть.
   await expect(modal.locator('input[type="email"]')).toHaveValue(email.toLowerCase());
   await modal.getByRole("button", { name: "Закрыть" }).click();
   await expect(modal).toBeHidden();
+});
+
+// «Мои данные» — второй шаг (28.10.2026): телефон сохраняется сам по себе,
+// приходит к одному виду, а отметка на имени в шапке после этого гаснет.
+test("в «Моих данных» сохраняется телефон, и отметка на имени гаснет", async ({ page }) => {
+  await login(page);
+  // У тестового аккаунта почта есть, телефона нет — данные не заполнены.
+  await expect(page.locator("#profileDot")).toBeVisible({ timeout: 20_000 });
+  await page.click("#accountBtn");
+  const modal = page.locator(".account-modal");
+  await page.fill("#accountPhone", "8 (900) 123 45 67");
+  await page.click("#accountSaveBtn");
+  await expect(modal.locator(".account-ok")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("#accountPhone")).toHaveValue("+7 900 123-45-67");
+  await expect(page.locator("#profileDot")).toHaveCount(0);
+  // И это правда базы, а не экрана: после перезагрузки номер на месте.
+  await modal.getByRole("button", { name: "Закрыть" }).click();
+  await page.reload();
+  await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
+  await page.click("#accountBtn");
+  await expect(page.locator("#accountPhone")).toHaveValue("+7 900 123-45-67", { timeout: 15_000 });
+  await expect(page.locator("#profileDot")).toHaveCount(0);
 });
 
 test("смайлик из кнопки у поля встаёт на место курсора", async ({ page }) => {

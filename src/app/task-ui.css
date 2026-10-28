@@ -1102,3 +1102,11 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .account-alerts{border:1px solid var(--line-soft); border-radius:var(--radius-md); background:var(--paper-soft); padding:2px 4px;}
 .account-download{align-self:flex-start; display:inline-flex; align-items:center; gap:7px; text-decoration:none;}
 .account-actions{justify-content:space-between;}
+
+/* Отметка «заполните „Мои данные“» на имени в шапке — точка, а не плашка:
+   плашки поверх доски он снимал («засоряют место»). */
+.account-btn{position:relative;}
+.account-dot{
+  position:absolute; top:4px; right:4px; width:8px; height:8px; border-radius:50%;
+  background:var(--today); box-shadow:0 0 0 2px var(--paper);
+}

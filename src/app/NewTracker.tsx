@@ -21,6 +21,7 @@ import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useDesktopAlerts } from "@/hooks/useDesktopAlerts";
 import AlertsButton from "@/components/tracker/AlertsButton";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 import { useBotLink } from "@/hooks/useBotLink";
 import { prefetchTeam, useColleagues } from "@/hooks/useColleagues";
@@ -347,6 +348,8 @@ export default function NewTracker() {
   // вообще персональный.
   // С 13.10.2026 это не меню, а окно — личный кабинет (AccountModal).
   const [accountOpen, setAccountOpen] = useState(false);
+  // «Мои данные» не заполнены — отметка на имени и один раз кабинет сам.
+  const profile = useProfileStatus(ready, () => setAccountOpen(true));
 
   // Список команды спрашивается заранее, а не в момент нажатия. «Команда» и
   // любое ✈ открываются из уже открытого трекера, то есть время на запрос
@@ -935,6 +938,7 @@ export default function NewTracker() {
             ...(installPrompt.visible ? [{ id: "install", label: "Установить приложение на компьютер", icon: "install" as const, onSelect: installPrompt.promptInstall }] : []),
           ]}
           alerts={{ permission: notifications.permission, requestPermission: notifications.requestPermission }}
+          onProfileSaved={profile.setComplete}
           onSignOut={(everywhere) => actions.signOut(everywhere)}
           onClose={() => setAccountOpen(false)}
         />
@@ -953,7 +957,7 @@ export default function NewTracker() {
             accountName={withoutSelfMark(myName)}
             extra={<ConnectionStatus offline={offline} />}
             items={[
-              { id: "account", label: "Личный кабинет", icon: "users" as const, onSelect: () => setAccountOpen(true) },
+              { id: "account", label: profile.incomplete ? "Личный кабинет · заполните данные" : "Личный кабинет", icon: "users" as const, onSelect: () => setAccountOpen(true) },
               ...(isOwner ? [{ id: "team", label: "Команда", icon: "users" as const, onSelect: () => setTeamOpen(true) }] : []),
               // Поиск вернулся сюда 23.09.2026. Он жил здесь до 22.09.2026,
               // переехал шестой кнопкой в нижнюю панель, а с появлением
@@ -1108,6 +1112,7 @@ export default function NewTracker() {
               onClick={() => setAccountOpen(true)}
             >
               <Icon name="users" size={14} /> {withoutSelfMark(myName) || "Аккаунт"}
+              {profile.incomplete && <span className="account-dot" id="profileDot" title="Заполните «Мои данные»" />}
             </button>
           </div>
         </div>

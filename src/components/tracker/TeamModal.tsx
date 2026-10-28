@@ -15,6 +15,7 @@ import { withoutSelfMark } from "@/lib/actorName";
 import { useAwayEditor } from "./AwayMenu";
 import { awayPhrase, isAwayOn } from "@/lib/away";
 import { todayStr } from "@/lib/taskDisplay";
+import { phoneHref } from "@/lib/phone";
 
 // «Команда»: who can be written to, and how to connect the rest.
 //
@@ -122,6 +123,21 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
   const [menuFor, setMenuFor] = useState<{ id: string; name: string; anchor: DOMRect } | null>(null);
   // Раскрытая карточка человека — всё о нём и все действия кнопками.
   const [openFor, setOpenFor] = useState<string | null>(null);
+  // Рабочие почта и телефон из «Моих данных» людей — читаются при первом
+  // раскрытии карточки, а не при открытии окна: нужны редко, а запрос
+  // обходит учётные записи всех людей (/api/workspace/contacts).
+  const [contacts, setContacts] = useState<Record<string, { phone: string; email: string }> | null>(null);
+
+  function toggleCard(id: string) {
+    const next = openFor === id ? null : id;
+    setOpenFor(next);
+    if (next && !contacts) {
+      void fetch("/api/workspace/contacts")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data: { contacts?: Record<string, { phone: string; email: string }> } | null) => setContacts(data?.contacts || {}))
+        .catch(() => setContacts({}));
+    }
+  }
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
 
@@ -655,7 +671,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                       className="team-person"
                       aria-expanded={open}
                       title="Подробнее"
-                      onClick={() => setOpenFor(open ? null : person.id)}
+                      onClick={() => toggleCard(person.id)}
                     >
                       <span className="team-avatar" aria-hidden>
                         {initials(withoutSelfMark(person.name))}
@@ -759,6 +775,30 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                           <>
                             <dt>Направление</dt>
                             <dd>{person.direction || "—"}</dd>
+                          </>
+                        )}
+                        {!person.isMe && (
+                          <>
+                            <dt>Телефон</dt>
+                            <dd>
+                              {contacts === null ? "…" : contacts[person.id]?.phone ? (
+                                <a className="auth-link" style={{ padding: 0 }} href={phoneHref(contacts[person.id].phone)}>
+                                  {contacts[person.id].phone}
+                                </a>
+                              ) : (
+                                "не указан"
+                              )}
+                            </dd>
+                            <dt>Рабочая почта</dt>
+                            <dd>
+                              {contacts === null ? "…" : contacts[person.id]?.email ? (
+                                <a className="auth-link" style={{ padding: 0 }} href={"mailto:" + contacts[person.id].email}>
+                                  {contacts[person.id].email}
+                                </a>
+                              ) : (
+                                "не указана"
+                              )}
+                            </dd>
                           </>
                         )}
                         <dt>На месте</dt>

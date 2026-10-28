@@ -5,6 +5,7 @@ import type { MessengerState } from "@/hooks/useMyMessenger";
 import type { ColleagueChannel } from "@/hooks/useColleagues";
 import { emailProblem, passwordProblem } from "@/lib/workspaceInvite";
 import { humanError } from "@/lib/humanError";
+import { normalizePhone } from "@/lib/phone";
 import Modal from "./Modal";
 import Icon, { type IconName } from "./Icon";
 import MessengerLink from "./MessengerLink";
@@ -45,6 +46,7 @@ export default function AccountModal({
   owner,
   items,
   alerts,
+  onProfileSaved,
   onSignOut,
   onClose,
 }: {
@@ -57,6 +59,9 @@ export default function AccountModal({
   owner: { needs: Record<ColleagueChannel, boolean>; maxAvailable: boolean; link: (c: ColleagueChannel) => void } | null;
   items: AccountItem[];
   alerts: { permission: NotificationPermission | "unsupported"; requestPermission: () => void };
+  // Сохранили «Мои данные»: заполнено ли теперь всё — по этому гаснет
+  // отметка на имени в шапке.
+  onProfileSaved?: (complete: boolean) => void;
   onSignOut: (everywhere?: boolean) => void;
   onClose: () => void;
 }) {
@@ -64,8 +69,10 @@ export default function AccountModal({
   const [desktopOffer] = useState(
     () => typeof navigator !== "undefined" && !/Electron|Android|iPhone|iPad|Mobile/i.test(navigator.userAgent),
   );
-  const [email, setEmail] = useState<string | null>(null);
+  // Что сохранено (null — ещё не прочитано) и что набрано в полях.
+  const [saved, setSaved] = useState<{ email: string; phone: string } | null>(null);
   const [draftEmail, setDraftEmail] = useState("");
+  const [draftPhone, setDraftPhone] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -75,46 +82,65 @@ export default function AccountModal({
     let alive = true;
     fetch("/api/account/credentials")
       .then((res) => res.json())
-      .then((data: { email?: string }) => {
+      .then((data: { email?: string; phone?: string }) => {
         if (!alive) return;
-        setEmail(data.email ?? "");
+        setSaved({ email: data.email ?? "", phone: data.phone ?? "" });
         setDraftEmail(data.email ?? "");
+        setDraftPhone(data.phone ?? "");
       })
-      .catch(() => alive && setEmail(""));
+      .catch(() => alive && setSaved({ email: "", phone: "" }));
     return () => {
       alive = false;
     };
   }, []);
 
+  const email = saved?.email ?? "";
+  const emailChanged = draftEmail.trim().toLowerCase() !== email.toLowerCase();
+  const phoneChanged = draftPhone.trim() !== (saved?.phone ?? "");
+  const changed = emailChanged || phoneChanged || !!password;
+
   async function save(e: FormEvent) {
     e.preventDefault();
     setNote(null);
-    const problem = emailProblem(draftEmail) || (password ? passwordProblem(password) : "");
+    // Те же проверки, что на сервере, — чтобы сказать о них, пока человек
+    // смотрит на поле, а не после похода в сеть.
+    const problem =
+      (emailChanged && draftEmail.trim() ? emailProblem(draftEmail) : "") ||
+      (password ? passwordProblem(password) : "") ||
+      (phoneChanged && normalizePhone(draftPhone) === null ? "Не похоже на номер телефона — например, +7 900 123-45-67" : "");
     if (problem) return setNote({ ok: false, text: problem });
-    if (!email && !password) return setNote({ ok: false, text: "Придумайте пароль — без него с компьютера не войти" });
+    if (emailChanged && draftEmail.trim() && !email && !password) {
+      return setNote({ ok: false, text: "Придумайте пароль — без него с компьютера не войти" });
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/account/credentials", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: draftEmail, password }),
+        body: JSON.stringify({
+          ...(emailChanged ? { email: draftEmail } : {}),
+          ...(password ? { password } : {}),
+          ...(phoneChanged ? { phone: draftPhone } : {}),
+        }),
       });
-      const data = (await res.json().catch(() => null)) as { ok?: boolean; email?: string; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; email?: string; phone?: string; error?: string } | null;
       if (!res.ok || !data?.ok) {
         setNote({ ok: false, text: data?.error || "Не получилось сохранить" });
         return;
       }
-      setEmail(data.email || draftEmail);
+      const next = { email: data.email ?? email, phone: data.phone ?? saved?.phone ?? "" };
+      setSaved(next);
+      setDraftEmail(next.email);
+      setDraftPhone(next.phone);
       setPassword("");
-      setNote({ ok: true, text: password ? "Сохранено. С компьютера входите с этой почтой и паролем." : "Почта сохранена." });
+      onProfileSaved?.(!!next.email && !!next.phone);
+      setNote({ ok: true, text: password ? "Сохранено. С компьютера можно входить с этой почтой и паролем." : "Сохранено." });
     } catch (err) {
       setNote({ ok: false, text: humanError(err, "Не получилось сохранить") });
     } finally {
       setBusy(false);
     }
   }
-
-  const changed = draftEmail.trim().toLowerCase() !== (email || "").toLowerCase() || !!password;
   // Выбирать есть из чего, только когда подключены оба: с одним трекер и
   // так пишет в него.
   const bothConnected = messenger
@@ -137,6 +163,66 @@ export default function AccountModal({
             <Icon name="close" size={18} />
           </button>
         </div>
+
+        {/* Первым, сразу под именем: это и есть «второй шаг» после
+            подключения бота, и кабинет открывается сам ради него, пока
+            данные не заполнены (NewTracker, profileIncomplete). */}
+        <section className="account-section" id="accountProfile">
+          <h3>Мои данные</h3>
+          {saved === null ? (
+            <p className="field-hint">Загружаю…</p>
+          ) : (
+            <form onSubmit={save} className="account-form">
+              <p className="field-hint">
+                Рабочая почта и телефон — чтобы с вами можно было связаться. Почта с паролем — запасной вход с компьютера;
+                основной — кнопкой «Войти через Telegram» (или MAX) на странице входа, без пароля.
+              </p>
+              <label className="account-field">
+                <span>Рабочая почта</span>
+                <input
+                  id="accountEmail"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="ivanov@company.ru"
+                  value={draftEmail}
+                  onChange={(e) => setDraftEmail(e.target.value)}
+                />
+              </label>
+              <label className="account-field">
+                <span>Телефон</span>
+                <input
+                  id="accountPhone"
+                  type="tel"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="+7 900 123-45-67"
+                  value={draftPhone}
+                  onChange={(e) => setDraftPhone(e.target.value)}
+                />
+              </label>
+              <label className="account-field">
+                <span>{email ? "Новый пароль" : "Пароль"}</span>
+                <span className="account-pass">
+                  <input
+                    id="accountPassword"
+                    type={show ? "text" : "password"}
+                    autoComplete="new-password"
+                    placeholder={email ? "Оставьте пустым, чтобы не менять" : "Не короче 8 символов"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button type="button" className="btn btn-small" onClick={() => setShow((v) => !v)}>
+                    {show ? "Скрыть" : "Показать"}
+                  </button>
+                </span>
+              </label>
+              {note && <div className={note.ok ? "account-ok" : "ms-link-error"}>{note.text}</div>}
+              <button type="submit" id="accountSaveBtn" className="btn btn-primary btn-small" disabled={busy || !changed}>
+                {busy ? "Сохраняю…" : "Сохранить"}
+              </button>
+            </form>
+          )}
+        </section>
 
         <section className="account-section">
           <h3>Мессенджеры</h3>
@@ -183,53 +269,6 @@ export default function AccountModal({
           </p>
         </section>
 
-        <section className="account-section">
-          <h3>Вход с компьютера</h3>
-          <p className="field-hint">
-            Проще всего — без пароля: на странице входа кнопка «Войти через Telegram» (или MAX), бот спросит «это вы?», и
-            трекер откроется. Почта и пароль ниже — запасной путь.
-          </p>
-          {email === null ? (
-            <p className="field-hint">Загружаю…</p>
-          ) : (
-            <form onSubmit={save} className="account-form">
-              <p className="field-hint">
-                {email
-                  ? "На компьютере вы входите с этой почтой и паролем. Пароль можно сменить здесь же."
-                  : "Сейчас вы входите через мессенджер. Чтобы открывать трекер на компьютере, задайте почту и пароль."}
-              </p>
-              <label className="account-field">
-                <span>Почта</span>
-                <input
-                  type="email"
-                  autoComplete="email"
-                  placeholder="ivanov@company.ru"
-                  value={draftEmail}
-                  onChange={(e) => setDraftEmail(e.target.value)}
-                />
-              </label>
-              <label className="account-field">
-                <span>{email ? "Новый пароль" : "Пароль"}</span>
-                <span className="account-pass">
-                  <input
-                    type={show ? "text" : "password"}
-                    autoComplete="new-password"
-                    placeholder={email ? "Оставьте пустым, чтобы не менять" : "Не короче 8 символов"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                  <button type="button" className="btn btn-small" onClick={() => setShow((v) => !v)}>
-                    {show ? "Скрыть" : "Показать"}
-                  </button>
-                </span>
-              </label>
-              {note && <div className={note.ok ? "account-ok" : "ms-link-error"}>{note.text}</div>}
-              <button type="submit" className="btn btn-primary btn-small" disabled={busy || !changed}>
-                {busy ? "Сохраняю…" : "Сохранить"}
-              </button>
-            </form>
-          )}
-        </section>
 
 
         {desktopOffer && (
