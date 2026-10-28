@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { messengerInput, readInput } from "@/lib/apiInput";
 import { preferredMessenger } from "@/lib/colleagues";
 
-// Куда писать мне — MAX или Telegram (миграция 0069).
+// Куда писать мне — MAX или Telegram (миграция 0070).
 //
 // 28.10.2026: «возможность выбрать только один бот, приоритетный конечно
 // MAX, но и телеграмм должен быть доступен для выбора». Выбирает человек

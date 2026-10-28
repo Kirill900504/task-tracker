@@ -32,7 +32,7 @@ export type OwnerChat = { channel: BotChannelConfig; chatId: number };
 export async function ownerChats(admin: SupabaseClient, userId: string): Promise<OwnerChat[]> {
   // Обе таблицы — одним заходом, а не по очереди (тот же приём, что у
   // findActorByChat: вопросы, не зависящие друг от друга, задаются разом).
-  // Выбор мессенджера лежит на его строке «(я)» (миграция 0069) — тем же
+  // Выбор мессенджера лежит на его строке «(я)» (миграция 0070) — тем же
   // заходом, что и чаты.
   const channels = await activeChannels();
   const [rows, self] = await Promise.all([

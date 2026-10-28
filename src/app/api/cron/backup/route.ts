@@ -63,7 +63,7 @@ export async function GET(req: Request) {
   let sent = 0;
   let failed = 0;
   for (const [userId, connected] of byUser) {
-    // В выбранный мессенджер (миграция 0069, MAX по умолчанию), второй —
+    // В выбранный мессенджер (миграция 0070, MAX по умолчанию), второй —
     // только запасом, если первый файл не принял (см. ниже).
     const { data: self } = await admin.from("assignees").select("messenger").eq("user_id", userId).like("name", "%(я)").limit(1).maybeSingle();
     const want = preferredMessenger((self as { messenger?: string | null } | null)?.messenger);

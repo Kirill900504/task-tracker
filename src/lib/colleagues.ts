@@ -20,7 +20,7 @@ export type ColleagueRow = {
   name: string;
   telegram_chat_id: number | null;
   max_user_id: number | null;
-  // Куда человек велел писать (миграция 0069): пусто — MAX. Выборка,
+  // Куда человек велел писать (миграция 0070): пусто — MAX. Выборка,
   // которая кормит chatsFor, обязана просить эту колонку
   // (PEOPLE_CHAT_COLUMNS), иначе выбравший Telegram молча получит MAX.
   messenger?: string | null;

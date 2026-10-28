@@ -314,7 +314,7 @@ export async function GET(req: Request) {
           // «ответа нет» про человека в отпуске — неправда, и он о ней знает.
           const { data: waitingRows } = await admin
             .from("assignees")
-            .select("id, name, telegram_chat_id, max_user_id, away_until")
+            .select("id, name, telegram_chat_id, max_user_id, messenger, away_until")
             .in("id", task.waiting.map((w) => w.assigneeId));
           const present = ((waitingRows || []) as (ColleagueRow & { away_until: string | null })[]).filter(
             (p) => !isAwayOn(p.away_until, today),
@@ -361,7 +361,7 @@ export async function GET(req: Request) {
         await onceOnly(admin, { userId, kind: "unaccepted_nudge", refId: w.participantId, date: today }, async () => {
           const { data: person } = await admin
             .from("assignees")
-            .select("id, name, telegram_chat_id, max_user_id, away_until")
+            .select("id, name, telegram_chat_id, max_user_id, messenger, away_until")
             .eq("id", w.assigneeId)
             .maybeSingle();
           // В отпуске — не теребим: задача дождётся его возвращения.
