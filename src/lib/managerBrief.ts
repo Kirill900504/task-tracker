@@ -43,17 +43,13 @@ export type ManagerBriefFacts = {
   together: { title: string; note: string }[];
 };
 
+// Сводка уходит, только когда ГОРИТ срок: что-то просрочено, срок сегодня
+// или до следующей сводки. 28.10.2026, его слова: «только по утрам и
+// только если подходит срок выполнения или уже просроченные есть».
+// Остальное (ответы, встречи, обсуждения) едет в ней попутно, но само по
+// себе утреннего сообщения не стоит — у него своя доставка.
 export function managerBriefIsEmpty(f: ManagerBriefFacts): boolean {
-  return (
-    !f.overdue.length &&
-    !f.today.length &&
-    !f.soon.length &&
-    !f.unanswered.length &&
-    !f.meetings.length &&
-    !f.returned.length &&
-    !f.discussed.length &&
-    !f.together.length
-  );
+  return !f.overdue.length && !f.today.length && !f.soon.length;
 }
 
 export async function buildManagerBrief(

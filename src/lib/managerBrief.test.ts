@@ -64,10 +64,11 @@ describe("утренняя сводка руководителю", () => {
     expect(text.indexOf("Вместе с вами")).toBeLessThan(text.indexOf("Писали в обсуждениях"));
   });
 
-  it("сводка с одним лишь обсуждением всё-таки уходит", () => {
-    // Пустой её считать нельзя: иначе единственное, что случилось за сутки,
-    // человек не увидит.
-    expect(managerBriefIsEmpty(facts({ discussed: [{ title: "Смета" }] }))).toBe(false);
+  it("без горящих сроков сводка не уходит, что бы в ней ни было", () => {
+    // 28.10.2026: утреннее сообщение — только когда просрочено или
+    // подходит срок.
+    expect(managerBriefIsEmpty(facts({ discussed: [{ title: "Смета" }], unanswered: [{ title: "А" }] }))).toBe(true);
+    expect(managerBriefIsEmpty(facts({ overdue: [{ title: "А", deadline: "2026-10-01" }] }))).toBe(false);
     expect(managerBriefIsEmpty(facts())).toBe(true);
   });
 });
