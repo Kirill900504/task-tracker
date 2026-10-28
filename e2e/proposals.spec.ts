@@ -59,7 +59,7 @@ test("встреча с повтором записывает правило, и
     })
     .toBe("weekly");
 
-  await chip.click();
+  await chip.click(CARD_CORNER);
   await expect(page.locator(".meeting-recur-note")).toContainText("каждую неделю");
   await page.click("#meetingStopRepeat");
   await expect
@@ -225,7 +225,7 @@ test("повестка: пункт дописывается, получает и
   await expect
     .poll(async () => (await admin.from("meetings").select("id").eq("user_id", ownerId).eq("title", title).maybeSingle()).data?.id, { timeout: 20_000 })
     .toBeTruthy();
-  await chip.click();
+  await chip.click(CARD_CORNER);
   const point = "Смета по складу";
   await page.fill("#agendaInput", point);
   await page.locator("#agendaInput").press("Enter");

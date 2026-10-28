@@ -388,7 +388,7 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   // ни время, ни состав — они показаны фактом. Проверяется и то, что
   // сохранилось именно выбранное (время и участник видны в сводке), и то,
   // что редактировать их отсюда нечем: полей нет вовсе.
-  await chip.click();
+  await chip.click(CARD_CORNER);
   // Сводка встречи — тот же блок, что у задачи (ItemFacts, «окно созданной
   // встречи должно быть однотипным с окном созданной задачи»): название
   // строкой над ней, дата, время и состав внутри.
@@ -1438,7 +1438,7 @@ test("время и состав встречи меняются только п
   await waitForSaved(page);
 
   // Открытая встреча полей не даёт — только факт и кнопку переноса.
-  await chip.click();
+  await chip.click(CARD_CORNER);
   await expect(page.locator("#mTitle")).toHaveCount(0);
   await expect(page.locator("#mTimeGrid")).toHaveCount(0);
   await expect(page.locator("#meetingMoveBtn")).toBeVisible();

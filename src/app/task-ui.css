@@ -109,26 +109,30 @@
 .task.kind-incoming .task-top .task-title{border-color:rgba(201,138,143,.35);}
 .task.kind-self .task-top .task-title{border-color:rgba(134,184,150,.28);}
 .task-top .check{margin-top:3px;}
-/* Название, которое можно поправить (постановщику открытой задачи): курсор
-   ввода, фирменная рамка и карандаш в углу на наведение — сразу видно, что
-   нажатие здесь правит, а не открывает. Карандаш лежит поверх хвоста
-   строки, а не отнимает у названия место у всех кубиков разом. */
-.task-top .task-title.renamable{position:relative; cursor:text;}
-.task-top .task-title.renamable:hover{border-color:var(--accent);}
+/* Название, которое можно поправить (постановщику открытой задачи и
+   организатору встречи): курсор ввода, фирменная рамка и карандаш в углу на
+   наведение — сразу видно, что нажатие здесь правит, а не открывает.
+   Карандаш лежит поверх хвоста строки, а не отнимает у названия место у
+   всех карточек разом. Одно правило на кубик задачи и карточку встречи. */
+.task-top .task-title.renamable, .meeting-chip .mtitle.renamable{position:relative; cursor:text;}
+.task-top .task-title.renamable:hover, .meeting-chip .mtitle.renamable:hover{border-color:var(--accent);}
 .task-title-pen{
   position:absolute; top:3px; right:3px; width:20px; height:20px; border-radius:var(--radius-xs);
   display:inline-flex; align-items:center; justify-content:center;
   background:var(--accent); color:#fff; opacity:0; transition:opacity .12s ease; pointer-events:none;
 }
-.task-top .task-title.renamable:hover .task-title-pen{opacity:1;}
-.task-title-edit{flex:1; min-width:0; display:block;}
-.task-title-input{
+.task-top .task-title.renamable:hover .task-title-pen,
+.meeting-chip .mtitle.renamable:hover .task-title-pen{opacity:1;}
+/* Поле правки (TitleEditField) встаёт на место названия той же ширины. */
+.title-edit{flex:1; min-width:0; display:block;}
+.task-title-input, .mtitle-input{
   display:block; width:100%; box-sizing:border-box; resize:none; margin:0;
   padding:4px 9px; border-radius:var(--radius-sm);
   background:rgba(0,0,0,.28); border:1px solid var(--accent); outline:none; color:var(--ink);
   font:inherit; font-size:13.5px; font-weight:700; line-height:1.38; letter-spacing:-.005em;
   box-shadow:0 0 0 3px var(--accent-soft);
 }
+.mtitle-input{padding:3px 8px; line-height:1.35;}
 @media (max-width:800px){
   .task-top .task-title{font-size:15px;}
   .task-top .check{margin-top:2px;}

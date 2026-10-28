@@ -208,6 +208,19 @@ export default function MeetingsPanel({
     });
   }
 
+  // Название правит организатор, пока встреча не закрыта, — прямо в списке
+  // и карандашом в окне (28.10.2026, «сделай аналогично и во встречах»).
+  // Это одна колонка движка синхронизации, а не перенос: дата, время и
+  // состав по-прежнему меняются только новой встречей.
+  function renameOf(m: Meeting): ((title: string) => void) | undefined {
+    const open = !m.status || m.status === "planned" || m.status === "proposed";
+    if (!isMine(m, myUserId) || !open) return undefined;
+    return (title) => {
+      const current = meetings.find((x) => x.id === m.id) || m;
+      actions.saveMeeting({ ...current, title });
+    };
+  }
+
   function handleModalSave(m: Meeting, agenda?: string[]) {
     const before = modalMeeting;
     actions.saveMeeting(m);
@@ -672,6 +685,7 @@ export default function MeetingsPanel({
               onVote={(choice) => void voteFromList(m, choice)}
               unreadCount={unread[m.id]}
               canManage={isMine(m, myUserId)}
+              onRename={renameOf(m)}
             />
           ))}
         </div>
@@ -696,6 +710,7 @@ export default function MeetingsPanel({
               onVote={(choice) => void voteFromList(m, choice)}
               unreadCount={unread[m.id]}
               canManage={isMine(m, myUserId)}
+              onRename={renameOf(m)}
               justCreated={justCreatedId === m.id}
             />
           ))
@@ -829,6 +844,7 @@ export default function MeetingsPanel({
               : undefined
           }
           onRecapTasks={onCreateTasks ? (m, items) => openRecapTasks(m, items) : undefined}
+          onRename={modalMeeting ? renameOf(modalMeeting) : undefined}
         />
       )}
 

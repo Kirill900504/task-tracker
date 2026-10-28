@@ -182,7 +182,7 @@ test("«+» и в полях правки: мысль, описание зада
   await page.click("#meetingSaveBtn");
   const chip = page.locator(".meeting-chip", { hasText: mTitle });
   await expect(chip).toBeVisible();
-  await chip.locator(".mtitle").click();
+  await chip.click(CARD_CORNER);
   const resultRow = page.locator(".input-with-mic", { has: page.locator("#mResult") });
   await expectBrandPlusBeforeMic(resultRow);
   await expect(page.locator("#resultAddBtn")).toBeDisabled();
@@ -190,6 +190,6 @@ test("«+» и в полях правки: мысль, описание зада
   await page.click("#resultAddBtn");
   await page.keyboard.press("Escape");
   await expect(page.locator("#meetingOverlay")).toHaveCount(0);
-  await chip.locator(".mtitle").click();
+  await chip.click(CARD_CORNER);
   await expect(page.locator("#mResult")).toHaveValue("Решили плюсом");
 });

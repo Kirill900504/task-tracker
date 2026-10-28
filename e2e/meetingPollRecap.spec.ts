@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { CARD_CORNER } from "./helpers";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { userFilePath } from "./userFile";
@@ -49,7 +50,7 @@ test("закрытая встреча предлагает задачи из п�
   await page.click("#meetingSaveBtn");
   const chip = page.locator(".meeting-chip", { hasText: title });
   await expect(chip).toBeVisible();
-  await chip.locator(".mtitle").click();
+  await chip.click(CARD_CORNER);
   const stamp = Date.now();
   for (const item of [`Обзвонить филиалы ${stamp}`, `Сверить прайс ${stamp}`]) {
     await page.fill("#agendaInput", item);
@@ -110,7 +111,7 @@ test("опрос времени: варианты, и организатор н�
   // В списке — «Опрос времени», в окне — варианты, организатор назначает.
   const chip = page.locator(".meeting-chip", { hasText: title });
   await expect(chip.locator(".pill-proposed")).toHaveText("Опрос времени");
-  await chip.locator(".mtitle").click();
+  await chip.click(CARD_CORNER);
   const poll = page.locator("#meetingPoll");
   await expect(poll.locator(".poll-row")).toHaveCount(2);
   await poll.locator('.poll-row[data-slot="1"]').getByRole("button", { name: "Назначить" }).click();

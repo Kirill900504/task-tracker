@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { grow, shrink } from "@/lib/smoothHeight";
-import AutoGrowTextarea from "./AutoGrowTextarea";
+import TitleEditField from "./TitleEditField";
 import Icon from "./Icon";
 
 // Шапка окна: название, действия и × в правом верхнем углу.
@@ -58,35 +58,22 @@ export default function ItemModalHead({
   closeId?: string;
   // Название без рамки — у служебных окон («Команда», «Разделы»).
   plain?: boolean;
-  // Название можно поправить — у открытой задачи её постановщику. Тогда в
-  // рамке названия стоит карандаш (28.10.2026, его слова: «сделай удобный
-  // значок в поле названия задачи, понятный! Что можно отредактировать или
-  // дополнить название задачи»). Без него название только читается.
+  // Название можно поправить — у открытой задачи и встречи тому, кто их
+  // поставил. Тогда в рамке названия стоит карандаш (28.10.2026, его слова:
+  // «сделай удобный значок в поле названия задачи, понятный! Что можно
+  // отредактировать или дополнить название задачи»). Без него название
+  // только читается.
   onRename?: (title: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const full = typeof title === "string" ? title : undefined;
   const renamable = !plain && !!onRename && full !== undefined;
-  // Правка идёт в той же рамке, что и название: поле встаёт на его место,
-  // Enter или щелчок мимо сохраняют, Escape отменяет — и только правку, а не
-  // окно (preventDefault снимает «запрос на закрытие» у <dialog>, см.
-  // useEscapeToClose). Пустое название не сохраняется: задача без названия
-  // на доске — пустой кубик.
-  const [draft, setDraft] = useState<string | null>(null);
-  const renaming = draft !== null;
-  const doneRef = useRef(false);
+  // Правка идёт в той же рамке, что и название: поле встаёт на его место
+  // (TitleEditField — то же поле, что на карточках).
+  const [renaming, setRenaming] = useState(false);
   function startRename() {
-    if (!renamable) return;
-    doneRef.current = false;
-    setDraft(full ?? "");
-  }
-  function finishRename(save: boolean) {
-    if (doneRef.current || draft === null) return;
-    doneRef.current = true;
-    const next = draft.trim();
-    if (save && next && next !== full) onRename?.(next);
-    setDraft(null);
+    if (renamable) setRenaming(true);
   }
   // Название раскрывается плавно (21.10.2026: «большое описание плавно
   // спокойно выплывало, без резких рывков»), а номер и кнопки при этом стоят
@@ -130,20 +117,13 @@ export default function ItemModalHead({
       <div className={"item-head-main" + (renamable ? " renamable" : "")}>
         {plain && kicker && <div className="item-head-kicker">{kicker}</div>}
         {renaming ? (
-          <AutoGrowTextarea
-            id="taskTitleEdit"
+          <TitleEditField
+            id="titleEdit"
             className="item-head-title-input"
-            singleLine
-            focusAtEnd
-            value={draft}
-            onChange={setDraft}
-            onEnter={() => finishRename(true)}
-            onBlur={() => finishRename(true)}
-            onKeyDown={(e) => {
-              if (e.key !== "Escape") return;
-              e.preventDefault();
-              e.stopPropagation();
-              finishRename(false);
+            value={full ?? ""}
+            onDone={(next) => {
+              setRenaming(false);
+              if (next) onRename?.(next);
             }}
           />
         ) : (
@@ -162,7 +142,7 @@ export default function ItemModalHead({
               <button
                 type="button"
                 className="item-head-rename"
-                id="renameTaskBtn"
+                id="renameTitleBtn"
                 title="Изменить название"
                 aria-label="Изменить название"
                 onClick={startRename}

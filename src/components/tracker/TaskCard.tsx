@@ -8,7 +8,7 @@ import { withoutSelfMark } from "@/lib/actorName";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSwipeComplete } from "@/hooks/useSwipeComplete";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
-import AutoGrowTextarea from "./AutoGrowTextarea";
+import TitleEditField from "./TitleEditField";
 import Icon from "./Icon";
 import PopLayer from "./PopLayer";
 import PersonBadge from "./PersonBadge";
@@ -141,19 +141,10 @@ export default function TaskCard({
   // открывать карточку: иначе открыть её было бы нечем. Там название
   // правят карандашом в открытой задаче.
   const renamable = !!onRename && !isMobile;
-  const [draft, setDraft] = useState<string | null>(null);
-  const renameDone = useRef(false);
+  const [renaming, setRenaming] = useState(false);
   function startRename() {
     stopPeek();
-    renameDone.current = false;
-    setDraft(task.title);
-  }
-  function finishRename(save: boolean) {
-    if (renameDone.current || draft === null) return;
-    renameDone.current = true;
-    const next = draft.trim();
-    if (save && next && next !== task.title) onRename?.(next);
-    setDraft(null);
+    setRenaming(true);
   }
   // Меню карточки: открыто ли и от чего. Якорь нужен только на
   // компьютере — на телефоне меню и так полоса у нижнего края, — поэтому
@@ -278,31 +269,15 @@ export default function TaskCard({
               переписке одним словом (миграция 0045). Левый верхний угол —
               его место по словам Кирилла. */}
           <span className="task-num">{task.number != null ? `#${task.number}` : ""}</span>
-          {draft !== null ? (
-            // Поле живёт внутри перетаскиваемого кубика, поэтому всё, что в
-            // нём происходит, дальше поля не идёт: щелчок открыл бы
-            // карточку, а пробел и Enter dnd-kit читает как «взять кубик
-            // клавиатурой» — набранное слово уносило бы задачу в соседний
-            // столбец. Escape отменяет правку, Enter и щелчок мимо сохраняют.
-            <span
-              className="task-title-edit"
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-            >
-              <AutoGrowTextarea
-                className="task-title-input"
-                singleLine
-                focusAtEnd
-                value={draft}
-                onChange={setDraft}
-                onEnter={() => finishRename(true)}
-                onBlur={() => finishRename(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") finishRename(false);
-                }}
-              />
-            </span>
+          {renaming ? (
+            <TitleEditField
+              className="task-title-input"
+              value={task.title}
+              onDone={(next) => {
+                setRenaming(false);
+                if (next) onRename?.(next);
+              }}
+            />
           ) : (
             <div
               className={"task-title" + (renamable ? " renamable" : "")}
