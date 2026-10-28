@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fmtDate } from "@/lib/taskDisplay";
 import { withoutSelfMark } from "@/lib/actorName";
 import { numbered } from "@/lib/taskRef";
 import { selfTaskIds } from "@/lib/selfTaskServer";
@@ -15,6 +14,8 @@ import { selfTaskIds } from "@/lib/selfTaskServer";
 
 export type ManagerBriefFacts = {
   name: string;
+  // День сводки: от него считаются «6 дн. назад» и «через 2 дн.».
+  date: string;
   overdue: { title: string; deadline: string }[];
   today: { title: string; deadline: string }[];
   // Сроки ДО следующей сводки (lib/briefDays): сводка выходит по
@@ -64,6 +65,7 @@ export async function buildManagerBrief(
   const facts: ManagerBriefFacts = {
     // Без «(я)»: «Доброе утро, Кирилл Кучеренко (я)» — 28.10.2026.
     name: withoutSelfMark(assignee.name),
+    date: today,
     overdue: [],
     today: [],
     soon: [],
@@ -227,46 +229,80 @@ export async function buildManagerBrief(
   return facts;
 }
 
+// Вид сводки — «карточки», выбран Кириллом 28.10.2026 из трёх присланных
+// ему вариантов («Настрой более выразительно и читабельно»). Раздел —
+// заголовком капсом с числом и чертой, задача — строкой с маркером, а срок
+// — отдельной строкой под ней: дата и «сколько дней» читаются, не
+// выискиваясь в хвосте длинного названия. Названия режутся: #148 в одну
+// строку занимал полэкрана телефона.
+const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+const RULE = "━━━━━━━━━━━━";
+const TITLE_MAX = 60;
+
+function dayDiff(from: string, to: string): number {
+  return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86_400_000);
+}
+
+function shortDate(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${WEEKDAYS[new Date(iso + "T00:00:00Z").getUTCDay()]} ${d}.${m}`;
+}
+
+function clip(title: string): string {
+  return title.length > TITLE_MAX ? title.slice(0, TITLE_MAX - 1).trimEnd() + "…" : title;
+}
+
+function section(lines: string[], head: string, count: number) {
+  lines.push("", `${head} · ${count}`, RULE);
+}
+
 export function composeManagerBrief(f: ManagerBriefFacts): string {
-  const lines = [`Доброе утро, ${f.name}.`];
+  const lines = [`☀️ Доброе утро, ${f.name}!`];
 
   // Порядок продиктован тем, что человек должен сделать раньше: сначала
   // то, что уже горит, потом сегодняшнее, потом то, где ждут его ответа.
   if (f.overdue.length) {
-    lines.push("", "⚠ Просрочено:");
-    for (const t of f.overdue) lines.push(`• ${t.title} — срок был ${fmtDate(t.deadline)}`);
+    section(lines, "🔥 ПРОСРОЧЕНО", f.overdue.length);
+    for (const t of [...f.overdue].sort((a, b) => a.deadline.localeCompare(b.deadline))) {
+      const ago = dayDiff(t.deadline, f.date);
+      lines.push(`▪️ ${clip(t.title)}`, `      ⌛ срок был ${shortDate(t.deadline)}${ago > 0 ? ` · ${ago} дн. назад` : ""}`);
+    }
   }
   if (f.today.length) {
-    lines.push("", "Сегодня:");
-    for (const t of f.today) lines.push(`• ${t.title}`);
+    section(lines, "📌 СЕГОДНЯ", f.today.length);
+    for (const t of f.today) lines.push(`▪️ ${clip(t.title)}`, "      ⏰ срок сегодня");
   }
   if (f.soon.length) {
-    lines.push("", "⏳ Скоро срок:");
-    for (const t of [...f.soon].sort((a, b) => a.deadline.localeCompare(b.deadline))) lines.push(`• ${t.title} — до ${fmtDate(t.deadline)}`);
+    section(lines, "⏳ СКОРО СРОК", f.soon.length);
+    for (const t of [...f.soon].sort((a, b) => a.deadline.localeCompare(b.deadline))) {
+      const left = dayDiff(f.date, t.deadline);
+      lines.push(`▫️ ${clip(t.title)}`, `      📅 ${left === 1 ? "завтра" : `${shortDate(t.deadline)}, через ${left} дн.`}`);
+    }
   }
   if (f.returned.length) {
-    lines.push("", "Вернули на доработку:");
-    for (const t of f.returned) lines.push(`• ${t.title}${t.comment ? " — " + t.comment : ""}`);
+    section(lines, "↩️ ВЕРНУЛИ НА ДОРАБОТКУ", f.returned.length);
+    for (const t of f.returned) lines.push(`▪️ ${clip(t.title)}`, ...(t.comment ? [`      💬 ${clip(t.comment)}`] : []));
   }
   if (f.unanswered.length) {
-    lines.push("", "Ждут вашего ответа:");
-    for (const t of f.unanswered) lines.push(`• ${t.title}`);
+    section(lines, "❓ ЖДУТ ВАШЕГО ОТВЕТА", f.unanswered.length);
+    for (const t of f.unanswered) lines.push(`▫️ ${clip(t.title)}`);
   }
   if (f.meetings.length) {
-    lines.push("", "Встречи сегодня:");
-    for (const m of f.meetings) lines.push(`• ${m.time ? m.time + " — " : ""}${m.title}`);
+    section(lines, "🗓 ВСТРЕЧИ СЕГОДНЯ", f.meetings.length);
+    for (const m of f.meetings) lines.push(`▫️ ${m.time ? m.time + " — " : ""}${clip(m.title)}`);
   }
   // Общие задачи — перед обсуждениями: это ещё про работу, а не про
   // чтение. «Отчитался» соседа означает, что задача ждёт одного вас.
   if (f.together.length) {
-    lines.push("", "Вместе с вами:");
-    for (const t of f.together) lines.push(`• ${t.title} — ${t.note}`);
+    section(lines, "🤝 ВМЕСТЕ С ВАМИ", f.together.length);
+    for (const t of f.together) lines.push(`▫️ ${clip(t.title)}`, `      ${t.note}`);
   }
   // Последним: это не то, что нужно сделать, а то, что стоит прочитать.
   if (f.discussed.length) {
-    lines.push("", "💬 Писали в обсуждениях:");
-    for (const t of f.discussed) lines.push(`• ${t.title}`);
+    section(lines, "💬 ПИСАЛИ В ОБСУЖДЕНИЯХ", f.discussed.length);
+    for (const t of f.discussed) lines.push(`▫️ ${clip(t.title)}`);
   }
 
+  lines.push("", "Хорошего дня! 💪");
   return lines.join("\n");
 }
