@@ -608,7 +608,11 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
   // the fix for "I edited something, signed out immediately, and it was
   // gone" — the browser aborts in-flight requests on navigation, so signing
   // out first could discard a save that hadn't landed yet.
-  const signOut = useCallback(async (): Promise<{ ok: true } | { ok: false; reason: "pending-failure" | "error"; message?: string }> => {
+  // `everywhere` — «Выйти на всех устройствах» из личного кабинета. Обычный
+  // «Выйти» выходит ТОЛЬКО здесь: по умолчанию Supabase выходит везде
+  // (scope "global"), и выход с рабочего компьютера молча закрывал трекер и
+  // на телефоне, и в настольном приложении.
+  const signOut = useCallback(async (everywhere = false): Promise<{ ok: true } | { ok: false; reason: "pending-failure" | "error"; message?: string }> => {
     const db = dbRef.current;
     if (!db) return { ok: false, reason: "error", message: "not initialized" };
     await syncChainRef.current;
@@ -618,7 +622,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     if (hasPendingFailureRef.current) {
       return { ok: false, reason: "pending-failure" };
     }
-    const { error } = await db.auth.signOut();
+    const { error } = await db.auth.signOut({ scope: everywhere ? "global" : "local" });
     if (error) return { ok: false, reason: "error", message: error.message };
     if (userIdRef.current) await clearSnapshot(userIdRef.current);
     // Заодно — то, что ради быстрого старта лежит в localStorage: роль и

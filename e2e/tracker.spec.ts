@@ -941,17 +941,18 @@ test("an invite link appears under the person it was asked for", async ({ page }
   // кого-нибудь к мессенджеру, и у подключённого кнопки другие.
   const row = page
     .locator(".team-row")
-    .filter({ has: page.getByRole("button", { name: "Telegram", exact: true }) })
+    .filter({ has: page.getByRole("button", { name: "Пригласить", exact: true }) })
     .last();
   const name = (await row.locator(".team-name").innerText()).trim();
-  await row.getByRole("button", { name: "Telegram", exact: true }).click();
+  await row.getByRole("button", { name: "Пригласить", exact: true }).click();
 
   // Щедрый таймаут: первое обращение к маршруту — это ещё и его холодный
   // старт, а тест здесь про то, ГДЕ появляется ссылка, а не как быстро.
   const invite = page.locator("#inviteBlock");
   await expect(invite).toBeVisible({ timeout: 20_000 });
   await expect(invite).toContainText(name);
-  await expect(invite.locator(".invite-link")).toContainText("t.me/");
+  // Одна ссылка на всё — страница приглашения (lib/welcomeInvite).
+  await expect(invite.locator(".invite-message")).toContainText("/welcome/");
 
   // Стоит непосредственно за строкой этого человека…
   expect(await row.evaluate((el) => el.nextElementSibling?.id === "inviteBlock")).toBe(true);

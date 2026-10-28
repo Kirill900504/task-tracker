@@ -121,7 +121,7 @@ test("в «Команде» человека добавляют, убирают 
     await expect(row).toHaveClass(/just-added/);
     await expect(page.locator("#teamNotice")).toContainText("добавлен");
     // Следующий шаг стоит в его же строке.
-    await expect(row.getByRole("button", { name: "Telegram" })).toBeVisible();
+    await expect(row.getByRole("button", { name: "Пригласить" })).toBeVisible();
 
     // Дел у него нет — хватает подтверждения.
     await row.locator(".team-more").click();

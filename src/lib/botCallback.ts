@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig } from "@/lib/botTransport";
 import type { CallbackAction } from "@/lib/colleagues";
+import { isLoginAction, resolveLogin } from "@/lib/messengerLogin";
 import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, screenButtons, type ColleagueRow } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { sendToPerson } from "@/lib/reach";
@@ -96,6 +97,13 @@ async function routeBotCallback(
   // развилки ниже, иначе владельцу «Взять в работу» отвечала бы его
   // постановщицкая половина, где таких кнопок нет (lib/ideaInbox).
   if (isIdeaInboxAction(action)) return handleIdeaInbox(admin, chatId, action, channel);
+
+  // «Да, войти» под вопросом о входе на компьютере (lib/messengerLogin) —
+  // кем бы ни был нажавший: владелец, руководитель или человек без входа.
+  if (isLoginAction(action)) {
+    const text = await resolveLogin(admin, chatId, channel, action.id, action.action === "lgok");
+    return { toast: action.action === "lgok" ? "Вход" : "Отклонено", rewriteTo: text };
+  }
 
   // «🕐 Другое время» под приглашением — тоже кнопка ПОЛУЧАТЕЛЯ, кем бы он
   // ни был: владелец, позванный руководителем, предлагает время своей
