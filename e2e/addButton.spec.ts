@@ -1,7 +1,7 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
-import { pickSelfExecutor } from "./helpers";
+import { pickSelfExecutor, CARD_CORNER } from "./helpers";
 
 // «+» слева от микрофона у каждого поля, из которого что-то заводится, и в
 // фирменной заливке (21.10.2026, его слова: «слева от микрофона такую же
@@ -161,7 +161,7 @@ test("«+» и в полях правки: мысль, описание зада
   await page.click("#saveTaskBtn");
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
-  await card.locator(".task-title, .title").first().click();
+  await card.first().click(CARD_CORNER);
   const modal = page.locator("dialog[open]");
   await modal.locator("#editDescBtn").click();
   await expectBrandPlusBeforeMic(modal.locator("#taskDesc .input-with-mic"));

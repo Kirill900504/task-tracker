@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { pickSelfExecutor, pickCoexecutor } from "./helpers";
+import { pickSelfExecutor, pickCoexecutor, CARD_CORNER } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // Выход из «Завершённых» — весь путь, глазами человека.
@@ -97,7 +97,7 @@ test("принятая задача открывается заново кноп
   // (useWorkspaceRole переспрашивает её, пока список едет), и тест
   // обязан проверять починку, а не обходить её: первый заход должен
   // сразу показывать «Это поручено вам».
-  await card.click();
+  await card.click(CARD_CORNER);
   // Строка участия заводится на сервере (триггер плюс assignExecutors) и
   // приезжает realtime-ом чуть позже самой задачи — до неё блока «Это
   // поручено вам» в карточке просто нет.
@@ -118,7 +118,7 @@ test("принятая задача открывается заново кноп
   await expect(page.locator("#col-done .task", { hasText: title })).toBeVisible({ timeout: 15_000 });
 
   // И вот то, ради чего тест: из «Завершённых» есть выход.
-  await page.locator("#col-done .task", { hasText: title }).click();
+  await page.locator("#col-done .task", { hasText: title }).click(CARD_CORNER);
   const reopen = page.locator(".tp-review-actions .btn", { hasText: "Открыть заново" });
   await expect(reopen).toBeVisible();
   await reopen.click();
@@ -158,7 +158,7 @@ test("отказ тоже закрывает карточку и уводит з
   await expect(card).toBeVisible();
   await waitForSaved(page);
 
-  await card.click();
+  await card.click(CARD_CORNER);
   const decline = page.locator(".my-work .btn", { hasText: "Не могу" });
   await expect(decline).toBeVisible({ timeout: 20_000 });
   await decline.click();
@@ -186,7 +186,7 @@ test("отказ тоже закрывает карточку и уводит з
   // Ответ даётся один раз (lib/answerRules, 06.10.2026): открыв задачу
   // снова, человек видит свой отказ — и ни одной кнопки, которой его можно
   // перекрыть. До этого рядом с отказом стояла «Сделал».
-  await page.locator("#col-review .task", { hasText: title }).click();
+  await page.locator("#col-review .task", { hasText: title }).click(CARD_CORNER);
   await expect(page.locator(".my-work-said.declined")).toContainText("Нет доступа к смете", { timeout: 15_000 });
   await expect(page.locator(".my-work .ms-actions .btn")).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -212,7 +212,7 @@ test("отказ тоже закрывает карточку и уводит з
   // «Закрыть невыполненной» (14.10.2026): причина отказа уважительная —
   // постановщик закрывает задачу без результата, и заключительный
   // комментарий обязателен.
-  await page.locator("#col-review .task", { hasText: title }).click();
+  await page.locator("#col-review .task", { hasText: title }).click(CARD_CORNER);
   const closeBtn = page.locator("#closeUnfulfilledBtn");
   await expect(closeBtn).toHaveText("Закрыть невыполненной", { timeout: 15_000 });
   await closeBtn.click();

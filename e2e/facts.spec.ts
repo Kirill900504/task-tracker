@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
-import { pickSelfExecutor, pickCoexecutor } from "./helpers";
+import { pickSelfExecutor, pickCoexecutor, CARD_CORNER } from "./helpers";
 
 // Сводка задачи, блок «Результат» и переписка — то, что Кирилл просил
 // 21.09.2026 первыми двумя пунктами и чего не проверял ни один тест.
@@ -53,7 +53,7 @@ test("карточка задачи говорит, кто поручил, ко�
   await expect(card.locator(".task-people")).toBeVisible();
   await expect(card.locator(".task-due-pill")).toContainText(/до |сегодня|завтра|просрочено/i);
 
-  await card.click();
+  await card.click(CARD_CORNER);
   const facts = page.locator("#taskFacts");
   await expect(facts).toBeVisible();
   await expect(facts).toContainText("Постановщик");
@@ -106,7 +106,7 @@ test("карточка задачи говорит, кто поручил, ко�
   await page.reload();
   await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
 
-  await page.locator(`.task:has-text("${title}")`).first().click();
+  await page.locator(`.task:has-text("${title}")`).first().click(CARD_CORNER);
   const results = page.locator("#taskResults");
   await expect(results).toBeVisible({ timeout: 20_000 });
   await expect(results).toContainText("Готово, проверьте");
@@ -148,7 +148,7 @@ test("обсуждение выглядит перепиской: своя ре�
   await page.fill("#fTitle", title);
   await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
-  await page.locator(`.task:has-text("${title}")`).first().click();
+  await page.locator(`.task:has-text("${title}")`).first().click(CARD_CORNER);
 
   const composer = page.locator(".chat-composer textarea");
   await expect(composer).toBeVisible();
@@ -191,7 +191,7 @@ test("@ в обсуждении показывает всех участнико
   // Второй человек на задаче — чтобы в подсказке было из чего выбирать.
   await pickCoexecutor(page);
   await page.click("#saveTaskBtn");
-  await page.locator(`.task:has-text("${title}")`).first().click();
+  await page.locator(`.task:has-text("${title}")`).first().click(CARD_CORNER);
 
   const composer = page.locator(".chat-composer textarea");
   await expect(composer).toBeVisible();

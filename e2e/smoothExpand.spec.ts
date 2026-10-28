@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
-import { pickAnyExecutor } from "./helpers";
+import { pickAnyExecutor, CARD_CORNER } from "./helpers";
 
 // Длинное название в шапке задачи раскрывается ПЛАВНО, а номер и кнопки
 // рядом стоят на месте. 21.10.2026 Кирилл прислал два снимка: название из
@@ -50,7 +50,7 @@ test("длинное название в шапке раскрывается п�
   await page.click("#saveTaskBtn");
   const card = page.locator(".task", { hasText: String(stamp) });
   await expect(card).toHaveCount(1);
-  await card.locator(".task-title").click();
+  await card.click(CARD_CORNER);
   await expect(page.locator(".modal .item-head.one-line .item-head-title")).toBeVisible();
 
   const open = await clickAndSample(page);
@@ -113,7 +113,7 @@ test("короткое название в шапке не раскрывает�
   await page.click("#saveTaskBtn");
   const card = page.locator(".task", { hasText: String(stamp) });
   await expect(card).toHaveCount(1);
-  await card.locator(".task-title").click();
+  await card.click(CARD_CORNER);
   const title = page.locator(".modal .item-head.one-line .item-head-title");
   await expect(title).toHaveAttribute("data-overflow", "0");
   expect(await title.evaluate((el) => getComputedStyle(el).cursor)).toBe("default");

@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
-import { centerOnScreen, dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, signOut, settled as settledBox } from "./helpers";
+import { centerOnScreen, dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, signOut, settled as settledBox, CARD_CORNER } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // The one smoke test covering the actual "Definition of Done" checklist
@@ -344,7 +344,7 @@ test("deleting a task survives an immediate sign-out", async ({ page }) => {
 
   // Open it, delete it, then sign out immediately. Подтверждение — своё окно
   // трекера, а не системное окно браузера (см. components/Ask.tsx).
-  await page.locator(".task", { hasText: title }).click();
+  await page.locator(".task", { hasText: title }).click(CARD_CORNER);
   await page.click("#deleteTaskBtn");
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.click("#askOkBtn");
@@ -1044,7 +1044,7 @@ test("вопросы задаются окном трекера, а не бра�
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
 
   // Отмена в окне подтверждения означает «ничего не делать».
-  await page.locator(".task", { hasText: title }).click();
+  await page.locator(".task", { hasText: title }).click(CARD_CORNER);
   await page.click("#deleteTaskBtn");
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.click("#askCancelBtn");
@@ -1053,7 +1053,7 @@ test("вопросы задаются окном трекера, а не бра�
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
 
   // …а подтверждение — удаляет.
-  await page.locator(".task", { hasText: title }).click();
+  await page.locator(".task", { hasText: title }).click(CARD_CORNER);
   await page.click("#deleteTaskBtn");
   await page.click("#askOkBtn");
   await expect(page.locator(".task", { hasText: title })).toHaveCount(0);
