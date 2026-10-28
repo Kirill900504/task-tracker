@@ -1129,7 +1129,9 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
    от шага к шагу. */
 .modal.tour-modal{
   --tour-c:#4FA8D8;
-  max-width:560px; position:relative; overflow-x:hidden;
+  /* 680, а не 560: в карточке до пяти пунктов «кнопка — что делает», и на
+     узком окне каждый ложился в три строки — читалось простынёй. */
+  width:min(680px, 100%); max-width:680px; position:relative; overflow-x:hidden;
   background:
     radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--tour-c) 22%, transparent), transparent 70%),
     var(--paper);
@@ -1139,11 +1141,12 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .modal.tour-modal.tour-tone-sky{--tour-c:#4FA8D8;}
 .modal.tour-modal.tour-tone-blue{--tour-c:#6C9EF0;}
 .modal.tour-modal.tour-tone-green{--tour-c:#5FC48A;}
+.modal.tour-modal.tour-tone-orange{--tour-c:#EE9A5E;}
 .modal.tour-modal.tour-tone-amber{--tour-c:#E8B850;}
 .modal.tour-modal.tour-tone-violet{--tour-c:#B79AF0;}
 .modal.tour-modal.tour-tone-teal{--tour-c:#4FC7B8;}
 .modal.tour-modal.tour-tone-rose{--tour-c:#E68FA8;}
-.tour-card{min-height:330px; padding:4px 2px 0; animation:tour-in .26s var(--win-ease, ease);}
+.tour-card{min-height:400px; padding:4px 2px 0; animation:tour-in .26s var(--win-ease, ease);}
 @keyframes tour-in{from{opacity:0; transform:translateX(12px);} to{opacity:1; transform:none;}}
 @media (prefers-reduced-motion: reduce){ .tour-card{animation:none;} }
 .tour-hero{display:flex; align-items:center; gap:16px; margin:0 0 14px;}

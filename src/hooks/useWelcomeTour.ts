@@ -2,20 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { shouldShowTour } from "@/lib/welcomeTour";
+import { TOUR_VERSION, seenTourVersion, shouldShowTour } from "@/lib/welcomeTour";
 
 // Когда показать стартовое знакомство (правило — lib/welcomeTour) и как
 // запомнить, что его прошли.
 //
-// Отметка — в метаданных учётной записи (`tour_done`), а не в браузере:
+// Отметка — номер версии в метаданных учётной записи (`tour_version`), а не в браузере:
 // человек открывает трекер и на телефоне, и на ПК, и второй раз то же
 // знакомство на другом устройстве — уже навязчивость. Копия в localStorage
 // — только чтобы окно не всплыло снова в ту секунду, пока запись едет.
 //
-// Сессия читается из браузера (getSession), без запроса в сеть: на пути к
-// первому кадру сетевого ответа быть не должно.
+// Решение спрашивает учётную запись у сервера (getUser), а не у сессии в
+// браузере: метаданные в сессии — копия из токена, и на втором устройстве
+// она до часа помнит «не видел», то есть показала бы знакомство дважды. На
+// первый кадр это не влияет — окно всплывает поверх уже открытого трекера.
 
-const LOCAL_KEY = "kkt_tour_done";
+// Ключ несёт версию: отметка «видел первую» не должна прятать вторую.
+const LOCAL_KEY = `kkt_tour_v${TOUR_VERSION}`;
 
 export function useWelcomeTour(enabled: boolean) {
   const [open, setOpen] = useState(false);
@@ -24,9 +27,9 @@ export function useWelcomeTour(enabled: boolean) {
     if (!enabled) return;
     let alive = true;
     createClient()
-      .auth.getSession()
+      .auth.getUser()
       .then(({ data }) => {
-        const user = data.session?.user;
+        const user = data.user;
         if (!alive || !user) return;
         let localDone = false;
         try {
@@ -35,13 +38,13 @@ export function useWelcomeTour(enabled: boolean) {
           // Приватный режим — полагаемся на учётную запись.
         }
         const show = shouldShowTour({
-          createdAt: user.created_at,
-          done: localDone || user.user_metadata?.tour_done === true,
-          now: Date.now(),
+          seenVersion: localDone ? TOUR_VERSION : seenTourVersion(user.user_metadata),
           automated: typeof navigator !== "undefined" && navigator.webdriver === true,
         });
         if (show) setOpen(true);
-      });
+      })
+      // Без связи знакомство просто подождёт следующего открытия.
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -58,7 +61,7 @@ export function useWelcomeTour(enabled: boolean) {
       } catch {
         /* приватный режим */
       }
-      void db.auth.updateUser({ data: { tour_done: true } });
+      void db.auth.updateUser({ data: { tour_done: true, tour_version: TOUR_VERSION } });
     });
   }
 

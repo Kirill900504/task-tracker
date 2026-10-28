@@ -105,7 +105,7 @@ test("знакомство с трекером листается и ведёт 
   const tour = page.locator(".tour-modal");
   await expect(tour).toBeVisible();
   await expect(tour.locator(".tour-title")).toHaveText("Добро пожаловать!");
-  for (let i = 0; i < 12 && (await page.locator("#tourNextBtn").count()); i++) await page.click("#tourNextBtn");
+  for (let i = 0; i < 14 && (await page.locator("#tourNextBtn").count()); i++) await page.click("#tourNextBtn");
   await expect(tour.locator(".tour-title")).toHaveText("Последний шаг");
   await page.click("#tourProfileBtn");
   await expect(tour).toHaveCount(0);

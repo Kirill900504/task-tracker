@@ -1,24 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { shouldShowTour, tourSteps } from "./welcomeTour";
-
-const NOW = new Date("2026-10-28T12:00:00Z").getTime();
-const DAY = 24 * 60 * 60 * 1000;
+import { TOUR_VERSION, seenTourVersion, shouldShowTour, tourSteps } from "./welcomeTour";
 
 describe("стартовое знакомство — кому показывать", () => {
-  it("новому человеку — да", () => {
-    expect(shouldShowTour({ createdAt: new Date(NOW - DAY).toISOString(), done: false, now: NOW, automated: false })).toBe(true);
+  it("кто не видел — да, и новым, и давним", () => {
+    expect(shouldShowTour({ seenVersion: seenTourVersion({}), automated: false })).toBe(true);
   });
 
-  it("второй раз — нет, отметка в учётной записи", () => {
-    expect(shouldShowTour({ createdAt: new Date(NOW - DAY).toISOString(), done: true, now: NOW, automated: false })).toBe(false);
+  it("прошёл первую версию — увидит нынешнюю ещё раз", () => {
+    expect(seenTourVersion({ tour_done: true })).toBe(1);
+    expect(shouldShowTour({ seenVersion: seenTourVersion({ tour_done: true }), automated: false })).toBe(true);
   });
 
-  it("тому, кто в трекере давно, — не навязываем", () => {
-    expect(shouldShowTour({ createdAt: new Date(NOW - 60 * DAY).toISOString(), done: false, now: NOW, automated: false })).toBe(false);
+  it("прошёл нынешнюю — больше не показываем, на любом устройстве", () => {
+    expect(shouldShowTour({ seenVersion: seenTourVersion({ tour_done: true, tour_version: TOUR_VERSION }), automated: false })).toBe(false);
   });
 
   it("автотестам — нет, иначе окно легло бы поверх каждого теста", () => {
-    expect(shouldShowTour({ createdAt: new Date(NOW - DAY).toISOString(), done: false, now: NOW, automated: true })).toBe(false);
+    expect(shouldShowTour({ seenVersion: 0, automated: true })).toBe(false);
   });
 });
 
