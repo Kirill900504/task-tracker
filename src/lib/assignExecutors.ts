@@ -96,7 +96,7 @@ export async function attachExecutors(
 
   const { data } = await admin
     .from("assignees")
-    .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username")
+    .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username, messenger")
     .eq("user_id", userId)
     .in("name", wanted);
   const people = (data || []) as ColleagueRow[];

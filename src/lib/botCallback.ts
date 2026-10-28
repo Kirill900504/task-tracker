@@ -330,7 +330,7 @@ async function tellMeeting(admin: SupabaseClient, meetingId: string, text: strin
   const rows = (parts || []) as { assignee_id: string; user_id: string }[];
   if (!rows.length) return;
   const ownerId = rows[0].user_id;
-  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", rows.map((r) => r.assignee_id));
+  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", rows.map((r) => r.assignee_id));
   // Всем сразу, а не по очереди (см. reviewWork — та же причина).
   await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, ownerId, person, text, meetingButtons(meetingId), { kind: "meeting", itemId: meetingId })));
 }
@@ -344,7 +344,7 @@ async function tellAssignees(admin: SupabaseClient, taskId: string, text: string
   const rows = (parts || []) as { assignee_id: string; user_id: string }[];
   if (!rows.length) return;
   const ownerId = rows[0].user_id;
-  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", rows.map((r) => r.assignee_id));
+  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", rows.map((r) => r.assignee_id));
   await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, ownerId, person, text)));
 }
 

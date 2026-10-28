@@ -250,7 +250,7 @@ async function runTaskPeople(admin: SupabaseClient, actor: BotActor, op: Extract
     if (r.attached.length) done.push(`подключил: ${r.attached.map(withoutSelfMark).join(", ")}`);
   }
 
-  const { data: partsRaw } = await admin.from("task_participants").select("assignee_id, role, assignees(id, name, telegram_chat_id, max_user_id)").eq("task_id", task.id);
+  const { data: partsRaw } = await admin.from("task_participants").select("assignee_id, role, assignees(id, name, telegram_chat_id, max_user_id, messenger)").eq("task_id", task.id);
   const parts = (partsRaw || []) as PartRow[];
   const person = (p: PartRow) => (Array.isArray(p.assignees) ? p.assignees[0] : p.assignees);
   const newExec = new Set(op.add.filter((a) => a.role === "executor").map((a) => a.name));
@@ -319,7 +319,7 @@ async function runMeetingPeople(admin: SupabaseClient, actor: BotActor, op: Extr
   const done: string[] = [];
   if (op.add.length) {
     await attachMeetingParticipants(admin, m.user_id, m.id, op.add);
-    const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").eq("user_id", m.user_id).in("name", op.add);
+    const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").eq("user_id", m.user_id).in("name", op.add);
     const from = withoutSelfMark(await actorName(admin, m.user_id, actor.userId));
     await Promise.all(
       ((data || []) as ColleagueRow[])
@@ -329,7 +329,7 @@ async function runMeetingPeople(admin: SupabaseClient, actor: BotActor, op: Extr
     done.push(`позвал: ${op.add.map(withoutSelfMark).join(", ")}`);
   }
   if (op.remove.length) {
-    const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").eq("user_id", m.user_id).in("name", op.remove);
+    const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").eq("user_id", m.user_id).in("name", op.remove);
     const people = (data || []) as ColleagueRow[];
     if (people.length) await admin.from("meeting_participants").delete().eq("meeting_id", m.id).in("assignee_id", people.map((p) => p.id));
     await Promise.all(
@@ -450,7 +450,7 @@ export async function createMeetingFromBot(
   const agendaPoints = agenda?.ok ? agendaIn : [];
   let delivered = 0;
   if (people.length) {
-    const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").eq("user_id", actor.spaceId).in("name", people);
+    const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").eq("user_id", actor.spaceId).in("name", people);
     const from = withoutSelfMark(await actorName(admin, actor.spaceId, actor.userId));
     const sent = await Promise.all(
       ((data || []) as ColleagueRow[])
@@ -765,7 +765,7 @@ export async function checklistForPerson(
 async function pingTask(admin: SupabaseClient, actor: BotActor, taskId: string): Promise<number> {
   const task = await loadTask(admin, actor, taskId);
   if (!task) return 0;
-  const { data } = await admin.from("task_participants").select("done_at, declined_at, assignees(id, name, telegram_chat_id, max_user_id)").eq("task_id", task.id).in("role", ["executor", "coexecutor"]);
+  const { data } = await admin.from("task_participants").select("done_at, declined_at, assignees(id, name, telegram_chat_id, max_user_id, messenger)").eq("task_id", task.id).in("role", ["executor", "coexecutor"]);
   type Row = { done_at: string | null; declined_at: string | null; assignees: ColleagueRow | ColleagueRow[] | null };
   // Отчитавшихся и отказавшихся не торопят: они уже ответили.
   const people = ((data || []) as Row[])

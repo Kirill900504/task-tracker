@@ -708,7 +708,7 @@ export async function handleOwnerCallback(
     if (!meeting) return { toast: "Эта встреча не найдена" };
     const { data: rows } = await admin
       .from("meeting_participants")
-      .select("assignee_id, response, late, assignees(name, telegram_chat_id, max_user_id)")
+      .select("assignee_id, response, late, assignees(name, telegram_chat_id, max_user_id, messenger)")
       .eq("meeting_id", action.id);
     type Row = {
       assignee_id: string;

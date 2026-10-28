@@ -119,7 +119,7 @@ export async function applySlot(admin: SupabaseClient, meeting: MeetingRow, inde
   const { data: parts } = await admin.from("meeting_participants").select("assignee_id").eq("meeting_id", meeting.id);
   const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
   if (ids.length) {
-    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", ids);
     const text = `✅ Встреча назначена: «${meeting.title}»\n${when}\n\nВремя выбрано ${why}.`;
     await Promise.all(
       ((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, meeting.user_id, person, text, undefined, { kind: "meeting", itemId: meeting.id })),

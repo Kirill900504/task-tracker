@@ -197,10 +197,23 @@ describe("chatsFor", () => {
     ]);
   });
 
-  it("puts Telegram first for someone connected to both, so one message goes out and not two", () => {
+  // 28.10.2026: «приоритетный конечно MAX, но и телеграмм должен быть
+  // доступен для выбора».
+  it("puts MAX first for someone connected to both who has not chosen", () => {
     const both = chatsFor({ ...row, telegram_chat_id: 111, max_user_id: 222 });
     expect(both).toHaveLength(2);
-    expect(both[0].channel.id).toBe("telegram");
+    expect(both[0].channel.id).toBe("max");
+    expect(chatsFor({ ...row, telegram_chat_id: 111, max_user_id: 222, messenger: null })[0].channel.id).toBe("max");
+  });
+
+  it("puts the chosen messenger first", () => {
+    expect(chatsFor({ ...row, telegram_chat_id: 111, max_user_id: 222, messenger: "telegram" })[0].channel.id).toBe("telegram");
+    expect(chatsFor({ ...row, telegram_chat_id: 111, max_user_id: 222, messenger: "max" })[0].channel.id).toBe("max");
+  });
+
+  it("falls back to the other one when the chosen is not connected", () => {
+    expect(chatsFor({ ...row, telegram_chat_id: 111, max_user_id: null, messenger: "max" })[0].channel.id).toBe("telegram");
+    expect(chatsFor({ ...row, telegram_chat_id: null, max_user_id: 222, messenger: "telegram" })[0].channel.id).toBe("max");
   });
 
   it("gives nothing for someone who has connected nothing", () => {

@@ -52,7 +52,7 @@ export async function deliverRecap(
 
   let sent = 0;
   if (ids.length) {
-    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", ids);
     // Кнопка «Ответить» здесь не формальность: с итогом чаще всего и спорят,
     // и уточнять его будут именно в этот момент. Всем сразу, а не по очереди.
     const delivered = await Promise.all(

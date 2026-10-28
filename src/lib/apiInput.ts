@@ -119,6 +119,9 @@ export const awayInput = z.object({
   kind: z.enum(["vacation", "sick", "trip", "other"]).optional(),
 });
 
+// Куда писать мне (миграция 0069).
+export const messengerInput = z.object({ messenger: z.enum(["max", "telegram"]) });
+
 export const inviteInput = z.object({
   assigneeId: UUID,
   email: EMAIL.optional(),

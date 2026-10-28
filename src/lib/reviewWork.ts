@@ -333,7 +333,7 @@ async function tellExecutors(
   const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id).filter((id) => !only || only.includes(id));
   if (!ids.length) return;
 
-  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", ids);
 
   const text =
     action === "return"
@@ -378,7 +378,7 @@ async function tellUnblocked(admin: SupabaseClient, task: { id: string; user_id:
     const { data: parts } = await admin.from("task_participants").select("assignee_id").eq("task_id", w.id).in("role", ["executor", "coexecutor"]);
     const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
     if (!ids.length) continue;
-    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", ids);
     const text = `🟢 Можно начинать: ${taskRef({ title: w.title, number: w.number })}\n\nЗадача, которую она ждала, закрыта: ${named}.`;
     await Promise.all(
       ((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, w.user_id, person, text, taskButtons(w.id, "executor"), { kind: "task", itemId: w.id })),
