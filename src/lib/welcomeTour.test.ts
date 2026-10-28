@@ -35,6 +35,12 @@ describe("стартовое знакомство — шаги", () => {
     expect(steps[steps.length - 1].text.join(" ")).toContain("Мои данные");
   });
 
+  it("«Мысли» объясняют, чем «Отправить» отличается от «Поделиться»", () => {
+    const ideas = tourSteps({ isOwner: false }).find((s) => s.id === "ideas")!;
+    const labels = (ideas.points || []).map((p) => p.label);
+    expect(labels).toEqual(expect.arrayContaining(["Создать", "Отправить", "Поделиться"]));
+  });
+
   it("у каждого шага есть слова", () => {
     for (const s of tourSteps({ isOwner: true })) expect(s.text.join("").length).toBeGreaterThan(20);
   });

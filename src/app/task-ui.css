@@ -1111,23 +1111,80 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
   background:var(--today); box-shadow:0 0 0 2px var(--paper);
 }
 
-/* Стартовое знакомство (WelcomeTour): одна карточка за раз — значок,
-   заголовок, две-три строки, точки шагов и кнопки внизу. Высота карточки
-   держится одной, чтобы кнопки не прыгали под рукой от шага к шагу. */
-.modal.tour-modal{max-width:520px;}
-.tour-card{min-height:250px; padding:6px 4px 0; animation:tour-in .22s var(--win-ease, ease);}
-@keyframes tour-in{from{opacity:0; transform:translateX(10px);} to{opacity:1; transform:none;}}
-@media (prefers-reduced-motion: reduce){ .tour-card{animation:none;} }
-.tour-icon{
-  width:52px; height:52px; border-radius:var(--radius-md); display:grid; place-items:center;
-  background:var(--accent-soft); color:var(--accent); margin-bottom:14px;
+/* Стартовое знакомство (WelcomeTour): одна карточка за раз — цветная шапка
+   со значком и «Шаг N из M», вступление, список «кнопка — что делает»,
+   полоса шагов и кнопки внизу. 28.10.2026, его слова: «сделай окно для
+   новичков более красиво оформленным, ярким и приятным для чтения».
+   Цвет у каждого раздела свой (--tour-c, классы .tour-tone-*): серое окно с
+   одинаковым значком читалось одной и той же страницей, менялся только
+   текст. Цвет красит значок, сияние под шапкой, метки кнопок и полосу шагов;
+   «Далее» остаётся фирменной — у главной кнопки окна один формат на весь
+   трекер. Цвет задаётся на .modal.tour-modal.tour-tone-* — с той же
+   специфичностью, что и цвет по умолчанию, только ниже: короткий
+   .tour-tone-* ему проигрывал, и все шаги выходили голубыми. Высота карточки держится одной, чтобы кнопки не прыгали под рукой
+   от шага к шагу. */
+.modal.tour-modal{
+  --tour-c:#4FA8D8;
+  max-width:560px; position:relative; overflow-x:hidden;
+  background:
+    radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--tour-c) 22%, transparent), transparent 70%),
+    var(--paper);
+  border-color:color-mix(in srgb, var(--tour-c) 35%, var(--line));
+  transition:border-color .25s ease;
 }
-.tour-title{margin:0 0 10px; font-family:var(--display); font-size:19px; font-weight:800; color:var(--ink);}
-.tour-text{margin:0 0 10px; font-size:14px; line-height:1.6; color:var(--ink-soft);}
-.tour-dots{display:flex; justify-content:center; gap:7px; margin:10px 0 4px;}
-.tour-dot{width:8px; height:8px; padding:0; border:0; border-radius:50%; background:var(--line); cursor:pointer; transition:width .18s ease, background .18s ease;}
-.tour-dot.on{width:22px; border-radius:999px; background:var(--accent);}
+.modal.tour-modal.tour-tone-sky{--tour-c:#4FA8D8;}
+.modal.tour-modal.tour-tone-blue{--tour-c:#6C9EF0;}
+.modal.tour-modal.tour-tone-green{--tour-c:#5FC48A;}
+.modal.tour-modal.tour-tone-amber{--tour-c:#E8B850;}
+.modal.tour-modal.tour-tone-violet{--tour-c:#B79AF0;}
+.modal.tour-modal.tour-tone-teal{--tour-c:#4FC7B8;}
+.modal.tour-modal.tour-tone-rose{--tour-c:#E68FA8;}
+.tour-card{min-height:330px; padding:4px 2px 0; animation:tour-in .26s var(--win-ease, ease);}
+@keyframes tour-in{from{opacity:0; transform:translateX(12px);} to{opacity:1; transform:none;}}
+@media (prefers-reduced-motion: reduce){ .tour-card{animation:none;} }
+.tour-hero{display:flex; align-items:center; gap:16px; margin:0 0 14px;}
+.tour-icon{
+  flex:none; width:60px; height:60px; border-radius:18px; display:grid; place-items:center;
+  color:#fff;
+  background:linear-gradient(145deg, color-mix(in srgb, var(--tour-c) 92%, #fff), color-mix(in srgb, var(--tour-c) 70%, #000));
+  box-shadow:0 8px 24px color-mix(in srgb, var(--tour-c) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.35);
+}
+.tour-hero-text{min-width:0;}
+.tour-step-no{
+  display:inline-block; margin-bottom:4px; font-size:12px; font-weight:700; letter-spacing:.04em;
+  text-transform:uppercase; color:var(--tour-c);
+}
+.tour-title{margin:0; font-family:var(--display); font-size:24px; line-height:1.2; font-weight:800; color:var(--ink); letter-spacing:-.01em;}
+.tour-text{margin:0 0 12px; font-size:15px; line-height:1.6; color:var(--ink);}
+/* Метка и пояснение — одной строкой, как «кнопка — что делает»: столбиком
+   карточка «Мысли» в четыре пункта не помещалась в окно ноутбука. */
+.tour-points{list-style:none; margin:0; padding:0; display:grid; gap:6px;}
+.tour-point{
+  padding:7px 12px; border-radius:var(--radius-md); line-height:1.5;
+  background:color-mix(in srgb, var(--tour-c) 8%, var(--paper-soft));
+  border:1px solid color-mix(in srgb, var(--tour-c) 18%, transparent);
+  border-left:3px solid var(--tour-c);
+}
+.tour-chip{
+  display:inline; margin-right:6px; padding:1px 8px; border-radius:999px; font-size:13px; font-weight:700;
+  -webkit-box-decoration-break:clone; box-decoration-break:clone;
+  color:color-mix(in srgb, var(--tour-c) 75%, #fff);
+  background:color-mix(in srgb, var(--tour-c) 20%, transparent);
+  overflow-wrap:anywhere;
+}
+.tour-point-text{font-size:14px; color:var(--ink-soft);}
+.tour-dots{display:flex; justify-content:center; gap:6px; margin:16px 0 4px;}
+.tour-dot{
+  width:8px; height:8px; padding:0; border:0; border-radius:999px; cursor:pointer;
+  background:color-mix(in srgb, var(--tour-c) 25%, var(--line));
+  transition:width .2s ease, background .2s ease;
+}
+.tour-dot.on{width:26px; background:var(--tour-c); box-shadow:0 0 10px color-mix(in srgb, var(--tour-c) 60%, transparent);}
 .tour-actions{justify-content:space-between; gap:8px;}
 .tour-finish{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
 .tour-count{margin-left:6px; opacity:.75; font-variant-numeric:tabular-nums;}
-@media (max-width:800px){ .tour-card{min-height:0;} }
+@media (max-width:800px){
+  .tour-card{min-height:0;}
+  .tour-title{font-size:21px;}
+  .tour-icon{width:52px; height:52px; border-radius:16px;}
+}

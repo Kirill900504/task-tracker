@@ -30,18 +30,38 @@ export default function WelcomeTour({
 
   return (
     <Modal id="welcomeTour" onClose={onClose} dismissOnBackdrop={false}>
-      <div className="modal tour-modal">
+      <div className={"modal tour-modal tour-tone-" + step.tone}>
         <ItemModalHead plain title={<>Знакомство с трекером</>} closeId="tourCloseBtn" onClose={onClose} />
+        {/* Окно красится цветом раздела (tone на .tour-modal): значок, сияние
+            сверху, точки и «Далее». У каждого шага свой цвет, и листание
+            читается как смена разделов, а не как одна серая страница. */}
         <div className="tour-card" key={step.id} data-step={step.id}>
-          <div className="tour-icon" aria-hidden>
-            <Icon name={step.icon} size={26} />
+          <div className="tour-hero">
+            <div className="tour-icon" aria-hidden>
+              <Icon name={step.icon} size={28} />
+            </div>
+            <div className="tour-hero-text">
+              <span className="tour-step-no">
+                Шаг {index + 1} из {steps.length}
+              </span>
+              <h2 className="tour-title">{step.title}</h2>
+            </div>
           </div>
-          <h2 className="tour-title">{step.title}</h2>
           {step.text.map((line) => (
             <p key={line} className="tour-text">
               {line}
             </p>
           ))}
+          {step.points && (
+            <ul className="tour-points">
+              {step.points.map((pt) => (
+                <li key={pt.label} className="tour-point">
+                  <span className="tour-chip">{pt.label}</span>
+                  <span className="tour-point-text">{pt.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         {/* Точки — где мы и сколько осталось; по ним можно перейти сразу. */}
         <div className="tour-dots" role="tablist" aria-label="Шаги знакомства">
