@@ -100,11 +100,21 @@ export async function buildManagerBrief(
     } | null;
   };
 
+  // Закрытая задача в сводку не попадает НИ ОДНИМ блоком. 28.10.2026
+  // Макарову пришло «Вместе с вами: #111 … пятеро отчитались» по задаче,
+  // давно принятой, при пустом трекере: этот отбор стоял только у сроков,
+  // а обсуждения и напарники брали все его строки участия подряд — и
+  // повторяли одно и то же в каждой сводке навсегда.
+  const isOpen = (t: Row["tasks"]): t is NonNullable<Row["tasks"]> =>
+    !!t &&
+    !t.deleted_at &&
+    t.status !== "done" &&
+    // Принятая разовая задача — закрыта, что бы ни стояло в status.
+    !(t.approval_state === "accepted" && (t.recur || "none") === "none");
+
   for (const r of ((rows || []) as unknown as Row[])) {
     const t = r.tasks;
-    if (!t || t.deleted_at || r.done_at || t.status === "done") continue;
-    // Принятая разовая задача — закрыта, что бы ни стояло в status.
-    if (t.approval_state === "accepted" && (t.recur || "none") === "none") continue;
+    if (!isOpen(t) || r.done_at) continue;
     // У повтора в колонке deadline лежит срок ПЕРВОГО круга, и «срок был
     // 24.09» через неделю — неправда: повтор просроченным не бывает, так
     // же как в трекере (isOverdue в taskDisplay и taskLogic). Отзыв
@@ -135,7 +145,12 @@ export async function buildManagerBrief(
   // Обсуждения, в которых со вчера писали другие. Своих сообщений здесь
   // быть не должно: сводка, напоминающая человеку о том, что он сам вчера
   // написал, учит пролистывать сводку.
-  const mine = ((rows || []) as unknown as Row[]).filter((r) => r.tasks && !r.tasks.deleted_at).map((r) => r.task_id);
+  const open = ((rows || []) as unknown as Row[]).filter((r) => isOpen(r.tasks));
+  const mine = open.map((r) => r.task_id);
+  // Напарники — только там, где задача ещё ждёт ЕГО ответа: «сосед
+  // отчитался» значит «дело за вами», а если он сам уже отчитался или
+  // отказался, строка ничего от него не просит.
+  const waitingOnMe = new Set(open.filter((r) => !r.done_at && !r.declined_at).map((r) => r.task_id));
   if (mine.length) {
     const since = new Date(Date.parse(today + "T00:00:00Z") - 24 * 60 * 60 * 1000).toISOString();
     const { data: comments } = await admin
@@ -156,7 +171,7 @@ export async function buildManagerBrief(
       ),
     ];
     const titleOf = new Map(
-      ((rows || []) as unknown as Row[]).filter((r) => r.tasks).map((r) => [r.task_id, numbered(r.tasks!)]),
+      open.map((r) => [r.task_id, numbered(r.tasks!)]),
     );
     for (const id of others) {
       const title = titleOf.get(id);
@@ -182,7 +197,7 @@ export async function buildManagerBrief(
     };
     const byTask = new Map<string, string[]>();
     for (const m of ((mates || []) as unknown as Mate[])) {
-      if (m.assignee_id === assignee.id) continue;
+      if (m.assignee_id === assignee.id || !waitingOnMe.has(m.task_id)) continue;
       // Только то, что человек СКАЗАЛ. «Ещё не ответил» сюда не идёт: это
       // не событие, а тишина, и о ней спрашивает постановщик, а не сосед.
       const name = withoutSelfMark((Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name) || "");
