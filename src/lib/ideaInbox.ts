@@ -554,7 +554,7 @@ async function loadIdea(admin: SupabaseClient, ideaId: string, spaceId: string):
 }
 
 async function peopleOf(admin: SupabaseClient, spaceId: string): Promise<ColleagueRow[]> {
-  const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").eq("user_id", spaceId);
+  const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").eq("user_id", spaceId);
   return sortByPeopleOrder((data || []) as ColleagueRow[], (p) => p.name);
 }
 
@@ -570,9 +570,9 @@ async function authorRow(admin: SupabaseClient, idea: IdeaRef): Promise<Colleagu
       .maybeSingle();
     const assigneeId = (m as { assignee_id?: string } | null)?.assignee_id;
     if (!assigneeId) return null;
-    const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").eq("id", assigneeId).maybeSingle();
+    const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").eq("id", assigneeId).maybeSingle();
     return (data as ColleagueRow | null) || null;
   }
-  const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").eq("user_id", idea.userId);
+  const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").eq("user_id", idea.userId);
   return ((data || []) as ColleagueRow[]).find((p) => isSelfAssignee(p.name)) || null;
 }

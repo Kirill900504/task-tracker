@@ -37,9 +37,9 @@ export async function chatsForPerson(
 
 // Написать человеку один раз.
 //
-// Коллеге — в тот мессенджер, через который он подключился (первый из
-// двух, см. chatsFor). Владельцу — во все, что он подключил: так уже
-// устроен notifyOwner, и он читает тот, что открыт.
+// В ОДИН мессенджер — выбранный человеком, MAX по умолчанию (chatsFor,
+// ownerChats). Владельцу раньше уходило во все подключённые; с 28.10.2026
+// и он выбирает один, как все.
 export async function sendToPerson(
   admin: SupabaseClient,
   ownerId: string,
@@ -54,8 +54,7 @@ export async function sendToPerson(
 ): Promise<number> {
   const targets = await chatsForPerson(admin, ownerId, person);
   if (!targets.length) return 0;
-  const chosen = isSelfAssignee(person.name) ? targets : targets.slice(0, 1);
-  // Во все выбранные чаты — одновременно (у владельца их два: Telegram и MAX).
+  const chosen = targets.slice(0, 1);
   const results = await Promise.all(chosen.map((target) => sendToColleague(target, text, buttons)));
   if (memo && buttons?.length) {
     await rememberSent(

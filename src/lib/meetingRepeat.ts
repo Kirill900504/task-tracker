@@ -126,7 +126,7 @@ async function inviteToRepeat(admin: SupabaseClient, m: MeetingSeed, id: string,
   if (!names.length) return;
   const { data } = await admin
     .from("assignees")
-    .select("id, name, telegram_chat_id, max_user_id")
+    .select("id, name, telegram_chat_id, max_user_id, messenger")
     .eq("user_id", m.user_id)
     .in("name", names);
   // Организатору приглашение на собственную планёрку не нужно.

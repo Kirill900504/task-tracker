@@ -76,12 +76,13 @@ export async function POST(req: Request) {
   if (!membership) {
     const { data: mine } = await admin.from("assignees").select("id").eq("user_id", user.id).limit(1);
     if (!(mine || []).length) return NextResponse.json(SAME_ANSWER);
-    targets.push(...(await ownerChats(admin, user.id)));
+    // Один мессенджер, выбранный им (ownerChats ставит его первым).
+    targets.push(...(await ownerChats(admin, user.id)).slice(0, 1));
   } else {
     if (membership.status !== "active") return NextResponse.json(SAME_ANSWER);
     const { data: person } = await admin
       .from("assignees")
-      .select("id, name, telegram_chat_id, max_user_id")
+      .select("id, name, telegram_chat_id, max_user_id, messenger")
       .eq("id", membership.assignee_id)
       .maybeSingle();
     const target = person ? chatsFor(person as ColleagueRow)[0] : null;

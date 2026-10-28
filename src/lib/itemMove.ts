@@ -166,7 +166,7 @@ export async function announceMeetingMove(
   if (!names.length && !ids.length) return 0;
   const { data: people } = await admin
     .from("assignees")
-    .select("id, name, telegram_chat_id, max_user_id")
+    .select("id, name, telegram_chat_id, max_user_id, messenger")
     .eq("user_id", meeting.user_id)
     .or([ids.length ? `id.in.(${ids.join(",")})` : "", names.length ? `name.in.(${names.map((n) => `"${n.replace(/"/g, '\\"')}"`).join(",")})` : ""].filter(Boolean).join(","));
   // Себе не пишут — и «я» здесь тот, кто переносит, а не владелец
@@ -205,7 +205,7 @@ export async function moveTaskDeadline(
   });
   const { data: parts } = await admin
     .from("task_participants")
-    .select("assignee_id, assignees(id, name, telegram_chat_id, max_user_id)")
+    .select("assignee_id, assignees(id, name, telegram_chat_id, max_user_id, messenger)")
     .eq("task_id", task.id)
     .in("role", ["executor", "coexecutor"]);
   const { data: member } = await admin.from("workspace_members").select("assignee_id").eq("member_id", actorUserId).eq("status", "active").maybeSingle();

@@ -8,6 +8,8 @@ import { humanError } from "@/lib/humanError";
 import Modal from "./Modal";
 import Icon, { type IconName } from "./Icon";
 import MessengerLink from "./MessengerLink";
+import ChipChoice from "./ChipChoice";
+import { postJson } from "@/lib/postJson";
 import { MaxBrandIcon, TelegramBrandIcon } from "./MessengerBrandIcon";
 
 // Личный кабинет — всё, что касается самого человека, в одном окне.
@@ -99,6 +101,11 @@ export default function AccountModal({
   }
 
   const changed = draftEmail.trim().toLowerCase() !== (email || "").toLowerCase() || !!password;
+  // Выбирать есть из чего, только когда подключены оба: с одним трекер и
+  // так пишет в него.
+  const bothConnected = messenger
+    ? messenger.telegram.connected && messenger.max.connected
+    : !!owner && owner.maxAvailable && !owner.needs.telegram && !owner.needs.max;
 
   return (
     <Modal onClose={onClose} id="accountModal" dismissOnBackdrop={false}>
@@ -192,6 +199,7 @@ export default function AccountModal({
               )}
             </div>
           )}
+          {bothConnected && <MessengerChoice />}
         </section>
 
         {!!items.length && (
@@ -220,6 +228,58 @@ export default function AccountModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+// Куда писать — один мессенджер из двух (миграция 0069). 28.10.2026:
+// «возможность выбрать только один бот, приоритетный конечно MAX, но и
+// телеграмм должен быть доступен для выбора». До ответа сервера кнопок нет:
+// показать MAX тому, кто выбрал Telegram, и через секунду переключить —
+// это кнопка, которая сама двигается под рукой.
+type Messenger = "max" | "telegram";
+
+function MessengerChoice() {
+  const [value, setValue] = useState<Messenger | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/account/messenger")
+      .then((res) => res.json())
+      .then((data: { messenger?: Messenger }) => alive && setValue(data.messenger === "telegram" ? "telegram" : "max"))
+      .catch(() => alive && setValue("max"));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function choose(next: Messenger) {
+    if (!value || next === value) return;
+    const before = value;
+    setValue(next);
+    setError("");
+    try {
+      await postJson("/api/account/messenger", { messenger: next }, { fallback: "Не получилось сохранить выбор" });
+    } catch (err) {
+      setValue(before);
+      setError(humanError(err, "Не получилось сохранить выбор"));
+    }
+  }
+
+  if (!value) return null;
+  return (
+    <div className="account-ms-choice" id="messengerChoice">
+      <span className="field-hint">Писать в</span>
+      <ChipChoice<Messenger>
+        value={value}
+        options={[
+          { value: "max", label: "MAX" },
+          { value: "telegram", label: "Telegram" },
+        ]}
+        onSelect={(v) => void choose(v)}
+      />
+      {error && <div className="ms-link-error">{error}</div>}
+    </div>
   );
 }
 

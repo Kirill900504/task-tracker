@@ -26,9 +26,10 @@ const colleague = { id: "a1", name: "Игорь Черкашин", telegram_chat
 const owner = { id: "a0", name: "Кирилл (я)", telegram_chat_id: null, max_user_id: null };
 
 beforeEach(() => {
+  // ownerChats отдаёт выбранный первым (по умолчанию MAX).
   ownerChats.mockReset().mockResolvedValue([
-    { channel: TELEGRAM_CHANNEL, chatId: 900 },
     { channel: MAX_CHANNEL, chatId: 901 },
+    { channel: TELEGRAM_CHANNEL, chatId: 900 },
   ]);
   sendToColleague.mockReset().mockResolvedValue({ ok: true });
 });
@@ -53,17 +54,23 @@ describe("chatsForPerson", () => {
 });
 
 describe("sendToPerson", () => {
-  it("коллеге — одно сообщение, в тот мессенджер, через который он подключился", async () => {
+  it("коллеге с двумя мессенджерами — одно сообщение, в MAX, пока не выбрал Telegram", async () => {
     const sent = await sendToPerson(admin, "owner-1", { ...colleague, max_user_id: 222 }, "текст");
     expect(sent).toBe(1);
     expect(sendToColleague).toHaveBeenCalledTimes(1);
+    expect(sendToColleague.mock.calls[0][0]).toEqual({ channel: MAX_CHANNEL, chatId: 222 });
+  });
+
+  it("выбравшему Telegram — в Telegram", async () => {
+    await sendToPerson(admin, "owner-1", { ...colleague, max_user_id: 222, messenger: "telegram" }, "текст");
     expect(sendToColleague.mock.calls[0][0]).toEqual({ channel: TELEGRAM_CHANNEL, chatId: 111 });
   });
 
-  it("владельцу — во все, что он подключил: он читает тот, что открыт", async () => {
+  it("владельцу — тоже одно, в первый из его чатов (выбранный)", async () => {
     const sent = await sendToPerson(admin, "owner-1", owner, "текст");
-    expect(sent).toBe(2);
-    expect(sendToColleague).toHaveBeenCalledTimes(2);
+    expect(sent).toBe(1);
+    expect(sendToColleague).toHaveBeenCalledTimes(1);
+    expect(sendToColleague.mock.calls[0][0]).toEqual({ channel: MAX_CHANNEL, chatId: 901 });
   });
 
   it("некуда писать — ноль, и ни одной попытки отправки", async () => {

@@ -3794,6 +3794,8 @@
   background:rgba(108,190,140,.12); border:1px solid rgba(108,190,140,.4); color:var(--ink); font-size:12.5px;
 }
 .account-owner-ms{display:grid; grid-template-columns:1fr auto; gap:8px 12px; align-items:center;}
+.account-ms-choice{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px;}
+.account-ms-choice .ms-link-error{flex-basis:100%;}
 .account-items{display:flex; flex-direction:column; gap:6px;}
 .account-item{justify-content:flex-start; display:flex; align-items:center; gap:8px; width:100%;}
 @media (max-width: 799px){

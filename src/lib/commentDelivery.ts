@@ -147,7 +147,7 @@ export async function deliverComment(admin: SupabaseClient, commentId: string): 
 
   const { data: people } = await admin
     .from("assignees")
-    .select("id, name, user_id, telegram_chat_id, max_user_id")
+    .select("id, name, user_id, telegram_chat_id, max_user_id, messenger")
     .eq("user_id", comment.user_id);
   const rows = (people || []) as (ColleagueRow & { user_id: string })[];
   const byId = new Map(rows.map((r) => [r.id, r]));

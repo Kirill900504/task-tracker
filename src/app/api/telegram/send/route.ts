@@ -21,8 +21,8 @@ import { selfTaskIds } from "@/lib/selfTaskServer";
 // participants, or, for a thought, the named person.
 //
 // Which messenger it travels through is not the caller's business either:
-// a colleague is connected to Telegram, to MAX, or to both, and one message
-// goes to whichever they connected first (see chatsFor).
+// a person is connected to Telegram, to MAX, or to both, and one message
+// goes to the one they chose — MAX unless they picked Telegram (chatsFor).
 
 type Recipient = { id: string; name: string; targets: { channel: BotChannelConfig; chatId: number }[] };
 
@@ -45,7 +45,7 @@ async function recipientsByName(
   if (!wanted.length) return { linked: [], unlinked: [], self: [] };
   // Убранный из команды (миграция 0055) — не адресат, даже если имя пришло
   // из меню, открытого до того, как его убрали.
-  const { data } = await supabase.from("assignees").select("id, name, user_id, telegram_chat_id, max_user_id").in("name", wanted).is("archived_at", null);
+  const { data } = await supabase.from("assignees").select("id, name, user_id, telegram_chat_id, max_user_id, messenger").in("name", wanted).is("archived_at", null);
   const rows = (data || []) as (ColleagueRow & { user_id: string })[];
   const linked: Recipient[] = [];
   const unlinked: string[] = [];
@@ -61,20 +61,14 @@ async function recipientsByName(
       continue;
     }
     const targets = await chatsForPerson(admin, row.user_id, row);
-    if (targets.length) linked.push({ id: row.id, name: row.name, targets: isSelfAssignee(row.name) ? targets : targets.slice(0, 1) });
+    if (targets.length) linked.push({ id: row.id, name: row.name, targets: targets.slice(0, 1) });
     else unlinked.push(name);
   }
   return { linked, unlinked, self };
 }
 
-// Одно сообщение человеку: коллеге — в его мессенджер, владельцу — во все,
-// что он подключил (он читает тот, что открыт).
-//
-// «Во все» — буквально: до 06.10.2026 цикл выходил на первом удачном
-// отправлении, то есть владелец получал приглашение в Telegram и никогда в
-// MAX, хотя комментарий выше обещал оба. Коллеге список и так из одного
-// чата (recipientsByName режет его до первого), так что для него не
-// меняется ничего.
+// Одно сообщение человеку — в выбранный им мессенджер (recipientsByName
+// оставляет один чат и владельцу: с 28.10.2026 он тоже выбирает один).
 async function deliver(
   person: Recipient,
   text: string,

@@ -87,7 +87,7 @@ async function tellMeetingPeople(
   const ids = ((parts || []) as { assignee_id: string }[]).map((r) => r.assignee_id);
   let ownerReached = false;
   if (ids.length) {
-    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", ids);
     for (const person of ((people || []) as ColleagueRow[])) {
       if (isSelfAssignee(person.name)) ownerReached = true;
       await sendToPerson(admin, userId, person, text);
@@ -384,7 +384,7 @@ export async function GET(req: Request) {
     if (workingDay && briefDay && nowMin >= BRIEF_FROM_MINUTES) {
       const { data: colleagues } = await admin
         .from("assignees")
-        .select("id, name, telegram_chat_id, max_user_id")
+        .select("id, name, telegram_chat_id, max_user_id, messenger")
         .eq("user_id", userId)
         // Убранному из команды сводок нет: дел у него больше нет.
         .is("archived_at", null);
@@ -460,7 +460,7 @@ export async function GET(req: Request) {
       // другое было бы началом недоверия.
       const { data: forStats } = await admin
         .from("assignees")
-        .select("id, name, telegram_chat_id, max_user_id")
+        .select("id, name, telegram_chat_id, max_user_id, messenger")
         .eq("user_id", userId);
       for (const person of ((forStats || []) as ColleagueRow[])) {
         const target = chatsFor(person)[0];
@@ -618,7 +618,7 @@ export async function GET(req: Request) {
 
       const { data: people } = await admin
         .from("assignees")
-        .select("id, name, telegram_chat_id, max_user_id")
+        .select("id, name, telegram_chat_id, max_user_id, messenger")
         .eq("user_id", userId)
         .in("name", everyone);
 

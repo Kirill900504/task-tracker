@@ -130,7 +130,7 @@ export async function POST(req: Request) {
     if (meetings) lines.push("", `Встречи: ${meetings}`);
     const { data: full } = await admin
       .from("assignees")
-      .select("id, name, telegram_chat_id, max_user_id")
+      .select("id, name, telegram_chat_id, max_user_id, messenger")
       .eq("id", receiver.id)
       .maybeSingle();
     // Себе владелец сообщений не шлёт: он только что нажал кнопку сам.
