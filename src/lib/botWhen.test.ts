@@ -38,6 +38,13 @@ describe("parseWhen — время", () => {
     expect(parseWhen("в 10.30", TODAY)).toMatchObject({ date: "", time: "10:30" });
     expect(parseWhen("10.11", TODAY)).toMatchObject({ date: "2026-11-10", time: "" });
   });
+  // 28.10.2026: «на 03.11 в то же время» читалось как 03:11 — и встреча
+  // уезжала на 31.10 в три часа ночи.
+  it("«на 03.11» — дата, а не 03:11; «на 10.30» — время", () => {
+    expect(parseWhen("Перенеси телемост на 03.11 в то же время", TODAY)).toEqual({ date: "2026-11-03", time: "", sameTime: true });
+    expect(parseWhen("на 10.30", TODAY)).toMatchObject({ date: "", time: "10:30" });
+    expect(parseWhen("на 05.11 в 10.30", TODAY)).toMatchObject({ date: "2026-11-05", time: "10:30" });
+  });
   it("«на 15 часов»", () => {
     expect(parseWhen("на 15 часов", TODAY).time).toBe("15:00");
   });
