@@ -1,5 +1,6 @@
 import type { BotButton, BotSendResult, BotTransport } from "@/lib/botTransport";
 import { maxSettings } from "@/lib/botSettings";
+import { stripSelfMarks } from "@/lib/botText";
 import { russianFetch } from "@/lib/russianCa";
 import { miniAppUrl } from "@/lib/trackerUrl";
 
@@ -69,16 +70,18 @@ export function keyboardAttachment(buttons: BotButton[][], botUsername = "") {
         row.map((b) =>
           b.app
             ? botUsername
-              ? { type: "open_app", text: b.text, web_app: botUsername }
-              : { type: "link", text: b.text, url: b.app }
-            : { type: "callback", text: b.text, payload: b.data },
+              ? { type: "open_app", text: stripSelfMarks(b.text), web_app: botUsername }
+              : { type: "link", text: stripSelfMarks(b.text), url: b.app }
+            : { type: "callback", text: stripSelfMarks(b.text), payload: b.data },
         ),
       ),
     },
   };
 }
 
-function clip(text: string): string {
+function clip(raw: string): string {
+  // Каждый текст в MAX проходит здесь — значит и снятие «(я)» (lib/botText).
+  const text = stripSelfMarks(raw);
   return text.length > MAX_TEXT ? text.slice(0, MAX_TEXT - 1) + "…" : text;
 }
 

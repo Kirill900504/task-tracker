@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtDate } from "@/lib/taskDisplay";
 import { withoutSelfMark } from "@/lib/actorName";
 import { numbered } from "@/lib/taskRef";
+import { selfTaskIds } from "@/lib/selfTaskServer";
 
 // Утренняя сводка руководителю — та же услуга, что владелец получает с
 // самого начала, только про его собственные дела.
@@ -65,7 +66,8 @@ export async function buildManagerBrief(
   soonUntil = "",
 ): Promise<ManagerBriefFacts> {
   const facts: ManagerBriefFacts = {
-    name: assignee.name,
+    // Без «(я)»: «Доброе утро, Кирилл Кучеренко (я)» — 28.10.2026.
+    name: withoutSelfMark(assignee.name),
     overdue: [],
     today: [],
     soon: [],
@@ -112,20 +114,30 @@ export async function buildManagerBrief(
     // Принятая разовая задача — закрыта, что бы ни стояло в status.
     !(t.approval_state === "accepted" && (t.recur || "none") === "none");
 
-  for (const r of ((rows || []) as unknown as Row[])) {
-    const t = r.tasks;
-    if (!isOpen(t) || r.done_at) continue;
+  // Личные задачи (поставил себе и работает один — lib/selfTaskServer) —
+  // только сроками: просрочено, сегодня, скоро. 28.10.2026, его слова: «по
+  // ним напоминать в ботах не надо, только по просроченным и по тем, по
+  // которым подходит срок». «Ждут вашего ответа» про задачу, которую он сам
+  // себе записал, — это бот, спрашивающий человека, принял ли он свою же
+  // заметку; ответов, возврата и напарников у неё не бывает.
+  const openRows = ((rows || []) as unknown as Row[]).filter((r) => isOpen(r.tasks));
+  const personal = await selfTaskIds(admin, ownerId, openRows.map((r) => r.task_id));
+
+  for (const r of openRows) {
+    const t = r.tasks!;
+    if (r.done_at) continue;
+    const self = personal.has(r.task_id);
     // У повтора в колонке deadline лежит срок ПЕРВОГО круга, и «срок был
     // 24.09» через неделю — неправда: повтор просроченным не бывает, так
     // же как в трекере (isOverdue в taskDisplay и taskLogic). Отзыв
     // Витовского 25.09.2026 — закрытая ежедневная задача в «Просрочено».
     const recurring = (t.recur || "none") !== "none";
     const deadline = t.deadline || "";
-    if (t.approval_state === "returned") facts.returned.push({ title: numbered(t), comment: t.approval_comment || "" });
+    if (!self && t.approval_state === "returned") facts.returned.push({ title: numbered(t), comment: t.approval_comment || "" });
     if (!recurring && deadline && deadline < today) facts.overdue.push({ title: numbered(t), deadline });
     else if (!recurring && deadline === today) facts.today.push({ title: numbered(t), deadline });
     else if (!recurring && deadline && soonUntil && deadline > today && deadline <= soonUntil) facts.soon.push({ title: numbered(t), deadline });
-    if (!r.accepted_at && !r.declined_at) facts.unanswered.push({ title: numbered(t) });
+    if (!self && !r.accepted_at && !r.declined_at) facts.unanswered.push({ title: numbered(t) });
   }
 
   const { data: meetings } = await admin
@@ -145,7 +157,7 @@ export async function buildManagerBrief(
   // Обсуждения, в которых со вчера писали другие. Своих сообщений здесь
   // быть не должно: сводка, напоминающая человеку о том, что он сам вчера
   // написал, учит пролистывать сводку.
-  const open = ((rows || []) as unknown as Row[]).filter((r) => isOpen(r.tasks));
+  const open = openRows.filter((r) => !personal.has(r.task_id));
   const mine = open.map((r) => r.task_id);
   // Напарники — только там, где задача ещё ждёт ЕГО ответа: «сосед
   // отчитался» значит «дело за вами», а если он сам уже отчитался или
@@ -183,7 +195,7 @@ export async function buildManagerBrief(
     // а задач у одного — единицы.
     const { data: mates } = await admin
       .from("task_participants")
-      .select("task_id, assignee_id, done_at, declined_at, assignees(name)")
+      .select("task_id, assignee_id, done_at, declined_at, assignees(name, archived_at)")
       .eq("user_id", ownerId)
       .eq("role", "executor")
       .in("task_id", mine);
@@ -193,11 +205,16 @@ export async function buildManagerBrief(
       assignee_id: string;
       done_at: string | null;
       declined_at: string | null;
-      assignees: { name: string } | { name: string }[] | null;
+      assignees: { name: string; archived_at: string | null } | { name: string; archived_at: string | null }[] | null;
     };
     const byTask = new Map<string, string[]>();
     for (const m of ((mates || []) as unknown as Mate[])) {
       if (m.assignee_id === assignee.id || !waitingOnMe.has(m.task_id)) continue;
+      // Убранного из команды здесь нет: «Кирилл (тест) отчитался» через
+      // неделю после того, как его убрали, — новость о человеке, которого
+      // уже нет (28.10.2026).
+      const person = Array.isArray(m.assignees) ? m.assignees[0] : m.assignees;
+      if (person?.archived_at) continue;
       // Только то, что человек СКАЗАЛ. «Ещё не ответил» сюда не идёт: это
       // не событие, а тишина, и о ней спрашивает постановщик, а не сосед.
       const name = withoutSelfMark((Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name) || "");

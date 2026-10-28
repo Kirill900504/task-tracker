@@ -246,7 +246,7 @@ Playwright ждёт стабильности сам, но только внут�
   системный `<select>`. `Icon.tsx` — все значки интерфейса.
 - `src/hooks/useEscapeToClose.ts` — Esc закрывает то, что открыто. Одно
   место на все окна и меню.
-- `src/lib/quickAdd.ts`, `meetingNotes.ts`, `dailyBrief.ts`, `weeklyReview.ts`,
+- `src/lib/quickAdd.ts`, `meetingNotes.ts`, `managerBrief.ts`, `weeklyReview.ts`,
   `telegramQueries.ts`, `telegramManage.ts`, `bulkActions.ts` — the assistant.
 - `src/app/api/*` — Telegram/MAX webhooks, invite/link/send, cron.
 - `supabase/migrations/*` — applied with the script above, never by hand.
@@ -1802,9 +1802,24 @@ auth-id). Две ловушки, обе стоили по разу: читать
 **Реплика из обсуждения уходит постановщику, а не «владельцу всегда»**
 (`commentDelivery`, 14.10.2026). Владелец получает её, только если он сам
 поручил или стоит на деле: видимость одна для экрана и для бота, и сводка с
-чужими переписками была той же лентой. По той же причине утренняя сводка
-владельца (`dailyBrief`, «ждут приёмки», «писали в обсуждениях», «кто
-молчит») берёт только видимое ему — `lib/ownerVisible`.
+чужими переписками была той же лентой.
+
+**Владельческой утренней сводки нет** (28.10.2026, его слова: «это
+ежедневное оповещение убери вообще у всех, оно только эфир засоряет»).
+«☀️ Утро. Главное на сегодня» с приёмкой, молчащими, неподключёнными,
+сроками поручений и обсуждениями удалена вместе с `dailyBrief`,
+`silence`, `pendingInvites`. Осталась одна утренняя сводка —
+`managerBrief` «Доброе утро» каждому про СВОИ дела, владельцу тоже. В ней
+личная задача (`selfTaskServer`) — только сроками: просрочено, сегодня,
+скоро; без «ждут вашего ответа», возврата, напарников и обсуждений («по
+ним напоминать в ботах не надо»). Убранные из команды (`archived_at`) в
+неё не попадают ни адресатом, ни напарником. Не возвращайте владельческую
+сводку «короче» или «раз в неделю» — просьба была убрать.
+**«(я)» в мессенджер не уходит никогда** — `lib/botText.stripSelfMarks`
+на выходе в `telegram.ts` и `max.ts` (текст, кнопки, всплывашки). Он
+просил убрать его трижды: каждый раз оно возвращалось новым сообщением,
+собранным из имени строки напрямую. Новый способ отправки в мессенджер —
+только через эти два файла.
 
 **Заведённая задача — не черновик.** У неё нет полей: название заголовком,
 описание текстом, из правки только срок (его двигает постановщик), состав,
@@ -3213,16 +3228,9 @@ Playwright. Так же уходит шторка календаря (`CalSheet`
   real bot token (owner and manager signed in, forgeries refused).
 - Colleagues are recipients, not users. Making them real users who exchange
   items with each other is his own next big idea, deliberately deferred.
-- **The morning brief is facts first, model second.** GigaChat writes the
-  prose part; everything with a name or a number in it is appended
-  afterwards in code — what is waiting for his приёмка, who has not answered
-  at all (`silence.ts`), what was discussed since yesterday, and on Mondays
-  what looks assigned but is not. That order is the rule, not the habit: the
-  model may reword, it may not count.
-- «Не ответили на задачу» and «задача не дошла» are two blocks on purpose. A
-  person with no messenger and no login has no button to press, and calling
-  that silence is both untrue and the fastest way to make the whole brief
-  unreadable. On 15.09.2026 all four «silent» people were exactly that.
+- **The owner's morning brief is gone** (28.10.2026, see «Владельческой
+  утренней сводки нет» above). The rule it was built on still holds for
+  every summary that remains: the model may reword, it may not count.
 - Sending a task to the assignee at the moment of assignment is **done**, not
   pending — `assignWork.ts` treats it as one of the three notifications that
   cannot be switched off. «Покажи это ещё и Ане» осталось, но не в форме:

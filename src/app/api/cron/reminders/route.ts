@@ -7,7 +7,6 @@ import { notifyAuthor, notifyOwner } from "@/lib/botDelivery";
 import { flushNotices } from "@/lib/noticeQueue";
 import { moscowNow, dateStr, minutesOfDay } from "@/lib/taskLogic";
 import { isRussianWorkingDay } from "@/lib/workCalendar";
-import { buildBriefFacts, briefIsEmpty, composeBrief } from "@/lib/dailyBrief";
 import { briefButtons } from "@/lib/ownerQueries";
 import { buildWeeklyFacts, weeklyIsEmpty, composeWeekly } from "@/lib/weeklyReview";
 import { dueReminder, minutesUntil, organizerNeedsReminder, organizerReminderButtons, ownerReminder, participantReminder, reasonNudge, recapAsk, recapButtons, recapDue } from "@/lib/meetingReminders";
@@ -21,14 +20,11 @@ import { personStats, composePeopleReview, composeMyWeek, buildParticipation } f
 import { findAssignmentDrift } from "@/lib/assignmentDrift";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { onceOnly } from "@/lib/onceOnly";
-import { findSilent, composeSilence } from "@/lib/silence";
-import { composePending, findPendingInvites } from "@/lib/pendingInvites";
 import { setMaxCommands, setTelegramCommands, syncTelegramAppButtons } from "@/lib/botCommands";
 import { alarmText, findStuck, nudgeText, selfOverdueText } from "@/lib/escalation";
 import { selfTaskIds } from "@/lib/selfTaskServer";
 import { findWaiting, unacceptedText, unreviewedText } from "@/lib/waitingNudges";
-import { numbered, taskRef } from "@/lib/taskRef";
-import { ownerSeesTask, ownerSight } from "@/lib/ownerVisible";
+import { taskRef } from "@/lib/taskRef";
 import { normalizeDuration } from "@/lib/meetingTime";
 import { timeIsUpText } from "@/lib/meetingNudges";
 import { telegramTransport } from "@/lib/telegram";
@@ -270,133 +266,14 @@ export async function GET(req: Request) {
 
   for (const userId of userIds) {
 
-    // The morning briefing replaces what used to be a line-per-task dump:
-    // one note saying what actually matters today and why. Sent once a day,
-    // on a working day, and not before BRIEF_FROM_MINUTES — a list of tasks
-    // arriving at 00:05 (whenever the pinger first ran after midnight) was
-    // no use to anybody.
-    // Только по понедельникам и средам (lib/briefDays, 07.10.2026: «чтобы не
-    // засорял эфир и не бесил каждый день»).
-    if (workingDay && briefDay && nowMin >= BRIEF_FROM_MINUTES) {
-      await onceOnly(admin, { userId, kind: "daily_brief", refId: today, date: today }, async () => {
-        const facts = await buildBriefFacts(admin, userId);
-        let text = briefIsEmpty(facts) ? "" : await composeBrief(facts);
-
-        // То, что ждёт решения самого владельца. Сводка до сих пор
-        // рассказывала только про чужую работу, а собственная очередь —
-        // задачи, где все отчитались и ждут приёмки — не попадала в неё
-        // вовсе. Дописывается кодом после модели: цифра и список имён
-        // не должны зависеть от того, как их перескажут.
-        //
-        // Своё — пустой `created_by`: принимает работу тот, кто её поручил,
-        // и чужие приёмки (руководителей) здесь были чужими решениями,
-        // которых владелец даже не видит на своей доске (14.10.2026).
-        const { data: waiting } = await admin
-          .from("tasks")
-          .select("title, number")
-          .eq("user_id", userId)
-          .is("created_by", null)
-          .eq("approval_state", "awaiting_review")
-          .is("deleted_at", null)
-          .limit(10);
-        const onReview = ((waiting || []) as { title: string; number: number | null }[]).map((t) => numbered(t));
-        if (onReview.length) {
-          text =
-            (text ? text + "\n\n" : "") +
-            `🔍 Ждут вашей приёмки (${onReview.length}):\n` +
-            onReview.slice(0, 5).map((t) => `• ${t}`).join("\n");
-        }
-
-        // Кто молчит. Просроченное сводка показывает давно, но просрочка —
-        // это про дату, а здесь про человека: задачу выдали, и по ней не
-        // нажали ничего. Такая задача выглядит живой ровно до срока, а
-        // потом оказывается, что её никто и не начинал. Считается кодом:
-        // имена и сроки модели не отдаются.
-        const silent = await findSilent(admin, userId, now);
-        if (silent.length) text = (text ? text + "\n\n" : "") + composeSilence(silent);
-
-        // Ссылку на бота выдали, а человек не подключился (lib/pendingInvites).
-        const pending = composePending(await findPendingInvites(admin, userId));
-        if (pending) text = (text ? text + "\n\n" : "") + pending;
-
-        // Сроки его поручений до следующей сводки: раз она выходит дважды в
-        // неделю, срок во вторник или в пятницу иначе прошёл бы мимо неё.
-        // Своё — где автор не записан (равные права: чужие поручения
-        // сообщают их постановщикам).
-        if (briefUntil) {
-          const { data: soonRows } = await admin
-            .from("tasks")
-            .select("title, number, deadline, recur")
-            .eq("user_id", userId)
-            .is("created_by", null)
-            .is("deleted_at", null)
-            .neq("status", "done")
-            .gt("deadline", today)
-            .lte("deadline", briefUntil)
-            .order("deadline")
-            .limit(10);
-          const soon = ((soonRows || []) as { title: string; number: number | null; deadline: string; recur: string | null }[]).filter((t) => (t.recur || "none") === "none");
-          if (soon.length) {
-            text =
-              (text ? text + "\n\n" : "") +
-              `⏳ Скоро срок по вашим поручениям (${soon.length}):\n` +
-              soon.map((t) => `• ${numbered(t)} — до ${t.deadline.split("-").reverse().join(".")}`).join("\n");
-          }
-        }
-
-        // Обсуждения, в которых со вчера что-то писали. Каждое сообщение
-        // отдельным уведомлением превратило бы мессенджер в ленту, а
-        // одной строкой утром это ровно то, чем оно и является:
-        // «есть что почитать вот здесь».
-        //
-        // Считаются и те сообщения, что написаны в самом трекере. Раньше
-        // стояло `author_user_id is null`, то есть «только из мессенджера»,
-        // и руководитель, ответивший с экрана, для этой сводки молчал —
-        // владелец не узнавал о его словах ни сразу, ни утром. Отсекается
-        // ровно одно: собственные сообщения Кирилла, напоминать о которых
-        // ему незачем.
-        const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-        const { data: fresh } = await admin
-          .from("item_comments")
-          .select("item_id, item_kind, author_user_id")
-          .eq("user_id", userId)
-          .eq("item_kind", "task")
-          .gt("created_at", since)
-          .is("deleted_at", null)
-          .eq("system", false);
-        const discussed = [
-          ...new Set(
-            ((fresh || []) as { item_id: string; author_user_id: string | null }[])
-              .filter((c) => c.author_user_id !== userId)
-              .map((c) => c.item_id),
-          ),
-        ];
-        if (discussed.length) {
-          // Только задачи, которые он видит и в трекере (lib/ownerVisible):
-          // до 14.10.2026 здесь были все переписки пространства, в том
-          // числе по поручениям руководителей, где его нет вовсе.
-          const [{ data: rows }, sight] = await Promise.all([
-            admin.from("tasks").select("id, title, number, created_by").in("id", discussed),
-            ownerSight(admin, userId),
-          ]);
-          const seen = ((rows || []) as { id: string; title: string; number: number | null; created_by: string | null }[]).filter((t) =>
-            ownerSeesTask(sight, t),
-          );
-          if (seen.length) {
-            text =
-              (text ? text + "\n\n" : "") +
-              `💬 Писали в обсуждениях (${seen.length}):\n` +
-              seen.slice(0, 5).map((t) => `• ${numbered(t)}`).join("\n");
-          }
-        }
-
-        // Под сводкой — кнопки, а не только текст. Сводка перечисляет то,
-        // что требует решения, и человек, дочитав её, должен нажать, а не
-        // идти искать, чем нажать: «кнопка там, где от человека ждут
-        // ответа» — правило проекта, и сводка тут самый частый случай.
-        if (text) await notifyOwner(admin, userId, text, briefButtons());
-      });
-    }
+    // Владельческой утренней сводки («☀️ Утро. Главное на сегодня» плюс
+    // приёмка, молчащие, неподключённые, сроки поручений, обсуждения) БОЛЬШЕ
+    // НЕТ — 28.10.2026, его слова: «это ежедневное оповещение убери вообще у
+    // всех, оно только эфир засоряет». Всё, что в ней было, уже приходит
+    // своей дорогой: приёмка и ответы — сводкой очереди постановщику,
+    // просрочка — ступенями, свои сроки — личной сводкой ниже
+    // (managerBrief, она же владельцу как получателю). Не возвращайте её
+    // «короче» или «раз в неделю»: просьба была убрать, а не ужать.
 
     // Отложенная задача вернулась (миграция 0049): в день, до которого её
     // отложили, постановщику — одной строкой, сразу, а не в сводке: сводка
@@ -508,7 +385,9 @@ export async function GET(req: Request) {
       const { data: colleagues } = await admin
         .from("assignees")
         .select("id, name, telegram_chat_id, max_user_id")
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        // Убранному из команды сводок нет: дел у него больше нет.
+        .is("archived_at", null);
 
       for (const person of ((colleagues || []) as ColleagueRow[])) {
         // Владелец здесь тоже адресат, и это не лишнее письмо: его
