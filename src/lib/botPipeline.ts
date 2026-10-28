@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotButton, BotChannelConfig, BotTransport } from "@/lib/botTransport";
 import { closedReply, itemClosed } from "@/lib/closedItem";
+import { isLoginToken, loginPrompt } from "@/lib/messengerLogin";
 import { answerOwnOpenQuestion, colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
 import { appReply, matchColleagueCommand, navButtons, signInReply } from "@/lib/colleagueQueries";
 import { encodeCallback, findColleagueByChat, findOwnerSelfByChat, screenButtons } from "@/lib/colleagues";
@@ -640,6 +641,13 @@ async function respondToTool(ctx: BotContext, userId: string, tool: string, inpu
 // whether this chat becomes the owner's own or one colleague's.
 export async function handleLinkCode(ctx: BotContext, rawCode: string, username: string | null): Promise<boolean> {
   const code = rawCode.trim().toUpperCase();
+  // Вход на компьютере через бота (lib/messengerLogin) приходит той же
+  // дверью — ссылкой на бота с токеном — и отвечает вопросом «это вы?».
+  if (isLoginToken(code)) {
+    const prompt = await loginPrompt(ctx.admin, ctx.chatId, ctx.channel, code);
+    await ctx.transport.send(ctx.chatId, prompt.text, prompt.buttons ? { buttons: prompt.buttons } : {});
+    return true;
+  }
   if (!code) {
     await say(ctx, `Откройте трекер на сайте и нажмите «Подключить ${ctx.channel.label}», чтобы получить код.`);
     return true;
@@ -657,9 +665,27 @@ export async function handleLinkCode(ctx: BotContext, rawCode: string, username:
   }
   // A code issued for the other messenger is not valid here — it was shown
   // with a different bot's link, and honouring it would attach the wrong chat.
-  if (!linkRow || linkRow.channel !== ctx.channel.id || new Date(linkRow.expires_at).getTime() < Date.now()) {
+  // Приглашение «всё в одном» (lib/welcomeInvite) — канал «any»: его
+  // принимают оба бота, и при подключении оно не сгорает.
+  const welcome = linkRow?.channel === "any";
+  if (!linkRow || (linkRow.channel !== ctx.channel.id && !welcome) || new Date(linkRow.expires_at).getTime() < Date.now()) {
     await say(ctx, "Код неверный или уже истёк. Запросите новый в приложении.");
     return true;
+  }
+  // Живущий неделю код не должен перепривязать уже подключённого человека
+  // к чужому чату: ссылку пересылают, и открыть её может не тот, кому её
+  // дали. Свой же чат — просто приветствие ещё раз.
+  if (welcome && linkRow.assignee_id) {
+    const { data: current } = await ctx.admin
+      .from("assignees")
+      .select(ctx.channel.chatColumn)
+      .eq("id", linkRow.assignee_id)
+      .maybeSingle();
+    const existing = (current as Record<string, unknown> | null)?.[ctx.channel.chatColumn];
+    if (existing && Number(existing) !== Number(ctx.chatId)) {
+      await say(ctx, `Этот человек уже подключён к ${ctx.channel.label} с другого аккаунта. Если это вы и аккаунт новый — попросите у Кирилла новую ссылку.`);
+      return true;
+    }
   }
 
   // A code issued for a colleague attaches this chat to that person instead
@@ -680,7 +706,7 @@ export async function handleLinkCode(ctx: BotContext, rawCode: string, username:
       await say(ctx, "Не удалось подключиться: " + linkError.message);
       return true;
     }
-    await ctx.admin.from("telegram_link_codes").delete().eq("code", code);
+    if (!welcome) await ctx.admin.from("telegram_link_codes").delete().eq("code", code);
     // Подключение — это и есть вход в трекер: дальше человеку не нужно ни
     // приглашения, ни пароля. Кабинет заведётся при первом открытии
     // приложения (lib/cabinet), поэтому кнопка стоит прямо в приветствии,
@@ -698,7 +724,7 @@ export async function handleLinkCode(ctx: BotContext, rawCode: string, username:
       `✓ Готово, ${withoutSelfMark(person?.name || "") || "вы"} на связи.\n\n` +
         "Сюда приходят задачи и встречи — отвечать можно кнопками под сообщением.\n" +
         "📱 Весь трекер — кнопка «Мобильное приложение» ниже: открывается прямо здесь, без пароля.\n" +
-        "💻 На компьютере — «Вход с компьютера»: пришлю ссылку.",
+        `💻 На компьютере — кнопка «Войти через ${ctx.channel.label}» на странице входа трекера: пароль не нужен.`,
       { buttons: menu.buttons },
     );
     return true;

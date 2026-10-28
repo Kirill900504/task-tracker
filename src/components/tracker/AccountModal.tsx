@@ -9,6 +9,7 @@ import Modal from "./Modal";
 import Icon, { type IconName } from "./Icon";
 import MessengerLink from "./MessengerLink";
 import { MaxBrandIcon, TelegramBrandIcon } from "./MessengerBrandIcon";
+import { AlertSettings } from "./AlertsButton";
 
 // Личный кабинет — всё, что касается самого человека, в одном окне.
 //
@@ -25,6 +26,13 @@ import { MaxBrandIcon, TelegramBrandIcon } from "./MessengerBrandIcon";
 // нет); куда мне пишет трекер (мессенджеры, подключение — той же плашкой,
 // что и напоминание, а не второй копией); и личные мелочи, которые уже
 // были в меню. Права и роли других людей сюда не входят — это «Команда».
+//
+// 28.10.2026 («модернизируй личные кабинеты, чтобы они могли управлять
+// настройками, уведомлениями и прочим») сюда добавлены уведомления — те же
+// переключатели, что в колокольчике (AlertSettings), — приложение для
+// компьютера постоянной ссылкой /api/download и выход на всех устройствах.
+// Порядок — от того, что нужно чаще: куда приходит, что всплывает, как войти,
+// чем открывать, и только потом выход.
 
 export type AccountItem = { id: string; label: string; icon: IconName; onSelect: () => void };
 
@@ -34,6 +42,7 @@ export default function AccountModal({
   messenger,
   owner,
   items,
+  alerts,
   onSignOut,
   onClose,
 }: {
@@ -45,9 +54,14 @@ export default function AccountModal({
   // кнопка подключения — разбирать его как руководительский нельзя.
   owner: { needs: Record<ColleagueChannel, boolean>; maxAvailable: boolean; link: (c: ColleagueChannel) => void } | null;
   items: AccountItem[];
-  onSignOut: () => void;
+  alerts: { permission: NotificationPermission | "unsupported"; requestPermission: () => void };
+  onSignOut: (everywhere?: boolean) => void;
   onClose: () => void;
 }) {
+  // В настольном приложении скачивать его же незачем; на телефоне — нечем.
+  const [desktopOffer] = useState(
+    () => typeof navigator !== "undefined" && !/Electron|Android|iPhone|iPad|Mobile/i.test(navigator.userAgent),
+  );
   const [email, setEmail] = useState<string | null>(null);
   const [draftEmail, setDraftEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -118,7 +132,55 @@ export default function AccountModal({
         </div>
 
         <section className="account-section">
+          <h3>Мессенджеры</h3>
+          <p className="field-hint">
+            Туда приходят задачи и встречи с кнопками ответа, а в меню бота — «Мобильное приложение»: весь трекер
+            прямо в чате, без пароля.
+          </p>
+          {messenger && <MessengerLink messenger={messenger} embedded />}
+          {owner && (
+            <div className="account-owner-ms">
+              <span className="ms-link-on">
+                <TelegramBrandIcon size={16} /> Telegram — {owner.needs.telegram ? "не подключён" : "подключён"}
+              </span>
+              {owner.needs.telegram && (
+                <button type="button" className="btn btn-small btn-primary" onClick={() => owner.link("telegram")}>
+                  Подключить
+                </button>
+              )}
+              {owner.maxAvailable && (
+                <>
+                  <span className="ms-link-on">
+                    <MaxBrandIcon size={16} /> MAX — {owner.needs.max ? "не подключён" : "подключён"}
+                  </span>
+                  {owner.needs.max && (
+                    <button type="button" className="btn btn-small btn-primary" onClick={() => owner.link("max")}>
+                      Подключить
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="account-section" id="accountAlerts">
+          <h3>Уведомления на этом устройстве</h3>
+          <div className="account-alerts">
+            <AlertSettings permission={alerts.permission} requestPermission={alerts.requestPermission} idPrefix="account" />
+          </div>
+          <p className="field-hint">
+            В мессенджер приходит всегда: задачи и встречи на вас, ответы по вашим поручениям, а в понедельник и среду —
+            сводка, если горит срок. Это не выключается: иначе поручение можно не увидеть вовсе.
+          </p>
+        </section>
+
+        <section className="account-section">
           <h3>Вход с компьютера</h3>
+          <p className="field-hint">
+            Проще всего — без пароля: на странице входа кнопка «Войти через Telegram» (или MAX), бот спросит «это вы?», и
+            трекер откроется. Почта и пароль ниже — запасной путь.
+          </p>
           {email === null ? (
             <p className="field-hint">Загружаю…</p>
           ) : (
@@ -161,38 +223,19 @@ export default function AccountModal({
           )}
         </section>
 
-        <section className="account-section">
-          <h3>Мессенджеры</h3>
-          <p className="field-hint">
-            Туда приходят задачи и встречи с кнопками ответа, а в меню бота — «Мобильное приложение»: весь трекер
-            прямо в чате, без пароля.
-          </p>
-          {messenger && <MessengerLink messenger={messenger} embedded />}
-          {owner && (
-            <div className="account-owner-ms">
-              <span className="ms-link-on">
-                <TelegramBrandIcon size={16} /> Telegram — {owner.needs.telegram ? "не подключён" : "подключён"}
-              </span>
-              {owner.needs.telegram && (
-                <button type="button" className="btn btn-small btn-primary" onClick={() => owner.link("telegram")}>
-                  Подключить
-                </button>
-              )}
-              {owner.maxAvailable && (
-                <>
-                  <span className="ms-link-on">
-                    <MaxBrandIcon size={16} /> MAX — {owner.needs.max ? "не подключён" : "подключён"}
-                  </span>
-                  {owner.needs.max && (
-                    <button type="button" className="btn btn-small btn-primary" onClick={() => owner.link("max")}>
-                      Подключить
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </section>
+
+        {desktopOffer && (
+          <section className="account-section">
+            <h3>Приложение для компьютера</h3>
+            <p className="field-hint">
+              Трекер в своём окне, с уведомлениями поверх других программ. Обновляется само. Windows может спросить «защитила
+              ваш компьютер» — «Подробнее» → «Выполнить в любом случае».
+            </p>
+            <a className="btn btn-small btn-primary account-download" href="/api/download" id="accountDownload">
+              <Icon name="download" size={14} /> Скачать для Windows
+            </a>
+          </section>
+        )}
 
         {!!items.length && (
           <section className="account-section">
@@ -213,8 +256,13 @@ export default function AccountModal({
           </section>
         )}
 
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={onSignOut}>
+        <div className="modal-actions account-actions">
+          {/* «Везде» — для потерянного телефона или чужого компьютера, где
+              забыли выйти: закрывает вход на всех устройствах сразу. */}
+          <button type="button" className="btn" id="signOutEverywhereBtn" onClick={() => onSignOut(true)}>
+            Выйти на всех устройствах
+          </button>
+          <button type="button" className="btn" id="accountSignOutBtn" onClick={() => onSignOut(false)}>
             <Icon name="logout" size={14} /> Выйти
           </button>
         </div>

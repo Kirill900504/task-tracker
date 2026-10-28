@@ -44,7 +44,9 @@ export async function updateSession(request: NextRequest) {
   // стояли ПОСЛЕ getUser и платили его зря (почему каждая публична —
   // написано у её проверки ниже).
   const path = request.nextUrl.pathname;
-  if (["/reset-password", "/join", "/app", "/enter"].some((p) => path.startsWith(p))) return NextResponse.next({ request });
+  // /welcome — страница приглашения (lib/welcomeInvite): её открывает
+  // человек, у которого ещё нет ни входа, ни сессии.
+  if (["/reset-password", "/join", "/app", "/enter", "/welcome"].some((p) => path.startsWith(p))) return NextResponse.next({ request });
 
   let supabaseResponse = NextResponse.next({ request });
 

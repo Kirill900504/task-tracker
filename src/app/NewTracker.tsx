@@ -934,7 +934,8 @@ export default function NewTracker() {
             { id: "calendar", label: "Встречи в календаре телефона", icon: "calendar", onSelect: () => void subscribeCalendar() },
             ...(installPrompt.visible ? [{ id: "install", label: "Установить приложение на компьютер", icon: "install" as const, onSelect: installPrompt.promptInstall }] : []),
           ]}
-          onSignOut={() => actions.signOut()}
+          alerts={{ permission: notifications.permission, requestPermission: notifications.requestPermission }}
+          onSignOut={(everywhere) => actions.signOut(everywhere)}
           onClose={() => setAccountOpen(false)}
         />
       )}
