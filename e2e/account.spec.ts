@@ -92,3 +92,22 @@ test("смайлик из кнопки у поля встаёт на место 
   await expect(page.locator(".emoji-picker")).toBeHidden();
   await expect(composer).toBeVisible();
 });
+
+// Стартовое знакомство (28.10.2026). Само оно у автотестов не всплывает
+// (lib/welcomeTour — иначе легло бы поверх каждого теста), поэтому
+// проверяется дверью, которой его открывают снова, — «Как пользоваться
+// трекером» в личном кабинете: листается до конца, а последняя кнопка ведёт
+// в «Мои данные».
+test("знакомство с трекером листается и ведёт в «Мои данные»", async ({ page }) => {
+  await login(page);
+  await page.click("#accountBtn");
+  await page.locator(".account-modal").getByRole("button", { name: "Как пользоваться трекером" }).click();
+  const tour = page.locator(".tour-modal");
+  await expect(tour).toBeVisible();
+  await expect(tour.locator(".tour-title")).toHaveText("Добро пожаловать");
+  for (let i = 0; i < 12 && (await page.locator("#tourNextBtn").count()); i++) await page.click("#tourNextBtn");
+  await expect(tour.locator(".tour-title")).toHaveText("Последний шаг");
+  await page.click("#tourProfileBtn");
+  await expect(tour).toHaveCount(0);
+  await expect(page.locator("#accountProfile")).toBeVisible();
+});

@@ -26,6 +26,7 @@ export const loadTaskModal = () => import("@/components/tracker/TaskModal");
 export const loadMeetingModal = () => import("@/components/tracker/MeetingModal");
 export const loadTeamModal = () => import("@/components/tracker/TeamModal");
 export const loadAccountModal = () => import("@/components/tracker/AccountModal");
+export const loadWelcomeTour = () => import("@/components/tracker/WelcomeTour");
 export const loadSectionsModal = () => import("@/components/tracker/SectionsModal");
 export const loadMeetingTasksSheet = () => import("@/components/tracker/MeetingTasksSheet");
 export const loadSentIdeasModal = () => import("@/components/tracker/SentIdeasModal");
@@ -43,6 +44,7 @@ const ALL = [
   loadIdeaReviewModal,
   loadMeetingTasksSheet,
   loadSectionsModal,
+  loadWelcomeTour,
 ];
 
 let started = false;

@@ -10,6 +10,8 @@ describe("приглашение «всё в одном»", () => {
     const text = welcomeMessage("Иван Петров", "https://t.example/welcome/X");
     expect(text.startsWith("Иван, привет!")).toBe(true);
     expect(text).toContain("https://t.example/welcome/X");
+    // Второй шаг назван заранее — «Мои данные» в личном кабинете.
+    expect(text).toContain("рабочую почту, телефон и пароль");
   });
 
   it("без имени — просто «Привет»", () => {

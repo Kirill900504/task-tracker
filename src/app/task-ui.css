@@ -1110,3 +1110,24 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
   position:absolute; top:4px; right:4px; width:8px; height:8px; border-radius:50%;
   background:var(--today); box-shadow:0 0 0 2px var(--paper);
 }
+
+/* Стартовое знакомство (WelcomeTour): одна карточка за раз — значок,
+   заголовок, две-три строки, точки шагов и кнопки внизу. Высота карточки
+   держится одной, чтобы кнопки не прыгали под рукой от шага к шагу. */
+.modal.tour-modal{max-width:520px;}
+.tour-card{min-height:250px; padding:6px 4px 0; animation:tour-in .22s var(--win-ease, ease);}
+@keyframes tour-in{from{opacity:0; transform:translateX(10px);} to{opacity:1; transform:none;}}
+@media (prefers-reduced-motion: reduce){ .tour-card{animation:none;} }
+.tour-icon{
+  width:52px; height:52px; border-radius:var(--radius-md); display:grid; place-items:center;
+  background:var(--accent-soft); color:var(--accent); margin-bottom:14px;
+}
+.tour-title{margin:0 0 10px; font-family:var(--display); font-size:19px; font-weight:800; color:var(--ink);}
+.tour-text{margin:0 0 10px; font-size:14px; line-height:1.6; color:var(--ink-soft);}
+.tour-dots{display:flex; justify-content:center; gap:7px; margin:10px 0 4px;}
+.tour-dot{width:8px; height:8px; padding:0; border:0; border-radius:50%; background:var(--line); cursor:pointer; transition:width .18s ease, background .18s ease;}
+.tour-dot.on{width:22px; border-radius:999px; background:var(--accent);}
+.tour-actions{justify-content:space-between; gap:8px;}
+.tour-finish{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
+.tour-count{margin-left:6px; opacity:.75; font-variant-numeric:tabular-nums;}
+@media (max-width:800px){ .tour-card{min-height:0;} }
