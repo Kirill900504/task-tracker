@@ -161,7 +161,10 @@ export async function settled(locator: Locator, tries = 20): Promise<{ x: number
 export async function signOut(page: Page) {
   await page.click("#accountBtn");
   // С 13.10.2026 это окно «Личный кабинет», и «Выйти» — его кнопка внизу.
-  await page.locator(".account-modal").getByRole("button", { name: "Выйти" }).click();
+  // По id, а не по слову: рядом стоит «Выйти на всех устройствах», и поиск
+  // по имени находил обе — строгий режим Playwright ронял каждый тест с
+  // выходом (28.10.2026).
+  await page.locator(".account-modal #accountSignOutBtn").click();
 }
 
 // Сделать задачу ЧУЖИМ поручением тестовому аккаунту.
