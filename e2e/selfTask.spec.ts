@@ -66,6 +66,36 @@ test("новая своя задача сразу показана личной"
   await expect(card.locator(".task-people")).toHaveCount(0);
 });
 
+// Та же гарантия у задач из повестки встречи: они назначались мимо
+// заготовок (assignExecutorsByName) и первые секунды стояли без людей.
+test("задача из повестки на себя сразу показана личной", async ({ page }) => {
+  const stamp = Date.now();
+  const item = `E2E пункт ${stamp}`;
+  await login(page);
+  await page.click("#addMeetingBtn");
+  await page.fill("#mTitle", `E2E повестка ${stamp}`);
+  await page.fill("#mAgenda", item);
+  await page.click("#agendaAddBtn");
+  await page.click("#meetingSaveBtn");
+  const chip = page.locator(".meeting-chip", { hasText: `E2E повестка ${stamp}` });
+  await expect(chip).toBeVisible();
+
+  await chip.locator(".meeting-act.success").click();
+  await page.fill("#askInput", "Решили");
+  await page.click("#askOkBtn");
+  await expect(page.locator("#recapTasksSheet")).toBeVisible({ timeout: 20_000 });
+
+  await page.route(/\/rest\/v1\/(tasks|task_participants)(\?|$)/, async (route) => {
+    if (route.request().method() !== "GET") await new Promise((r) => setTimeout(r, 5000));
+    await route.continue();
+  });
+  await page.click("#recapTasksCreate");
+
+  const card = page.locator(".task", { hasText: item });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("Личная задача", { timeout: 1500 });
+});
+
 // Наблюдатель рядом задачу «своей» не отменяет (23.10.2026: мысль,
 // переведённая в задачу на себя с наблюдателем, шла полной дорогой —
 // «Принял / Сделал», «Принудительное закрытие»). Работаю по ней только я.
