@@ -3,6 +3,8 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { passwordProblem } from "@/lib/workspaceInvite";
+import PasswordHints from "@/components/PasswordHints";
 
 // Landed on via the email link from resetPasswordForEmail() (login page).
 // The Supabase browser client auto-exchanges the link's code for a
@@ -20,13 +22,21 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  // Ссылка не подошла: вместо тупика — кнопка за новой (страница входа
+  // сразу в режиме «Забыли пароль?», /login?forgot=1).
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
+    // Пришла ли сессия хоть каким-то путём — для таймера ниже.
+    let got = false;
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") setReady(true);
+      if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
+        got = true;
+        setReady(true);
+      }
     });
 
     // Второй способ сюда попасть: ссылка, выданная владельцем в «Команде»
@@ -39,8 +49,10 @@ export default function ResetPasswordPage() {
     const tokenHash = new URLSearchParams(window.location.search).get("token_hash");
     if (tokenHash) {
       supabase.auth.verifyOtp({ type: "recovery", token_hash: tokenHash }).then(({ error }) => {
-        if (error) setError("Ссылка больше не действует — попросите новую.");
-        else setReady(true);
+        if (error) {
+          setError("Ссылка больше не действует — она одноразовая и живёт час.");
+          setExpired(true);
+        } else setReady(true);
         window.history.replaceState(null, "", window.location.pathname);
       });
       return () => subscription.unsubscribe();
@@ -49,16 +61,35 @@ export default function ResetPasswordPage() {
     // Covers the case where the recovery session was already established by
     // the time this effect runs (event fired before the listener attached).
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setReady(true);
+      if (data.session) {
+        got = true;
+        setReady(true);
+      }
     });
-    return () => subscription.unsubscribe();
+    // Ни кода в адресе, ни сессии: страницу открыли из закладки, из
+    // истории или по обрезанной ссылке. Раньше она оставалась на «Проверяю
+    // ссылку…» навсегда; через несколько секунд честно говорим, что
+    // ссылка не та, и даём кнопку за новой.
+    const giveUp = window.setTimeout(() => {
+      if (got) return;
+      setError("Ссылка неполная или уже использована.");
+      setExpired(true);
+    }, 6000);
+    return () => {
+      window.clearTimeout(giveUp);
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (password.length < 6) {
-      setError("Пароль должен быть не короче 6 символов.");
+    // Те же требования, что везде (lib/workspaceInvite.PASSWORD_RULES). До
+    // 29.10.2026 здесь было своё «не короче 6», и по ссылке восстановления
+    // ставился «123456», который не прошёл бы ни в одном другом месте.
+    const problem = passwordProblem(password);
+    if (problem) {
+      setError(problem);
       return;
     }
     if (password !== confirm) {
@@ -66,11 +97,24 @@ export default function ResetPasswordPage() {
       return;
     }
     setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password });
+    // Через маршрут «Моих данных», а не прямо в Supabase: там правило
+    // пароля проверяет сервер (браузерную проверку обходят), там же новый
+    // пароль закрывает все прочие входы и в мессенджер уходит «пароль
+    // изменён» — если меняли не вы, это первое, по чему вы узнаете.
+    const res = await fetch("/api/account/credentials", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password, recovery: true }),
+    }).catch(() => null);
+    const data = (await res?.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
     setLoading(false);
-    if (error) {
-      setError("Не получилось сохранить пароль: " + error.message);
+    if (!res) {
+      setError("Нет связи с трекером — проверьте интернет и нажмите ещё раз.");
+      return;
+    }
+    if (!res.ok || !data?.ok) {
+      if (res.status === 401) setExpired(true);
+      setError(res.status === 401 ? "Ссылка больше не действует — попросите новую." : "Не получилось сохранить пароль: " + (data?.error || "попробуйте ещё раз"));
       return;
     }
     setDone(true);
@@ -96,6 +140,11 @@ export default function ResetPasswordPage() {
             строка «Проверяю ссылку…», и остаться с ней навсегда значит
             остаться без объяснения. */}
         {!ready && !done && error && <div className="auth-error">{error}</div>}
+        {expired && !done && (
+          <button type="button" className="auth-btn" id="resetAgainBtn" onClick={() => router.push("/login?forgot=1")}>
+            Получить новую ссылку
+          </button>
+        )}
         {!ready && !done && !error && <p className="auth-sub" style={{ margin: 0 }}>Проверяю ссылку…</p>}
 
         {ready && !done && (
@@ -135,6 +184,7 @@ export default function ResetPasswordPage() {
                   required
                 />
               </div>
+              <PasswordHints password={password} repeat={confirm} />
 
               <button type="submit" className="auth-btn" disabled={loading}>
                 {loading ? "Сохраняю…" : "Сохранить пароль"}
@@ -143,7 +193,11 @@ export default function ResetPasswordPage() {
           </>
         )}
 
-        {done && <p className="auth-sub" style={{ margin: 0 }}>✓ Пароль сохранён, перехожу в трекер…</p>}
+        {done && (
+          <p className="auth-sub" style={{ margin: 0 }}>
+            ✓ Пароль сохранён. На остальных устройствах вход нужно будет повторить. Перехожу в трекер…
+          </p>
+        )}
       </div>
     </div>
   );

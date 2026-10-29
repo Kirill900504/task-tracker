@@ -2796,6 +2796,9 @@
   }
   .auth-link:hover{text-decoration:underline;}
   .auth-hint{color:var(--ink-soft); font-size:12.5px; line-height:1.5; margin:16px 0 0;}
+  /* Ссылка внутри строки ошибки — «Забыли пароль?» прямо там, где сказали
+     «не подошёл»: ответ рядом с вопросом. */
+  .auth-error .auth-link{padding:0; color:inherit; text-decoration:underline; font-size:inherit;}
 
   /* Страница подключения бота (/max) — тот же экран входа, но с
      инструкцией: три шага, которые надо выполнить в другом приложении, в
@@ -3834,6 +3837,13 @@
 /* «Показать» — той же высоты, что и поле рядом: кнопка ниже поля в одной
    строке и выглядела приклеенной сбоку. */
 .account-pass .btn{min-height:42px;}
+/* Требования к паролю под полем (PasswordHints) — на входе, в приглашении
+   и в «Моих данных»; выполненное зеленеет галочкой. */
+.password-hints{list-style:none; margin:-6px 0 12px; padding:0; display:flex; flex-wrap:wrap; gap:2px 14px; font-size:12px; color:var(--ink-soft);}
+.account-form .password-hints{margin:0;}
+.password-hints li.ok{color:var(--ok-ink);}
+.account-forgot{align-self:flex-start; background:none; border:0; padding:2px 0; cursor:pointer; color:var(--accent); font-size:12.5px;}
+.account-forgot:hover{text-decoration:underline;}
 .account-ok{
   padding:8px 10px; border-radius:var(--radius-sm);
   background:rgba(108,190,140,.12); border:1px solid rgba(108,190,140,.4); color:var(--ink); font-size:12.5px;
