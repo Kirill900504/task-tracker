@@ -16,6 +16,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // даже самому себе»). Тестам, которым срок безразличен, он ставится здесь —
 // «Через неделю», и только если тест не выбрал свой до этого: проверки
 // сроков (просрочка, «завтра») ставят его сами и после этого шага.
+// Открыть задачу с доски — нажатием в угол кубика, а не по названию.
+// С 28.10.2026 нажатие на название у постановщика открытой задачи ПРАВИТ
+// его прямо на доске (TaskCard onRename), а щелчок в середину кубика у
+// короткой карточки приходится как раз на название. Угол — это корешок
+// роли и поля кубика: он открывает карточку у любого вида задачи.
+export const CARD_CORNER = { position: { x: 6, y: 6 } } as const;
+
 export async function ensureDeadline(page: Page) {
   const req = page.locator(".field-req", { hasText: "Нужен срок" });
   if (!(await req.isVisible().catch(() => false))) return;
@@ -154,7 +161,10 @@ export async function settled(locator: Locator, tries = 20): Promise<{ x: number
 export async function signOut(page: Page) {
   await page.click("#accountBtn");
   // С 13.10.2026 это окно «Личный кабинет», и «Выйти» — его кнопка внизу.
-  await page.locator(".account-modal").getByRole("button", { name: "Выйти" }).click();
+  // По id, а не по слову: рядом стоит «Выйти на всех устройствах», и поиск
+  // по имени находил обе — строгий режим Playwright ронял каждый тест с
+  // выходом (28.10.2026).
+  await page.locator(".account-modal #accountSignOutBtn").click();
 }
 
 // Сделать задачу ЧУЖИМ поручением тестовому аккаунту.

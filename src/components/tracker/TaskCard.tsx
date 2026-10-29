@@ -8,6 +8,7 @@ import { withoutSelfMark } from "@/lib/actorName";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSwipeComplete } from "@/hooks/useSwipeComplete";
 import ActionMenu, { type ActionMenuItem } from "./ActionMenu";
+import TitleEditField from "./TitleEditField";
 import Icon from "./Icon";
 import PopLayer from "./PopLayer";
 import PersonBadge from "./PersonBadge";
@@ -69,6 +70,7 @@ export default function TaskCard({
   checklist,
   waitsFor,
   snoozedTill,
+  onRename,
 }: {
   task: Task;
   section: Section | null;
@@ -128,8 +130,22 @@ export default function TaskCard({
   // автору и только пока отложена: на доске такая карточка видна лишь по
   // кнопке «Отложено», и без отметки её нельзя было отличить от обычной.
   snoozedTill?: string;
+  // Поправить название прямо на доске (28.10.2026, его слова: «удобно
+  // редактировать название задачи, в канбане нажав на поле»). Приходит
+  // только постановщику открытой задачи; без него нажатие на название
+  // открывает карточку, как нажатие на любое другое место кубика.
+  onRename?: (title: string) => void;
 }) {
   const isMobile = useIsMobile();
+  // На телефоне название — почти весь кубик, и нажатие по нему обязано
+  // открывать карточку: иначе открыть её было бы нечем. Там название
+  // правят карандашом в открытой задаче.
+  const renamable = !!onRename && !isMobile;
+  const [renaming, setRenaming] = useState(false);
+  function startRename() {
+    stopPeek();
+    setRenaming(true);
+  }
   // Меню карточки: открыто ли и от чего. Якорь нужен только на
   // компьютере — на телефоне меню и так полоса у нижнего края, — поэтому
   // его открывает и жест, у которого прямоугольника нет.
@@ -253,9 +269,38 @@ export default function TaskCard({
               переписке одним словом (миграция 0045). Левый верхний угол —
               его место по словам Кирилла. */}
           <span className="task-num">{task.number != null ? `#${task.number}` : ""}</span>
-          <div className="task-title" ref={titleRef} onPointerEnter={startPeek} onPointerLeave={stopPeek}>
-            {task.title}
-          </div>
+          {renaming ? (
+            <TitleEditField
+              className="task-title-input"
+              value={task.title}
+              onDone={(next) => {
+                setRenaming(false);
+                if (next) onRename?.(next);
+              }}
+            />
+          ) : (
+            <div
+              className={"task-title" + (renamable ? " renamable" : "")}
+              ref={titleRef}
+              onPointerEnter={startPeek}
+              onPointerLeave={stopPeek}
+              onClick={
+                renamable
+                  ? (e) => {
+                      e.stopPropagation();
+                      startRename();
+                    }
+                  : undefined
+              }
+            >
+              {task.title}
+              {renamable && (
+                <span className="task-title-pen" aria-hidden>
+                  <Icon name="edit" size={12} />
+                </span>
+              )}
+            </div>
+          )}
           {canComplete && (
             <div
               className={"check" + (task.status === "done" ? " checked" : "")}

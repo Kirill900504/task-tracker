@@ -20,7 +20,16 @@ export type ColleagueRow = {
   name: string;
   telegram_chat_id: number | null;
   max_user_id: number | null;
+  // Куда человек велел писать (миграция 0070): пусто — MAX. Выборка,
+  // которая кормит chatsFor, обязана просить эту колонку
+  // (PEOPLE_CHAT_COLUMNS), иначе выбравший Telegram молча получит MAX.
+  messenger?: string | null;
 };
+
+// Столбцы строки человека, нужные, чтобы ему написать. Одна строка на все
+// выборки: колонка выбора, забытая в одной из сорока, означала бы рассылку
+// мимо выбора человека — и никто бы этого не увидел.
+export const PEOPLE_CHAT_COLUMNS = "telegram_chat_id, max_user_id, messenger";
 
 export type SendKind = "task" | "meeting" | "idea";
 
@@ -374,18 +383,35 @@ export async function findOwnerSelfByChat(
 }
 
 export async function listColleagues(admin: SupabaseClient, userId: string): Promise<ColleagueRow[]> {
-  const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").eq("user_id", userId).order("created_at");
+  const { data } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").eq("user_id", userId).order("created_at");
   return (data || []) as ColleagueRow[];
 }
 
-// Where this person can be written to, in the order the channels are listed.
-// A colleague connected to both gets one message, not two: the first
-// messenger they connected through is the one that is used.
+// Куда писать человеку — ВЫБРАННЫЙ им мессенджер первым, второй запасным.
+//
+// 28.10.2026: «возможность выбрать только один бот, приоритетный конечно
+// MAX, но и телеграмм должен быть доступен для выбора». До этого первым
+// шёл тот, что стоит первым в списке каналов кода (Telegram), то есть
+// подключившийся к обоим получал всё в Telegram, ничего не выбирая.
+// Теперь первым идёт выбранный (пусто — MAX), и все, кто берёт `[0]`,
+// пишут туда. Второй остаётся в списке: подключён только он — пишем в
+// него, а не молчим.
 export function chatsFor(row: ColleagueRow): { channel: BotChannelConfig; chatId: number }[] {
   const out: { channel: BotChannelConfig; chatId: number }[] = [];
   for (const channel of BOT_CHANNELS) {
     const id = channel.id === "telegram" ? row.telegram_chat_id : row.max_user_id;
     if (id != null) out.push({ channel, chatId: id });
   }
-  return out;
+  return preferredFirst(out, row.messenger);
+}
+
+export type PreferredMessenger = "max" | "telegram";
+
+export function preferredMessenger(value: string | null | undefined): PreferredMessenger {
+  return value === "telegram" ? "telegram" : "max";
+}
+
+export function preferredFirst<T extends { channel: BotChannelConfig }>(chats: T[], choice: string | null | undefined): T[] {
+  const want = preferredMessenger(choice);
+  return [...chats].sort((a, b) => Number(b.channel.id === want) - Number(a.channel.id === want));
 }

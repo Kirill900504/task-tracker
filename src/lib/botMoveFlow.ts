@@ -477,7 +477,7 @@ export async function cancelMeetingFromBot(admin: SupabaseClient, actor: BotActo
     const { data: parts } = await admin.from("meeting_participants").select("assignee_id").eq("meeting_id", m.id);
     const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id).filter((id) => id !== actor.assigneeId);
     if (ids.length) {
-      const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+      const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", ids);
       const delivered = await Promise.all(
         ((people || []) as ColleagueRow[])
           .filter((p) => !(actor.isOwner && isSelfAssignee(p.name || "")))

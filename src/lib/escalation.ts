@@ -97,7 +97,13 @@ export async function findStuck(admin: SupabaseClient, userId: string, today: st
     .is("deleted_at", null);
 
   type Row = { id: string; title: string; number?: number | null; deadline: string; created_by: string | null; approval_state: string | null };
-  const rows = ((data || []) as Row[]).filter((t) => t.deadline < today && t.approval_state !== "awaiting_review");
+  // Принятая — закрыта, что бы ни стояло в status: у задач, принятых до
+  // 20.09.2026, он так и остался in_progress, и исполнитель, за которого
+  // «сдал всю задачу» напарник, без этого получал «просрочено» по задаче,
+  // давно лежащей в «Завершённых» (тот же отбор — isClosed в taskDisplay).
+  const rows = ((data || []) as Row[]).filter(
+    (t) => t.deadline < today && t.approval_state !== "awaiting_review" && t.approval_state !== "accepted",
+  );
   if (!rows.length) return [];
 
   const withStep = rows

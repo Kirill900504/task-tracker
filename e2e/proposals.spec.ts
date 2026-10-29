@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
-import { pickSelfExecutor } from "./helpers";
+import { pickSelfExecutor, CARD_CORNER } from "./helpers";
 
 // Сторожа к предложениям, сделанным 07.10.2026 (docs/proposals-2026-10.md):
 // номер задачи, регулярная встреча, «меня не будет». Каждое проверяется по
@@ -59,7 +59,7 @@ test("встреча с повтором записывает правило, и
     })
     .toBe("weekly");
 
-  await chip.click();
+  await chip.click(CARD_CORNER);
   await expect(page.locator(".meeting-recur-note")).toContainText("каждую неделю");
   await page.click("#meetingStopRepeat");
   await expect
@@ -99,19 +99,17 @@ test("«Меня не будет…» отмечает отпуск, и его �
     .toBeNull();
 });
 
-test("«Ссылки всем» в «Команде» выдаёт ссылку каждому неподключённому одним блоком", async ({ page }) => {
+test("«Пригласить всех» в «Команде» выдаёт приглашение каждому неподключённому одним блоком", async ({ page }) => {
   const name = "Неподключённый " + Date.now();
   await admin.from("assignees").insert({ user_id: ownerId, name });
   await login(page);
   await page.click("#teamBtn");
   await page.click("#inviteAllBtn");
-  // Если в трекере есть и бот MAX, сначала спросят, куда подключать.
-  const ask = page.locator(".ask-modal");
+  // Мессенджер больше не спрашивается: человек выбирает его сам на
+  // странице приглашения.
   const block = page.locator("#bulkInviteBlock");
-  await expect(ask.or(block)).toBeVisible({ timeout: 20_000 });
-  if (await ask.isVisible()) await ask.getByRole("button", { name: "Telegram", exact: true }).click();
   await expect(block).toContainText(name, { timeout: 20_000 });
-  await expect(block).toContainText("https://");
+  await expect(block).toContainText("/welcome/");
   await expect(block.getByRole("button", { name: "Скопировать всё" })).toBeVisible();
 });
 
@@ -152,7 +150,7 @@ test("готовый ответ вставляется в отчёт одним 
     await login(fresh);
     const card = fresh.locator(`.task[data-id="${id}"]`);
     await expect(card).toBeVisible({ timeout: 30_000 });
-    await card.click();
+    await card.click(CARD_CORNER);
     const modal = fresh.locator("dialog[open]").filter({ has: fresh.locator("#modalTitle") });
     await modal.getByRole("button", { name: "Сделал" }).click({ timeout: 20_000 });
     await modal.locator(".ms-answer-quick").getByRole("button", { name: "Готово, проверьте" }).click();
@@ -227,7 +225,7 @@ test("повестка: пункт дописывается, получает и
   await expect
     .poll(async () => (await admin.from("meetings").select("id").eq("user_id", ownerId).eq("title", title).maybeSingle()).data?.id, { timeout: 20_000 })
     .toBeTruthy();
-  await chip.click();
+  await chip.click(CARD_CORNER);
   const point = "Смета по складу";
   await page.fill("#agendaInput", point);
   await page.locator("#agendaInput").press("Enter");
@@ -265,7 +263,7 @@ test("«Отложить…» убирает задачу с доски авто
   await page.click("#saveTaskBtn");
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
-  await card.click();
+  await card.click(CARD_CORNER);
   // Кнопка — в строке срока, а не значком в шапке (20.10.2026).
   await expect(page.locator("#selfDeadline #snoozeTaskBtn")).toBeVisible();
   await page.click("#snoozeTaskBtn");
@@ -318,7 +316,7 @@ test("в окне приёмки четыре готовых ответа, и н
     await login(page);
     const card = page.locator(`.task[data-id="${id}"]`);
     await expect(card).toBeVisible({ timeout: 30_000 });
-    await card.click();
+    await card.click(CARD_CORNER);
     await page.locator(".tp-review-actions .btn", { hasText: "Принять" }).click({ timeout: 20_000 });
     const ask = page.locator(".ask-modal");
     await expect(ask.locator(".ask-quick button")).toHaveCount(4);

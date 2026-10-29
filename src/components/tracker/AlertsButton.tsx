@@ -85,8 +85,6 @@ function AlertsPanel({
 }) {
   const prefs = useAlertPrefs();
   const ref = useRef<HTMLDivElement | null>(null);
-  const hourQuiet = prefs.enabled && isQuiet(prefs);
-  const [toggled, setToggled] = useState(false);
   useEscapeToClose(onClose);
 
   // У кнопки, а у нижнего края экрана — вверх; как ActionMenu.
@@ -105,12 +103,39 @@ function AlertsPanel({
     <PopLayer>
       <div className="export-backdrop" onClick={onClose} />
       <div ref={ref} className="alerts-panel" id="alertsPanel" role="dialog" aria-label="Уведомления" style={{ top: -9999, right: 8 }}>
+        <AlertSettings permission={permission} requestPermission={requestPermission} />
+      </div>
+    </PopLayer>
+  );
+}
+
+// Сами переключатели — общие для колокольчика и личного кабинета
+// (28.10.2026: «модернизируй личные кабинеты, чтобы они могли управлять
+// настройками, уведомлениями и прочим»). Настройка одна и хранится в одном
+// месте (lib/alertPrefs), поэтому и рисует её один компонент: вторая копия
+// переключателей разошлась бы с первой при первой же новой строке.
+// `idPrefix` — чтобы у двух мест не совпали id переключателей.
+export function AlertSettings({
+  permission,
+  requestPermission,
+  idPrefix = "alerts",
+}: {
+  permission: NotificationPermission | "unsupported";
+  requestPermission: () => void;
+  idPrefix?: string;
+}) {
+  const prefs = useAlertPrefs();
+  const ref = useRef<HTMLDivElement | null>(null);
+  const hourQuiet = prefs.enabled && isQuiet(prefs);
+  const [toggled, setToggled] = useState(false);
+  return (
+    <div ref={ref}>
         <Row
           title="Уведомления"
           hint={prefs.enabled ? "Сообщения коллег, новые задачи, переносы встреч" : "Выключены — ничего не всплывает"}
         >
           <Switch
-            id="alertsMainSwitch"
+            id={`${idPrefix}MainSwitch`}
             on={prefs.enabled}
             label="Уведомления"
             onChange={() => {
@@ -131,14 +156,14 @@ function AlertsPanel({
           <Reveal className="ap-more" appear={toggled}>
             <div className="ap-sep" />
             <Row title="Ход работы" hint="Принял, сдал, вернули, сдвинули срок">
-              <Switch id="alertsProgressSwitch" on={prefs.progress} label="Ход работы" onChange={() => writeAlertPrefs({ progress: !prefs.progress })} />
+              <Switch id={`${idPrefix}ProgressSwitch`} on={prefs.progress} label="Ход работы" onChange={() => writeAlertPrefs({ progress: !prefs.progress })} />
             </Row>
             <Row title="За 15 минут до встречи">
-              <Switch id="alertsRemindersSwitch" on={prefs.reminders} label="За 15 минут до встречи" onChange={() => writeAlertPrefs({ reminders: !prefs.reminders })} />
+              <Switch id={`${idPrefix}RemindersSwitch`} on={prefs.reminders} label="За 15 минут до встречи" onChange={() => writeAlertPrefs({ reminders: !prefs.reminders })} />
             </Row>
             <Row title="Тишина на час" hint={hourQuiet ? `До ${hhmm(prefs.quietUntil)}` : "Через час всё вернётся само"}>
               <Switch
-                id="alertsQuietSwitch"
+                id={`${idPrefix}QuietSwitch`}
                 on={hourQuiet}
                 label="Тишина на час"
                 onChange={() => writeAlertPrefs({ quietUntil: hourQuiet ? "" : new Date(Date.now() + 3600_000).toISOString() })}
@@ -146,14 +171,14 @@ function AlertsPanel({
             </Row>
             {prefs.muted.length > 0 && (
               <Row title="Обсуждения без звука" hint={`${prefs.muted.length} шт.`}>
-                <button type="button" className="btn ap-btn" id="alertsUnmuteBtn" onClick={() => writeAlertPrefs({ muted: [] })}>
+                <button type="button" className="btn ap-btn" id={`${idPrefix}UnmuteBtn`} onClick={() => writeAlertPrefs({ muted: [] })}>
                   Вернуть
                 </button>
               </Row>
             )}
             {permission === "default" && (
               <Row title="Поверх всех окон" hint="Сейчас — только внутри трекера">
-                <button type="button" className="btn ap-btn" id="alertsAllowBtn" onClick={requestPermission}>
+                <button type="button" className="btn ap-btn" id={`${idPrefix}AllowBtn`} onClick={requestPermission}>
                   Разрешить
                 </button>
               </Row>
@@ -161,8 +186,7 @@ function AlertsPanel({
             {permission === "denied" && <div className="ap-note">Окна Windows запрещены в браузере — показываю внутри трекера.</div>}
           </Reveal>
         )}
-      </div>
-    </PopLayer>
+    </div>
   );
 }
 

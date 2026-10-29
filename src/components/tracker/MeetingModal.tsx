@@ -104,6 +104,7 @@ export default function MeetingModal({
   onAnswer,
   onAcceptProposal,
   onRecapTasks,
+  onRename,
 }: {
   meeting: Meeting | null;
   prefill?: MeetingPrefill;
@@ -153,6 +154,9 @@ export default function MeetingModal({
   // есть и у закрытой встречи (правило «Закрытое событие — только
   // просмотр» оставляет такие выходы, как «В задачу»).
   onRecapTasks?: (meeting: Meeting, items: AgendaItem[]) => void;
+  // Поправить название назначенной встречи (28.10.2026) — организатору,
+  // пока встреча не закрыта. Остальное в ней по-прежнему меняет перенос.
+  onRename?: (title: string) => void;
 }) {
   const isEditing = !!meeting;
   // Новой встрече без заданного времени — первый ещё не начавшийся слот, а
@@ -420,7 +424,9 @@ export default function MeetingModal({
       // У назначенной встречи правило меняется только кнопкой «Больше не
       // повторять» — она пишет сама, мимо формы.
       recur: isEditing ? meeting.recur ?? "none" : recur,
-      title: isEditing ? meeting.title : trimmedTitle,
+      // Название — из формы и у назначенной: его правит карандаш в шапке
+      // (onRename), и снимок meeting к этому моменту бывает старым.
+      title: isEditing ? trimmedTitle || meeting.title : trimmedTitle,
       participants: isEditing ? meeting.participants : sanitizeAssigneeList(participants).filter((n) => !isArchived(n)),
       // Новая встреча — назначенная, всегда (см. комментарий про «Как
       // собираем» выше). У сохранённой статус остаётся её собственный.
@@ -594,7 +600,7 @@ export default function MeetingModal({
                       // набранное до того, как решили «успех» или «провал»,
                       // терять нельзя.
                       onBlur={() => {
-                        if (meeting && result.trim() !== (meeting.result || "").trim()) onSave({ ...meeting, result: result.trim() });
+                        if (meeting && result.trim() !== (meeting.result || "").trim()) onSave({ ...meeting, title: title.trim() || meeting.title, result: result.trim() });
                       }}
                     />
                     {/* «+» записывает набранный итог — то же, что выход из
@@ -604,7 +610,7 @@ export default function MeetingModal({
                       title="Записать итог"
                       disabled={!result.trim()}
                       onClick={() => {
-                        if (meeting && result.trim() !== (meeting.result || "").trim()) onSave({ ...meeting, result: result.trim() });
+                        if (meeting && result.trim() !== (meeting.result || "").trim()) onSave({ ...meeting, title: title.trim() || meeting.title, result: result.trim() });
                       }}
                     />
                     <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
@@ -651,6 +657,14 @@ export default function MeetingModal({
             titleId="meetingModalTitle"
             closeId="meetingCancelBtn"
             onClose={onClose}
+            onRename={
+              onRename && !resolved
+                ? (next) => {
+                    setTitle(next);
+                    onRename(next);
+                  }
+                : undefined
+            }
             actions={
               canEdit && !resolved ? (
                 <button
@@ -680,7 +694,7 @@ export default function MeetingModal({
 
         {/* Назначенная встреча — это уже состоявшаяся договорённость, а не
             черновик.
-            Кирилл сказал прямо: название менять нельзя, а состав и время
+            Кирилл сказал прямо: состав и время
             «в моменте не подлежат изменению» — «изменения и дополнения
             участниками возможны только при дальнейшем переносе». Он прав, и
             дело не в аккуратности: о встрече УЖЕ сообщили всем, кого она
@@ -690,7 +704,11 @@ export default function MeetingModal({
             видели у себя, и то, что написано в трекере. Поэтому «когда» и
             «кто» здесь — факт, который читают, а меняются они переносом:
             перенос заводит НОВУЮ встречу, которую снова рассылают и снова
-            голосуют, и вот в ней и время, и состав открыты. */}
+            голосуют, и вот в ней и время, и состав открыты.
+            Название — исключение с 28.10.2026 («сделай аналогично и во
+            встречах»): организатор правит его карандашом в шапке, как у
+            задачи. Оно не меняет ни часа, ни людей, а дописать название по
+            ходу дела — обычное дело. */}
         {/* Первым — то, чего ждут от вас: ответить «буду» или «не смогу».
             Ниже — всё остальное, что о встрече известно. */}
         {/* Назначенная встреча разворачивается в два столбца на десктопе —
@@ -751,7 +769,7 @@ export default function MeetingModal({
                                   className="link-btn"
                                   id="meetingStopRepeat"
                                   title="Эта встреча останется, следующих не будет"
-                                  onClick={() => onSave({ ...meeting, recur: "none" })}
+                                  onClick={() => onSave({ ...meeting, title: title.trim() || meeting.title, recur: "none" })}
                                 >
                                   Больше не повторять
                                 </button>

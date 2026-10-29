@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     await admin.from("tasks").update({ approval_state: "open" }).eq("id", task.id).eq("approval_state", "awaiting_review");
     const { data: personRow } = await admin
       .from("assignees")
-      .select("id, name, telegram_chat_id, max_user_id")
+      .select("id, name, telegram_chat_id, max_user_id, messenger")
       .eq("id", one.assignee_id)
       .maybeSingle();
     const person = personRow as ColleagueRow | null;
@@ -167,7 +167,7 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
     const actorAssignee = (memberRow as { assignee_id: string | null } | null)?.assignee_id || "";
     const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id).filter((id) => id !== actorAssignee);
     if (ids.length) {
-      const { data: found } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", ids);
+      const { data: found } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", ids);
       const people = ((found || []) as ColleagueRow[]).filter((p) => !(user.id === task.user_id && isSelfAssignee(p.name || "")));
       const text = to
         ? "📅 Новый срок по задаче " + taskRef(task) + ": " + fmtDate(to)
@@ -219,7 +219,7 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
 
     const { data: person } = await admin
       .from("assignees")
-      .select("id, name, telegram_chat_id, max_user_id")
+      .select("id, name, telegram_chat_id, max_user_id, messenger")
       .eq("id", part.assignee_id)
       .maybeSingle();
     if (person) {
@@ -260,7 +260,7 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
         .map((p) => p.assignee_id)
         .filter((id) => id !== part.assignee_id && id !== actorAssignee);
       if (others.length) {
-        const { data: found } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", others);
+        const { data: found } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", others);
         const people = ((found || []) as ColleagueRow[]).filter((p) => !(user.id === task.user_id && isSelfAssignee(p.name || "")));
         const text = "📅 Новый срок по задаче " + taskRef(task) + ": " + fmtDate(when);
         after(() => Promise.all(people.map((p) => sendToPerson(admin, task.user_id, p, text))).then(() => undefined));

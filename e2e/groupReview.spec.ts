@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { CARD_CORNER } from "./helpers";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
@@ -91,7 +92,7 @@ test("возврат групповой задачи спрашивает, ко�
   const { id, people } = await handedInWhole(title);
   await page.reload();
 
-  await page.locator("#col-review .task", { hasText: title }).click();
+  await page.locator("#col-review .task", { hasText: title }).click(CARD_CORNER);
   const review = page.locator("#taskDecisions .tp-review");
   await expect(review).toContainText("Задачу сдали целиком, хотя ответили не все");
   await expect(review.locator("#waitForAllBtn")).toBeVisible();
@@ -129,7 +130,7 @@ test("«Дождаться всех» возвращает задачу в ра�
   const { id, people } = await handedInWhole(title);
   await page.reload();
 
-  await page.locator("#col-review .task", { hasText: title }).click();
+  await page.locator("#col-review .task", { hasText: title }).click(CARD_CORNER);
   await page.locator("#waitForAllBtn").click();
   await expect(page.locator("#overlay")).toHaveCount(0, { timeout: 15_000 });
   await expect(page.locator("#col-work .task", { hasText: title })).toBeVisible({ timeout: 15_000 });
@@ -175,11 +176,11 @@ test("у задачи «каждый сдаёт сам» нет кнопки «�
   const anyId = await make(`E2E можно за всех ${stamp}`, false);
   await page.reload();
 
-  await page.locator(".task", { hasText: `E2E можно за всех ${stamp}` }).click();
+  await page.locator(".task", { hasText: `E2E можно за всех ${stamp}` }).click(CARD_CORNER);
   await expect(page.locator("#myWorkDoneAll")).toBeVisible({ timeout: 20_000 });
   await page.click("#cancelBtn");
 
-  await page.locator(".task", { hasText: `E2E каждый сам ${stamp}` }).click();
+  await page.locator(".task", { hasText: `E2E каждый сам ${stamp}` }).click(CARD_CORNER);
   await expect(page.locator(".my-work .btn", { hasText: "Сделал" })).toBeVisible({ timeout: 20_000 });
   await expect(page.locator("#myWorkDoneAll")).toHaveCount(0);
   await expect(page.locator(".progress-note", { hasText: "каждый сдаёт сам" })).toBeVisible();

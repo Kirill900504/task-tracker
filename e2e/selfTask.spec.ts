@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { ensureDeadline, pickSelfExecutor } from "./helpers";
+import { ensureDeadline, pickSelfExecutor, CARD_CORNER } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // Задача самому себе — облегчённая модель (07.10.2026, lib/selfTask):
@@ -28,7 +28,7 @@ test("своя задача: в карточке только срок, без �
 
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
-  await card.locator(".task-title, .title").first().click();
+  await card.first().click(CARD_CORNER);
 
   // Строки участия доезжают отдельно — ждём, пока карточка поймёт, что
   // задача своя, и покажет срок.
@@ -115,7 +115,7 @@ test("своя задача с наблюдателем — всё равно с
   const card = page.locator(".task", { hasText: title });
   await expect(card).toBeVisible();
   await expect(card).toContainText("Личная задача", { timeout: 20_000 });
-  await card.locator(".task-title, .title").first().click();
+  await card.first().click(CARD_CORNER);
   await expect(page.locator("#selfDeadline")).toBeVisible({ timeout: 20_000 });
   const modal = page.locator("dialog[open]");
   await expect(modal.getByRole("button", { name: /Принял/ })).toHaveCount(0);
@@ -190,7 +190,7 @@ for (const size of [
     await page.click("#saveTaskBtn");
     const card = page.locator(".task", { hasText: title });
     await expect(card).toBeVisible();
-    await card.locator(".task-title, .title").first().click();
+    await card.first().click(CARD_CORNER);
     const row = page.locator("#selfDeadline .deadline-row");
     await expect(row).toBeVisible({ timeout: 20_000 });
     expect(await oneLine(row)).toEqual({ rows: 1, fits: true });

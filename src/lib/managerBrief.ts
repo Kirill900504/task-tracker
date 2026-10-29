@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fmtDate } from "@/lib/taskDisplay";
 import { withoutSelfMark } from "@/lib/actorName";
 import { numbered } from "@/lib/taskRef";
+import { selfTaskIds } from "@/lib/selfTaskServer";
 
 // Утренняя сводка руководителю — та же услуга, что владелец получает с
 // самого начала, только про его собственные дела.
@@ -14,6 +14,8 @@ import { numbered } from "@/lib/taskRef";
 
 export type ManagerBriefFacts = {
   name: string;
+  // День сводки: от него считаются «6 дн. назад» и «через 2 дн.».
+  date: string;
   overdue: { title: string; deadline: string }[];
   today: { title: string; deadline: string }[];
   // Сроки ДО следующей сводки (lib/briefDays): сводка выходит по
@@ -42,17 +44,13 @@ export type ManagerBriefFacts = {
   together: { title: string; note: string }[];
 };
 
+// Сводка уходит, только когда ГОРИТ срок: что-то просрочено, срок сегодня
+// или до следующей сводки. 28.10.2026, его слова: «только по утрам и
+// только если подходит срок выполнения или уже просроченные есть».
+// Остальное (ответы, встречи, обсуждения) едет в ней попутно, но само по
+// себе утреннего сообщения не стоит — у него своя доставка.
 export function managerBriefIsEmpty(f: ManagerBriefFacts): boolean {
-  return (
-    !f.overdue.length &&
-    !f.today.length &&
-    !f.soon.length &&
-    !f.unanswered.length &&
-    !f.meetings.length &&
-    !f.returned.length &&
-    !f.discussed.length &&
-    !f.together.length
-  );
+  return !f.overdue.length && !f.today.length && !f.soon.length;
 }
 
 export async function buildManagerBrief(
@@ -65,7 +63,9 @@ export async function buildManagerBrief(
   soonUntil = "",
 ): Promise<ManagerBriefFacts> {
   const facts: ManagerBriefFacts = {
-    name: assignee.name,
+    // Без «(я)»: «Доброе утро, Кирилл Кучеренко (я)» — 28.10.2026.
+    name: withoutSelfMark(assignee.name),
+    date: today,
     overdue: [],
     today: [],
     soon: [],
@@ -100,22 +100,42 @@ export async function buildManagerBrief(
     } | null;
   };
 
-  for (const r of ((rows || []) as unknown as Row[])) {
-    const t = r.tasks;
-    if (!t || t.deleted_at || r.done_at || t.status === "done") continue;
+  // Закрытая задача в сводку не попадает НИ ОДНИМ блоком. 28.10.2026
+  // Макарову пришло «Вместе с вами: #111 … пятеро отчитались» по задаче,
+  // давно принятой, при пустом трекере: этот отбор стоял только у сроков,
+  // а обсуждения и напарники брали все его строки участия подряд — и
+  // повторяли одно и то же в каждой сводке навсегда.
+  const isOpen = (t: Row["tasks"]): t is NonNullable<Row["tasks"]> =>
+    !!t &&
+    !t.deleted_at &&
+    t.status !== "done" &&
     // Принятая разовая задача — закрыта, что бы ни стояло в status.
-    if (t.approval_state === "accepted" && (t.recur || "none") === "none") continue;
+    !(t.approval_state === "accepted" && (t.recur || "none") === "none");
+
+  // Личные задачи (поставил себе и работает один — lib/selfTaskServer) —
+  // только сроками: просрочено, сегодня, скоро. 28.10.2026, его слова: «по
+  // ним напоминать в ботах не надо, только по просроченным и по тем, по
+  // которым подходит срок». «Ждут вашего ответа» про задачу, которую он сам
+  // себе записал, — это бот, спрашивающий человека, принял ли он свою же
+  // заметку; ответов, возврата и напарников у неё не бывает.
+  const openRows = ((rows || []) as unknown as Row[]).filter((r) => isOpen(r.tasks));
+  const personal = await selfTaskIds(admin, ownerId, openRows.map((r) => r.task_id));
+
+  for (const r of openRows) {
+    const t = r.tasks!;
+    if (r.done_at) continue;
+    const self = personal.has(r.task_id);
     // У повтора в колонке deadline лежит срок ПЕРВОГО круга, и «срок был
     // 24.09» через неделю — неправда: повтор просроченным не бывает, так
     // же как в трекере (isOverdue в taskDisplay и taskLogic). Отзыв
     // Витовского 25.09.2026 — закрытая ежедневная задача в «Просрочено».
     const recurring = (t.recur || "none") !== "none";
     const deadline = t.deadline || "";
-    if (t.approval_state === "returned") facts.returned.push({ title: numbered(t), comment: t.approval_comment || "" });
+    if (!self && t.approval_state === "returned") facts.returned.push({ title: numbered(t), comment: t.approval_comment || "" });
     if (!recurring && deadline && deadline < today) facts.overdue.push({ title: numbered(t), deadline });
     else if (!recurring && deadline === today) facts.today.push({ title: numbered(t), deadline });
     else if (!recurring && deadline && soonUntil && deadline > today && deadline <= soonUntil) facts.soon.push({ title: numbered(t), deadline });
-    if (!r.accepted_at && !r.declined_at) facts.unanswered.push({ title: numbered(t) });
+    if (!self && !r.accepted_at && !r.declined_at) facts.unanswered.push({ title: numbered(t) });
   }
 
   const { data: meetings } = await admin
@@ -135,7 +155,12 @@ export async function buildManagerBrief(
   // Обсуждения, в которых со вчера писали другие. Своих сообщений здесь
   // быть не должно: сводка, напоминающая человеку о том, что он сам вчера
   // написал, учит пролистывать сводку.
-  const mine = ((rows || []) as unknown as Row[]).filter((r) => r.tasks && !r.tasks.deleted_at).map((r) => r.task_id);
+  const open = openRows.filter((r) => !personal.has(r.task_id));
+  const mine = open.map((r) => r.task_id);
+  // Напарники — только там, где задача ещё ждёт ЕГО ответа: «сосед
+  // отчитался» значит «дело за вами», а если он сам уже отчитался или
+  // отказался, строка ничего от него не просит.
+  const waitingOnMe = new Set(open.filter((r) => !r.done_at && !r.declined_at).map((r) => r.task_id));
   if (mine.length) {
     const since = new Date(Date.parse(today + "T00:00:00Z") - 24 * 60 * 60 * 1000).toISOString();
     const { data: comments } = await admin
@@ -156,7 +181,7 @@ export async function buildManagerBrief(
       ),
     ];
     const titleOf = new Map(
-      ((rows || []) as unknown as Row[]).filter((r) => r.tasks).map((r) => [r.task_id, numbered(r.tasks!)]),
+      open.map((r) => [r.task_id, numbered(r.tasks!)]),
     );
     for (const id of others) {
       const title = titleOf.get(id);
@@ -168,7 +193,7 @@ export async function buildManagerBrief(
     // а задач у одного — единицы.
     const { data: mates } = await admin
       .from("task_participants")
-      .select("task_id, assignee_id, done_at, declined_at, assignees(name)")
+      .select("task_id, assignee_id, done_at, declined_at, assignees(name, archived_at)")
       .eq("user_id", ownerId)
       .eq("role", "executor")
       .in("task_id", mine);
@@ -178,11 +203,16 @@ export async function buildManagerBrief(
       assignee_id: string;
       done_at: string | null;
       declined_at: string | null;
-      assignees: { name: string } | { name: string }[] | null;
+      assignees: { name: string; archived_at: string | null } | { name: string; archived_at: string | null }[] | null;
     };
     const byTask = new Map<string, string[]>();
     for (const m of ((mates || []) as unknown as Mate[])) {
-      if (m.assignee_id === assignee.id) continue;
+      if (m.assignee_id === assignee.id || !waitingOnMe.has(m.task_id)) continue;
+      // Убранного из команды здесь нет: «Кирилл (тест) отчитался» через
+      // неделю после того, как его убрали, — новость о человеке, которого
+      // уже нет (28.10.2026).
+      const person = Array.isArray(m.assignees) ? m.assignees[0] : m.assignees;
+      if (person?.archived_at) continue;
       // Только то, что человек СКАЗАЛ. «Ещё не ответил» сюда не идёт: это
       // не событие, а тишина, и о ней спрашивает постановщик, а не сосед.
       const name = withoutSelfMark((Array.isArray(m.assignees) ? m.assignees[0]?.name : m.assignees?.name) || "");
@@ -199,46 +229,80 @@ export async function buildManagerBrief(
   return facts;
 }
 
+// Вид сводки — «карточки», выбран Кириллом 28.10.2026 из трёх присланных
+// ему вариантов («Настрой более выразительно и читабельно»). Раздел —
+// заголовком капсом с числом и чертой, задача — строкой с маркером, а срок
+// — отдельной строкой под ней: дата и «сколько дней» читаются, не
+// выискиваясь в хвосте длинного названия. Названия режутся: #148 в одну
+// строку занимал полэкрана телефона.
+const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+const RULE = "━━━━━━━━━━━━";
+const TITLE_MAX = 60;
+
+function dayDiff(from: string, to: string): number {
+  return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86_400_000);
+}
+
+function shortDate(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${WEEKDAYS[new Date(iso + "T00:00:00Z").getUTCDay()]} ${d}.${m}`;
+}
+
+function clip(title: string): string {
+  return title.length > TITLE_MAX ? title.slice(0, TITLE_MAX - 1).trimEnd() + "…" : title;
+}
+
+function section(lines: string[], head: string, count: number) {
+  lines.push("", `${head} · ${count}`, RULE);
+}
+
 export function composeManagerBrief(f: ManagerBriefFacts): string {
-  const lines = [`Доброе утро, ${f.name}.`];
+  const lines = [`☀️ Доброе утро, ${f.name}!`];
 
   // Порядок продиктован тем, что человек должен сделать раньше: сначала
   // то, что уже горит, потом сегодняшнее, потом то, где ждут его ответа.
   if (f.overdue.length) {
-    lines.push("", "⚠ Просрочено:");
-    for (const t of f.overdue) lines.push(`• ${t.title} — срок был ${fmtDate(t.deadline)}`);
+    section(lines, "🔥 ПРОСРОЧЕНО", f.overdue.length);
+    for (const t of [...f.overdue].sort((a, b) => a.deadline.localeCompare(b.deadline))) {
+      const ago = dayDiff(t.deadline, f.date);
+      lines.push(`▪️ ${clip(t.title)}`, `      ⌛ срок был ${shortDate(t.deadline)}${ago > 0 ? ` · ${ago} дн. назад` : ""}`);
+    }
   }
   if (f.today.length) {
-    lines.push("", "Сегодня:");
-    for (const t of f.today) lines.push(`• ${t.title}`);
+    section(lines, "📌 СЕГОДНЯ", f.today.length);
+    for (const t of f.today) lines.push(`▪️ ${clip(t.title)}`, "      ⏰ срок сегодня");
   }
   if (f.soon.length) {
-    lines.push("", "⏳ Скоро срок:");
-    for (const t of [...f.soon].sort((a, b) => a.deadline.localeCompare(b.deadline))) lines.push(`• ${t.title} — до ${fmtDate(t.deadline)}`);
+    section(lines, "⏳ СКОРО СРОК", f.soon.length);
+    for (const t of [...f.soon].sort((a, b) => a.deadline.localeCompare(b.deadline))) {
+      const left = dayDiff(f.date, t.deadline);
+      lines.push(`▫️ ${clip(t.title)}`, `      📅 ${left === 1 ? "завтра" : `${shortDate(t.deadline)}, через ${left} дн.`}`);
+    }
   }
   if (f.returned.length) {
-    lines.push("", "Вернули на доработку:");
-    for (const t of f.returned) lines.push(`• ${t.title}${t.comment ? " — " + t.comment : ""}`);
+    section(lines, "↩️ ВЕРНУЛИ НА ДОРАБОТКУ", f.returned.length);
+    for (const t of f.returned) lines.push(`▪️ ${clip(t.title)}`, ...(t.comment ? [`      💬 ${clip(t.comment)}`] : []));
   }
   if (f.unanswered.length) {
-    lines.push("", "Ждут вашего ответа:");
-    for (const t of f.unanswered) lines.push(`• ${t.title}`);
+    section(lines, "❓ ЖДУТ ВАШЕГО ОТВЕТА", f.unanswered.length);
+    for (const t of f.unanswered) lines.push(`▫️ ${clip(t.title)}`);
   }
   if (f.meetings.length) {
-    lines.push("", "Встречи сегодня:");
-    for (const m of f.meetings) lines.push(`• ${m.time ? m.time + " — " : ""}${m.title}`);
+    section(lines, "🗓 ВСТРЕЧИ СЕГОДНЯ", f.meetings.length);
+    for (const m of f.meetings) lines.push(`▫️ ${m.time ? m.time + " — " : ""}${clip(m.title)}`);
   }
   // Общие задачи — перед обсуждениями: это ещё про работу, а не про
   // чтение. «Отчитался» соседа означает, что задача ждёт одного вас.
   if (f.together.length) {
-    lines.push("", "Вместе с вами:");
-    for (const t of f.together) lines.push(`• ${t.title} — ${t.note}`);
+    section(lines, "🤝 ВМЕСТЕ С ВАМИ", f.together.length);
+    for (const t of f.together) lines.push(`▫️ ${clip(t.title)}`, `      ${t.note}`);
   }
   // Последним: это не то, что нужно сделать, а то, что стоит прочитать.
   if (f.discussed.length) {
-    lines.push("", "💬 Писали в обсуждениях:");
-    for (const t of f.discussed) lines.push(`• ${t.title}`);
+    section(lines, "💬 ПИСАЛИ В ОБСУЖДЕНИЯХ", f.discussed.length);
+    for (const t of f.discussed) lines.push(`▫️ ${clip(t.title)}`);
   }
 
+  lines.push("", "Хорошего дня! 💪");
   return lines.join("\n");
 }

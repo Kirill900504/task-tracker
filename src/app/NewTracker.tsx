@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { loadTeamModal, loadAccountModal, prefetchWindows } from "@/lib/lazyWindows";
+import { loadTeamModal, loadAccountModal, loadWelcomeTour, prefetchWindows } from "@/lib/lazyWindows";
 // Поиск — НЕ ленивый: его открывают «/» и сразу печатают, и буквы,
 // набранные, пока догружается кусок окна, терялись (e2e «поиск находит
 // «КП»» на 20.10.2026). Окно маленькое; первое нажатие дороже.
@@ -21,6 +21,8 @@ import { useDateTimeConfirm } from "@/hooks/useDateTimeConfirm";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useDesktopAlerts } from "@/hooks/useDesktopAlerts";
 import AlertsButton from "@/components/tracker/AlertsButton";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
+import { useWelcomeTour } from "@/hooks/useWelcomeTour";
 import { useInstallPrompt } from "@/hooks/useInstallPrompt";
 import { useBotLink } from "@/hooks/useBotLink";
 import { prefetchTeam, useColleagues } from "@/hooks/useColleagues";
@@ -72,6 +74,7 @@ import { withViewTransition } from "@/lib/viewTransition";
 // (lib/lazyWindows: почему и как).
 const TeamModal = dynamic(loadTeamModal, { ssr: false });
 const AccountModal = dynamic(loadAccountModal, { ssr: false });
+const WelcomeTour = dynamic(loadWelcomeTour, { ssr: false });
 
 const WEEKDAY_NAMES_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 function formatClock(d: Date): string {
@@ -347,6 +350,12 @@ export default function NewTracker() {
   // вообще персональный.
   // С 13.10.2026 это не меню, а окно — личный кабинет (AccountModal).
   const [accountOpen, setAccountOpen] = useState(false);
+  // «Мои данные» не заполнены — отметка на имени и один раз кабинет сам.
+  const profile = useProfileStatus(ready, () => setAccountOpen(true));
+  // Стартовое знакомство новым людям (lib/welcomeTour). Пока оно открыто,
+  // кабинет, который «Мои данные» открывают сами, ждёт: знакомство идёт
+  // первым и само кончается кнопкой «Заполнить „Мои данные“».
+  const tour = useWelcomeTour(ready);
 
   // Список команды спрашивается заранее, а не в момент нажатия. «Команда» и
   // любое ✈ открываются из уже открытого трекера, то есть время на запрос
@@ -945,7 +954,8 @@ export default function NewTracker() {
           23.09.2026 она стояла только в десктопной ветке ниже, и
           руководитель, открывший трекер с телефона, о ней не узнавал вовсе. */}
       {messengerMissing && <MessengerLink messenger={myMessenger} />}
-      {accountOpen && (
+      {tour.open && <WelcomeTour isOwner={isOwner} onClose={tour.close} onOpenProfile={() => setAccountOpen(true)} />}
+      {accountOpen && !tour.open && (
         <AccountModal
           name={withoutSelfMark(myName)}
           roleLabel={MEMBER_ROLE_LABELS[identity.memberRole]}
@@ -954,9 +964,12 @@ export default function NewTracker() {
           items={[
             ...awayItem,
             { id: "calendar", label: "Встречи в календаре телефона", icon: "calendar", onSelect: () => void subscribeCalendar() },
+            { id: "tour", label: "Как пользоваться трекером", icon: "bulb", onSelect: tour.show },
             ...(installPrompt.visible ? [{ id: "install", label: "Установить приложение на компьютер", icon: "install" as const, onSelect: installPrompt.promptInstall }] : []),
           ]}
-          onSignOut={() => actions.signOut()}
+          alerts={{ permission: notifications.permission, requestPermission: notifications.requestPermission }}
+          onProfileSaved={profile.setComplete}
+          onSignOut={(everywhere) => actions.signOut(everywhere)}
           onClose={() => setAccountOpen(false)}
         />
       )}
@@ -974,7 +987,7 @@ export default function NewTracker() {
             accountName={withoutSelfMark(myName)}
             extra={<ConnectionStatus offline={offline} />}
             items={[
-              { id: "account", label: "Личный кабинет", icon: "users" as const, onSelect: () => setAccountOpen(true) },
+              { id: "account", label: profile.incomplete ? "Личный кабинет · заполните данные" : "Личный кабинет", icon: "users" as const, onSelect: () => setAccountOpen(true) },
               ...(isOwner ? [{ id: "team", label: "Команда", icon: "users" as const, onSelect: () => setTeamOpen(true) }] : []),
               // Поиск вернулся сюда 23.09.2026. Он жил здесь до 22.09.2026,
               // переехал шестой кнопкой в нижнюю панель, а с появлением
@@ -1006,6 +1019,7 @@ export default function NewTracker() {
               ...(isOwner && botLink.needs.max ? [{ id: "max", label: "Подключить MAX", icon: "link" as const, onSelect: () => botLink.link("max") }] : []),
               ...awayItem,
               { id: "calendar", label: "Встречи в календаре телефона", icon: "calendar" as const, onSelect: () => void subscribeCalendar() },
+              { id: "tour", label: "Как пользоваться трекером", icon: "bulb" as const, onSelect: tour.show },
               { id: "signout", label: "Выйти", icon: "logout" as const, onSelect: () => actions.signOut() },
             ]}
           />
@@ -1129,6 +1143,7 @@ export default function NewTracker() {
               onClick={() => setAccountOpen(true)}
             >
               <Icon name="users" size={14} /> {withoutSelfMark(myName) || "Аккаунт"}
+              {profile.incomplete && <span className="account-dot" id="profileDot" title="Заполните «Мои данные»" />}
             </button>
           </div>
         </div>

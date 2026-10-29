@@ -18,6 +18,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useMinuteClock } from "@/hooks/useMinuteClock";
 import { useArchivedPeople } from "@/hooks/useArchivedPeople";
 import ArchivedMark from "./ArchivedMark";
+import TitleEditField from "./TitleEditField";
 import { humanError } from "@/lib/humanError";
 
 // Карточка встречи в списке — устроена как карточка задачи.
@@ -65,6 +66,7 @@ export default function MeetingChip({
   voteRows = [],
   myVote = null,
   onVote,
+  onRename,
 }: {
   meeting: Meeting;
   selectedDay: string | null;
@@ -89,6 +91,10 @@ export default function MeetingChip({
   // значит меня позвали, и ответить можно прямо в карточке.
   myVote?: MeetingVote | null;
   onVote?: (choice: VoteChoice) => void;
+  // Поправить название прямо в списке — как у кубика задачи (28.10.2026,
+  // «сделай аналогично и во встречах»). Приходит только организатору ещё
+  // не закрытой встречи.
+  onRename?: (title: string) => void;
 }) {
   // The participants tooltip lives in <body> and is positioned from the
   // anchor's rect, exactly as legacy's showPeopleTooltip() did: the meetings
@@ -118,6 +124,10 @@ export default function MeetingChip({
     peekTimer.current = null;
     setPeek(null);
   }
+  // На телефоне нажатие по названию открывает встречу — иначе открыть её
+  // было бы почти нечем; там название правят карандашом в самой встрече.
+  const renamable = !!onRename && !isMobile;
+  const [renaming, setRenaming] = useState(false);
   const participants = sanitizeAssigneeList(meeting.participants);
   // Убранный из команды остаётся в составе прошедшей встречи — с пометкой.
   const isArchived = useArchivedPeople();
@@ -243,6 +253,7 @@ export default function MeetingChip({
         (gathered ? " all-in" : "") +
         (someoneOut ? " has-decline" : "")
       }
+      data-id={meeting.id}
       ref={setNodeRef}
       {...attributes}
       {...listeners}
@@ -255,9 +266,39 @@ export default function MeetingChip({
     >
       <div className="meeting-body">
         <div className="meeting-head">
-          <span className="mtitle" ref={titleRef} onPointerEnter={startPeek} onPointerLeave={stopPeek}>
-            {meeting.title}
-          </span>
+          {renaming ? (
+            <TitleEditField
+              className="mtitle-input"
+              value={meeting.title}
+              onDone={(next) => {
+                setRenaming(false);
+                if (next) onRename?.(next);
+              }}
+            />
+          ) : (
+            <span
+              className={"mtitle" + (renamable ? " renamable" : "")}
+              ref={titleRef}
+              onPointerEnter={startPeek}
+              onPointerLeave={stopPeek}
+              onClick={
+                renamable
+                  ? (e) => {
+                      e.stopPropagation();
+                      stopPeek();
+                      setRenaming(true);
+                    }
+                  : undefined
+              }
+            >
+              {meeting.title}
+              {renamable && (
+                <span className="task-title-pen" aria-hidden>
+                  <Icon name="edit" size={12} />
+                </span>
+              )}
+            </span>
+          )}
           {!!unreadCount && (
             <span className="task-mark unread" title={`${unreadCount} новых сообщений в обсуждении`}>
               {unreadCount}

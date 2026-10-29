@@ -109,6 +109,30 @@
 .task.kind-incoming .task-top .task-title{border-color:rgba(201,138,143,.35);}
 .task.kind-self .task-top .task-title{border-color:rgba(134,184,150,.28);}
 .task-top .check{margin-top:3px;}
+/* Название, которое можно поправить (постановщику открытой задачи и
+   организатору встречи): курсор ввода, фирменная рамка и карандаш в углу на
+   наведение — сразу видно, что нажатие здесь правит, а не открывает.
+   Карандаш лежит поверх хвоста строки, а не отнимает у названия место у
+   всех карточек разом. Одно правило на кубик задачи и карточку встречи. */
+.task-top .task-title.renamable, .meeting-chip .mtitle.renamable{position:relative; cursor:text;}
+.task-top .task-title.renamable:hover, .meeting-chip .mtitle.renamable:hover{border-color:var(--accent);}
+.task-title-pen{
+  position:absolute; top:3px; right:3px; width:20px; height:20px; border-radius:var(--radius-xs);
+  display:inline-flex; align-items:center; justify-content:center;
+  background:var(--accent); color:#fff; opacity:0; transition:opacity .12s ease; pointer-events:none;
+}
+.task-top .task-title.renamable:hover .task-title-pen,
+.meeting-chip .mtitle.renamable:hover .task-title-pen{opacity:1;}
+/* Поле правки (TitleEditField) встаёт на место названия той же ширины. */
+.title-edit{flex:1; min-width:0; display:block;}
+.task-title-input, .mtitle-input{
+  display:block; width:100%; box-sizing:border-box; resize:none; margin:0;
+  padding:4px 9px; border-radius:var(--radius-sm);
+  background:rgba(0,0,0,.28); border:1px solid var(--accent); outline:none; color:var(--ink);
+  font:inherit; font-size:13.5px; font-weight:700; line-height:1.38; letter-spacing:-.005em;
+  box-shadow:0 0 0 3px var(--accent-soft);
+}
+.mtitle-input{padding:3px 8px; line-height:1.35;}
 @media (max-width:800px){
   .task-top .task-title{font-size:15px;}
   .task-top .check{margin-top:2px;}
@@ -315,6 +339,35 @@
   max-height:min(34vh, 300px); overflow-y:auto; overscroll-behavior:contain;
 }
 .item-head.one-line .item-head-actions{flex-wrap:nowrap; width:auto;}
+/* Карандаш в рамке названия (ItemModalHead onRename): виден всегда — на
+   телефоне наведения нет, а спрятанная кнопка равна отсутствующей. Залит
+   фирменным, как «Отложить» и «+», и стоит у правого края рамки; название
+   уступает ему место отступом, чтобы многоточие не уходило под него. */
+.item-head-main.renamable{position:relative;}
+.item-head.one-line .item-head-main.renamable .item-head-title{padding-right:118px;}
+.item-head-rename{
+  position:absolute; top:4px; right:4px; height:30px; padding:0 10px; gap:6px; border-radius:var(--radius-sm);
+  display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
+  font:inherit; font-size:13px; font-weight:700; white-space:nowrap;
+  color:#fff; border:1px solid rgba(255,255,255,.14);
+  background:linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,0)) , var(--accent);
+  box-shadow:0 1px 2px rgba(0,0,0,.3);
+  transition:filter .12s ease, transform .08s ease;
+}
+.item-head-rename:hover{filter:brightness(1.12);}
+.item-head-rename:active{transform:translateY(1px);}
+.item-head-title-input{
+  display:block; width:100%; box-sizing:border-box; resize:none; margin:0;
+  padding:7px 12px 8px; border-radius:var(--radius-md); min-height:38px;
+  font:inherit; font-size:16px; font-weight:800; line-height:1.35; letter-spacing:-.015em; color:var(--ink);
+  background:rgba(0,0,0,.25); border:1px solid var(--accent); outline:none;
+  box-shadow:0 0 0 3px var(--accent-soft);
+}
+@media (max-width:800px){
+  .item-head-rename{width:30px; padding:0;}
+  .item-head-rename-word{display:none;}
+  .item-head.one-line .item-head-main.renamable .item-head-title{padding-right:46px;}
+}
 .fc-short{display:none;}
 @media (max-width:800px){
   .item-head.one-line{flex-wrap:nowrap;}
@@ -931,3 +984,214 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
   box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 1px 3px rgba(0,0,0,.3), 0 0 10px rgba(124,203,149,.35);
 }
 .personal-btn.on:hover{background:linear-gradient(180deg, #C2F0D0 0%, #88D4A0 100%);}
+
+/* ---- Приглашения, «Команда», личный кабинет (28.10.2026) ----
+   Приглашение «всё в одном» (/welcome), вход через бота на странице входа,
+   отбор и карточка человека в «Команде», уведомления и приложение в
+   кабинете. Один блок — потому что это одна дорога человека в трекер:
+   пригласили → подключил бота → вошёл на компьютере → настроил себе. */
+
+/* Вход через бота — над формой пароля, главным путём. */
+.ms-signin{display:flex; flex-direction:column; gap:8px; margin-bottom:6px;}
+.ms-signin-btn{display:flex; align-items:center; justify-content:center; gap:9px; margin-top:0; text-decoration:none;}
+.ms-signin-wait{
+  display:flex; align-items:center; gap:12px; padding:12px 13px;
+  border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--accent-soft);
+  font-size:13.5px; color:var(--ink);
+}
+.ms-signin-wait > div{flex:1; min-width:0;}
+.ms-signin-spin{
+  flex:none; width:18px; height:18px; border-radius:50%;
+  border:2px solid var(--accent-soft); border-top-color:var(--accent);
+  animation:ms-spin .9s linear infinite;
+}
+@keyframes ms-spin{to{transform:rotate(360deg);}}
+@media (prefers-reduced-motion: reduce){ .ms-signin-spin{animation:none;} }
+.ms-signin-or{
+  display:flex; align-items:center; gap:10px; margin:12px 0 10px;
+  color:var(--ink-soft); font-size:12px;
+}
+.ms-signin-or::before, .ms-signin-or::after{content:""; flex:1; height:1px; background:var(--line);}
+
+/* Страница приглашения: три шага, каждый — номер в кружке и тело. Сделанный
+   шаг — галочка зелёным: человек видит, что первое уже позади. */
+.welcome-card{max-width:560px;}
+.welcome-steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px;}
+.welcome-step{
+  display:flex; gap:14px; padding:14px; border:1px solid var(--line-soft);
+  border-radius:var(--radius-md); background:var(--paper-soft);
+}
+.welcome-num{
+  flex:none; width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
+  background:var(--accent); color:#F3F8FA; font-family:var(--display); font-weight:800; font-size:14px;
+}
+.welcome-step.done{border-color:var(--long-border);}
+.welcome-step.done .welcome-num{background:var(--ok-ink); color:var(--bg);}
+.welcome-body{flex:1; min-width:0;}
+.welcome-body h2{margin:3px 0 6px; font-family:var(--display); font-size:15.5px; font-weight:700; color:var(--ink);}
+.welcome-body p{margin:0 0 10px; color:var(--ink-soft); font-size:13px; line-height:1.55;}
+.welcome-body p:last-child{margin-bottom:0;}
+.welcome-buttons{display:flex; flex-wrap:wrap; gap:8px; margin:2px 0 10px;}
+.welcome-btn{
+  display:inline-flex; align-items:center; gap:9px; min-height:42px; padding:9px 16px;
+  border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--paper);
+  color:var(--ink); font-weight:600; font-size:14px; text-decoration:none;
+  transition:box-shadow .12s ease, border-color .12s ease;
+}
+.welcome-btn:hover{box-shadow:0 0 0 3px var(--accent-soft); border-color:var(--accent);}
+.welcome-btn.on{border-color:var(--long-border); color:var(--ok-ink);}
+.welcome-btn.primary{background:var(--accent); border-color:var(--accent); color:#F3F8FA;}
+.welcome-ok{color:var(--ok-ink) !important; font-weight:600;}
+.welcome-note{font-size:12.5px !important;}
+@media (max-width:560px){
+  .welcome-step{padding:12px; gap:10px;}
+  .welcome-btn{flex:1; justify-content:center;}
+}
+
+/* «Команда» — шире прежних 580: у строки три места (имя, состояние,
+   действия), и при четырнадцати людях узкое окно рвало состояние на три
+   строки. */
+.modal.team-modal{max-width:720px;}
+.team-tools{display:flex; align-items:center; gap:10px; margin:0 0 6px;}
+.team-filters{flex:1; min-width:0; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none;}
+.team-filters::-webkit-scrollbar{display:none;}
+.team-filters .participant-chip{flex:none; white-space:nowrap;}
+.team-filter-count{margin-left:3px; color:var(--ink-soft); font-variant-numeric:tabular-nums;}
+.participant-chip.selected .team-filter-count{color:inherit; opacity:.8;}
+.team-search{flex:none; width:190px; padding:7px 11px; font-size:13px;}
+/* Имя — кнопка (раскрывает карточку), но выглядит именем: без рамки и
+   фона, с кружком инициалов, как у людей на кубике задачи. */
+.team-person{
+  display:flex; align-items:center; gap:9px; border:0; background:none; padding:0; cursor:pointer;
+  text-align:left; font-family:var(--sans);
+}
+.team-person{min-width:0; color:inherit;}
+.team-person:hover .team-name{color:var(--accent);}
+.team-avatar{
+  flex:none; width:26px; height:26px; border-radius:50%; display:grid; place-items:center;
+  background:var(--paper-soft); border:1px solid var(--line-soft);
+  font-family:var(--display); font-size:10.5px; font-weight:700; color:var(--ink-soft);
+}
+.team-channels{display:inline-flex; gap:3px; flex:none;}
+.team-off{color:var(--today);}
+.team-row.open{background:var(--paper-soft); border-radius:var(--radius-sm) var(--radius-sm) 0 0; padding-left:8px; padding-right:4px; border-bottom-color:transparent;}
+.team-detail{
+  margin:0 0 8px; padding:10px 12px 12px; background:var(--paper-soft);
+  border-radius:0 0 var(--radius-sm) var(--radius-sm); border-bottom:1px solid var(--line-soft);
+}
+.team-facts{display:grid; grid-template-columns:max-content 1fr; gap:5px 14px; margin:0 0 10px; font-size:13px;}
+.team-facts dt{color:var(--ink-soft);}
+.team-facts dd{margin:0; color:var(--ink); overflow-wrap:anywhere;}
+.team-facts dd.linked{color:var(--ok-ink);}
+.team-detail-actions{display:flex; flex-wrap:wrap; gap:6px;}
+.team-detail-danger{color:var(--high);}
+/* Строка пачки приглашений: имя, ссылка, кнопки — сеткой, чтобы кнопки
+   у всех строк стояли друг под другом. */
+.team-bulk-links{max-height:300px;}
+.team-bulk-line{display:grid; grid-template-columns:minmax(90px,150px) minmax(0,1fr) auto auto; gap:8px; align-items:center;}
+.team-bulk-line .invite-link{margin:0; padding:5px 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; word-break:normal;}
+.team-bulk-name{font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.team-bulk-line .btn:only-of-type{grid-column:span 2;}
+.invite-message{
+  padding:10px 12px; margin-bottom:8px; border:1px solid var(--line); border-radius:var(--radius-xs);
+  background:var(--bg); font-size:13px; line-height:1.5; color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere;
+}
+@media (max-width:560px){
+  .team-bulk-line{grid-template-columns:1fr auto; }
+  .team-bulk-line .invite-link{grid-column:1 / -1; grid-row:2;}
+}
+
+/* Кабинет: переключатели уведомлений — те же, что в колокольчике, на
+   своей подложке, чтобы не сливаться с подсказками раздела. */
+.account-alerts{border:1px solid var(--line-soft); border-radius:var(--radius-md); background:var(--paper-soft); padding:2px 4px;}
+.account-download{align-self:flex-start; display:inline-flex; align-items:center; gap:7px; text-decoration:none;}
+.account-actions{justify-content:space-between;}
+
+/* Отметка «заполните „Мои данные“» на имени в шапке — точка, а не плашка:
+   плашки поверх доски он снимал («засоряют место»). */
+.account-btn{position:relative;}
+.account-dot{
+  position:absolute; top:4px; right:4px; width:8px; height:8px; border-radius:50%;
+  background:var(--today); box-shadow:0 0 0 2px var(--paper);
+}
+
+/* Стартовое знакомство (WelcomeTour): одна карточка за раз — цветная шапка
+   со значком и «Шаг N из M», вступление, список «кнопка — что делает»,
+   полоса шагов и кнопки внизу. 28.10.2026, его слова: «сделай окно для
+   новичков более красиво оформленным, ярким и приятным для чтения».
+   Цвет у каждого раздела свой (--tour-c, классы .tour-tone-*): серое окно с
+   одинаковым значком читалось одной и той же страницей, менялся только
+   текст. Цвет красит значок, сияние под шапкой, метки кнопок и полосу шагов;
+   «Далее» остаётся фирменной — у главной кнопки окна один формат на весь
+   трекер. Цвет задаётся на .modal.tour-modal.tour-tone-* — с той же
+   специфичностью, что и цвет по умолчанию, только ниже: короткий
+   .tour-tone-* ему проигрывал, и все шаги выходили голубыми. Высота карточки держится одной, чтобы кнопки не прыгали под рукой
+   от шага к шагу. */
+.modal.tour-modal{
+  --tour-c:#4FA8D8;
+  /* 680, а не 560: в карточке до пяти пунктов «кнопка — что делает», и на
+     узком окне каждый ложился в три строки — читалось простынёй. */
+  width:min(680px, 100%); max-width:680px; position:relative; overflow-x:hidden;
+  background:
+    radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--tour-c) 22%, transparent), transparent 70%),
+    var(--paper);
+  border-color:color-mix(in srgb, var(--tour-c) 35%, var(--line));
+  transition:border-color .25s ease;
+}
+.modal.tour-modal.tour-tone-sky{--tour-c:#4FA8D8;}
+.modal.tour-modal.tour-tone-blue{--tour-c:#6C9EF0;}
+.modal.tour-modal.tour-tone-green{--tour-c:#5FC48A;}
+.modal.tour-modal.tour-tone-orange{--tour-c:#EE9A5E;}
+.modal.tour-modal.tour-tone-amber{--tour-c:#E8B850;}
+.modal.tour-modal.tour-tone-violet{--tour-c:#B79AF0;}
+.modal.tour-modal.tour-tone-teal{--tour-c:#4FC7B8;}
+.modal.tour-modal.tour-tone-rose{--tour-c:#E68FA8;}
+.tour-card{min-height:400px; padding:4px 2px 0; animation:tour-in .26s var(--win-ease, ease);}
+@keyframes tour-in{from{opacity:0; transform:translateX(12px);} to{opacity:1; transform:none;}}
+@media (prefers-reduced-motion: reduce){ .tour-card{animation:none;} }
+.tour-hero{display:flex; align-items:center; gap:16px; margin:0 0 14px;}
+.tour-icon{
+  flex:none; width:60px; height:60px; border-radius:18px; display:grid; place-items:center;
+  color:#fff;
+  background:linear-gradient(145deg, color-mix(in srgb, var(--tour-c) 92%, #fff), color-mix(in srgb, var(--tour-c) 70%, #000));
+  box-shadow:0 8px 24px color-mix(in srgb, var(--tour-c) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.35);
+}
+.tour-hero-text{min-width:0;}
+.tour-step-no{
+  display:inline-block; margin-bottom:4px; font-size:12px; font-weight:700; letter-spacing:.04em;
+  text-transform:uppercase; color:var(--tour-c);
+}
+.tour-title{margin:0; font-family:var(--display); font-size:24px; line-height:1.2; font-weight:800; color:var(--ink); letter-spacing:-.01em;}
+.tour-text{margin:0 0 12px; font-size:15px; line-height:1.6; color:var(--ink);}
+/* Метка и пояснение — одной строкой, как «кнопка — что делает»: столбиком
+   карточка «Мысли» в четыре пункта не помещалась в окно ноутбука. */
+.tour-points{list-style:none; margin:0; padding:0; display:grid; gap:6px;}
+.tour-point{
+  padding:7px 12px; border-radius:var(--radius-md); line-height:1.5;
+  background:color-mix(in srgb, var(--tour-c) 8%, var(--paper-soft));
+  border:1px solid color-mix(in srgb, var(--tour-c) 18%, transparent);
+  border-left:3px solid var(--tour-c);
+}
+.tour-chip{
+  display:inline; margin-right:6px; padding:1px 8px; border-radius:999px; font-size:13px; font-weight:700;
+  -webkit-box-decoration-break:clone; box-decoration-break:clone;
+  color:color-mix(in srgb, var(--tour-c) 75%, #fff);
+  background:color-mix(in srgb, var(--tour-c) 20%, transparent);
+  overflow-wrap:anywhere;
+}
+.tour-point-text{font-size:14px; color:var(--ink-soft);}
+.tour-dots{display:flex; justify-content:center; gap:6px; margin:16px 0 4px;}
+.tour-dot{
+  width:8px; height:8px; padding:0; border:0; border-radius:999px; cursor:pointer;
+  background:color-mix(in srgb, var(--tour-c) 25%, var(--line));
+  transition:width .2s ease, background .2s ease;
+}
+.tour-dot.on{width:26px; background:var(--tour-c); box-shadow:0 0 10px color-mix(in srgb, var(--tour-c) 60%, transparent);}
+.tour-actions{justify-content:space-between; gap:8px;}
+.tour-finish{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
+.tour-count{margin-left:6px; opacity:.75; font-variant-numeric:tabular-nums;}
+@media (max-width:800px){
+  .tour-card{min-height:0;}
+  .tour-title{font-size:21px;}
+  .tour-icon{width:52px; height:52px; border-radius:16px;}
+}

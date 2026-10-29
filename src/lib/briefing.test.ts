@@ -1,61 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { draftBrief, briefIsEmpty, type BriefFacts } from "./dailyBrief";
 import { draftWeekly, weeklyIsEmpty, type WeeklyFacts } from "./weeklyReview";
 import { rewriteIsFaithful } from "./factGuard";
 import { tasksWord } from "./plural";
 
-function task(over: Partial<{ title: string; assignee: string; deadline: string; priority: string; daysOverdue: number; hasMeetingSoon: boolean }> = {}) {
-  return { title: "Задача", assignee: "", deadline: "2026-09-05", priority: "med", daysOverdue: 0, hasMeetingSoon: false, ...over };
-}
-function briefFacts(over: Partial<BriefFacts> = {}): BriefFacts {
-  return { today: "2026-09-05", overdue: [], dueToday: [], meetingsToday: [], meetingsTomorrow: [], totalOpen: 0, ...over };
-}
 function weeklyFacts(over: Partial<WeeklyFacts> = {}): WeeklyFacts {
   return { weekStart: "2026-08-29", perAssignee: [], stale: [], rescheduled: [], closedLastWeek: 0, createdLastWeek: 0, totalOpen: 0, totalOverdue: 0, ...over };
 }
-
-describe("draftBrief", () => {
-  it("puts the longest-overdue task first and says why", () => {
-    const facts = briefFacts({
-      overdue: [task({ title: "Свежая просрочка", daysOverdue: 1 }), task({ title: "Давняя просрочка", daysOverdue: 12 })],
-      totalOpen: 2,
-    });
-    const draft = draftBrief(facts);
-    expect(draft.indexOf("Давняя просрочка")).toBeLessThan(draft.indexOf("Свежая просрочка"));
-    expect(draft).toContain("срок был 12 дн. назад");
-  });
-
-  it("ranks a task tied to an upcoming meeting above a plain one due today", () => {
-    const facts = briefFacts({
-      dueToday: [task({ title: "Обычная" }), task({ title: "Обсуждается завтра", hasMeetingSoon: true })],
-      totalOpen: 2,
-    });
-    const draft = draftBrief(facts);
-    expect(draft.indexOf("Обсуждается завтра")).toBeLessThan(draft.indexOf("Обычная"));
-    expect(draft).toContain("по этой теме встреча в ближайший день");
-  });
-
-  it("shows at most three, and counts the rest instead of listing them", () => {
-    const facts = briefFacts({
-      overdue: [1, 2, 3, 4, 5].map((n) => task({ title: `Задача ${n}`, daysOverdue: n })),
-      totalOpen: 7,
-    });
-    const draft = draftBrief(facts);
-    expect(draft.match(/^•/gm)?.length).toBe(3);
-    expect(draft).toContain("Ещё 2");
-    expect(draft).toContain("всего в работе 7 задач");
-  });
-
-  it("lists today's meetings with their time", () => {
-    const facts = briefFacts({ meetingsToday: [{ title: "Планёрка", time: "11:00", participants: ["Никита Козлов"] }], totalOpen: 0 });
-    expect(draftBrief(facts)).toContain("11:00 — Планёрка (Никита Козлов)");
-  });
-
-  it("counts as empty when there is nothing due and no meetings", () => {
-    expect(briefIsEmpty(briefFacts({ totalOpen: 5 }))).toBe(true);
-    expect(briefIsEmpty(briefFacts({ dueToday: [task()] }))).toBe(false);
-  });
-});
 
 describe("draftWeekly", () => {
   it("reports the week's totals and per-person load", () => {

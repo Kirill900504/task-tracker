@@ -165,6 +165,26 @@ export function useColleagues() {
     [],
   );
 
+  // Приглашение «всё в одном» (lib/welcomeInvite): одна ссылка на человека —
+  // бот любого из двух мессенджеров, телефон и приложение для компьютера.
+  // Пачкой, одним запросом: «Пригласить всех» и «Пригласить» у строки — это
+  // один и тот же вызов с разной длиной списка.
+  const welcome = useCallback(
+    async (
+      assigneeIds: string[],
+    ): Promise<{ invites: { id: string; name: string; link?: string; message?: string; error?: string }[] } | { error: string }> => {
+      const res = await fetch("/api/workspace/welcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigneeIds }),
+      }).catch(() => null);
+      const data = await res?.json().catch(() => null);
+      if (!res?.ok || !data || data.error) return { error: data?.error || "Не получилось создать приглашение" };
+      return { invites: data.invites || [] };
+    },
+    [],
+  );
+
   // The other kind of invitation: a login rather than a chat. Returns the
   // link to hand over — the same shape as `invite` above, so the team screen
   // treats the two the same way.
@@ -390,6 +410,7 @@ export function useColleagues() {
     removePerson,
     restorePerson,
     invite,
+    welcome,
     inviteToTracker,
     accessLink,
     setDirection,

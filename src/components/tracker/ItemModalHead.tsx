@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { grow, shrink } from "@/lib/smoothHeight";
+import TitleEditField from "./TitleEditField";
 import Icon from "./Icon";
 
 // Шапка окна: название, действия и × в правом верхнем углу.
@@ -44,6 +45,7 @@ export default function ItemModalHead({
   onClose,
   closeId,
   plain,
+  onRename,
 }: {
   // «#111», «Встреча» — слева от названия, на той же строке.
   kicker?: ReactNode;
@@ -56,10 +58,23 @@ export default function ItemModalHead({
   closeId?: string;
   // Название без рамки — у служебных окон («Команда», «Разделы»).
   plain?: boolean;
+  // Название можно поправить — у открытой задачи и встречи тому, кто их
+  // поставил. Тогда в рамке названия стоит карандаш (28.10.2026, его слова:
+  // «сделай удобный значок в поле названия задачи, понятный! Что можно
+  // отредактировать или дополнить название задачи»). Без него название
+  // только читается.
+  onRename?: (title: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const full = typeof title === "string" ? title : undefined;
+  const renamable = !plain && !!onRename && full !== undefined;
+  // Правка идёт в той же рамке, что и название: поле встаёт на его место
+  // (TitleEditField — то же поле, что на карточках).
+  const [renaming, setRenaming] = useState(false);
+  function startRename() {
+    if (renamable) setRenaming(true);
+  }
   // Название раскрывается плавно (21.10.2026: «большое описание плавно
   // спокойно выплывало, без резких рывков»), а номер и кнопки при этом стоят
   // на месте — шапка выровнена по верху, а не по центру, иначе они съезжали
@@ -84,7 +99,8 @@ export default function ItemModalHead({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [plain, title]);
+    // После правки рамка названия — новый узел, и мерить надо его.
+  }, [plain, title, renaming]);
   function toggle() {
     const el = titleRef.current;
     if (!open && el?.dataset.overflow !== "1") return;
@@ -98,17 +114,47 @@ export default function ItemModalHead({
           {kicker}
         </span>
       )}
-      <div className="item-head-main">
+      <div className={"item-head-main" + (renamable ? " renamable" : "")}>
         {plain && kicker && <div className="item-head-kicker">{kicker}</div>}
-        <h2
-          id={titleId}
-          ref={titleRef}
-          className={"item-head-title" + (plain ? " plain" : "") + (open ? " open" : "")}
-          title={!plain && !open ? full : undefined}
-          onClick={plain ? undefined : toggle}
-        >
-          {title}
-        </h2>
+        {renaming ? (
+          <TitleEditField
+            id="titleEdit"
+            className="item-head-title-input"
+            value={full ?? ""}
+            onDone={(next) => {
+              setRenaming(false);
+              if (next) onRename?.(next);
+            }}
+          />
+        ) : (
+          <>
+            <h2
+              id={titleId}
+              ref={titleRef}
+              className={"item-head-title" + (plain ? " plain" : "") + (open ? " open" : "")}
+              title={!plain && !open ? full : undefined}
+              onClick={plain ? undefined : toggle}
+              onDoubleClick={renamable ? startRename : undefined}
+            >
+              {title}
+            </h2>
+            {renamable && (
+              <button
+                type="button"
+                className="item-head-rename"
+                id="renameTitleBtn"
+                title="Изменить название"
+                aria-label="Изменить название"
+                onClick={startRename}
+              >
+                <Icon name="edit" size={16} />
+                {/* Словом — на компьютере, где место есть: значок один
+                    угадывают, со словом его читают. */}
+                <span className="item-head-rename-word">Изменить</span>
+              </button>
+            )}
+          </>
+        )}
       </div>
       <div className="item-head-actions">
         {actions}

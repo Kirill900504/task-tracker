@@ -126,7 +126,13 @@ export function parseWhen(text: string, today: string, from = ""): When {
   const colon = s.match(/(?:^|[^\d.])([01]?\d|2[0-3]):([0-5]\d)(?![\d])/);
   // Границы слова — явные: `\b` в JavaScript знает только латиницу, и
   // `\bзавтра\b` не находит «завтра» нигде.
-  const dotted = s.match(/(?<![а-я])(?:в|на|к)\s+([01]?\d|2[0-3])\.([0-5]\d)(?![\d.])/);
+  // «на» с точкой — время, только если это НЕ день и месяц: «на 03.11» —
+  // третье ноября, а не 03:11 (так бот переносил встречу на 31.10 в 03:11,
+  // 28.10.2026), а «на 10.30» датой быть не может и остаётся временем.
+  const dottedHit = [...s.matchAll(/(?<![а-я])(в|на|к)\s+([01]?\d|2[0-3])\.([0-5]\d)(?![\d.])/g)].find(
+    (hit) => !(hit[1] === "на" && Number(hit[2]) >= 1 && Number(hit[3]) >= 1 && Number(hit[3]) <= 12),
+  );
+  const dotted = dottedHit ? ([dottedHit[0], dottedHit[2], dottedHit[3]] as unknown as RegExpMatchArray) : null;
   const hours = s.match(/(?<![а-я])(?:в|на|к)\s+([01]?\d|2[0-3])\s*(?:ч(?![а-я])|час)/);
   const timeHit = colon || dotted || hours;
   if (timeHit) out.time = `${pad(Number(timeHit[1]))}:${timeHit[2] && timeHit !== hours ? timeHit[2] : "00"}`;

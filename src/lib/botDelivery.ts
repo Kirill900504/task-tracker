@@ -3,7 +3,7 @@ import type { BotButton, BotChannelConfig, BotSendResult, BotTransport } from "@
 import { BOT_CHANNELS, MAX_CHANNEL, TELEGRAM_CHANNEL } from "@/lib/botTransport";
 import { telegramTransport } from "@/lib/telegram";
 import { maxTransport, maxConfigured } from "@/lib/max";
-import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
+import { chatsFor, preferredFirst, type ColleagueRow } from "@/lib/colleagues";
 import { queueNotice, type Notice } from "@/lib/noticeQueue";
 import { ownerSelfAssigneeId, rememberSent } from "@/lib/botMirror";
 
@@ -32,20 +32,29 @@ export type OwnerChat = { channel: BotChannelConfig; chatId: number };
 export async function ownerChats(admin: SupabaseClient, userId: string): Promise<OwnerChat[]> {
   // Обе таблицы — одним заходом, а не по очереди (тот же приём, что у
   // findActorByChat: вопросы, не зависящие друг от друга, задаются разом).
+  // Выбор мессенджера лежит на его строке «(я)» (миграция 0070) — тем же
+  // заходом, что и чаты.
   const channels = await activeChannels();
-  const rows = await Promise.all(
-    channels.map((channel) => admin.from(channel.accountsTable).select(channel.chatColumn).eq("user_id", userId).limit(1).maybeSingle()),
-  );
+  const [rows, self] = await Promise.all([
+    Promise.all(
+      channels.map((channel) => admin.from(channel.accountsTable).select(channel.chatColumn).eq("user_id", userId).limit(1).maybeSingle()),
+    ),
+    admin.from("assignees").select("messenger").eq("user_id", userId).like("name", "%(я)").order("created_at").limit(1).maybeSingle(),
+  ]);
   const out: OwnerChat[] = [];
   rows.forEach(({ data }, i) => {
     const chatId = (data as Record<string, number> | null)?.[channels[i].chatColumn];
     if (chatId != null) out.push({ channel: channels[i], chatId });
   });
-  return out;
+  // Выбранный первым — как у всех (chatsFor). Список остаётся полным: по нему
+  // же отвечают на «подключён ли он вообще».
+  return preferredFirst(out, (self.data as { messenger?: string | null } | null)?.messenger);
 }
 
 // The owner hears about something (a colleague pressed a button, a reminder
-// came due) in every messenger he has connected — he reads whichever is open.
+// came due) in ONE messenger — the one he chose, MAX unless he picked
+// Telegram (28.10.2026, «возможность выбрать только один бот»). Until then
+// he got every message twice, once in each.
 export async function notifyOwner(
   admin: SupabaseClient,
   userId: string,
@@ -61,7 +70,7 @@ export async function notifyOwner(
   // и итог записывали дважды (17.10.2026).
   memo?: { kind: "task" | "meeting"; itemId: string },
 ): Promise<number> {
-  const chats = await ownerChats(admin, userId);
+  const chats = (await ownerChats(admin, userId)).slice(0, 1);
   const results = await Promise.all(
     chats.map((chat) => transportFor(chat.channel).send(chat.chatId, text, buttons?.length ? { buttons } : undefined)),
   );
@@ -142,7 +151,7 @@ export async function notifyAuthor(
 
   const { data: person } = await admin
     .from("assignees")
-    .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username")
+    .select("id, name, telegram_chat_id, telegram_username, max_user_id, max_username, messenger")
     .eq("id", assigneeId)
     .maybeSingle();
   const target = person ? chatsFor(person as ColleagueRow)[0] : undefined;

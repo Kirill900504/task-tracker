@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { hasMessengerLaunch, miniAppRedirect } from "@/lib/messengerLaunch";
+import MessengerSignIn from "@/components/MessengerSignIn";
 
 // The front door. Shares its look with /join and /reset-password (.auth-*
 // in tracker.css) — they are one screen with different words on it, and
@@ -161,6 +162,10 @@ export default function LoginPage() {
         {brand}
         <h1 className="auth-title">Вход в трекер</h1>
         <p className="auth-sub">Задачи, встречи и мысли — то, что касается вас.</p>
+
+        {/* Первым — вход через бота: у большинства людей пароля нет вовсе,
+            их кабинет заведён из мессенджера (lib/messengerLogin). */}
+        <MessengerSignIn />
 
         <form onSubmit={handleSubmit}>
           {error && <div className="auth-error">{error}</div>}

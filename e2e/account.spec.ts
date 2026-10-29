@@ -24,12 +24,34 @@ test("личный кабинет открывается из имени в ша
   await page.click("#accountBtn");
   const modal = page.locator(".account-modal");
   await expect(modal).toBeVisible();
-  await expect(modal.getByRole("heading", { name: "Вход с компьютера" })).toBeVisible();
+  await expect(modal.getByRole("heading", { name: "Мои данные" })).toBeVisible();
   await expect(modal.getByRole("heading", { name: "Мессенджеры" })).toBeVisible();
   // Почта, с которой вошли, — в поле: её больше нигде в трекере не увидеть.
   await expect(modal.locator('input[type="email"]')).toHaveValue(email.toLowerCase());
   await modal.getByRole("button", { name: "Закрыть" }).click();
   await expect(modal).toBeHidden();
+});
+
+// «Мои данные» — второй шаг (28.10.2026): телефон сохраняется сам по себе,
+// приходит к одному виду, а отметка на имени в шапке после этого гаснет.
+test("в «Моих данных» сохраняется телефон, и отметка на имени гаснет", async ({ page }) => {
+  await login(page);
+  // У тестового аккаунта почта есть, телефона нет — данные не заполнены.
+  await expect(page.locator("#profileDot")).toBeVisible({ timeout: 20_000 });
+  await page.click("#accountBtn");
+  const modal = page.locator(".account-modal");
+  await page.fill("#accountPhone", "8 (900) 123 45 67");
+  await page.click("#accountSaveBtn");
+  await expect(modal.locator(".account-ok")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("#accountPhone")).toHaveValue("+7 900 123-45-67");
+  await expect(page.locator("#profileDot")).toHaveCount(0);
+  // И это правда базы, а не экрана: после перезагрузки номер на месте.
+  await modal.getByRole("button", { name: "Закрыть" }).click();
+  await page.reload();
+  await expect(page.locator("#newTaskBtn")).toBeVisible({ timeout: 30_000 });
+  await page.click("#accountBtn");
+  await expect(page.locator("#accountPhone")).toHaveValue("+7 900 123-45-67", { timeout: 15_000 });
+  await expect(page.locator("#profileDot")).toHaveCount(0);
 });
 
 test("смайлик из кнопки у поля встаёт на место курсора", async ({ page }) => {
@@ -69,4 +91,23 @@ test("смайлик из кнопки у поля встаёт на место 
   await composer.click();
   await expect(page.locator(".emoji-picker")).toBeHidden();
   await expect(composer).toBeVisible();
+});
+
+// Стартовое знакомство (28.10.2026). Само оно у автотестов не всплывает
+// (lib/welcomeTour — иначе легло бы поверх каждого теста), поэтому
+// проверяется дверью, которой его открывают снова, — «Как пользоваться
+// трекером» в личном кабинете: листается до конца, а последняя кнопка ведёт
+// в «Мои данные».
+test("знакомство с трекером листается и ведёт в «Мои данные»", async ({ page }) => {
+  await login(page);
+  await page.click("#accountBtn");
+  await page.locator(".account-modal").getByRole("button", { name: "Как пользоваться трекером" }).click();
+  const tour = page.locator(".tour-modal");
+  await expect(tour).toBeVisible();
+  await expect(tour.locator(".tour-title")).toHaveText("Добро пожаловать!");
+  for (let i = 0; i < 14 && (await page.locator("#tourNextBtn").count()); i++) await page.click("#tourNextBtn");
+  await expect(tour.locator(".tour-title")).toHaveText("Последний шаг");
+  await page.click("#tourProfileBtn");
+  await expect(tour).toHaveCount(0);
+  await expect(page.locator("#accountProfile")).toBeVisible();
 });

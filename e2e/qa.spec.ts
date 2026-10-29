@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
-import { handOverAuthorship, pickSelfExecutor } from "./helpers";
+import { handOverAuthorship, pickSelfExecutor, CARD_CORNER } from "./helpers";
 
 // Сторожа к тому, что нашёл полный QA-проход 06.10.2026 руками в браузере.
 //
@@ -79,7 +79,7 @@ test("пометки «(я)» нет на экране задачи", async ({ p
   await page.fill("#fTitle", title);
   await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
-  await page.locator(".task", { hasText: title }).locator(".task-title").click();
+  await page.locator(".task", { hasText: title }).click(CARD_CORNER);
   const card = page.locator("dialog[open]");
   await expect(card.locator("#taskFacts")).toBeVisible();
   await expect(card).not.toContainText("(я)");
@@ -134,7 +134,7 @@ test("владелец не распоряжается задачей, кото�
     await page.reload();
     const card = page.locator(".task", { hasText: title });
     await expect(card).toBeVisible({ timeout: 20_000 });
-    await card.locator(".task-title").click();
+    await card.click(CARD_CORNER);
     const modal = page.locator("dialog[open]");
     await expect(modal.locator("#taskFacts")).toBeVisible();
     // Как исполнитель он отвечает — это его право, как у всех.
@@ -162,7 +162,7 @@ test("после «Принял» остаётся «Сделал», а сама
   await pickSelfExecutor(page);
   await page.click("#saveTaskBtn");
   // Дата постановки — сразу, а не после эха из базы («Дата постановки —»).
-  await page.locator(".task", { hasText: title }).locator(".task-title").click();
+  await page.locator(".task", { hasText: title }).click(CARD_CORNER);
   await expect(page.locator("dialog[open] #taskFacts")).toContainText(/\d{2}\.\d{2}\.\d{4}/);
   await page.keyboard.press("Escape");
 
@@ -174,7 +174,7 @@ test("после «Принял» остаётся «Сделал», а сама
     await login(fresh);
     const card = fresh.locator(`.task[data-id="${handed.id}"]`);
     await expect(card).toBeVisible({ timeout: 30_000 });
-    await card.locator(".task-title").click();
+    await card.click(CARD_CORNER);
     const modal = fresh.locator("dialog[open]");
     const done = modal.getByRole("button", { name: "Сделал" });
     await expect(done).toBeVisible({ timeout: 20_000 });

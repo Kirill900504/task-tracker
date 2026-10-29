@@ -1,4 +1,5 @@
 import type { BotTransport } from "@/lib/botTransport";
+import { stripSelfMarks } from "@/lib/botText";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
@@ -12,6 +13,11 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 // carries both, so these are two shapes rather than one with two fields.
 export type InlineButton = { text: string; callback_data: string } | { text: string; web_app: { url: string } };
 export type SendResult = { ok: boolean; error?: string; messageId?: number };
+
+// Подписи кнопок — тоже текст, который читает человек (lib/botText).
+function cleanButtons(rows: InlineButton[][]): InlineButton[][] {
+  return rows.map((row) => row.map((b) => ({ ...b, text: stripSelfMarks(b.text) })));
+}
 
 // The result matters when writing to a COLLEAGUE: they may never have
 // started the bot, or may have blocked it, and the person who pressed
@@ -28,8 +34,8 @@ export async function sendTelegramMessage(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
-        text,
-        ...(options?.buttons ? { reply_markup: { inline_keyboard: options.buttons } } : {}),
+        text: stripSelfMarks(text),
+        ...(options?.buttons ? { reply_markup: { inline_keyboard: cleanButtons(options.buttons) } } : {}),
       }),
     });
     const body = await res.json().catch(() => null);
@@ -47,7 +53,7 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
     await fetch(`${API}/answerCallbackQuery`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ callback_query_id: callbackQueryId, ...(text ? { text } : {}) }),
+      body: JSON.stringify({ callback_query_id: callbackQueryId, ...(text ? { text: stripSelfMarks(text) } : {}) }),
     });
   } catch {
     /* the answer is a courtesy; the action itself has already happened */
@@ -86,8 +92,8 @@ export async function editTelegramMessage(
       body: JSON.stringify({
         chat_id: chatId,
         message_id: messageId,
-        text,
-        reply_markup: { inline_keyboard: options?.buttons ?? [] },
+        text: stripSelfMarks(text),
+        reply_markup: { inline_keyboard: cleanButtons(options?.buttons ?? []) },
       }),
     });
   } catch {
@@ -106,7 +112,7 @@ export async function sendTelegramDocument(
 ): Promise<{ ok: boolean; error?: string }> {
   const form = new FormData();
   form.append("chat_id", String(chatId));
-  if (caption) form.append("caption", caption);
+  if (caption) form.append("caption", stripSelfMarks(caption));
   form.append("document", new Blob([content], { type: "application/json" }), filename);
   try {
     const res = await fetch(`${API}/sendDocument`, { method: "POST", body: form });

@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
-import { centerOnScreen, dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, signOut, settled as settledBox } from "./helpers";
+import { centerOnScreen, dayCell, dragOnto, pickAnyExecutor, pickSelfExecutor, signOut, settled as settledBox, CARD_CORNER } from "./helpers";
 import { userFilePath } from "./userFile";
 
 // The one smoke test covering the actual "Definition of Done" checklist
@@ -344,7 +344,7 @@ test("deleting a task survives an immediate sign-out", async ({ page }) => {
 
   // Open it, delete it, then sign out immediately. Подтверждение — своё окно
   // трекера, а не системное окно браузера (см. components/Ask.tsx).
-  await page.locator(".task", { hasText: title }).click();
+  await page.locator(".task", { hasText: title }).click(CARD_CORNER);
   await page.click("#deleteTaskBtn");
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.click("#askOkBtn");
@@ -388,7 +388,7 @@ test("meeting: time slot, participants, then closing it with an outcome", async 
   // ни время, ни состав — они показаны фактом. Проверяется и то, что
   // сохранилось именно выбранное (время и участник видны в сводке), и то,
   // что редактировать их отсюда нечем: полей нет вовсе.
-  await chip.click();
+  await chip.click(CARD_CORNER);
   // Сводка встречи — тот же блок, что у задачи (ItemFacts, «окно созданной
   // встречи должно быть однотипным с окном созданной задачи»): название
   // строкой над ней, дата, время и состав внутри.
@@ -941,17 +941,18 @@ test("an invite link appears under the person it was asked for", async ({ page }
   // кого-нибудь к мессенджеру, и у подключённого кнопки другие.
   const row = page
     .locator(".team-row")
-    .filter({ has: page.getByRole("button", { name: "Telegram", exact: true }) })
+    .filter({ has: page.getByRole("button", { name: "Пригласить", exact: true }) })
     .last();
   const name = (await row.locator(".team-name").innerText()).trim();
-  await row.getByRole("button", { name: "Telegram", exact: true }).click();
+  await row.getByRole("button", { name: "Пригласить", exact: true }).click();
 
   // Щедрый таймаут: первое обращение к маршруту — это ещё и его холодный
   // старт, а тест здесь про то, ГДЕ появляется ссылка, а не как быстро.
   const invite = page.locator("#inviteBlock");
   await expect(invite).toBeVisible({ timeout: 20_000 });
   await expect(invite).toContainText(name);
-  await expect(invite.locator(".invite-link")).toContainText("t.me/");
+  // Одна ссылка на всё — страница приглашения (lib/welcomeInvite).
+  await expect(invite.locator(".invite-message")).toContainText("/welcome/");
 
   // Стоит непосредственно за строкой этого человека…
   expect(await row.evaluate((el) => el.nextElementSibling?.id === "inviteBlock")).toBe(true);
@@ -1044,7 +1045,7 @@ test("вопросы задаются окном трекера, а не бра�
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
 
   // Отмена в окне подтверждения означает «ничего не делать».
-  await page.locator(".task", { hasText: title }).click();
+  await page.locator(".task", { hasText: title }).click(CARD_CORNER);
   await page.click("#deleteTaskBtn");
   await expect(page.locator(".ask-modal")).toBeVisible();
   await page.click("#askCancelBtn");
@@ -1053,7 +1054,7 @@ test("вопросы задаются окном трекера, а не бра�
   await expect(page.locator(".task", { hasText: title })).toBeVisible();
 
   // …а подтверждение — удаляет.
-  await page.locator(".task", { hasText: title }).click();
+  await page.locator(".task", { hasText: title }).click(CARD_CORNER);
   await page.click("#deleteTaskBtn");
   await page.click("#askOkBtn");
   await expect(page.locator(".task", { hasText: title })).toHaveCount(0);
@@ -1437,7 +1438,7 @@ test("время и состав встречи меняются только п
   await waitForSaved(page);
 
   // Открытая встреча полей не даёт — только факт и кнопку переноса.
-  await chip.click();
+  await chip.click(CARD_CORNER);
   await expect(page.locator("#mTitle")).toHaveCount(0);
   await expect(page.locator("#mTimeGrid")).toHaveCount(0);
   await expect(page.locator("#meetingMoveBtn")).toBeVisible();

@@ -4,6 +4,7 @@ import { sendTelegramDocument, sendTelegramMessage } from "@/lib/telegram";
 import { sendMaxDocument, sendMaxMessage } from "@/lib/max";
 import { groupBackupTargets, type BackupDestination } from "@/lib/backupTargets";
 import { involvedFilter } from "@/lib/telegramQueries";
+import { preferredMessenger } from "@/lib/colleagues";
 
 // Weekly backup: everyone who has linked a messenger gets their own tasks/
 // meetings/ideas/assignees as a JSON file.
@@ -61,7 +62,12 @@ export async function GET(req: Request) {
 
   let sent = 0;
   let failed = 0;
-  for (const [userId, destinations] of byUser) {
+  for (const [userId, connected] of byUser) {
+    // В выбранный мессенджер (миграция 0070, MAX по умолчанию), второй —
+    // только запасом, если первый файл не принял (см. ниже).
+    const { data: self } = await admin.from("assignees").select("messenger").eq("user_id", userId).like("name", "%(я)").limit(1).maybeSingle();
+    const want = preferredMessenger((self as { messenger?: string | null } | null)?.messenger);
+    const destinations = [...connected].sort((a, b) => Number(b.channel === want) - Number(a.channel === want));
     const [taskScope, meetingScope] = await Promise.all([involvedFilter(admin, userId, "task"), involvedFilter(admin, userId, "meeting")]);
     const [tasks, meetings, ideas, assignees] = await Promise.all([
       admin.from("tasks").select("*").eq("user_id", userId).or(taskScope),
@@ -89,15 +95,16 @@ export async function GET(req: Request) {
     const today = new Date().toISOString().slice(0, 10);
     const file = JSON.stringify(payload, null, 2);
 
-    // «Delivered» means at least one messenger took the file. One channel
-    // being down is not a reason to withhold the copy from the other, and it
-    // is not a reason to purge as if both had worked either.
+    // One copy, in the chosen messenger. The other one is tried only if the
+    // first refused the file: one channel being down is not a reason to
+    // withhold the copy, and it is not a reason to purge as if it had worked.
     let delivered = false;
     for (const to of destinations) {
       const result = await sendDocument(to, `tracker-backup-${today}.json`, file, `📦 Еженедельная резервная копия (${today})`);
       if (result.ok) {
         delivered = true;
         sent++;
+        break;
       } else {
         failed++;
         await sendNote(to, "⚠ Резервная копия не отправилась: " + (result.error || "неизвестно"));

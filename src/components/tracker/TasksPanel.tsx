@@ -813,6 +813,9 @@ export default function TasksPanel({
                       checklist={checklistCounts[t.id]}
                       waitsFor={waitsFor(t)}
                       snoozedTill={snoozedMine(t) ? t.snoozedUntil : undefined}
+                      // Название правит постановщик, пока задача открыта, —
+                      // то же право, что у карандаша в самой задаче.
+                      onRename={mine(t) && !isClosed(t) ? (title) => actions.saveTask({ ...t, title }) : undefined}
                     />
                   )}
                 </SortableTask>

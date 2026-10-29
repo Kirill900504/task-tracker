@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig } from "@/lib/botTransport";
 import type { CallbackAction } from "@/lib/colleagues";
+import { isLoginAction, resolveLogin } from "@/lib/messengerLogin";
 import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, screenButtons, type ColleagueRow } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { sendToPerson } from "@/lib/reach";
@@ -96,6 +97,13 @@ async function routeBotCallback(
   // развилки ниже, иначе владельцу «Взять в работу» отвечала бы его
   // постановщицкая половина, где таких кнопок нет (lib/ideaInbox).
   if (isIdeaInboxAction(action)) return handleIdeaInbox(admin, chatId, action, channel);
+
+  // «Да, войти» под вопросом о входе на компьютере (lib/messengerLogin) —
+  // кем бы ни был нажавший: владелец, руководитель или человек без входа.
+  if (isLoginAction(action)) {
+    const text = await resolveLogin(admin, chatId, channel, action.id, action.action === "lgok");
+    return { toast: action.action === "lgok" ? "Вход" : "Отклонено", rewriteTo: text };
+  }
 
   // «🕐 Другое время» под приглашением — тоже кнопка ПОЛУЧАТЕЛЯ, кем бы он
   // ни был: владелец, позванный руководителем, предлагает время своей
@@ -322,7 +330,7 @@ async function tellMeeting(admin: SupabaseClient, meetingId: string, text: strin
   const rows = (parts || []) as { assignee_id: string; user_id: string }[];
   if (!rows.length) return;
   const ownerId = rows[0].user_id;
-  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", rows.map((r) => r.assignee_id));
+  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", rows.map((r) => r.assignee_id));
   // Всем сразу, а не по очереди (см. reviewWork — та же причина).
   await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, ownerId, person, text, meetingButtons(meetingId), { kind: "meeting", itemId: meetingId })));
 }
@@ -336,7 +344,7 @@ async function tellAssignees(admin: SupabaseClient, taskId: string, text: string
   const rows = (parts || []) as { assignee_id: string; user_id: string }[];
   if (!rows.length) return;
   const ownerId = rows[0].user_id;
-  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id").in("id", rows.map((r) => r.assignee_id));
+  const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", rows.map((r) => r.assignee_id));
   await Promise.all(((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, ownerId, person, text)));
 }
 
