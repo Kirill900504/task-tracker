@@ -44,6 +44,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     .select("id, title, date, time, duration_min, participants, status, result")
     .eq("user_id", spaceId)
     .is("deleted_at", null)
+    // Перенесённая встреча — это прежняя, закрытая с moved_to_date, плюс
+    // НОВАЯ на новое время (closeAsMoved). Прежняя стояла в календаре
+    // телефона подтверждённым событием на старое время рядом с новой
+    // (аудит 29.10.2026): человек видел две встречи и не знал, на какую идти.
+    .is("moved_to_date", null)
     .in("status", ["planned", "proposed", "success", "no_result"])
     .gte("date", since)
     .or(filter)

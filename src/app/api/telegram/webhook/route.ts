@@ -8,6 +8,7 @@ import { mirrorAnswer } from "@/lib/botMirror";
 import type { BotContext } from "@/lib/botPipeline";
 import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
 import { replyContext } from "@/lib/botMemory";
+import { secretMatches } from "@/lib/secretMatch";
 
 // Telegram's side of the bot: the update format, voice files, and Telegram's
 // own retry behaviour. What a message MEANS is not decided here — that is
@@ -25,8 +26,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const secret = req.headers.get("x-telegram-bot-api-secret-token");
-  if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+  // An unset TELEGRAM_WEBHOOK_SECRET used to let in a request that simply
+  // left the header out (`undefined !== undefined` is false) — see
+  // lib/secretMatch.
+  if (!secretMatches(req.headers.get("x-telegram-bot-api-secret-token"), process.env.TELEGRAM_WEBHOOK_SECRET)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -40,6 +43,32 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
   const transport = telegramTransport();
+
+  // Telegram redelivers an update it didn't get a fast/successful response
+  // to — observed in production as the bot repeating the same reply to the
+  // same voice message minutes apart while a bug made that message fail.
+  // Insert-or-skip on update_id stops reprocessing a redelivered update
+  // outright, regardless of what's causing the retry.
+  //
+  // It stands BEFORE the button branch, not after it (audit 29.10.2026): a
+  // press whose answer took longer than Telegram waits came back a second
+  // time and ran again — a second «Сделал», a second report line in the
+  // discussion, a second note to the assigner. MAX deduplicated its presses
+  // from the start; only Telegram's half was missing it.
+  if (updateId != null) {
+    const { error: dedupError } = await admin
+      .from("bot_processed_updates")
+      .insert({ channel: "telegram", update_key: String(updateId) });
+    // 23505 = unique_violation — already handled this exact update, skip
+    // silently instead of sending another reply for the same message. Any
+    // *other* error (e.g. the migration for this table not applied yet)
+    // fails open and processes normally — same principle as
+    // checkRateLimit(): a missing migration should never be the reason a
+    // legitimate message goes unanswered.
+    if (dedupError && dedupError.code === "23505") {
+      return NextResponse.json({ ok: true });
+    }
+  }
 
   // A tapped button under a task or a meeting. Handled before anything
   // else: it carries its own chat and needs none of the machinery below.
@@ -87,26 +116,6 @@ export async function POST(req: Request) {
   }
 
   const ctx: BotContext = { admin, transport, channel: TELEGRAM_CHANNEL, chatId };
-
-  // Telegram redelivers an update it didn't get a fast/successful response
-  // to — observed in production as the bot repeating the same reply to the
-  // same voice message minutes apart while a bug made that message fail.
-  // Insert-or-skip on update_id stops reprocessing a redelivered update
-  // outright, regardless of what's causing the retry.
-  if (updateId != null) {
-    const { error: dedupError } = await admin
-      .from("bot_processed_updates")
-      .insert({ channel: "telegram", update_key: String(updateId) });
-    // 23505 = unique_violation — already handled this exact update, skip
-    // silently instead of sending another reply for the same message. Any
-    // *other* error (e.g. the migration for this table not applied yet)
-    // fails open and processes normally — same principle as
-    // checkRateLimit(): a missing migration should never be the reason a
-    // legitimate message goes unanswered.
-    if (dedupError && dedupError.code === "23505") {
-      return NextResponse.json({ ok: true });
-    }
-  }
 
   // Фотография или документ от коллеги — в обсуждение задачи.
   //

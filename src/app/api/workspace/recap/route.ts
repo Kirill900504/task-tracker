@@ -13,7 +13,7 @@ const RECAP_LINE = /^(✅ Встреча прошла успешно|⚪ Вст�
 // Итог встречи — тем, кто на ней был.
 //
 // Организатора об итоге спрашивают через два часа после конца, напоминают
-// через сутки и тянут в понедельничную сводку, если он так и не написал.
+// через сутки, а на экране встреча стоит в «Нужен итог», пока он не напишет.
 // Участникам при этом не уходило ничего — а итог и есть то единственное,
 // ради чего половина из них приходила. Половина ещё и не пришла: «о чём
 // договорились» они не узнавали вовсе.
@@ -37,8 +37,13 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as
     | { meetingId?: string; result?: string; outcome?: "success" | "no_result" }
     | null;
-  const result = (body?.result || "").trim();
-  const outcome = body?.outcome;
+  // Итог — в разумных пределах, исход — только из двух слов (аудит
+  // 29.10.2026). Без предела итог уезжал в хронику и в сообщение каждому
+  // участнику целиком, а сообщение длиннее ~4 тысяч знаков мессенджер не
+  // принимает вовсе. А исход принимался любой строкой и уходил дальше в
+  // рассылку «встреча закрыта» как есть.
+  const result = (body?.result || "").trim().slice(0, 4000);
+  const outcome = body?.outcome === "success" || body?.outcome === "no_result" ? body.outcome : undefined;
   if (!body?.meetingId || (!result && !outcome)) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
 
   const admin = createAdminClient();

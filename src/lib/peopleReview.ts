@@ -2,22 +2,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { overdueOn } from "@/lib/taskLogic";
 
-// Понедельничная сводка по людям, а не по задачам.
+// Понедельничная цифра человеку о его СОБСТВЕННОЙ неделе (composeMyWeek).
 //
-// Владельцу уже приходит утренняя сводка и недельный обзор — оба про
-// задачи: что просрочено, что горит, что закрыто. Ни один из них не
-// отвечает на вопрос, ради которого всё это затевалось: кто из
-// руководителей держит слово, а кто тихо не отвечает. Разговор о мотивации
-// без этой цифры превращается в обмен впечатлениями, а с ней — в разговор.
+// Раньше отсюда же собиралась сводка владельцу «по людям» — кто молчит,
+// кто просрочил, «стоит спросить лично». Она удалена 29.10.2026: концепция
+// трекера с 20.10.2026 — равноправие и конфиденциальность, и сводка о
+// людях, которую получает один человек, — это и неравенство, и утечка.
+// Не возвращайте её ни в каком виде, даже «только числами».
 //
-// Всё здесь считается кодом. Модель может это потом переписать словами
-// (как в dailyBrief), но ни одна цифра не приходит от неё: человек, о
-// котором сказали «просрочил четыре», должен иметь возможность открыть
-// список и увидеть ровно четыре.
-
-// Данные для обеих сводок собираются один раз и одним запросом — не ради
-// экономии, а ради того же самого: владелец и руководитель должны видеть
-// цифры, посчитанные из одних и тех же строк в одну и ту же секунду.
+// Всё здесь считается кодом, а не моделью: человек, которому сказали
+// «просрочено четыре», должен иметь возможность открыть список и увидеть
+// ровно четыре.
+//
+// Участие всех исполнителей пространства читается одним запросом: крон
+// считает цифры каждому сразу, а получает каждый только свою строку.
 export async function buildParticipation(admin: SupabaseClient, userId: string): Promise<ParticipationRow[]> {
   const { data: rows } = await admin
     .from("task_participants")
@@ -50,11 +48,8 @@ export async function buildParticipation(admin: SupabaseClient, userId: string):
       const name = (Array.isArray(r.assignees) ? r.assignees[0]?.name : r.assignees?.name) || "";
       return { name, row: r };
     })
-    // Себя в сводке по людям быть не должно. «Кирилл (я): не ответил на 4»
-    // — это не дисциплина, это его собственный список дел, и строка «стоит
-    // спросить лично: Кирилл (я)» предлагает поговорить с самим собой.
-    // Та же ошибка уже находилась в блоке молчания (silence.ts) — и найдена
-    // обе раза одинаково: предпросмотром на настоящих данных.
+    // Строку владельца «(я)» крон всё равно пропускает при рассылке (чат у
+    // неё пустой), поэтому и считать её незачем.
     .filter(({ name }) => name && !isSelfAssignee(name))
     .map(({ name, row: r }) => {
       return {
@@ -166,8 +161,7 @@ export function personStats(rows: ParticipationRow[], now: Date): PersonStats[] 
     });
   }
 
-  // Сначала те, к кому есть вопросы: молчащие, потом просрочившие.
-  out.sort((a, b) => b.silent - a.silent || b.overdue - a.overdue || a.name.localeCompare(b.name));
+  out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
 
@@ -178,47 +172,10 @@ function hoursWord(h: number): string {
   return `${Math.round(h / 24)} дн`;
 }
 
-export function reviewIsEmpty(stats: PersonStats[]): boolean {
-  return !stats.some((s) => s.open || s.doneThisWeek || s.declined);
-}
-
-export function composePeopleReview(stats: PersonStats[]): string {
-  if (reviewIsEmpty(stats)) return "";
-  const lines = ["📊 Неделя по людям", ""];
-
-  for (const s of stats) {
-    if (!s.open && !s.doneThisWeek && !s.declined) continue;
-    const bits: string[] = [];
-    if (s.open) bits.push(`в работе ${s.open}`);
-    if (s.overdue) bits.push(`просрочено ${s.overdue}`);
-    if (s.silent) bits.push(`не ответил на ${s.silent}`);
-    if (s.declined) bits.push(`отказался от ${s.declined}`);
-    if (s.doneThisWeek) bits.push(`закрыл ${s.doneThisWeek}`);
-    if (s.avgAcceptHours !== null) bits.push(`принимает за ${hoursWord(s.avgAcceptHours)}`);
-    if (s.avgWorkHours !== null) bits.push(`делает за ${hoursWord(s.avgWorkHours)}`);
-    if (s.onTimeShare !== null) bits.push(`в срок ${Math.round(s.onTimeShare * 100)}%`);
-    const where = s.direction ? ` (${s.direction})` : "";
-    lines.push(`• ${s.name}${where}: ${bits.join(", ")}`);
-  }
-
-  // Одна строка вывода вместо тринадцати строк, которые надо сравнивать
-  // глазами: кому написать сегодня.
-  const worry = stats.filter((s) => s.silent || s.overdue >= 3);
-  if (worry.length) {
-    lines.push("", "Стоит спросить лично: " + worry.map((s) => s.name).join(", "));
-  }
-  return lines.join("\n");
-}
-
-// То же самое, но человеку про него самого (G4 в docs/multiuser.md).
+// Человеку про него самого (G4 в docs/multiuser.md).
 //
 // Решение записано там одной фразой: «цифра о себе меняет поведение дешевле
 // любого разговора». Из неё следует и всё остальное здесь.
-//
-// Считается ровно той же функцией, что и сводка владельца, — не похожей, а
-// той же. Показывать человеку одно, а начальнику про него другое было бы
-// началом недоверия, и первый же разговор, где цифры не сошлись, стоил бы
-// дороже всей затеи.
 //
 // Тон — не обвинение. Это отчёт о себе, а не выговор: сначала сделанное,
 // потом висящее, и только потом то, о чём стоит помнить. И прямо сказано,

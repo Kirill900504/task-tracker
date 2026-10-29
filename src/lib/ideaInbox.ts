@@ -17,6 +17,7 @@ import { WORKDAY_SLOTS, startsInPast } from "@/lib/meetingTime";
 import { busyOnServer, busyStartsOnServer } from "@/lib/meetingBusyServer";
 import { uid } from "@/lib/uid";
 import { takenIdeaAuthor, type IdeaShareKind } from "@/lib/ideaRecipients";
+import { claimTakenIdea } from "@/lib/ideaClaim";
 
 // Присланная мысль — четыре ответа получателя в мессенджере.
 //
@@ -498,6 +499,13 @@ async function takeForSelf(admin: SupabaseClient, me: Receiver, idea: IdeaRef): 
     .from("tasks")
     .insert(newTaskRow({ id: taskId, userId: me.spaceId, title, assignee: me.name, createdBy }));
   if (error) return { toast: "Не получилось завести задачу" };
+  // Мысль занимает первое нажатие (lib/ideaClaim): второе — из трекера или
+  // повтором в мессенджере — получает «уже в работе», а не вторую задачу.
+  // Без строки получателя занимать нечего — так было и раньше.
+  if (row) {
+    const claim = await claimTakenIdea(admin, { ideaId: idea.id, assigneeId: me.assigneeId }, taskId, new Date().toISOString());
+    if (!claim.won) return { toast: "Уже в работе", rewriteTo: `${head(idea)}\n\n➕ Уже взято в работу` };
+  }
   // upsert: строку по имени исполнителя успевает завести триггер 0024.
   await admin
     .from("task_participants")
@@ -505,11 +513,6 @@ async function takeForSelf(admin: SupabaseClient, me: Receiver, idea: IdeaRef): 
       { task_id: taskId, assignee_id: me.assigneeId, role: "executor", accepted_at: new Date().toISOString() },
       { onConflict: "task_id,assignee_id" },
     );
-  await admin
-    .from("idea_recipients")
-    .update({ converted_task_id: taskId, seen_at: new Date().toISOString() })
-    .eq("idea_id", idea.id)
-    .eq("assignee_id", me.assigneeId);
   await notifyAuthor(admin, me.spaceId, idea.createdBy, `➕ ${withoutSelfMark(me.name)} взял мысль в работу: «${title}»`, {
     kind: "idea_taken",
     item: title,

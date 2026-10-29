@@ -29,8 +29,8 @@ export type MemberState = "none" | "invited" | "active" | "disabled";
 export type Colleague = {
   id: string;
   name: string;
-  // Направление, которое человек ведёт. Пусто, пока его не указали при
-  // приглашении: понедельничная сводка группирует людей по нему.
+  // Направление, которое человек ведёт: подпись в «Команде». Пусто, пока
+  // его не указали.
   direction: string;
   linked: boolean;
   telegram: boolean;

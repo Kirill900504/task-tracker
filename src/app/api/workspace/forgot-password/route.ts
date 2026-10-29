@@ -4,6 +4,7 @@ import { forgotPasswordInput, readInput } from "@/lib/apiInput";
 import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
 import { ownerChats, sendToColleague, type OwnerChat } from "@/lib/botDelivery";
 import { originOf, recoveryLink } from "@/lib/recoveryLink";
+import { findUserByEmail } from "@/lib/findUserByEmail";
 
 // «Забыли пароль?» — ссылка приходит в мессенджер, а не письмом.
 //
@@ -42,11 +43,10 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
-  // Найти вход по почте. Отдельного поиска в auth у SDK нет, а людей здесь
-  // десятки — перебор одной страницы дешевле собственной таблицы почт,
-  // которая немедленно стала бы второй правдой о том же самом.
-  const { data: users } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  const user = (users?.users || []).find((u) => (u.email || "").toLowerCase() === email);
+  // Найти вход по почте — узким запросом к серверу входа, а не выкачкой
+  // всех учётных записей (lib/findUserByEmail). Собственная таблица почт
+  // по-прежнему не нужна: она немедленно стала бы второй правдой о том же.
+  const user = await findUserByEmail(admin, email);
   if (!user) return NextResponse.json(SAME_ANSWER);
 
   const { count } = await admin

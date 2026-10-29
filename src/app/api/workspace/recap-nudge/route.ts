@@ -96,7 +96,9 @@ export async function POST(req: Request) {
   const text = recapNudgeText(meeting.title, who, meeting.id + who);
   await Promise.all([
     notifyAuthor(admin, meeting.user_id, meeting.created_by, text, undefined, recapButtons(meeting.id), { kind: "meeting", itemId: meeting.id }),
-    recordEvent(admin, { userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `${NUDGE_MARK} ${who} напомнил об итоге встречи` }),
+    // actorUserId — автор строки (CLAUDE.md, «Хроника знает автора»): без
+    // него напомнившему тут же всплывало на ПК его же «напомнил об итоге».
+    recordEvent(admin, { actorUserId: user.id, userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `${NUDGE_MARK} ${who} напомнил об итоге встречи` }),
   ]);
   return NextResponse.json({ ok: true });
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dateStr, minutesOfDay, isDueToday, isOverdue, type TaskRow } from "./taskLogic";
+import { dateStr, minutesOfDay, isDueToday, isOverdue, todayMoscow, type TaskRow } from "./taskLogic";
 
 function baseTask(overrides: Partial<TaskRow>): TaskRow {
   return {
@@ -88,5 +88,18 @@ describe("isDueToday", () => {
     expect(
       isDueToday(baseTask({ recur: "yearly", recur_year_day: 2, recur_year_month: 10 }), now, "2026-09-02"),
     ).toBe(false);
+  });
+});
+
+// Аудит 29.10.2026: бот брал «сегодня» по Гринвичу, и с полуночи до трёх
+// ночи по Москве это был вчерашний день.
+describe("todayMoscow", () => {
+  it("после полуночи по Москве — уже новый день, хотя по Гринвичу ещё вчера", () => {
+    const at0130msk = Date.parse("2026-10-28T22:30:00Z");
+    expect(new Date(at0130msk).toISOString().slice(0, 10)).toBe("2026-10-28");
+    expect(todayMoscow(at0130msk)).toBe("2026-10-29");
+  });
+  it("днём совпадает с датой по Гринвичу", () => {
+    expect(todayMoscow(Date.parse("2026-10-29T12:00:00Z"))).toBe("2026-10-29");
   });
 });

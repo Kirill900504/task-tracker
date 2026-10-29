@@ -15,6 +15,7 @@ import { newTaskRow } from "@/lib/newTask";
 import { recordEvent } from "@/lib/itemHistory";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { takenIdeaAuthor, type IdeaShareKind } from "@/lib/ideaRecipients";
+import { claimTakenIdea } from "@/lib/ideaClaim";
 import type { Notice } from "@/lib/noticeQueue";
 import { taskRef as taskLabel } from "@/lib/taskRef";
 import { lockedTaskText, lockedVoteText, openTaskChoices, voteVerdict } from "@/lib/answerRules";
@@ -134,6 +135,10 @@ export async function POST(req: Request) {
       .from("tasks")
       .insert(newTaskRow({ id: taskId, userId: m.owner_id, title, assignee: rowName || myName, createdBy }));
     if (taskError) return NextResponse.json({ error: taskError.message }, { status: 500 });
+    // Мысль занимает первое нажатие — второе получает ту же задачу, а не
+    // вторую (lib/ideaClaim).
+    const claim = await claimTakenIdea(admin, { id: recipient.id }, taskId, now);
+    if (!claim.won) return NextResponse.json({ ok: true, taskId: claim.taskId });
 
     // upsert, а не insert: имя исполнителя стоит в самой задаче, и строку
     // по нему успевает завести триггер (миграция 0024) — простая вставка
@@ -147,7 +152,6 @@ export async function POST(req: Request) {
       },
       { onConflict: "task_id,assignee_id" },
     );
-    await admin.from("idea_recipients").update({ converted_task_id: taskId, seen_at: now }).eq("id", recipient.id);
     await recordEvent(admin, { actorUserId: user.id, userId: m.owner_id, kind: "task", itemId: taskId, text: `➕ ${myName} взял мысль в работу` });
     // Мысль тоже кто-то отправил — ему и знать, что её взяли.
     await notifyAuthor(admin, m.owner_id, idea?.created_by || null, `➕ ${myName} взял мысль в работу: «${title}»`);

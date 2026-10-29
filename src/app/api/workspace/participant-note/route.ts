@@ -68,8 +68,12 @@ export async function POST(req: Request) {
   }
   actorName = actorName || "Участник";
 
-  const { data: targetRow } = await admin.from("assignees").select("name").eq("id", body.assigneeId).maybeSingle();
-  const targetName = withoutSelfMark((targetRow?.name as string) || "") || "человек";
+  // Человек — только из пространства этой задачи (аудит 29.10.2026). Служебный
+  // ключ находит строку любого пространства, и подставленный чужой id
+  // переписывал в хронику своей задачи имя человека из чужого трекера.
+  const { data: targetRow } = await admin.from("assignees").select("name").eq("id", body.assigneeId).eq("user_id", task.user_id).maybeSingle();
+  if (!targetRow) return NextResponse.json({ error: "Человек не найден" }, { status: 404 });
+  const targetName = withoutSelfMark((targetRow.name as string) || "") || "человек";
   const roleLabel = body.role ? ROLE_LABEL[body.role] || body.role : "";
 
   const text =

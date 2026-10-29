@@ -5,6 +5,8 @@ import { sendMaxDocument, sendMaxMessage } from "@/lib/max";
 import { groupBackupTargets, type BackupDestination } from "@/lib/backupTargets";
 import { involvedFilter } from "@/lib/telegramQueries";
 import { preferredMessenger } from "@/lib/colleagues";
+import { bearerMatches } from "@/lib/secretMatch";
+import { todayMoscow } from "@/lib/taskLogic";
 
 // Weekly backup: everyone who has linked a messenger gets their own tasks/
 // meetings/ideas/assignees as a JSON file.
@@ -45,7 +47,10 @@ export async function GET(req: Request) {
   // Vercel's own Cron Jobs feature (unlike the external pinger the
   // reminders route needs) automatically sends this header when CRON_SECRET
   // is set as a project env var — no secret needs to live in vercel.json.
-  if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
+  // With CRON_SECRET unset this used to compare against the literal
+  // "Bearer undefined" — a header anybody can send, and this route mails
+  // the tracker out (lib/secretMatch).
+  if (!bearerMatches(req.headers.get("authorization"), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -92,7 +97,7 @@ export async function GET(req: Request) {
       ideas: ideas.data,
       assignees: assignees.data,
     };
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayMoscow();
     const file = JSON.stringify(payload, null, 2);
 
     // One copy, in the chosen messenger. The other one is tried only if the

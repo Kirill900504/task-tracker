@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { maxBotInfo, subscribeMaxWebhook } from "@/lib/max";
 import { forgetMaxSettings } from "@/lib/botSettings";
 import { ensureBotSettingsTable, looksLikeMissingTable } from "@/lib/ensureBotSettings";
+import { originOf } from "@/lib/recoveryLink";
 
 // Подключение бота MAX — целиком, одним действием.
 //
@@ -26,9 +27,7 @@ const UPDATE_TYPES = ["message_created", "message_callback", "bot_started"];
 // показывает внутренний адрес, поэтому идём по заголовкам — вебхук должен
 // указывать на публичный домен, иначе MAX не достучится.
 function publicOrigin(req: Request): string {
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
-  const proto = req.headers.get("x-forwarded-proto") || "https";
-  return host ? `${proto}://${host}` : new URL(req.url).origin;
+  return originOf(req);
 }
 
 function randomSecret(): string {
@@ -44,10 +43,20 @@ async function requireOwner(): Promise<{ ok: true; userId: string } | { ok: fals
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, status: 401, error: "Не авторизован" };
 
+  // Владелец доказывается тем, что он ЕСТЬ, а не тем, что про него не нашлось
+  // ничего другого (аудит 29.10.2026). Прежняя проверка пускала всякого, у
+  // кого не нашлось строки членства: `.maybeSingle()` возвращает null и тогда,
+  // когда строк нет, и тогда, когда их две (это ошибка, а не данные), — а
+  // учётная запись без членства остаётся, например, у человека, чью строку
+  // удалили целиком. Любой такой вход мог заменить токен бота на свой и
+  // получать все сообщения всех людей. Теперь: ни одного членства в чужом
+  // пространстве — и есть собственная строка «(я)» в своём.
   const admin = createAdminClient();
-  const { data } = await admin.from("workspace_members").select("owner_id").eq("member_id", user.id).maybeSingle();
-  const ownerId = (data as { owner_id?: string } | null)?.owner_id;
-  if (ownerId && ownerId !== user.id) {
+  const [{ count: memberships, error: memberError }, { data: self }] = await Promise.all([
+    admin.from("workspace_members").select("id", { count: "exact", head: true }).eq("member_id", user.id).neq("owner_id", user.id),
+    admin.from("assignees").select("id").eq("user_id", user.id).like("name", "%(я)").limit(1),
+  ]);
+  if (memberError || (memberships ?? 0) > 0 || !(self || []).length) {
     return { ok: false, status: 403, error: "Бота подключает владелец трекера" };
   }
   return { ok: true, userId: user.id };

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { joinLink, randomInviteCode } from "@/lib/workspaceInvite";
+import { originOf } from "@/lib/recoveryLink";
 
 // The owner inviting one of his people INTO THE TRACKER — not into a
 // messenger. The messenger invite (/api/telegram/invite) attaches a chat to
@@ -12,14 +13,9 @@ import { joinLink, randomInviteCode } from "@/lib/workspaceInvite";
 // neither: a manager who only ever answers from Telegram never needs this,
 // and one who lives at his computer never needs the other.
 
-function originOf(req: Request): string {
-  // Behind Vercel's proxy the request URL is the internal one, so the
-  // forwarded headers are what the person will actually see in his browser.
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto") || "https";
-  if (host) return `${proto}://${host}`;
-  return new URL(req.url).origin;
-}
+// The address inside the link comes from lib/recoveryLink.originOf, which
+// trusts only this project's own hosts — this route used to keep its own
+// copy that believed any X-Forwarded-Host it was handed.
 
 export async function POST(req: Request) {
   const supabase = await createClient();

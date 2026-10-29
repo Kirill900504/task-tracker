@@ -16,7 +16,7 @@ import { chatsFor, meetingButtons, taskButtons, type ColleagueRow } from "@/lib/
 import { sendToColleague } from "@/lib/botDelivery";
 import { chatsForPerson, sendToPerson } from "@/lib/reach";
 import { buildManagerBrief, composeManagerBrief, managerBriefIsEmpty } from "@/lib/managerBrief";
-import { personStats, composePeopleReview, composeMyWeek, buildParticipation } from "@/lib/peopleReview";
+import { personStats, composeMyWeek, buildParticipation } from "@/lib/peopleReview";
 import { findAssignmentDrift } from "@/lib/assignmentDrift";
 import { isSelfAssignee } from "@/lib/trackerRows";
 import { onceOnly } from "@/lib/onceOnly";
@@ -29,6 +29,7 @@ import { normalizeDuration } from "@/lib/meetingTime";
 import { timeIsUpText } from "@/lib/meetingNudges";
 import { telegramTransport } from "@/lib/telegram";
 import { maxTransport } from "@/lib/max";
+import { bearerMatches, secretMatches } from "@/lib/secretMatch";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -88,10 +89,13 @@ async function tellMeetingPeople(
   let ownerReached = false;
   if (ids.length) {
     const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", ids);
-    for (const person of ((people || []) as ColleagueRow[])) {
-      if (isSelfAssignee(person.name)) ownerReached = true;
-      await sendToPerson(admin, userId, person, text);
-    }
+    const list = (people || []) as ColleagueRow[];
+    ownerReached = list.some((person) => isSelfAssignee(person.name));
+    // Всем разом (CLAUDE.md: «Рассылка нескольким — параллельно»): по
+    // одному это был полёт до мессенджера на каждого участника, и на
+    // встрече в десять человек «время вышло» последний получал через
+    // несколько секунд после первого, а крон ждал их всех подряд.
+    await Promise.all(list.map((person) => sendToPerson(admin, userId, person, text)));
   }
   await tellOrganizer(admin, userId, meeting.created_by ?? null, ids, ownerReached, text);
 }
@@ -132,8 +136,8 @@ export async function GET(req: Request) {
   // that calls this every five minutes can send a header instead, and the
   // query form stays only so switching it over is not a flag day.
   const secret = process.env.CRON_SECRET;
-  const headerAuth = req.headers.get("authorization") === `Bearer ${secret}`;
-  const queryAuth = url.searchParams.get("secret") === secret;
+  const headerAuth = bearerMatches(req.headers.get("authorization"), secret);
+  const queryAuth = secretMatches(url.searchParams.get("secret"), secret);
   if (!secret || (!headerAuth && !queryAuth)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
@@ -282,12 +286,16 @@ export async function GET(req: Request) {
     if (!quiet) {
       const { data: back } = await admin
         .from("tasks")
-        .select("id, title, number, created_by")
+        .select("id, title, number, created_by, recur, approval_state")
         .eq("user_id", userId)
         .eq("snoozed_until", today)
         .neq("status", "done")
         .is("deleted_at", null);
-      for (const t of (back || []) as { id: string; title: string; number: number | null; created_by: string | null }[]) {
+      type Back = { id: string; title: string; number: number | null; created_by: string | null; recur: string | null; approval_state: string | null };
+      // Принятая разовая закрыта и при status in_progress (isClosed в
+      // taskDisplay): «она снова на доске» про задачу в «Завершённых» — неправда.
+      const reopened = ((back || []) as Back[]).filter((t) => !(t.approval_state === "accepted" && (t.recur || "none") === "none"));
+      for (const t of reopened) {
         await onceOnly(admin, { userId, kind: "snooze_back", refId: `${t.id}:${today}`, date: today }, async () => {
           await notifyAuthor(admin, userId, t.created_by, `⏰ Сегодня вы просили напомнить: ${taskRef(t)} — она снова на доске.`);
         });
@@ -356,25 +364,33 @@ export async function GET(req: Request) {
       // «Ждёт вашего ответа — Принял / Не могу» по задаче, поставленной
       // себе, — вопрос самому себе: у своей задачи ответов нет вовсе.
       const ownWaiting = await selfTaskIds(admin, userId, waiting.unaccepted.map((w) => w.taskId));
-      for (const w of waiting.unaccepted) {
-        if (ownWaiting.has(w.taskId)) continue;
-        await onceOnly(admin, { userId, kind: "unaccepted_nudge", refId: w.participantId, date: today }, async () => {
-          const { data: person } = await admin
-            .from("assignees")
-            .select("id, name, telegram_chat_id, max_user_id, messenger, away_until")
-            .eq("id", w.assigneeId)
-            .maybeSingle();
-          // В отпуске — не теребим: задача дождётся его возвращения.
-          if (person && !isAwayOn(person.away_until as string | null, today)) {
-            await sendToPerson(admin, userId, person as ColleagueRow, unacceptedText(w), taskButtons(w.taskId, "executor"), { kind: "task", itemId: w.taskId });
-          }
-        });
-      }
-      for (const w of waiting.unreviewed) {
-        await onceOnly(admin, { userId, kind: "unreviewed_nudge", refId: w.taskId + ":" + w.since, date: today }, async () => {
-          await notifyAuthor(admin, userId, w.createdBy, unreviewedText(w), undefined, briefButtons());
-        });
-      }
+      // Каждое напоминание — своё и защищено своим onceOnly, друг от друга
+      // они не зависят, поэтому идут разом (аудит 29.10.2026): по одному
+      // это было три-четыре полёта (отметка, строка человека, мессенджер) на
+      // КАЖДУЮ задачу каждого пространства — внутри крона, который каждые
+      // пять минут обходит всех и обязан успеть в свой предел времени.
+      await Promise.all([
+        ...waiting.unaccepted
+          .filter((w) => !ownWaiting.has(w.taskId))
+          .map((w) =>
+            onceOnly(admin, { userId, kind: "unaccepted_nudge", refId: w.participantId, date: today }, async () => {
+              const { data: person } = await admin
+                .from("assignees")
+                .select("id, name, telegram_chat_id, max_user_id, messenger, away_until")
+                .eq("id", w.assigneeId)
+                .maybeSingle();
+              // В отпуске — не теребим: задача дождётся его возвращения.
+              if (person && !isAwayOn(person.away_until as string | null, today)) {
+                await sendToPerson(admin, userId, person as ColleagueRow, unacceptedText(w), taskButtons(w.taskId, "executor"), { kind: "task", itemId: w.taskId });
+              }
+            }),
+          ),
+        ...waiting.unreviewed.map((w) =>
+          onceOnly(admin, { userId, kind: "unreviewed_nudge", refId: w.taskId + ":" + w.since, date: today }, async () => {
+            await notifyAuthor(admin, userId, w.createdBy, unreviewedText(w), undefined, briefButtons());
+          }),
+        ),
+      ]);
     }
 
     // Утренняя сводка каждому руководителю — та же услуга, что владельцу,
@@ -404,60 +420,36 @@ export async function GET(req: Request) {
       }
     }
 
-    // Понедельничная сводка по людям — единственное место, где видно не
-    // «что просрочено», а «кто просрочил»: материал для разговора, а не для
-    // ещё одного списка задач.
+    // Понедельник: каждому — цифры о СВОЕЙ неделе, и больше никому ничего
+    // о чужой работе. Сводки владельцу «по людям» (кто молчит, кто
+    // просрочил, «стоит спросить лично», встречи без итога по всему
+    // пространству) здесь больше нет — концепция равноправия и
+    // конфиденциальности 20.10.2026: любая сводка о людях, которую получает
+    // один человек, — и неравенство, и утечка. Встречу без итога и так
+    // спрашивает у организатора recapDue, а на экране она стоит в «Нужен итог».
     if (workingDay && nowMin >= BRIEF_FROM_MINUTES && now.getUTCDay() === 1) {
-      // Считается один раз на обе сводки — владельцу про людей и каждому
-      // про себя. Не ради экономии запроса: цифры обязаны сойтись, а две
-      // выборки в разные секунды уже могут разойтись, и первый же разговор
-      // «у меня написано другое» стоил бы дороже всей затеи.
       const participation = await buildParticipation(admin, userId);
       const stats = personStats(participation, now);
 
-      await onceOnly(admin, { userId, kind: "people_review", refId: today, date: today }, async () => {
-        let text = composePeopleReview(stats);
-
-        // Встречи, у которых так и не появилось итога. Спрашивать про
-        // каждую в третий раз бессмысленно — а одной строкой раз в неделю
-        // видно, что переговоры проходят, а решений после них не остаётся.
-        const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-        const { data: noRecap } = await admin
-          .from("meetings")
-          .select("title, date, result")
-          .eq("user_id", userId)
-          .eq("status", "planned")
-          .lt("date", dateStr(threeDaysAgo))
-          .is("deleted_at", null);
-        // Без исхода — значит без итога, даже если в поле что-то набрано:
-        // закрывает встречу «Успех / Провал», а не текст (см. awaitsRecap).
-        const forgotten = (noRecap || []) as { title: string; date: string }[];
-        if (forgotten.length) {
-          const list = forgotten.slice(0, 5).map((m) => `• ${m.title} (${m.date.split("-").reverse().join(".")})`);
-          text = (text ? text + "\n\n" : "📊 Неделя по людям\n\n") + "Встречи без итога:\n" + list.join("\n");
-        }
-
-        // Задачи, которые выглядят назначенными и не назначены. Три места
-        // создавали задачи, и два из них строк участия не заводили —
-        // причины починены, но появится четвёртое, и узнать об этом лучше
-        // здесь, чем через неделю вопросом «почему он ничего не сделал».
+      // Задачи, которые выглядят назначенными и не назначены. Это не сводка
+      // о людях, а проверка собственных поручений владельца (findAssignmentDrift
+      // берёт только created_by is null): три места когда-то создавали задачи
+      // без строк участия — причины починены, но появится четвёртое, и узнать
+      // об этом лучше здесь, чем через неделю вопросом «почему он ничего не сделал».
+      await onceOnly(admin, { userId, kind: "assignment_drift", refId: today, date: today }, async () => {
         const drift = await findAssignmentDrift(admin, userId);
-        if (drift.length) {
-          const list = drift.slice(0, 5).map((d) => `• ${d.title} — ${d.assignee}`);
-          text =
-            (text ? text + "\n\n" : "📊 Неделя по людям\n\n") +
-            `⚠ Стоит имя, но задача не назначена (${drift.length}) — человек её не видит:\n` +
-            list.join("\n");
-        }
-
-        if (text) await notifyOwner(admin, userId, text);
+        if (!drift.length) return;
+        const list = drift.slice(0, 5).map((d) => `• ${d.title} — ${d.assignee}`);
+        await notifyOwner(
+          admin,
+          userId,
+          `⚠ Стоит имя, но задача не назначена (${drift.length}) — человек её не видит:\n` + list.join("\n"),
+        );
       });
 
-      // G4: та же цифра, но человеку про него самого. Решение записано в
+      // G4: цифра человеку про него самого. Решение записано в
       // docs/multiuser.md одной фразой — «цифра о себе меняет поведение
-      // дешевле любого разговора», — и считается она той же функцией, что
-      // сводка выше. Показывать человеку одно, а начальнику про него
-      // другое было бы началом недоверия.
+      // дешевле любого разговора». Получает её только он сам.
       const { data: forStats } = await admin
         .from("assignees")
         .select("id, name, telegram_chat_id, max_user_id, messenger")
@@ -503,8 +495,7 @@ export async function GET(req: Request) {
 
       // Итог встречи (C4): спрашивают у того, кто её собрал. Через два часа
       // после начала, и ещё раз на следующее утро, если так и не ответили.
-      // Дальше не дёргают — встреча без итога попадёт в понедельничную
-      // сводку, и это уже другой разговор.
+      // Дальше не дёргают — встреча остаётся в «Нужен итог» на экране.
       // Набранный текст без исхода встречу не закрывает (awaitsRecap),
       // поэтому спрашивают по статусу, а не по пустому полю.
       {

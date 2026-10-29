@@ -58,7 +58,7 @@ import {
   type SkillReply,
   type SlotPending,
 } from "@/lib/botSkills";
-import { dateStr, moscowNow } from "@/lib/taskLogic";
+import { dateStr, moscowNow, todayMoscow } from "@/lib/taskLogic";
 
 // Незакрытый вопрос «что доделать»: его ставит кнопка «Вернуть» в
 // мессенджере, а закрывает следующее сообщение владельца.
@@ -1338,12 +1338,12 @@ export async function handleText(baseCtx: BotContext, text: string, reply: Reply
     // задачу, — это список, после которого всё равно открывать трекер.
     const which = queryKind === "today" ? "today" : queryKind === "overdue" ? "overdue" : "";
     if (queryKind === "meetings") {
-      const reply = await ownerMeetingsReply(ctx.admin, asOwner, new Date().toISOString().slice(0, 10));
+      const reply = await ownerMeetingsReply(ctx.admin, asOwner, todayMoscow());
       await ctx.transport.send(ctx.chatId, reply.text, reply.buttons?.length ? { buttons: reply.buttons } : undefined);
       return;
     }
     if (which) {
-      const reply = await ownerListReply(ctx.admin, asOwner, which, new Date().toISOString().slice(0, 10));
+      const reply = await ownerListReply(ctx.admin, asOwner, which, todayMoscow());
       await ctx.transport.send(ctx.chatId, reply.text, reply.buttons?.length ? { buttons: reply.buttons } : undefined);
       return;
     }

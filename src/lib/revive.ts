@@ -45,6 +45,8 @@ type Watcher = {
   // focus подряд, а Alt+Tab по десять раз в минуту — обычное дело.
   minGapMs: number;
   last: number;
+  // Работает и в фоне с обычной частотой (см. HIDDEN_SLOWDOWN).
+  background: boolean;
 };
 
 const watchers = new Set<Watcher>();
@@ -54,10 +56,28 @@ let timer: ReturnType<typeof setInterval> | null = null;
 // свой срок, а проверять их дешевле, чем держать пять таймеров.
 const TICK_MS = 10_000;
 
+// Во сколько раз реже перечитывает вкладка, которую не видно.
+//
+// Трекер у людей открыт весь день, и чаще всего — в фоне: свёрнутое окно,
+// вкладка за другими. Раньше фоновая вкладка перечитывала по таймеру ровно
+// так же, как открытая: раз в минуту все задачи, встречи и мысли целиком
+// плюс участие, голоса и справочники — у пятнадцати человек это сотни
+// полных выборок в час, которых никто не видит (аудит 29.10.2026). При
+// возврате к вкладке всё перечитывается сразу («visible»), так что экран
+// при взгляде на него свежий; а подписка, пока жива, доносит изменения и в
+// фоне. Не замедляется то, что работает именно в фоне: всплывающие
+// уведомления на ПК и очередь неотправленных ответов (`background: true`).
+const HIDDEN_SLOWDOWN = 5;
+
+function hidden(): boolean {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
+
 function fire(reason: Reason) {
   const now = Date.now();
+  const slow = reason === "timer" && hidden();
   for (const w of [...watchers]) {
-    const gap = reason === "timer" ? w.everyMs() : w.minGapMs;
+    const gap = reason === "timer" ? w.everyMs() * (slow && !w.background ? HIDDEN_SLOWDOWN : 1) : w.minGapMs;
     if (now - w.last < gap) continue;
     w.last = now;
     try {
@@ -112,7 +132,10 @@ function unwire() {
   timer = null;
 }
 
-export function onRevive(fn: () => void, opts: { everyMs?: number | (() => number); minGapMs?: number } = {}): () => void {
+export function onRevive(
+  fn: () => void,
+  opts: { everyMs?: number | (() => number); minGapMs?: number; background?: boolean } = {},
+): () => void {
   const every = opts.everyMs ?? 60_000;
   const w: Watcher = {
     fn,
@@ -123,6 +146,7 @@ export function onRevive(fn: () => void, opts: { everyMs?: number | (() => numbe
     minGapMs: opts.minGapMs ?? 2_000,
     // Считаем от подписки, а не от нуля: хук только что прочитал всё сам.
     last: Date.now(),
+    background: opts.background ?? false,
   };
   watchers.add(w);
   wire();

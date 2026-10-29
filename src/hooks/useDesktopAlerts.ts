@@ -239,7 +239,7 @@ export function useDesktopAlerts({
       .subscribe((status) => {
         if (status === "SUBSCRIBED") void poll();
       });
-    const stopRevive = onRevive(() => void poll(), { everyMs: 60_000 });
+    const stopRevive = onRevive(() => void poll(), { everyMs: 60_000, background: true });
     return () => {
       cancelled = true;
       stopRevive();

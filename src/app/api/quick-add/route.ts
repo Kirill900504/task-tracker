@@ -9,6 +9,8 @@ import { talkReply } from "@/lib/botTalk";
 import { extractMeetingNotes } from "@/lib/meetingNotes";
 import { findMeetingForNotes } from "@/lib/meetingLink";
 
+const MAX_TEXT = 8000;
+
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -25,9 +27,19 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => null);
   const text = typeof body?.text === "string" ? body.text.trim() : "";
-  const assignees: string[] = Array.isArray(body?.assignees) ? body.assignees : [];
+  // Список имён — только строки и не длиннее разумного (аудит 29.10.2026):
+  // он уходит модели в подсказку целиком, и присланный руками список из
+  // тысяч «имён» любой длины оплачивался токенами GigaChat на каждый запрос.
+  const assignees: string[] = Array.isArray(body?.assignees)
+    ? (body.assignees as unknown[]).filter((n): n is string => typeof n === "string").slice(0, 200).map((n) => n.slice(0, 120))
+    : [];
   if (!text) {
     return NextResponse.json({ error: "Пустой текст" }, { status: 400 });
+  }
+  // Надиктованный итог встречи бывает длинным, но не бесконечным: предел
+  // держит цену одного запроса к модели в границах.
+  if (text.length > MAX_TEXT) {
+    return NextResponse.json({ error: `Слишком длинный текст — не больше ${MAX_TEXT} знаков за раз.` }, { status: 413 });
   }
 
   try {

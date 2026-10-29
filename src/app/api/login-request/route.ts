@@ -13,11 +13,21 @@ import { isLoginToken, newLoginToken } from "@/lib/messengerLogin";
 // Сам по себе он ничего не открывает: код появляется только после нажатия
 // «Да, войти» в чате, уже привязанном к человеку.
 
+const MAX_ALIVE = 300;
+
 export async function POST() {
   const admin = createAdminClient();
   // Уборка мимоходом: запросы живут десять минут, и отдельный крон ради
   // них не нужен.
   await admin.from("login_requests").delete().lt("expires_at", new Date().toISOString());
+  // Маршрут публичный, и до 29.10.2026 у него не было предела вовсе: скрипт
+  // заводил строки быстрее, чем их убирала уборка выше. Живых запросов при
+  // пятнадцати людях — единицы; сотни разом значат не людей, а скрипт, и
+  // отказ ему не мешает никому, кто входит по-настоящему.
+  const { count: alive } = await admin.from("login_requests").select("token", { count: "exact", head: true });
+  if ((alive ?? 0) >= MAX_ALIVE) {
+    return NextResponse.json({ error: "Слишком много попыток входа — попробуйте через несколько минут" }, { status: 429 });
+  }
   const token = newLoginToken();
   const { error } = await admin.from("login_requests").insert({ token });
   if (error) return NextResponse.json({ error: "Вход через мессенджер сейчас недоступен" }, { status: 500 });

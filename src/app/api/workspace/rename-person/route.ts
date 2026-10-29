@@ -30,6 +30,10 @@ import { isSelfAssignee } from "@/lib/trackerRows";
 // админские» в CLAUDE.md). Своё имя владелец меняет так же — его строка
 // помечена «(я)», и пометка остаётся на месте: по ней трекер понимает,
 // какая строка его собственная.
+// Сколько встреч переписывать одновременно: достаточно, чтобы сотня ушла за
+// пять полётов, и мало, чтобы не упереться в предел соединений базы.
+const RENAME_BATCH = 20;
+
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -78,7 +82,7 @@ export async function POST(req: Request) {
   // Дальше — имя, написанное на карточках. Если этот шаг не пройдёт,
   // задачи останутся подписаны прежним именем: строка человека уже
   // переименована, и «назначено только на словах» поймает это в
-  // понедельничной сводке (assignmentDrift). Молчать об этом нельзя,
+  // понедельничной проверке (assignmentDrift). Молчать об этом нельзя,
   // поэтому ответ честно говорит, что переименовано не всё.
   const { error: taskError } = await admin
     .from("tasks")
@@ -88,17 +92,30 @@ export async function POST(req: Request) {
 
   // Состав встречи — массив строк, и заменить в нём одно значение может
   // только сама база. PostgREST этого не умеет, поэтому строки читаются и
-  // переписываются по одной: встреч с одним человеком единицы.
+  // переписываются каждая своим запросом.
+  //
+  // Запросы идут пачками параллельно, а не по одному (аудит 29.10.2026):
+  // «встреч с одним человеком единицы» верно про неделю, но выборка берёт
+  // ВСЮ историю — за месяцы это сотни встреч, и переименование держало окно
+  // «Команды» десятки секунд, по полёту до базы на каждую.
   const { data: meetings } = await admin
     .from("meetings")
     .select("id, participants")
     .eq("user_id", person.user_id)
     .contains("participants", [person.name]);
   let meetingError = "";
-  for (const m of ((meetings || []) as { id: string; participants: string[] }[])) {
-    const next = (m.participants || []).map((p) => (p === person.name ? name : p));
-    const { error } = await admin.from("meetings").update({ participants: next }).eq("id", m.id);
-    if (error) meetingError = error.message;
+  const rows = (meetings || []) as { id: string; participants: string[] }[];
+  for (let i = 0; i < rows.length; i += RENAME_BATCH) {
+    const results = await Promise.all(
+      rows.slice(i, i + RENAME_BATCH).map((m) =>
+        admin
+          .from("meetings")
+          .update({ participants: (m.participants || []).map((p) => (p === person.name ? name : p)) })
+          .eq("id", m.id),
+      ),
+    );
+    const failed = results.find((r) => r.error);
+    if (failed?.error) meetingError = failed.error.message;
   }
 
   return NextResponse.json({

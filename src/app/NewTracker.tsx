@@ -557,6 +557,28 @@ export default function NewTracker() {
     setTimeout(() => setHighlightIdeaId((cur) => (cur === result.id ? null : cur)), 1600);
   }
 
+  // Назначение по именам — через тот же attachOnCreate, что у формы: он
+  // показывает состав на карточке сразу, до строк участия, и иначе задача
+  // из быстрого ввода или повестки первые секунды стояла бы без людей —
+  // своя читалась поручением «Кирилл → Кирилл» (27.10.2026). Имя, которого
+  // нет в списке людей (заведён только что), уходит прежней дорогой:
+  // запись там upsert, второй раз строку она не заведёт.
+  function attachByNames(id: string, names: string[]) {
+    const wanted = [...new Set(names.map((n) => (n || "").trim()).filter(Boolean))];
+    if (!wanted.length) return;
+    const known = wanted.map((n) => participants.people.find((p) => p.name === n)).filter((p) => !!p);
+    // Все известные — и списком тоже, своя строка «(я)» в том числе: так
+    // делает форма, и только так attachOnCreate ждёт настоящую строку,
+    // прежде чем снять заготовку.
+    void participants.attachOnCreate(
+      id,
+      wanted[0],
+      known.map((p) => ({ assigneeId: p.id, name: p.name, role: "executor" as const })),
+    );
+    const unknown = wanted.filter((n) => !known.some((p) => p.name === n));
+    if (unknown.length) void assignExecutorsByName(id, unknown);
+  }
+
   // Поручения из итога встречи (MeetingTasksSheet): каждая — обычная
   // задача, тем же путём, что и строка быстрого ввода: запись движком
   // синхронизации и назначение человека с сообщением ему.
@@ -584,7 +606,7 @@ export default function NewTracker() {
         manualOrder: null,
         completedAt: "",
       });
-      void assignExecutorsByName(id, [item.assignee]);
+      attachByNames(id, [item.assignee]);
     }
   }
 
@@ -627,7 +649,7 @@ export default function NewTracker() {
       // Задача, заведённая строкой быстрого ввода, минует карточку — но
       // не правило: исполнители получают строку участия и сообщение так
       // же, как если бы их вписали руками.
-      void assignExecutorsByName(id, [f.assignee, ...(f.executors || [])]);
+      attachByNames(id, [f.assignee, ...(f.executors || [])]);
     },
     createMeeting: (f) => {
       actions.saveMeeting({

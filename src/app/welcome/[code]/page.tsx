@@ -32,23 +32,41 @@ export default function WelcomePage() {
 
   useEffect(() => {
     let alive = true;
+    // Переспрашивать есть смысл, только пока есть чего ждать (аудит
+    // 29.10.2026). Раньше опрос раз в четыре секунды шёл, пока вкладка
+    // открыта, — и после ответа «приглашение не найдено / истекло», и когда
+    // все боты уже подключены: каждый раз это пять обращений к базе и к
+    // ботам на сервере, а вкладку с приглашением люди не закрывают днями.
+    let done = false;
+    const poll: { timer?: number } = {};
     const load = async () => {
-      if (document.visibilityState !== "visible") return;
+      if (done || document.visibilityState !== "visible") return;
       const res = await fetch(`/api/welcome?code=${encodeURIComponent(code)}`, { cache: "no-store" }).catch(() => null);
       const data = (await res?.json().catch(() => null)) as (Info & { error?: string }) | null;
       if (!alive) return;
       if (!res) return setError((e) => e || "Нет связи с трекером — проверьте интернет и обновите страницу.");
-      if (!data || data.error) return setError(data?.error || "Не получилось открыть приглашение.");
+      if (!data || data.error) {
+        // Ответ сервера по существу (ссылка неверна, истекла) от повтора не
+        // изменится; сбой разбора ответа — может, его переспросим.
+        if (data?.error) stop();
+        return setError(data?.error || "Не получилось открыть приглашение.");
+      }
       setError("");
       setInfo(data);
+      const bots = [data.telegram, data.max].filter((b): b is { link: string; connected: boolean } => !!b);
+      if (bots.length && bots.every((b) => b.connected)) stop();
     };
+    function stop() {
+      done = true;
+      window.clearInterval(poll.timer);
+      document.removeEventListener("visibilitychange", load);
+    }
     void load();
-    const timer = window.setInterval(() => void load(), 4000);
+    poll.timer = window.setInterval(() => void load(), 4000);
     document.addEventListener("visibilitychange", load);
     return () => {
       alive = false;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", load);
+      stop();
     };
   }, [code]);
 

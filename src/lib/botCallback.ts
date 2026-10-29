@@ -17,6 +17,7 @@ import { lessonActor, saveLesson } from "@/lib/botMemory";
 // Только типы: сам модуль умений тянет разбор фразы (и GigaChat за ним), а
 // нажатию кнопки он нужен в трёх ветках — там он и подгружается.
 import type { ConfirmPending, SlotPending } from "@/lib/botSkills";
+import { todayMoscow } from "@/lib/taskLogic";
 
 // Нажатая кнопка — один разбор на оба мессенджера.
 //
@@ -170,7 +171,7 @@ async function routeBotCallback(
       return { toast: "Готово", rewriteTo: text, rewriteButtons: ownerNav() };
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayMoscow();
     const outcome = await handleOwnerCallback(admin, actor, action, today);
     if (!outcome) {
       // Кнопка не постановщицкая — но это ещё не значит «чужая». Тот же

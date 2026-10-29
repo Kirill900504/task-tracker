@@ -374,14 +374,32 @@ async function tellUnblocked(admin: SupabaseClient, task: { id: string; user_id:
     .eq("blocked_by", task.id)
     .neq("status", "done")
     .is("deleted_at", null);
-  for (const w of (waiting || []) as { id: string; title: string; number: number | null; user_id: string }[]) {
-    const { data: parts } = await admin.from("task_participants").select("assignee_id").eq("task_id", w.id).in("role", ["executor", "coexecutor"]);
-    const ids = ((parts || []) as { assignee_id: string }[]).map((p) => p.assignee_id);
-    if (!ids.length) continue;
-    const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", ids);
-    const text = `🟢 Можно начинать: ${taskRef({ title: w.title, number: w.number })}\n\nЗадача, которую она ждала, закрыта: ${named}.`;
-    await Promise.all(
-      ((people || []) as ColleagueRow[]).map((person) => sendToPerson(admin, w.user_id, person, text, taskButtons(w.id, "executor"), { kind: "task", itemId: w.id })),
-    );
-  }
+  const tasks = (waiting || []) as { id: string; title: string; number: number | null; user_id: string }[];
+  if (!tasks.length) return;
+  // Участники всех ждавших задач — одним запросом, люди — вторым, рассылка —
+  // разом (аудит 29.10.2026). Раньше это было два запроса и рассылка на
+  // КАЖДУЮ ждавшую задачу по очереди, а приёмка ждала их все, прежде чем
+  // ответить постановщику.
+  const { data: parts } = await admin
+    .from("task_participants")
+    .select("task_id, assignee_id")
+    .in("task_id", tasks.map((w) => w.id))
+    .in("role", ["executor", "coexecutor"]);
+  const rows = (parts || []) as { task_id: string; assignee_id: string }[];
+  if (!rows.length) return;
+  const { data: people } = await admin
+    .from("assignees")
+    .select("id, name, telegram_chat_id, max_user_id, messenger")
+    .in("id", [...new Set(rows.map((p) => p.assignee_id))]);
+  const byId = new Map(((people || []) as ColleagueRow[]).map((p) => [p.id, p]));
+  await Promise.all(
+    tasks.flatMap((w) => {
+      const text = `🟢 Можно начинать: ${taskRef({ title: w.title, number: w.number })}\n\nЗадача, которую она ждала, закрыта: ${named}.`;
+      return rows
+        .filter((p) => p.task_id === w.id)
+        .map((p) => byId.get(p.assignee_id))
+        .filter((person): person is ColleagueRow => !!person)
+        .map((person) => sendToPerson(admin, w.user_id, person, text, taskButtons(w.id, "executor"), { kind: "task", itemId: w.id }));
+    }),
+  );
 }

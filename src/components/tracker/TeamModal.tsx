@@ -204,8 +204,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
   async function handleTrackerInvite(id: string, name: string, currentDirection = "") {
     setError(null);
     // Направление спрашивается здесь, а не отдельным экраном: это
-    // единственный момент, когда о человеке и так думают, и без него
-    // понедельничная сводка по направлениям остаётся пустой колонкой.
+    // единственный момент, когда о человеке и так думают.
     const direction =
       (await ask.ask({
         title: "Вход по почте и паролю",
@@ -274,7 +273,7 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
     const next = await ask.ask({
       title: "Направление",
       question: `Какое направление ведёт ${person.name}?`,
-      note: "По направлениям собирается понедельничная сводка.",
+      note: "Подпись рядом с именем в «Команде».",
       value: person.direction,
       placeholder: "Например: Продажи",
       okText: "Сохранить",
