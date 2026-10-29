@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { originOf } from "@/lib/recoveryLink";
 import { withoutSelfMark } from "@/lib/actorName";
-import { issueWelcomeCode, welcomeLink, welcomeMessage } from "@/lib/welcomeInvite";
+import { desktopInstallerUrl, issueWelcomeCode, welcomeLink, welcomeMessage } from "@/lib/welcomeInvite";
 
 // Выписать приглашения «всё в одном» (lib/welcomeInvite) — одному человеку
 // или пачке сразу. Пачкой одним запросом, а не пятнадцатью: «Пригласить
@@ -42,13 +42,16 @@ export async function POST(req: Request) {
   if (!people.length) return NextResponse.json({ error: "Это решение не ваше" }, { status: 403 });
 
   const origin = originOf(req);
+  // Один раз на пачку: адрес установщика у всех один, а ответ API выпусков
+  // и так держится час.
+  const installer = await desktopInstallerUrl();
   const invites = await Promise.all(
     people.map(async (p) => {
       const name = withoutSelfMark(p.name);
       const made = await issueWelcomeCode(admin, user.id, p.id);
       if ("error" in made) return { id: p.id, name, error: made.error };
       const link = welcomeLink(origin, made.code);
-      return { id: p.id, name, link, message: welcomeMessage(name, link) };
+      return { id: p.id, name, link, message: welcomeMessage(name, link, installer.url) };
     }),
   );
   // Порядок — тот, в котором просили: это порядок «Команды».

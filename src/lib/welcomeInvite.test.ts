@@ -14,6 +14,12 @@ describe("приглашение «всё в одном»", () => {
     expect(text).toContain("рабочую почту, телефон и пароль");
   });
 
+  it("установщик — прямой ссылкой, когда адрес известен", () => {
+    const exe = "https://github.com/o/r/releases/download/v1/Setup-1.exe";
+    expect(welcomeMessage("Иван", "L", exe)).toContain(exe);
+    expect(welcomeMessage("Иван", "L")).not.toContain("Windows");
+  });
+
   it("без имени — просто «Привет»", () => {
     expect(welcomeMessage("  ", "L").startsWith("Привет!")).toBe(true);
   });
