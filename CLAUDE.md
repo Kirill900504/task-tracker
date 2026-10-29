@@ -66,6 +66,10 @@ edit this," and always says yes for the owner).
 ни «надёжность исполнения по людям», ни матрицей взаимодействий: любая
 сводка о людях, которую получает один человек, — это и неравенство, и
 утечка. Каждый получает статистику только о СВОЕЙ работе (`my_week`).
+29.10.2026 найден и удалён последний хвост — понедельничная «📊 Неделя по
+людям» владельцу (`composePeopleReview`: «стоит спросить лично», встречи
+без итога по всему пространству). От неё осталась только проверка
+«назначено на словах» по его СОБСТВЕННЫМ поручениям (`assignmentDrift`).
 
 Full detail lives in `docs/how-it-works.md` — read it before touching
 anything about what a screen shows to whom; if code and that document

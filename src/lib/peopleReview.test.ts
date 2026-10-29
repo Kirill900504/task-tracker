@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeMyWeek, composePeopleReview, personStats, reviewIsEmpty, type ParticipationRow } from "./peopleReview";
+import { composeMyWeek, personStats, type ParticipationRow } from "./peopleReview";
 
 const NOW = new Date("2026-09-14T09:00:00Z"); // понедельник
 
@@ -103,39 +103,9 @@ describe("что считается по человеку", () => {
   });
 });
 
-describe("порядок и текст", () => {
-  it("первыми те, к кому есть вопросы", () => {
-    const stats = personStats(
-      [
-        row({ name: "Борис", deadline: "2026-09-30", acceptedAt: "2026-09-11T09:00:00Z" }),
-        row({ name: "Аня" }), // молчит четыре дня
-      ],
-      NOW,
-    );
-    expect(stats[0].name).toBe("Аня");
-  });
-
-  it("называет, кому написать лично", () => {
-    const stats = personStats([row({ name: "Аня" })], NOW);
-    expect(composePeopleReview(stats)).toContain("Стоит спросить лично: Аня");
-  });
-
-  it("молчит, когда сказать нечего", () => {
-    expect(reviewIsEmpty([])).toBe(true);
-    expect(composePeopleReview([])).toBe("");
-  });
-
-  it("показывает направление, когда оно известно", () => {
-    const stats = personStats([row({ name: "Аня", direction: "ОПТ", deadline: "2026-09-01" })], NOW);
-    expect(composePeopleReview(stats)).toContain("(ОПТ)");
-  });
-});
-
-// G4: та же цифра, но человеку про него самого. Главное здесь — не текст, а
-// то, что арифметика одна: расхождение между «что видит начальник» и «что
-// видит человек» дороже всей затеи.
+// G4: цифра человеку про него самого — и только ему.
 describe("своя неделя", () => {
-  it("цифры совпадают с теми, что видит владелец", () => {
+  it("называет цифры, посчитанные personStats", () => {
     const rows = [
       row({ deadline: "2026-09-10", doneAt: "2026-09-12T09:00:00Z" }),
       row({ deadline: "2026-09-01" }),
@@ -143,15 +113,10 @@ describe("своя неделя", () => {
     ];
     const [stat] = personStats(rows, NOW);
     const mine = composeMyWeek(stat);
-    const owner = composePeopleReview([stat]);
 
     expect(mine).toContain(`в работе ${stat.open}`);
-    expect(owner).toContain(`в работе ${stat.open}`);
     expect(mine).toContain(`просрочено ${stat.overdue}`);
-    expect(owner).toContain(`просрочено ${stat.overdue}`);
-    const share = `${Math.round(stat.onTimeShare! * 100)}%`;
-    expect(mine).toContain(share);
-    expect(owner).toContain(share);
+    expect(mine).toContain(`${Math.round(stat.onTimeShare! * 100)}%`);
   });
 
   it("обращается к человеку, а не рассказывает о нём", () => {
