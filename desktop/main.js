@@ -3,7 +3,7 @@
 // The desktop app is a window around the deployed tracker, not a copy of it.
 //
 // That is the whole design, and it is deliberate: everything a release adds
-// to task-tracker-beta-ebon.vercel.app is in front of the person the next
+// to tracker.rokass.ru is in front of the person the next
 // time they open this window, with nothing to download and nobody to tell.
 // Кирилл asked for exactly that — «чтобы все изменения при новом открытии
 // приложения сами автоматически устанавливались». Shipping a bundled copy of
@@ -20,7 +20,10 @@ const { autoUpdater } = require("electron-updater");
 const path = require("node:path");
 const fs = require("node:fs");
 
-const APP_URL = process.env.ROKAS_URL || "https://task-tracker-beta-ebon.vercel.app";
+// The company domain, not *.vercel.app (29.10.2026): Russian networks cut
+// vercel.app by name, and Черкашин's window showed «Нет связи» on exactly
+// that while the site itself was fine.
+const APP_URL = process.env.ROKAS_URL || "https://tracker.rokass.ru";
 const APP_ORIGIN = new URL(APP_URL).origin;
 
 // Window size and position live next to the app's own data, so a person who

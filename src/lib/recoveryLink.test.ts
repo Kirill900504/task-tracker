@@ -65,9 +65,14 @@ describe("originOf", () => {
   // сайт. Незнакомый хост заменяется боевым адресом.
   it("не верит чужому хосту из заголовков", () => {
     const forwarded = new Request("http://10.0.0.1/api/x", { headers: { "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" } });
-    expect(originOf(forwarded)).toBe("https://task-tracker-beta-ebon.vercel.app");
+    expect(originOf(forwarded)).toBe("https://tracker.rokass.ru");
     const plain = new Request("http://evil.example/api/x", { headers: { host: "evil.example" } });
-    expect(originOf(plain)).toBe("https://task-tracker-beta-ebon.vercel.app");
+    expect(originOf(plain)).toBe("https://tracker.rokass.ru");
+  });
+
+  it("свой домен компании — тоже свой", () => {
+    const req = new Request("http://10.0.0.1/api/x", { headers: { "x-forwarded-host": "tracker.rokass.ru" } });
+    expect(originOf(req)).toBe("https://tracker.rokass.ru");
   });
 
   it("не даёт чужому прокси понизить боевой адрес до http", () => {

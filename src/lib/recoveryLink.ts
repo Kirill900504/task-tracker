@@ -67,9 +67,14 @@ export async function signInLink(
 }
 
 // Хосты, которым можно верить: этот проект на Vercel и локальная машина.
+// Прежний адрес на vercel.app остаётся своим и после переезда на
+// tracker.rokass.ru (29.10.2026): у кого он открывается, тот по нему и
+// работает, и выданная ему ссылка должна вести туда, откуда он пришёл.
+const LEGACY_HOST = "task-tracker-beta-ebon.vercel.app";
+
 function trustedHost(host: string): boolean {
   if (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host)) return true;
-  const own = [trackerUrl(), process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+  const own = [trackerUrl(), LEGACY_HOST, process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
     .filter((v): v is string => !!v)
     .map((v) => v.replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase());
   return own.includes(host.toLowerCase());

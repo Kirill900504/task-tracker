@@ -20,12 +20,22 @@
 //   3. Known production host — последняя ниточка: функция, у которой нет
 //      ни одной переменной, всё равно должна дать работающую ссылку, а
 //      не пустую строку.
+//
+// С 29.10.2026 боевой адрес — свой домен компании, tracker.rokass.ru.
+// `*.vercel.app` часть российских сетей режет по имени (CLAUDE.md), и
+// ссылка из бота на него у половины людей открывалась белым экраном. На
+// боевом развёртывании домен берётся отсюда, а не из
+// VERCEL_PROJECT_PRODUCTION_URL: какой из доменов проекта Vercel назовёт
+// «боевым», решает его панель, а не мы, и ошибка там молча вернула бы все
+// ссылки на заблокированный адрес. Старый адрес при этом продолжает
+// работать — у кого он открывался, у того ничего не сломалось.
 
-const KNOWN_PRODUCTION = "https://task-tracker-beta-ebon.vercel.app";
+const KNOWN_PRODUCTION = "https://tracker.rokass.ru";
 
 export function trackerUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL;
   if (explicit) return explicit.replace(/\/+$/, "");
+  if (process.env.VERCEL_ENV === "production") return KNOWN_PRODUCTION;
   const production = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (production) return `https://${production.replace(/\/+$/, "")}`;
   return KNOWN_PRODUCTION;
