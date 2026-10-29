@@ -76,7 +76,14 @@ test("задача из повестки на себя сразу показан
   await page.fill("#mTitle", `E2E повестка ${stamp}`);
   await page.fill("#mAgenda", item);
   await page.click("#agendaAddBtn");
+  // Повестку пишет saveAgendaDraft, когда встреча уже в базе; «Успех»
+  // раньше этого читает пустую повестку и предлагает задачу по итогу.
+  const agendaSaved = page.waitForResponse(
+    (r) => /\/rest\/v1\/meeting_agenda/.test(r.url()) && r.request().method() === "POST" && r.ok(),
+    { timeout: 30_000 },
+  );
   await page.click("#meetingSaveBtn");
+  await agendaSaved;
   const chip = page.locator(".meeting-chip", { hasText: `E2E повестка ${stamp}` });
   await expect(chip).toBeVisible();
 

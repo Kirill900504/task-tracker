@@ -612,7 +612,17 @@ export default function MeetingsPanel({
     });
   }
 
-  const recapPeople = recapSheet ? meetingPeopleForTask(recapSheet.meeting).map((p) => p.name) : [];
+  // В окне задач из повестки — те же люди, и в конце я сам. Там это не
+  // состав по умолчанию, а список выбора для каждого пункта, и без себя он
+  // был пуст у встречи, на которой никого больше нет: «Поставить 0 задач»
+  // без единого выхода. Да и решение встречи ложится на организатора не
+  // реже, чем на остальных. По умолчанию по-прежнему первый из других.
+  const recapPeople = recapSheet ? recapChoices(recapSheet.meeting) : [];
+  function recapChoices(m: Meeting): string[] {
+    const others = meetingPeopleForTask(m).map((p) => p.name);
+    const me = authorRawName(myUserId, authors, assignees);
+    return me && !others.includes(me) ? [...others, me] : others;
+  }
   return (
     <div className="panel dash-panel" id="meetingsPanel" data-panel-id="meetingsPanel" ref={setMeetingsDropRef}>
       {/* На телефоне этой строки нет вовсе.
