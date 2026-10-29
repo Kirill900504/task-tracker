@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { trackerUrl } from "@/lib/trackerUrl";
+import { KNOWN_PRODUCTION, trackerUrl } from "@/lib/trackerUrl";
 
 // Ссылка «задайте себе новый пароль» — одна на все способы её выдать.
 //
@@ -67,9 +67,15 @@ export async function signInLink(
 }
 
 // Хосты, которым можно верить: этот проект на Vercel и локальная машина.
+//
+// Прежний адрес `*.vercel.app` (KNOWN_PRODUCTION) стоит здесь явно: когда у
+// проекта появился свой домен, Vercel отдаёт в VERCEL_PROJECT_PRODUCTION_URL
+// уже его, и без этой строки человек, работающий по старому адресу, получал
+// ссылку на новый — а тот доходит не из каждой сети (проверено 29.10.2026:
+// с этой машины не отвечал). Ссылка ведёт туда, откуда её попросили.
 function trustedHost(host: string): boolean {
   if (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host)) return true;
-  const own = [trackerUrl(), process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+  const own = [trackerUrl(), KNOWN_PRODUCTION, process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
     .filter((v): v is string => !!v)
     .map((v) => v.replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase());
   return own.includes(host.toLowerCase());
