@@ -21,7 +21,7 @@
 //      ни одной переменной, всё равно должна дать работающую ссылку, а
 //      не пустую строку.
 
-const KNOWN_PRODUCTION = "https://task-tracker-beta-ebon.vercel.app";
+export const KNOWN_PRODUCTION = "https://task-tracker-beta-ebon.vercel.app";
 
 export function trackerUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL;
