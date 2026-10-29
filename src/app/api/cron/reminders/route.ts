@@ -282,12 +282,16 @@ export async function GET(req: Request) {
     if (!quiet) {
       const { data: back } = await admin
         .from("tasks")
-        .select("id, title, number, created_by")
+        .select("id, title, number, created_by, recur, approval_state")
         .eq("user_id", userId)
         .eq("snoozed_until", today)
         .neq("status", "done")
         .is("deleted_at", null);
-      for (const t of (back || []) as { id: string; title: string; number: number | null; created_by: string | null }[]) {
+      type Back = { id: string; title: string; number: number | null; created_by: string | null; recur: string | null; approval_state: string | null };
+      // Принятая разовая закрыта и при status in_progress (isClosed в
+      // taskDisplay): «она снова на доске» про задачу в «Завершённых» — неправда.
+      const reopened = ((back || []) as Back[]).filter((t) => !(t.approval_state === "accepted" && (t.recur || "none") === "none"));
+      for (const t of reopened) {
         await onceOnly(admin, { userId, kind: "snooze_back", refId: `${t.id}:${today}`, date: today }, async () => {
           await notifyAuthor(admin, userId, t.created_by, `⏰ Сегодня вы просили напомнить: ${taskRef(t)} — она снова на доске.`);
         });
