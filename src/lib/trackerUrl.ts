@@ -30,15 +30,17 @@
 // ссылки на заблокированный адрес. Старый адрес при этом продолжает
 // работать — у кого он открывался, у того ничего не сломалось.
 
-const KNOWN_PRODUCTION = "https://tracker.rokass.ru";
+// Прежний адрес — им по-прежнему пользуется recoveryLink.trustedHost.
+export const KNOWN_PRODUCTION = "https://task-tracker-beta-ebon.vercel.app";
+export const PRODUCTION_DOMAIN = "https://tracker.rokass.ru";
 
 export function trackerUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL;
   if (explicit) return explicit.replace(/\/+$/, "");
-  if (process.env.VERCEL_ENV === "production") return KNOWN_PRODUCTION;
+  if (process.env.VERCEL_ENV === "production") return PRODUCTION_DOMAIN;
   const production = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (production) return `https://${production.replace(/\/+$/, "")}`;
-  return KNOWN_PRODUCTION;
+  return PRODUCTION_DOMAIN;
 }
 
 // Адрес мини-приложения. Отдельной функцией, а не строкой на месте:

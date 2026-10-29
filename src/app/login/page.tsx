@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { hasMessengerLaunch, miniAppRedirect } from "@/lib/messengerLaunch";
 import MessengerSignIn from "@/components/MessengerSignIn";
@@ -13,17 +13,34 @@ import MessengerSignIn from "@/components/MessengerSignIn";
 // There is no "register" link and there will not be one: an account here
 // exists because the owner invited the person (see /join).
 
+// useSearchParams на статической странице обязан стоять под Suspense —
+// иначе сборка отказывается её пререндерить.
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginScreen />
+    </Suspense>
+  );
+}
+
+function LoginScreen() {
   const router = useRouter();
+  // /login?forgot=1 — сразу «Восстановление пароля»: туда ведёт кнопка
+  // «Получить новую ссылку» со страницы, где старая не подошла. Без этого
+  // человека с просроченной ссылкой отправляли на вход, где ему нечего
+  // ввести, и «Забыли пароль?» надо было ещё найти.
+  const startForgot = useSearchParams().has("forgot");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Отказ именно по паролю — рядом с ним предлагаем «Забыли пароль?».
+  const [wrongPassword, setWrongPassword] = useState(false);
 
   // Forgot-password (spec-audit recommendation #3): self-service recovery
   // instead of the only path being "ask Кирилл to fix it by hand".
-  const [mode, setMode] = useState<"signin" | "forgot" | "sent">("signin");
+  const [mode, setMode] = useState<"signin" | "forgot" | "sent">(startForgot ? "forgot" : "signin");
   const [resetEmail, setResetEmail] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
@@ -45,12 +62,18 @@ export default function LoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setWrongPassword(false);
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
-      setError("Не удалось войти: проверьте почту и пароль.");
+      // Нет связи — это не «неверный пароль», и отправлять человека
+      // восстанавливать пароль, который у него верный, — худшее, что тут
+      // можно сделать.
+      const offline = /fetch|network/i.test(error.message);
+      setError(offline ? "Нет связи с трекером — проверьте интернет и нажмите «Войти» ещё раз." : "Не подходит почта или пароль.");
+      setWrongPassword(!offline);
       return;
     }
     router.push("/");
@@ -88,7 +111,7 @@ export default function LoginPage() {
     <div className="auth-brand">
       {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size local logo; next/image adds nothing */}
       <img src="/favicon.png" alt="" />
-      <span>РОКАС</span>
+      <span>Планировщик задач</span>
     </div>
   );
 
@@ -124,6 +147,10 @@ export default function LoginPage() {
           {brand}
           <h1 className="auth-title">Восстановление пароля</h1>
           <p className="auth-sub">Пришлём ссылку в Telegram или MAX — в тот же чат с ботом, куда приходят задачи.</p>
+          {/* Самый короткий путь — вообще без пароля: вход через бота, а
+              новый пароль потом задаётся в «Личном кабинете» («Мои данные»)
+              без старого (вход через бота его не спрашивает). */}
+          <MessengerSignIn />
 
           <form onSubmit={handleForgotSubmit}>
             {resetError && <div className="auth-error">{resetError}</div>}
@@ -145,6 +172,10 @@ export default function LoginPage() {
               {resetLoading ? "Отправляю…" : "Отправить ссылку"}
             </button>
           </form>
+
+          <p className="auth-hint">
+            Вошли через бота — новый пароль задаётся в «Личном кабинете» → «Мои данные», старый не нужен.
+          </p>
 
           <div className="auth-foot">
             <button type="button" className="auth-link" onClick={() => setMode("signin")}>
@@ -168,7 +199,26 @@ export default function LoginPage() {
         <MessengerSignIn />
 
         <form onSubmit={handleSubmit}>
-          {error && <div className="auth-error">{error}</div>}
+          {error && (
+            <div className="auth-error" id="loginError">
+              {error}
+              {wrongPassword && (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    className="auth-link"
+                    onClick={() => {
+                      setResetEmail(email);
+                      setMode("forgot");
+                    }}
+                  >
+                    Забыли пароль?
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="auth-field">
             <label htmlFor="email">Почта</label>

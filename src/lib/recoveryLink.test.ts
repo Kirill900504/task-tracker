@@ -89,3 +89,21 @@ describe("originOf", () => {
     expect(originOf(req)).toBe("http://localhost:3100");
   });
 });
+
+describe("originOf при своём домене", () => {
+  // Свой домен у проекта появился 29.10.2026, и Vercel стал называть боевым
+  // его. Запрос, пришедший по старому адресу, должен получить ссылку туда же.
+  it("старый адрес vercel.app остаётся своим", async () => {
+    const was = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "tracker.example.ru";
+    try {
+      const req = new Request("http://10.0.0.1/api/x", { headers: { "x-forwarded-host": "task-tracker-beta-ebon.vercel.app" } });
+      expect(originOf(req)).toBe("https://task-tracker-beta-ebon.vercel.app");
+      const evil = new Request("http://10.0.0.1/api/x", { headers: { "x-forwarded-host": "evil.example" } });
+      expect(originOf(evil)).toBe("https://tracker.example.ru");
+    } finally {
+      if (was === undefined) delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+      else process.env.VERCEL_PROJECT_PRODUCTION_URL = was;
+    }
+  });
+});

@@ -416,11 +416,41 @@
   .quick-add-preview .qap-row > span{min-width:0; max-width:100%; overflow-wrap:anywhere;}
   .quick-add-preview .qap-actions{display:flex; gap:8px; margin-top:2px;}
 
-  select, input[type=text], input[type=date], input[type=search]{
+  /* Every text-like type, not a hand-picked three. «Личный кабинет» uses
+     email, tel and password, none of which were listed, so those fields fell
+     through to the browser's own chrome — a pale sunken box with a hard
+     grey frame that Кирилл called «как на виндоус 95» (29.10.2026). A field
+     type missing from this list is drawn by Windows, not by the tracker. */
+  select, input[type=text], input[type=date], input[type=search],
+  input[type=email], input[type=password], input[type=tel],
+  input[type=number], input[type=url], input[type=time]{
     font-family:var(--sans); font-size:13.5px; padding:9px 11px;
     border:1px solid var(--line-soft); border-radius:var(--radius-sm); background:var(--bg); color:var(--ink);
-    transition:border-color .15s ease, box-shadow .15s ease;
+    transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
   }
+  :is(input[type=text], input[type=email], input[type=password], input[type=tel],
+      input[type=number], input[type=url], input[type=search]):hover:not(:focus){
+    border-color:var(--line);
+  }
+  /* Chrome paints an autofilled field pale yellow-blue, which on this
+     palette reads as a rendering fault; only an inset shadow overrides it.
+     .auth-field keeps its own (lighter) version below. */
+  input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus{
+    -webkit-text-fill-color:var(--ink); caret-color:var(--ink);
+    box-shadow:0 0 0 1000px var(--bg) inset;
+    transition:background-color 9999s ease 0s;
+  }
+  input:-webkit-autofill:focus{box-shadow:0 0 0 1000px var(--bg) inset, 0 0 0 3px var(--accent-soft);}
+  /* Inner scrolling lists (окна, лента обсуждения, повестка) were drawn with
+     the system's wide light scrollbar; the page's own was already thin and
+     dark. scrollbar-* is not inherited, so it is set on every element. */
+  *{scrollbar-width:thin; scrollbar-color:var(--line) transparent;}
+  /* The rest of the system chrome that still showed through: the browser's
+     black-and-white keyboard ring on buttons, its default blue text
+     selection, and the grey flash Android paints over every tapped element. */
+  :is(button, a, [role=button], [tabindex]:not([tabindex="-1"])):focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  ::selection{background:var(--accent-soft); color:var(--ink);}
+  html{-webkit-tap-highlight-color:transparent;}
   /* Подсказка в пустом поле — это пример, а не текст: она должна читаться
      как более тихая, иначе пустое поле выглядит заполненным. */
   ::placeholder{color:var(--ink-soft); opacity:.75;}
@@ -2671,6 +2701,10 @@
      they are the same screen with different words on it — and because the
      first thing a manager ever sees of this tracker is one of them.
      ---------------------------------------------------------------- */
+  /* The tracker body keeps 60px of bottom padding for the board; under the
+     sign-in screens that padding showed as a band of a different colour
+     beneath the gradient. */
+  body:has(.auth-screen){padding-bottom:0;}
   .auth-screen{
     min-height:100dvh; display:grid; place-items:center; padding:24px 16px;
     /* Two soft pools of colour instead of a flat field: enough depth that
@@ -2694,16 +2728,20 @@
   .auth-title{font-family:var(--display); font-size:21px; font-weight:800; letter-spacing:-.015em; margin:0 0 7px; color:var(--ink);}
   .auth-sub{color:var(--ink-soft); font-size:13px; line-height:1.55; margin:0 0 22px;}
   .auth-field{margin-bottom:14px; position:relative;}
+  /* Подпись обычным регистром, как во всём трекере: мелкий разреженный
+     капс над полем («ПОЧТА») — приём форм прошлого десятилетия, и только
+     здесь он и оставался. */
   .auth-field label{
-    display:block; font-size:11px; letter-spacing:.05em; text-transform:uppercase;
-    color:var(--ink-soft); margin-bottom:6px; font-family:var(--display);
+    display:block; font-size:12.5px; font-weight:600;
+    color:var(--ink-label); margin-bottom:7px; font-family:var(--display);
   }
   .auth-field input{
-    width:100%; padding:12px 13px; font-size:14px; font-family:var(--sans);
+    width:100%; min-height:46px; padding:12px 14px; font-size:14.5px; font-family:var(--sans);
     color:var(--ink); background:var(--paper-soft);
     border:1px solid var(--line); border-radius:var(--radius-sm);
     transition:border-color .12s ease, box-shadow .12s ease, background .12s ease;
   }
+  .auth-field input:hover:not(:focus){border-color:color-mix(in srgb, var(--accent) 35%, var(--line));}
   .auth-field input:focus{
     outline:none; border-color:var(--accent); background:var(--paper);
     box-shadow:0 0 0 3px var(--accent-soft);
@@ -2730,11 +2768,14 @@
     width:100%; margin-top:8px; padding:12px 16px;
     border:1px solid var(--accent); border-radius:var(--radius-sm);
     background:var(--accent); color:#F3F8FA;
-    font-family:var(--sans); font-size:14px; font-weight:600; cursor:pointer;
-    box-shadow:var(--shadow-1);
-    transition:opacity .12s ease, box-shadow .12s ease;
+    font-family:var(--sans); font-size:14.5px; font-weight:600; cursor:pointer; min-height:46px;
+    /* Тот же блик сверху, что у кнопок окна задачи («Отложить»), — одна
+       форма главной кнопки на весь трекер, от входа до карточки. */
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.14), var(--shadow-1);
+    transition:opacity .12s ease, box-shadow .12s ease, transform .1s ease;
   }
-  .auth-btn:hover:not(:disabled){opacity:.93; box-shadow:0 0 0 3px var(--accent-soft), var(--shadow-1);}
+  .auth-btn:hover:not(:disabled){box-shadow:0 0 0 3px var(--accent-soft), inset 0 1px 0 rgba(255,255,255,.14), var(--shadow-1);}
+  .auth-btn:active:not(:disabled){transform:translateY(1px);}
   .auth-btn:disabled{opacity:.55; cursor:default;}
   .auth-btn-quiet{
     background:var(--paper-soft); color:var(--ink); border-color:var(--line); box-shadow:none;
@@ -2755,6 +2796,9 @@
   }
   .auth-link:hover{text-decoration:underline;}
   .auth-hint{color:var(--ink-soft); font-size:12.5px; line-height:1.5; margin:16px 0 0;}
+  /* Ссылка внутри строки ошибки — «Забыли пароль?» прямо там, где сказали
+     «не подошёл»: ответ рядом с вопросом. */
+  .auth-error .auth-link{padding:0; color:inherit; text-decoration:underline; font-size:inherit;}
 
   /* Страница подключения бота (/max) — тот же экран входа, но с
      инструкцией: три шага, которые надо выполнить в другом приложении, в
@@ -3786,9 +3830,20 @@
 .account-section .field-hint{margin:0;}
 .account-form{display:flex; flex-direction:column; gap:10px; align-items:flex-start;}
 .account-field{display:flex; flex-direction:column; gap:5px; width:100%; font-size:12.5px; color:var(--ink-soft);}
-.account-field input{width:100%;}
+.account-field input{width:100%; min-height:42px; padding:10px 13px; font-size:14px;}
+.account-field > span:first-child{font-size:12px; font-weight:600; color:var(--ink-label, var(--ink-soft));}
 .account-pass{display:flex; gap:8px; align-items:center; width:100%;}
 .account-pass input{flex:1; min-width:0;}
+/* «Показать» — той же высоты, что и поле рядом: кнопка ниже поля в одной
+   строке и выглядела приклеенной сбоку. */
+.account-pass .btn{min-height:42px;}
+/* Требования к паролю под полем (PasswordHints) — на входе, в приглашении
+   и в «Моих данных»; выполненное зеленеет галочкой. */
+.password-hints{list-style:none; margin:-6px 0 12px; padding:0; display:flex; flex-wrap:wrap; gap:2px 14px; font-size:12px; color:var(--ink-soft);}
+.account-form .password-hints{margin:0;}
+.password-hints li.ok{color:var(--ok-ink);}
+.account-forgot{align-self:flex-start; background:none; border:0; padding:2px 0; cursor:pointer; color:var(--accent); font-size:12.5px;}
+.account-forgot:hover{text-decoration:underline;}
 .account-ok{
   padding:8px 10px; border-radius:var(--radius-sm);
   background:rgba(108,190,140,.12); border:1px solid rgba(108,190,140,.4); color:var(--ink); font-size:12.5px;

@@ -1013,40 +1013,92 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 }
 .ms-signin-or::before, .ms-signin-or::after{content:""; flex:1; height:1px; background:var(--line);}
 
-/* Страница приглашения: три шага, каждый — номер в кружке и тело. Сделанный
-   шаг — галочка зелёным: человек видит, что первое уже позади. */
+/* Страница приглашения: три шага одной дорогой. Номера стоят на линии,
+   которая их связывает, — так три карточки читаются как «сначала, потом»,
+   а не как три независимые инструкции. Шаг, который ждёт человека, —
+   `current` (фирменная рамка и свечение номера), сделанный — галочка
+   зелёным: видно, что первое уже позади и куда смотреть дальше.
+   Пересобрано 29.10.2026 («чтобы выглядел на отлично»): было три серые
+   одинаковые коробки, в которых текущий шаг ничем не отличался от
+   будущих, и стена предупреждений обычным текстом. */
 .welcome-card{max-width:560px;}
-.welcome-steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px;}
+.welcome-steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px; position:relative;}
+.welcome-steps::before{
+  content:""; position:absolute; left:30px; top:30px; bottom:30px; width:2px;
+  background:linear-gradient(var(--line), var(--line-soft)); border-radius:2px;
+}
 .welcome-step{
-  display:flex; gap:14px; padding:14px; border:1px solid var(--line-soft);
-  border-radius:var(--radius-md); background:var(--paper-soft);
+  position:relative; display:flex; gap:14px; padding:16px;
+  border:1px solid var(--line-soft); border-radius:var(--radius-md);
+  background:var(--paper-soft);
+  transition:border-color .2s ease, box-shadow .2s ease;
+}
+.welcome-step.current{
+  border-color:color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow:0 0 0 3px var(--accent-soft), var(--shadow-1);
 }
 .welcome-num{
   flex:none; width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
-  background:var(--accent); color:#F3F8FA; font-family:var(--display); font-weight:800; font-size:14px;
+  background:var(--paper); color:var(--ink-soft); border:2px solid var(--line);
+  font-family:var(--display); font-weight:800; font-size:14px;
+}
+.welcome-step.current .welcome-num{
+  background:var(--accent); border-color:var(--accent); color:#F3F8FA;
+  box-shadow:0 0 0 4px var(--accent-soft);
 }
 .welcome-step.done{border-color:var(--long-border);}
-.welcome-step.done .welcome-num{background:var(--ok-ink); color:var(--bg);}
+.welcome-step.done .welcome-num{background:var(--ok-ink); border-color:var(--ok-ink); color:var(--bg);}
 .welcome-body{flex:1; min-width:0;}
-.welcome-body h2{margin:3px 0 6px; font-family:var(--display); font-size:15.5px; font-weight:700; color:var(--ink);}
+.welcome-body h2{margin:4px 0 6px; font-family:var(--display); font-size:16px; font-weight:700; color:var(--ink);}
 .welcome-body p{margin:0 0 10px; color:var(--ink-soft); font-size:13px; line-height:1.55;}
 .welcome-body p:last-child{margin-bottom:0;}
-.welcome-buttons{display:flex; flex-wrap:wrap; gap:8px; margin:2px 0 10px;}
+.welcome-buttons{display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 12px;}
+/* Мессенджеры — два равных больших плитки в ряд: выбор между ними и есть
+   весь первый шаг, поэтому они крупнее любой другой кнопки страницы. */
+.welcome-ms{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));}
 .welcome-btn{
-  display:inline-flex; align-items:center; gap:9px; min-height:42px; padding:9px 16px;
+  display:inline-flex; align-items:center; justify-content:center; gap:9px; min-height:44px; padding:10px 18px;
   border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--paper);
   color:var(--ink); font-weight:600; font-size:14px; text-decoration:none;
-  transition:box-shadow .12s ease, border-color .12s ease;
+  transition:box-shadow .15s ease, border-color .15s ease, transform .1s ease, background-color .15s ease;
 }
 .welcome-btn:hover{box-shadow:0 0 0 3px var(--accent-soft); border-color:var(--accent);}
+.welcome-btn:active{transform:translateY(1px);}
+.welcome-ms .welcome-btn{min-height:52px; font-size:15px;}
+.welcome-btn.ms-tg:not(.on){border-color:rgba(42,171,238,.45);}
+.welcome-btn.ms-tg:not(.on):hover{background:rgba(42,171,238,.10); border-color:#2AABEE; box-shadow:0 0 0 3px rgba(42,171,238,.18);}
+.welcome-btn.ms-max:not(.on){border-color:rgba(125,108,255,.45);}
+.welcome-btn.ms-max:not(.on):hover{background:rgba(125,108,255,.10); border-color:#7D6CFF; box-shadow:0 0 0 3px rgba(125,108,255,.18);}
 .welcome-btn.on{border-color:var(--long-border); color:var(--ok-ink);}
-.welcome-btn.primary{background:var(--accent); border-color:var(--accent); color:#F3F8FA;}
-.welcome-ok{color:var(--ok-ink) !important; font-weight:600;}
-.welcome-note{font-size:12.5px !important;}
-@media (max-width:560px){
-  .welcome-step{padding:12px; gap:10px;}
-  .welcome-btn{flex:1; justify-content:center;}
+.welcome-btn.primary{
+  background:var(--accent); border-color:var(--accent); color:#F3F8FA;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.14), var(--shadow-1);
 }
+.welcome-btn.primary:hover{box-shadow:0 0 0 3px var(--accent-soft), inset 0 1px 0 rgba(255,255,255,.14);}
+.welcome-ok{color:var(--ok-ink) !important; font-weight:600;}
+/* Предупреждение Windows — плашкой со значком, а не ещё одним абзацем:
+   его читают один раз, в ту секунду, когда Windows его покажет. */
+.welcome-body .welcome-note{
+  display:flex; gap:9px; align-items:flex-start;
+  padding:9px 11px; border-radius:var(--radius-sm);
+  background:rgba(224,170,95,.08); border:1px solid rgba(224,170,95,.25);
+  font-size:12.5px;
+}
+.welcome-note svg{flex:none; margin-top:1px; color:#E0AA5F;}
+.welcome-after{
+  display:flex; gap:10px; align-items:flex-start; margin:16px 0 0; padding:12px 14px;
+  border-radius:var(--radius-sm); background:var(--accent-soft);
+  color:var(--ink-soft); font-size:12.5px; line-height:1.5;
+}
+.welcome-after svg{flex:none; margin-top:1px; color:var(--accent);}
+@media (max-width:560px){
+  .welcome-step{padding:13px; gap:11px;}
+  .welcome-steps::before{left:27px;}
+  .welcome-btn{flex:1;}
+  .welcome-ms{grid-template-columns:1fr 1fr;}
+  .welcome-btn.primary{white-space:nowrap; padding-inline:12px; font-size:13.5px;}
+}
+@media (prefers-reduced-motion: reduce){ .welcome-btn, .welcome-step{transition:none;} }
 
 /* «Команда» — шире прежних 580: у строки три места (имя, состояние,
    действия), и при четырнадцати людях узкое окно рвало состояние на три

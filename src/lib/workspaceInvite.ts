@@ -48,8 +48,20 @@ export function emailProblem(email: string): string {
   return "";
 }
 
+// Требования к паролю — один список на все места, где пароль задают:
+// приглашение, «Мои данные» и страница нового пароля. Из него строятся и
+// отказ (passwordProblem), и подсказки, которые загораются галочками, пока
+// человек печатает (PasswordHints): требование, названное только после
+// отказа, — это загадка, которую разгадывают перебором.
+//
+// 29.10.2026 страница нового пароля проверяла своё — «не короче 6» — и по
+// ссылке восстановления можно было поставить «123456», который нигде больше
+// не прошёл бы.
+export const PASSWORD_RULES: { label: string; ok: (p: string) => boolean; problem: string }[] = [
+  { label: "не короче 8 символов", ok: (p) => p.length >= 8, problem: "Пароль короче 8 символов — так не пойдёт" },
+  { label: "не только цифры", ok: (p) => !/^\d+$/.test(p), problem: "Пароль из одних цифр слишком просто подобрать" },
+];
+
 export function passwordProblem(password: string): string {
-  if (password.length < 8) return "Пароль короче 8 символов — так не пойдёт";
-  if (/^\d+$/.test(password)) return "Пароль из одних цифр слишком просто подобрать";
-  return "";
+  return PASSWORD_RULES.find((rule) => !rule.ok(password))?.problem || "";
 }

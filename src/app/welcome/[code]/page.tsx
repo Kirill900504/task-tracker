@@ -99,76 +99,78 @@ export default function WelcomePage() {
         {brand}
         <h1 className="auth-title">{first}, добро пожаловать!</h1>
         <p className="auth-sub">
-          {info.inviter ? `${info.inviter} приглашает вас` : "Вас приглашают"} в планировщик задач команды. Здесь будут
-          ваши задачи и встречи — всё, что вы поручаете и что поручают вам. Три шага, пару минут.
+          {info.inviter ? `${info.inviter} приглашает вас` : "Вас приглашают"} в планировщик задач команды — здесь ваши
+          задачи и встречи. Три шага, пара минут.
         </p>
 
+        {/* Шаг, который ждёт человека, подсвечен (`current`): пока бот не
+            подключён, это первый, после — остальные два сразу. Номера
+            связаны линией, чтобы три карточки читались одной дорогой, а не
+            тремя отдельными инструкциями. */}
         <ol className="welcome-steps">
-          <li className={"welcome-step" + (connected ? " done" : "")} id="welcomeStepBot">
-            <div className="welcome-num">{connected ? "✓" : "1"}</div>
+          <li className={"welcome-step" + (connected ? " done" : " current")} id="welcomeStepBot">
+            <div className="welcome-num">{connected ? <Icon name="check" size={16} /> : "1"}</div>
             <div className="welcome-body">
               <h2>Подключите бота</h2>
-              <p>
-                Туда приходят задачи и встречи — отвечать можно прямо кнопками под сообщением. Выберите мессенджер, который у
-                вас есть, и нажмите в нём «Start» («Начать»).
-              </p>
-              <div className="welcome-buttons">
+              <p>Сюда приходят задачи и встречи, отвечать можно кнопками. Выберите мессенджер и нажмите в нём «Start».</p>
+              <div className="welcome-buttons welcome-ms">
                 {info.telegram && (
-                  <a className={"welcome-btn" + (info.telegram.connected ? " on" : "")} href={info.telegram.link} target="_blank" rel="noopener noreferrer" id="welcomeTelegram">
-                    <TelegramBrandIcon size={20} />
+                  <a className={"welcome-btn ms-tg" + (info.telegram.connected ? " on" : "")} href={info.telegram.link} target="_blank" rel="noopener noreferrer" id="welcomeTelegram">
+                    <TelegramBrandIcon size={22} />
                     {info.telegram.connected ? "Telegram подключён" : "Telegram"}
                   </a>
                 )}
                 {info.max && (
-                  <a className={"welcome-btn" + (info.max.connected ? " on" : "")} href={info.max.link} target="_blank" rel="noopener noreferrer" id="welcomeMax">
-                    <MaxBrandIcon size={20} />
+                  <a className={"welcome-btn ms-max" + (info.max.connected ? " on" : "")} href={info.max.link} target="_blank" rel="noopener noreferrer" id="welcomeMax">
+                    <MaxBrandIcon size={22} />
                     {info.max.connected ? "MAX подключён" : "MAX"}
                   </a>
                 )}
               </div>
-              {connected && <p className="welcome-ok">Готово — вы на связи. Можно подключить и второй мессенджер, про запас.</p>}
+              {connected && <p className="welcome-ok">Готово — вы на связи. Второй мессенджер можно подключить про запас.</p>}
             </div>
           </li>
 
-          <li className="welcome-step">
+          <li className={"welcome-step" + (connected ? " current" : "")}>
             <div className="welcome-num">2</div>
             <div className="welcome-body">
               <h2>На телефоне</h2>
-              <p>
-                Ставить ничего не нужно: весь трекер открывается прямо в боте — кнопка «Мобильное приложение» в его меню.
-                Без пароля.
-              </p>
+              <p>Ставить ничего не нужно: трекер открывается в боте — кнопка «Мобильное приложение» в его меню.</p>
             </div>
           </li>
 
-          <li className="welcome-step">
+          <li className={"welcome-step" + (connected ? " current" : "")}>
             <div className="welcome-num">3</div>
             <div className="welcome-body">
               <h2>На компьютере</h2>
-              <p>Приложение для Windows — трекер в своём окне, с уведомлениями поверх других программ. Обновляется само.</p>
+              <p>Приложение для Windows: своё окно, уведомления поверх программ, обновляется само.</p>
               <div className="welcome-buttons">
                 <a className="welcome-btn primary" href={info.desktop.url} id="welcomeDownload">
                   <Icon name="download" size={16} /> Скачать для Windows{info.desktop.version ? ` · ${info.desktop.version}` : ""}
                 </a>
               </div>
               <p className="welcome-note">
-                Windows может показать «Система Windows защитила ваш компьютер» — нажмите «Подробнее», затем «Выполнить в любом
-                случае». Это обычное предупреждение для программ без платной подписи.
+                <Icon name="warning" size={15} />
+                <span>
+                  Если Windows скажет «защитила ваш компьютер» — нажмите «Подробнее» → «Выполнить в любом случае». Так она
+                  встречает любую программу без платной подписи.
+                </span>
               </p>
-              <p className="welcome-note">
-                Войти в приложении — кнопкой «Войти через Telegram» (или MAX): бот спросит «это вы?», и трекер откроется. Пароль
-                не нужен.{" "}
+              <p>
+                Вход в приложении — «Войти через Telegram» или MAX, без пароля.{" "}
                 <a className="auth-link" style={{ padding: 0 }} href="/login">
-                  Или откройте трекер в браузере
+                  Открыть трекер в браузере
                 </a>
-                .
               </p>
             </div>
           </li>
         </ol>
-        <p className="auth-hint" id="welcomeAfter">
-          После входа откройте «Личный кабинет» — своё имя вверху трекера — и заполните рабочую почту, телефон и пароль.
-          Трекер сам покажет короткое знакомство с главными возможностями.
+        <p className="welcome-after" id="welcomeAfter">
+          <Icon name="user" size={16} />
+          <span>
+            После входа нажмите своё имя вверху трекера и впишите рабочую почту и телефон. Короткое знакомство трекер покажет
+            сам.
+          </span>
         </p>
       </div>
     </div>

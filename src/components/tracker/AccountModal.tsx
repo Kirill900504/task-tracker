@@ -13,6 +13,7 @@ import ChipChoice from "./ChipChoice";
 import { postJson } from "@/lib/postJson";
 import { MaxBrandIcon, TelegramBrandIcon } from "./MessengerBrandIcon";
 import { AlertSettings } from "./AlertsButton";
+import PasswordHints from "@/components/PasswordHints";
 
 // Личный кабинет — всё, что касается самого человека, в одном окне.
 //
@@ -74,6 +75,11 @@ export default function AccountModal({
   const [draftEmail, setDraftEmail] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
   const [password, setPassword] = useState("");
+  // Текущий пароль — его спрашивает сервер, когда в трекер вошли паролем
+  // и меняется сам вход (пароль или почта). Вошедшего через бота не
+  // спрашивают: бот и есть способ восстановить пароль (lib/signInMethod).
+  const [needsCurrent, setNeedsCurrent] = useState(false);
+  const [current, setCurrent] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
@@ -82,9 +88,10 @@ export default function AccountModal({
     let alive = true;
     fetch("/api/account/credentials")
       .then((res) => res.json())
-      .then((data: { email?: string; phone?: string }) => {
+      .then((data: { email?: string; phone?: string; needsCurrent?: boolean }) => {
         if (!alive) return;
         setSaved({ email: data.email ?? "", phone: data.phone ?? "" });
+        setNeedsCurrent(!!data.needsCurrent);
         setDraftEmail(data.email ?? "");
         setDraftPhone(data.phone ?? "");
       })
@@ -98,6 +105,9 @@ export default function AccountModal({
   const emailChanged = draftEmail.trim().toLowerCase() !== email.toLowerCase();
   const phoneChanged = draftPhone.trim() !== (saved?.phone ?? "");
   const changed = emailChanged || phoneChanged || !!password;
+  // Поле текущего пароля появляется, только когда меняют вход, — менять
+  // телефон оно не мешает.
+  const askCurrent = needsCurrent && (!!password || (emailChanged && !!draftEmail.trim()));
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -112,6 +122,7 @@ export default function AccountModal({
     if (emailChanged && draftEmail.trim() && !email && !password) {
       return setNote({ ok: false, text: "Придумайте пароль — без него с компьютера не войти" });
     }
+    if (askCurrent && !current) return setNote({ ok: false, text: "Введите текущий пароль" });
     setBusy(true);
     try {
       const res = await fetch("/api/account/credentials", {
@@ -121,10 +132,14 @@ export default function AccountModal({
           ...(emailChanged ? { email: draftEmail } : {}),
           ...(password ? { password } : {}),
           ...(phoneChanged ? { phone: draftPhone } : {}),
+          ...(askCurrent ? { currentPassword: current } : {}),
         }),
       });
-      const data = (await res.json().catch(() => null)) as { ok?: boolean; email?: string; phone?: string; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; email?: string; phone?: string; error?: string; needsCurrent?: boolean }
+        | null;
       if (!res.ok || !data?.ok) {
+        if (data?.needsCurrent) setNeedsCurrent(true);
         setNote({ ok: false, text: data?.error || "Не получилось сохранить" });
         return;
       }
@@ -133,14 +148,37 @@ export default function AccountModal({
       setDraftEmail(next.email);
       setDraftPhone(next.phone);
       setPassword("");
+      setCurrent("");
       onProfileSaved?.(!!next.email && !!next.phone);
-      setNote({ ok: true, text: password ? "Сохранено. С компьютера можно входить с этой почтой и паролем." : "Сохранено." });
+      setNote({
+        ok: true,
+        text:
+          password || emailChanged
+            ? "Сохранено. С компьютера входите с этой почтой и паролем; на остальных устройствах вход нужно будет повторить."
+            : "Сохранено.",
+      });
     } catch (err) {
       setNote({ ok: false, text: humanError(err, "Не получилось сохранить") });
     } finally {
       setBusy(false);
     }
   }
+  // «Не помню текущий пароль» — та же ссылка в мессенджер, что «Забыли
+  // пароль?» на странице входа: по ней пароль задаётся без старого.
+  async function forgotCurrent() {
+    setNote(null);
+    const res = await fetch("/api/workspace/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    }).catch(() => null);
+    setNote(
+      res?.ok
+        ? { ok: true, text: "Ссылка на новый пароль отправлена вам в мессенджер — в чат с ботом. Она действует час." }
+        : { ok: false, text: "Не получилось отправить ссылку — попробуйте ещё раз." },
+    );
+  }
+
   // Выбирать есть из чего, только когда подключены оба: с одним трекер и
   // так пишет в него.
   const bothConnected = messenger
@@ -216,6 +254,25 @@ export default function AccountModal({
                   </button>
                 </span>
               </label>
+              <PasswordHints password={password} />
+              {askCurrent && (
+                <>
+                  <label className="account-field">
+                    <span>Текущий пароль</span>
+                    <input
+                      id="accountCurrentPassword"
+                      type={show ? "text" : "password"}
+                      autoComplete="current-password"
+                      placeholder="Тот, с которым вы вошли"
+                      value={current}
+                      onChange={(e) => setCurrent(e.target.value)}
+                    />
+                  </label>
+                  <button type="button" className="account-forgot" id="accountForgotBtn" onClick={() => void forgotCurrent()}>
+                    Не помню текущий пароль
+                  </button>
+                </>
+              )}
               {note && <div className={note.ok ? "account-ok" : "ms-link-error"}>{note.text}</div>}
               <button type="submit" id="accountSaveBtn" className="btn btn-primary btn-small" disabled={busy || !changed}>
                 {busy ? "Сохраняю…" : "Сохранить"}

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { forgotPasswordInput, readInput } from "@/lib/apiInput";
-import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
-import { ownerChats, sendToColleague, type OwnerChat } from "@/lib/botDelivery";
+import { accountChat } from "@/lib/accountChat";
+import { sendToColleague } from "@/lib/botDelivery";
 import { originOf, recoveryLink } from "@/lib/recoveryLink";
 import { findUserByEmail } from "@/lib/findUserByEmail";
 
@@ -58,48 +58,20 @@ export async function POST(req: Request) {
   if ((count ?? 0) >= LIMIT) return NextResponse.json(SAME_ANSWER);
   await admin.from("api_rate_limits").insert({ user_id: user.id, route: "forgot-password" });
 
-  // Ссылка уходит только действующему участнику: у отключённого входа нет, и
-  // выдавать ему новый пароль значит возвращать доступ мимо владельца.
-  const { data: membership } = await admin
-    .from("workspace_members")
-    .select("assignee_id, status")
-    .eq("member_id", user.id)
-    .maybeSingle();
-
-  // Строки членства нет — это владелец собственного пространства, и ему
-  // эта дверь нужна больше всех: выдать ему ссылку заново некому (тот, кто
-  // делает это остальным, — он сам), а письмо Supabase ведёт на localhost.
-  // Раньше маршрут здесь просто выходил, то есть «Забыли пароль?» не
-  // работало у Кирилла вовсе. Его чат живёт в учётной записи, а не в
-  // строке списка людей (см. lib/reach).
-  const targets: OwnerChat[] = [];
-  if (!membership) {
-    const { data: mine } = await admin.from("assignees").select("id").eq("user_id", user.id).limit(1);
-    if (!(mine || []).length) return NextResponse.json(SAME_ANSWER);
-    // Один мессенджер, выбранный им (ownerChats ставит его первым).
-    targets.push(...(await ownerChats(admin, user.id)).slice(0, 1));
-  } else {
-    if (membership.status !== "active") return NextResponse.json(SAME_ANSWER);
-    const { data: person } = await admin
-      .from("assignees")
-      .select("id, name, telegram_chat_id, max_user_id, messenger")
-      .eq("id", membership.assignee_id)
-      .maybeSingle();
-    const target = person ? chatsFor(person as ColleagueRow)[0] : null;
-    if (target) targets.push(target);
-  }
-  if (!targets.length) return NextResponse.json(SAME_ANSWER);
+  // Кому и куда — lib/accountChat: только действующему участнику, в один
+  // выбранный им мессенджер. Владельцу эта дверь нужна больше всех: выдать
+  // ему ссылку заново некому (тот, кто делает это остальным, — он сам).
+  const target = await accountChat(admin, user.id);
+  if (!target) return NextResponse.json(SAME_ANSWER);
 
   const link = await recoveryLink(admin, email, originOf(req));
   if ("error" in link) return NextResponse.json(SAME_ANSWER);
 
-  for (const target of targets) {
-    await sendToColleague(
-      target,
-      `🔑 Новый пароль для трекера\n\n${link.link}\n\n` +
-        "Ссылка действует час и сработает один раз. Если пароль вы не забывали — просто не открывайте её.",
-    );
-  }
+  await sendToColleague(
+    target,
+    `🔑 Новый пароль для трекера\n\n${link.link}\n\n` +
+      "Ссылка действует час и сработает один раз. Если пароль вы не забывали — просто не открывайте её.",
+  );
 
   return NextResponse.json(SAME_ANSWER);
 }
