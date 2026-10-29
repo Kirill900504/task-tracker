@@ -86,7 +86,7 @@ export default function ResetPasswordPage() {
         <div className="auth-brand">
           {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size local logo; next/image adds nothing */}
           <img src="/favicon.png" alt="" />
-          <span>РОКАС</span>
+          <span>Планировщик задач</span>
         </div>
 
         <h1 className="auth-title">Новый пароль</h1>

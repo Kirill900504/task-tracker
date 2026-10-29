@@ -88,7 +88,7 @@ export default function LoginPage() {
     <div className="auth-brand">
       {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size local logo; next/image adds nothing */}
       <img src="/favicon.png" alt="" />
-      <span>РОКАС</span>
+      <span>Планировщик задач</span>
     </div>
   );
 
