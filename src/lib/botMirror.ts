@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { transportFor, TELEGRAM_CHANNEL, MAX_CHANNEL } from "@/lib/botDelivery";
 import { meetingCard, taskCard } from "@/lib/colleagueQueries";
+import { todayMoscow } from "@/lib/taskLogic";
 
 // Один ответ — во всех мессенджерах сразу.
 //
@@ -174,7 +175,7 @@ export async function mirrorAnswer(
     const colleague = person as { id: string; name: string; user_id: string } | null;
     if (!targets.length || !colleague) return;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayMoscow();
     const card =
       ref.kind === "idea"
         ? ref.text

@@ -30,7 +30,11 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as { meetingId?: string; reason?: string } | null;
-  const reason = (body?.reason || "").trim();
+  // Предел длины — как у переноса (аудит 29.10.2026): причина уходит в
+  // хронику и в сообщение каждому участнику, а сообщение мессенджера длиннее
+  // ~4 тысяч знаков не отправляется вовсе — отмена дошла бы до хроники и ни
+  // до одного человека.
+  const reason = (body?.reason || "").trim().slice(0, 1000);
   if (!body?.meetingId || !reason) return NextResponse.json({ error: "Нужна причина отмены" }, { status: 400 });
 
   const admin = createAdminClient();
@@ -54,6 +58,20 @@ export async function POST(req: Request) {
   // правило, что в интерфейсе: чужую встречу не удалить и не перенести.
   const author = meeting.created_by || meeting.user_id;
   if (author !== user.id) return NextResponse.json({ error: "Это не ваша встреча" }, { status: 403 });
+
+  // Отмена — один раз (аудит 29.10.2026). Повтор запроса (вторая вкладка,
+  // очередь outbox, досланная после обрыва, двойное нажатие) снова писал
+  // строку в хронику и снова слал всем «Встреча отменена». Признак — уже
+  // записанная строка отмены этой встречи.
+  const { data: already } = await admin
+    .from("item_comments")
+    .select("id")
+    .eq("item_kind", "meeting")
+    .eq("item_id", meeting.id)
+    .eq("system", true)
+    .like("body", "🚫 %отменил встречу%")
+    .limit(1);
+  if ((already || []).length) return NextResponse.json({ ok: true, sent: 0, already: true });
 
   const who = await actorName(admin, meeting.user_id, user.id);
   const when = fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "");

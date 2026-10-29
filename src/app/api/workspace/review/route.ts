@@ -51,11 +51,20 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: taskRow } = await admin
     .from("tasks")
-    .select("id, title, number, user_id, created_by, status")
+    .select("id, title, number, user_id, created_by, status, recur, approval_state")
     .eq("id", body.taskId)
     .is("deleted_at", null)
     .maybeSingle();
-  const task = taskRow as { id: string; title: string; number?: number | null; user_id: string; created_by: string | null; status: string } | null;
+  const task = taskRow as {
+    id: string;
+    title: string;
+    number?: number | null;
+    user_id: string;
+    created_by: string | null;
+    status: string;
+    recur?: string | null;
+    approval_state?: string | null;
+  } | null;
   if (!task) return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
 
   // Принимает работу тот, кто её поручил — и только он, даже когда он же
@@ -74,6 +83,18 @@ export async function POST(req: Request) {
   if (!isAuthor) return NextResponse.json({ error: "Это решение не ваше" }, { status: 403 });
 
   const comment = (body.comment || "").trim();
+
+  // Закрытая задача — только просмотр (14.10.2026), и выход из неё один —
+  // «Открыть заново» (applyReview, action "reopen"). Интерфейс эти кнопки у
+  // закрытой задачи прячет, а маршрут принимал (аудит 29.10.2026): вторая
+  // вкладка или очередь, досланная после обрыва, «возвращала на доработку»
+  // принятую задачу — стирала отчёт исполнителя, а задача оставалась в
+  // «Завершённых» с принятой работой без отчёта, — переносила ей срок и
+  // слала об этом людям. Правило «закрыта» — то же, что taskDisplay.isClosed.
+  const closed = task.status === "done" || ((task.recur || "none") === "none" && task.approval_state === "accepted");
+  if (closed && (body.action === "return_one" || body.action === "deadline" || body.action === "moved" || body.action === "kept")) {
+    return NextResponse.json({ error: "Задача уже закрыта — сначала откройте её заново" }, { status: 409 });
+  }
 
   // Вернуть на доработку ОДНОГО исполнителя, не трогая остальных.
   //
@@ -200,10 +221,18 @@ ${label}: ${comment}`, taskButtons(task.id, "executor"), { kind: "task", itemId:
     const part = partRow as { id: string; task_id: string; assignee_id: string; reschedule_to: string | null } | null;
     if (!part || part.task_id !== task.id) return NextResponse.json({ error: "Просьба не найдена" }, { status: 404 });
 
-    await admin
+    // Просьбу снимает тот, кто снял её ПЕРВЫМ, — условным UPDATE (аудит
+    // 29.10.2026). Раньше снятие было безусловным: второй ответ на ту же
+    // просьбу (вторая вкладка, очередь после обрыва, ответ уже из
+    // мессенджера) снова писал «Срок перенесён» в хронику и снова слал его
+    // человеку — а «перенесён» и «в переносе отказано» могли прийти оба.
+    const { data: taken } = await admin
       .from("task_participants")
       .update({ reschedule_requested_at: null, reschedule_to: null, reschedule_reason: null })
-      .eq("id", part.id);
+      .eq("id", part.id)
+      .or("reschedule_requested_at.not.is.null,reschedule_to.not.is.null")
+      .select("id");
+    if (!(taken || []).length) return NextResponse.json({ ok: true, already: true });
 
     const when = body.date || part.reschedule_to;
     const moved = body.action === "moved";

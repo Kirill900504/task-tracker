@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { trackerUrl } from "@/lib/trackerUrl";
 
 // Ссылка «задайте себе новый пароль» — одна на все способы её выдать.
 //
@@ -65,15 +66,31 @@ export async function signInLink(
   return { link: `${base}/enter?token_hash=${encodeURIComponent(data.properties.hashed_token)}` };
 }
 
+// Хосты, которым можно верить: этот проект на Vercel и локальная машина.
+function trustedHost(host: string): boolean {
+  if (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host)) return true;
+  const own = [trackerUrl(), process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+    .filter((v): v is string => !!v)
+    .map((v) => v.replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase());
+  return own.includes(host.toLowerCase());
+}
+
 // Адрес, который человек увидит в браузере. За прокси Vercel в request.url
 // лежит внутренний адрес, поэтому спрашиваем заголовки.
+//
+// Но только у СВОИХ хостов (аудит 29.10.2026). Эти адреса идут внутрь ссылок
+// на новый пароль и приглашений, а «Забыли пароль?» — маршрут публичный:
+// запрос с почтой жертвы и подставленным `X-Forwarded-Host: чужой.сайт`
+// уходил бы ей в мессенджер настоящим сообщением бота со ссылкой на чужой
+// сайт, а токен из ссылки доставался бы тому сайту (известный приём
+// «password reset poisoning»). Незнакомый хост заменяется боевым адресом.
 export function originOf(req: Request): string {
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const host = (req.headers.get("x-forwarded-host") || req.headers.get("host") || "").split(",")[0].trim();
+  if (!host || !trustedHost(host)) return trackerUrl();
   // Локальная машина по https не отвечает, а заголовка x-forwarded-proto на
   // ней нет — без этой оговорки ссылка, выданная на `npx next start`, ведёт
   // на https://localhost и не открывается вовсе.
-  const local = !!host && /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host);
-  const proto = req.headers.get("x-forwarded-proto") || (local ? "http" : "https");
-  if (host) return `${proto}://${host}`;
-  return new URL(req.url).origin;
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host);
+  const proto = local ? req.headers.get("x-forwarded-proto") || "http" : "https";
+  return `${proto}://${host}`;
 }

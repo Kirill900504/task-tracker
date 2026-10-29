@@ -31,6 +31,7 @@ import type { Notice } from "@/lib/noticeQueue";
 import { numbered, taskRef, taskRef as taskLabel } from "@/lib/taskRef";
 import { mirrorAnswer, type MirrorRef } from "@/lib/botMirror";
 import { acceptProposal, voteOnProposal } from "@/lib/meetingProposal";
+import { todayMoscow } from "@/lib/taskLogic";
 
 // What happens when a colleague presses a button under a task or a meeting.
 //
@@ -226,7 +227,7 @@ async function colleagueCallback(
   // кнопка жила только под тем сообщением, которым задачу прислали: стоило
   // переписке уехать вверх — и ответить было нечем.
   if (action.action === "list") {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayMoscow();
     // Третье поле кнопки — какой именно список. Раньше оно не читалось
     // вовсе: списков было два, задачи и встречи, и вид угадывался по виду
     // кнопки. Меню (lib/botMenu) спрашивает «сегодня», «просрочено», «на
@@ -237,7 +238,7 @@ async function colleagueCallback(
   }
 
   if (action.action === "show") {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayMoscow();
     const card =
       action.kind === "meeting"
         ? await meetingCard(admin, colleague, action.id)
@@ -737,7 +738,7 @@ async function selfTaskAction(
     return { toast: "Готово", rewriteTo: `📋 ${numbered(task)}\n\n✅ Готово — задача закрыта.`, rewriteButtons: [] };
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayMoscow();
   if (act === "mv") {
     if (task.status === "done") return closedNow;
     return {
@@ -939,7 +940,7 @@ export async function handleColleagueText(
   // уверенный, что отчитался.
   const command = matchColleagueCommand(body);
   if (!rows.length && command) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayMoscow();
     const answer = await replyForColleague(admin, colleague, command, today, source);
     return { reply: answer.text, buttons: answer.buttons };
   }

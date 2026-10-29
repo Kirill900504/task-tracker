@@ -64,6 +64,7 @@ type MeetingRef = {
   participants: string[] | null;
   duration_min: number | null;
   status: string | null;
+  result?: string | null;
   from_task_id: string | null;
   deleted_at: string | null;
 };
@@ -79,7 +80,7 @@ async function load(admin: SupabaseClient, commentId: string): Promise<{ comment
   if (!comment || comment.item_kind !== "meeting" || !comment.proposal?.date) return null;
   const { data: m } = await admin
     .from("meetings")
-    .select("id, title, date, time, user_id, created_by, participants, duration_min, status, from_task_id, deleted_at")
+    .select("id, title, date, time, user_id, created_by, participants, duration_min, status, result, from_task_id, deleted_at")
     .eq("id", comment.item_id)
     .maybeSingle();
   const meeting = m as MeetingRef | null;
@@ -228,6 +229,19 @@ export async function acceptProposal(
   const note = reason ? `По предложению: ${by} — ${reason}` : `По предложению: ${by}`;
 
   const newId = uid();
+  // Прежняя встреча ЗАНИМАЕТСЯ первой — условным UPDATE, и только тот, кто
+  // её занял, заводит новую (аудит 29.10.2026). Проверка статуса выше
+  // читает строку до записи, и два нажатия «Перенести» подряд (дребезг,
+  // повтор доставки, Telegram и MAX одновременно) оба её проходили:
+  // получались ДВЕ новые встречи на одно время и два круга приглашений.
+  // Тот же приём, что у цепочки регулярных встреч (recur_next_id).
+  const { data: claimed } = await admin
+    .from("meetings")
+    .update({ status: "no_result", result: note, moved_to_date: p.date, resolved_at: new Date().toISOString() })
+    .eq("id", meeting.id)
+    .in("status", ["planned", "proposed"])
+    .select("id");
+  if (!(claimed || []).length) return { toast: "Встреча уже закрыта или перенесена" };
   const { error } = await admin.from("meetings").insert({
     id: newId,
     user_id: meeting.user_id,
@@ -241,17 +255,24 @@ export async function acceptProposal(
     result: "",
     from_task_id: meeting.from_task_id,
   });
-  if (error) return { toast: "Не получилось перенести" };
-  await admin
-    .from("meetings")
-    .update({ status: "no_result", result: note, moved_to_date: p.date, resolved_at: new Date().toISOString() })
-    .eq("id", meeting.id);
+  if (error) {
+    // Новая не завелась — прежняя возвращается как была, иначе встреча
+    // исчезла бы целиком.
+    await admin
+      .from("meetings")
+      .update({ status: meeting.status || "planned", result: meeting.result ?? "", moved_to_date: null, resolved_at: null })
+      .eq("id", meeting.id);
+    return { toast: "Не получилось перенести" };
+  }
 
   const wasAt = fmtDate(meeting.date) + (meeting.time ? ", " + meeting.time : "");
   const nowAt = proposalWhen(p);
+  // Переносит организатор — он и автор строк: без actorUserId ему тут же
+  // всплывало на ПК его собственное «перенёс встречу».
+  const actorUserId = meeting.created_by || meeting.user_id;
   await Promise.all([
-    recordEvent(admin, { userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `📅 ${who} перенёс встречу на ${nowAt}: ${note}` }),
-    recordEvent(admin, { userId: meeting.user_id, kind: "meeting", itemId: newId, text: `📅 Перенесена с ${wasAt}: ${note}` }),
+    recordEvent(admin, { actorUserId, userId: meeting.user_id, kind: "meeting", itemId: meeting.id, text: `📅 ${who} перенёс встречу на ${nowAt}: ${note}` }),
+    recordEvent(admin, { actorUserId, userId: meeting.user_id, kind: "meeting", itemId: newId, text: `📅 Перенесена с ${wasAt}: ${note}` }),
   ]);
 
   // Приглашения на новое время — всем, кого звали. Строки участия завёл

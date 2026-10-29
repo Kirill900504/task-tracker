@@ -29,6 +29,7 @@ import { normalizeDuration } from "@/lib/meetingTime";
 import { timeIsUpText } from "@/lib/meetingNudges";
 import { telegramTransport } from "@/lib/telegram";
 import { maxTransport } from "@/lib/max";
+import { bearerMatches, secretMatches } from "@/lib/secretMatch";
 
 // Not before 08:00 Moscow time: the briefing is a morning read, and the
 // pinger runs around the clock.
@@ -88,10 +89,13 @@ async function tellMeetingPeople(
   let ownerReached = false;
   if (ids.length) {
     const { data: people } = await admin.from("assignees").select("id, name, telegram_chat_id, max_user_id, messenger").in("id", ids);
-    for (const person of ((people || []) as ColleagueRow[])) {
-      if (isSelfAssignee(person.name)) ownerReached = true;
-      await sendToPerson(admin, userId, person, text);
-    }
+    const list = (people || []) as ColleagueRow[];
+    ownerReached = list.some((person) => isSelfAssignee(person.name));
+    // Всем разом (CLAUDE.md: «Рассылка нескольким — параллельно»): по
+    // одному это был полёт до мессенджера на каждого участника, и на
+    // встрече в десять человек «время вышло» последний получал через
+    // несколько секунд после первого, а крон ждал их всех подряд.
+    await Promise.all(list.map((person) => sendToPerson(admin, userId, person, text)));
   }
   await tellOrganizer(admin, userId, meeting.created_by ?? null, ids, ownerReached, text);
 }
@@ -132,8 +136,8 @@ export async function GET(req: Request) {
   // that calls this every five minutes can send a header instead, and the
   // query form stays only so switching it over is not a flag day.
   const secret = process.env.CRON_SECRET;
-  const headerAuth = req.headers.get("authorization") === `Bearer ${secret}`;
-  const queryAuth = url.searchParams.get("secret") === secret;
+  const headerAuth = bearerMatches(req.headers.get("authorization"), secret);
+  const queryAuth = secretMatches(url.searchParams.get("secret"), secret);
   if (!secret || (!headerAuth && !queryAuth)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
@@ -360,25 +364,33 @@ export async function GET(req: Request) {
       // «Ждёт вашего ответа — Принял / Не могу» по задаче, поставленной
       // себе, — вопрос самому себе: у своей задачи ответов нет вовсе.
       const ownWaiting = await selfTaskIds(admin, userId, waiting.unaccepted.map((w) => w.taskId));
-      for (const w of waiting.unaccepted) {
-        if (ownWaiting.has(w.taskId)) continue;
-        await onceOnly(admin, { userId, kind: "unaccepted_nudge", refId: w.participantId, date: today }, async () => {
-          const { data: person } = await admin
-            .from("assignees")
-            .select("id, name, telegram_chat_id, max_user_id, messenger, away_until")
-            .eq("id", w.assigneeId)
-            .maybeSingle();
-          // В отпуске — не теребим: задача дождётся его возвращения.
-          if (person && !isAwayOn(person.away_until as string | null, today)) {
-            await sendToPerson(admin, userId, person as ColleagueRow, unacceptedText(w), taskButtons(w.taskId, "executor"), { kind: "task", itemId: w.taskId });
-          }
-        });
-      }
-      for (const w of waiting.unreviewed) {
-        await onceOnly(admin, { userId, kind: "unreviewed_nudge", refId: w.taskId + ":" + w.since, date: today }, async () => {
-          await notifyAuthor(admin, userId, w.createdBy, unreviewedText(w), undefined, briefButtons());
-        });
-      }
+      // Каждое напоминание — своё и защищено своим onceOnly, друг от друга
+      // они не зависят, поэтому идут разом (аудит 29.10.2026): по одному
+      // это было три-четыре полёта (отметка, строка человека, мессенджер) на
+      // КАЖДУЮ задачу каждого пространства — внутри крона, который каждые
+      // пять минут обходит всех и обязан успеть в свой предел времени.
+      await Promise.all([
+        ...waiting.unaccepted
+          .filter((w) => !ownWaiting.has(w.taskId))
+          .map((w) =>
+            onceOnly(admin, { userId, kind: "unaccepted_nudge", refId: w.participantId, date: today }, async () => {
+              const { data: person } = await admin
+                .from("assignees")
+                .select("id, name, telegram_chat_id, max_user_id, messenger, away_until")
+                .eq("id", w.assigneeId)
+                .maybeSingle();
+              // В отпуске — не теребим: задача дождётся его возвращения.
+              if (person && !isAwayOn(person.away_until as string | null, today)) {
+                await sendToPerson(admin, userId, person as ColleagueRow, unacceptedText(w), taskButtons(w.taskId, "executor"), { kind: "task", itemId: w.taskId });
+              }
+            }),
+          ),
+        ...waiting.unreviewed.map((w) =>
+          onceOnly(admin, { userId, kind: "unreviewed_nudge", refId: w.taskId + ":" + w.since, date: today }, async () => {
+            await notifyAuthor(admin, userId, w.createdBy, unreviewedText(w), undefined, briefButtons());
+          }),
+        ),
+      ]);
     }
 
     // Утренняя сводка каждому руководителю — та же услуга, что владельцу,

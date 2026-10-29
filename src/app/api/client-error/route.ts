@@ -5,6 +5,10 @@ import { notifyOwner } from "@/lib/botDelivery";
 import { crashNotice, fingerprintOf, shouldNotify, tooMany, WRITE_WINDOW_MS } from "@/lib/crashReport";
 import { createCrashIssue } from "@/lib/githubIssue";
 
+// Сколько «человек» делят общий предел анонимных строк: предел на одного,
+// умноженный на это число, — на всех, кто упал до входа, вместе.
+const ANON_SHARE = 4;
+
 // Куда браузер сообщает, что упал.
 //
 // Вставка идёт служебным ключом, а не из браузера, и это не перестраховка:
@@ -37,33 +41,29 @@ export async function POST(req: Request) {
   // Чьё это пространство — тот и должен узнать. У владельца своя строка в
   // workspace_members отсутствует, и это значит «сам себе владелец».
   let ownerId: string | null = user?.id ?? null;
-  if (user) {
-    const { data: member } = await admin.from("workspace_members").select("owner_id").eq("member_id", user.id).maybeSingle();
-    if (member?.owner_id) ownerId = member.owner_id;
-  }
-
   const fingerprint = fingerprintOf(message, body?.stack);
 
   // Предел на запись: считаем строки этого же человека за последнюю минуту.
-  if (user) {
-    const since = new Date(Date.now() - WRITE_WINDOW_MS).toISOString();
-    const { count } = await admin
-      .from("client_errors")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .gte("created_at", since);
-    if (tooMany(count ?? 0)) return NextResponse.json({ ok: true, skipped: "throttled" });
-  }
-
-  // Видели ли мы это раньше — спрашивается ДО вставки, иначе своя же
-  // свежая строка сделает любую поломку «уже известной».
-  const { data: previous } = await admin
-    .from("client_errors")
-    .select("created_at")
-    .eq("fingerprint", fingerprint)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // У того, кто не вошёл, предел ОБЩИЙ на всех анонимных (аудит 29.10.2026):
+  // до этого без входа можно было писать сколько угодно — маршрут публичный,
+  // и любой скрипт заливал таблицу, а каждый новый текст ошибки становился
+  // ещё и задачей на GitHub.
+  //
+  // Три вопроса друг от друга не зависят и задаются разом: раньше это были
+  // три полёта до базы подряд на каждое падение.
+  const since = new Date(Date.now() - WRITE_WINDOW_MS).toISOString();
+  const recent = admin.from("client_errors").select("id", { count: "exact", head: true }).gte("created_at", since);
+  const [memberRes, recentRes, previousRes] = await Promise.all([
+    user ? admin.from("workspace_members").select("owner_id").eq("member_id", user.id).limit(1).maybeSingle() : Promise.resolve({ data: null }),
+    user ? recent.eq("user_id", user.id) : recent.is("user_id", null),
+    // Видели ли мы это раньше — спрашивается ДО вставки, иначе своя же
+    // свежая строка сделает любую поломку «уже известной».
+    admin.from("client_errors").select("created_at").eq("fingerprint", fingerprint).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const memberOwner = (memberRes.data as { owner_id?: string } | null)?.owner_id;
+  if (memberOwner) ownerId = memberOwner;
+  if (tooMany((recentRes.count ?? 0) / (user ? 1 : ANON_SHARE))) return NextResponse.json({ ok: true, skipped: "throttled" });
+  const previous = previousRes.data as { created_at: string } | null;
 
   const { error } = await admin.from("client_errors").insert({
     user_id: user?.id ?? null,
@@ -86,7 +86,11 @@ export async function POST(req: Request) {
     // И задача в репозитории — там, где починка и начинается. Молча
     // пропускается, если GitHub не настроен: трекер не должен зависеть от
     // чужого сервиса, а поломка уже записана.
-    await createCrashIssue({ message, stack: body?.stack, url: body?.url, release: body?.release, who, fingerprint }).catch(() => null);
+    //
+    // Только от вошедшего: текст анонимной «поломки» пишет кто угодно, и
+    // каждый новый текст был бы новой задачей в публичном репозитории.
+    // Анонимная строка в журнале при этом остаётся.
+    if (user) await createCrashIssue({ message, stack: body?.stack, url: body?.url, release: body?.release, who, fingerprint }).catch(() => null);
   }
 
   return NextResponse.json({ ok: true });

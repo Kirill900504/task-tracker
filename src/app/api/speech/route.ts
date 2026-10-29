@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 // Расшифровать надиктованное в трекере — нашими силами, без Google.
 //
@@ -42,6 +43,20 @@ export async function POST(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+
+  // Вход сам по себе не предел (аудит 29.10.2026): одна учётная запись
+  // скриптом держала бы функции занятыми минутными расшифровками сколько
+  // угодно — и платили бы за это мы. Тридцать диктовок за десять минут
+  // человеку не нужны никогда.
+  const { allowed } = await checkRateLimit(supabase, user.id, "speech", 30, 600);
+  if (!allowed) return NextResponse.json({ error: "Слишком много записей подряд — подождите несколько минут." }, { status: 429 });
+
+  // Размер — по заголовку, ДО чтения тела: иначе мегабайты лишнего уже
+  // прочитаны в память к моменту, когда их можно отвергнуть.
+  const declared = Number(req.headers.get("content-length") || 0);
+  if (declared > MAX_BYTES) {
+    return NextResponse.json({ error: `Запись длиннее ${MAX_SECONDS} секунд — скажите короче.` }, { status: 413 });
+  }
 
   const bytes = await req.arrayBuffer();
   if (bytes.byteLength > MAX_BYTES) {

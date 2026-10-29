@@ -487,7 +487,12 @@ export default function TasksPanel({
     } else {
       // completedAt is what orders the "завершённые" list newest-first, so
       // the task just closed is the one at the top, ready to be reopened.
-      actions.saveTask({ ...t, status: "done", lastCompletedOn: new Date().toISOString().slice(0, 10), completedAt: new Date().toISOString() });
+      // lastCompletedOn is the LOCAL day (todayStr), the same calendar
+      // refreshRecurringStatuses compares it against: toISOString() is UTC,
+      // and a recurring task ticked off between midnight and 03:00 Moscow
+      // was recorded as done «yesterday» and reopened itself at once
+      // (audit 29.10.2026).
+      actions.saveTask({ ...t, status: "done", lastCompletedOn: todayStr(), completedAt: new Date().toISOString() });
     }
   }
 

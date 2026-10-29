@@ -56,8 +56,25 @@ describe("originOf", () => {
   });
 
   it("обходится обычным host, когда прокси нет", () => {
-    const req = new Request("http://example.org/api/x", { headers: { host: "example.org" } });
-    expect(originOf(req)).toBe("https://example.org");
+    const req = new Request("http://10.0.0.1/api/x", { headers: { host: "task-tracker-beta-ebon.vercel.app" } });
+    expect(originOf(req)).toBe("https://task-tracker-beta-ebon.vercel.app");
+  });
+
+  // «Password reset poisoning»: публичный «Забыли пароль?» с подставленным
+  // хостом отправил бы человеку настоящее сообщение бота со ссылкой на чужой
+  // сайт. Незнакомый хост заменяется боевым адресом.
+  it("не верит чужому хосту из заголовков", () => {
+    const forwarded = new Request("http://10.0.0.1/api/x", { headers: { "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" } });
+    expect(originOf(forwarded)).toBe("https://task-tracker-beta-ebon.vercel.app");
+    const plain = new Request("http://evil.example/api/x", { headers: { host: "evil.example" } });
+    expect(originOf(plain)).toBe("https://task-tracker-beta-ebon.vercel.app");
+  });
+
+  it("не даёт чужому прокси понизить боевой адрес до http", () => {
+    const req = new Request("http://10.0.0.1/api/x", {
+      headers: { "x-forwarded-host": "task-tracker-beta-ebon.vercel.app", "x-forwarded-proto": "http" },
+    });
+    expect(originOf(req)).toBe("https://task-tracker-beta-ebon.vercel.app");
   });
 
   // Локальный запуск отдаёт http: иначе ссылка на `npx next start` ведёт на

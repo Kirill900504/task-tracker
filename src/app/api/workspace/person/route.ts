@@ -316,15 +316,24 @@ async function transferWork(admin: SupabaseClient, ownerId: string, from: Person
     await recordEvent(admin, { userId: ownerId, kind: "meeting", itemId: m.id, text: `${fromName} больше не в команде — вместо него: ${toName}`, actorUserId: ownerId });
   }
 
-  for (const t of work.authoredTasks) {
-    const { error } = await admin.from("tasks").update({ created_by: newAuthor }).eq("id", t.id);
-    if (error) return error.message;
-    await recordEvent(admin, { userId: ownerId, kind: "task", itemId: t.id, text: `${fromName} больше не в команде — постановщик теперь ${newAuthor ? toName : "владелец"}`, actorUserId: ownerId });
-  }
-  for (const m of work.authoredMeetings) {
-    const { error } = await admin.from("meetings").update({ created_by: newAuthor }).eq("id", m.id);
-    if (error) return error.message;
-  }
+  // Смена постановщика — одна запись на все его задачи и одна на все
+  // встречи, а не по запросу на каждую (аудит 29.10.2026): у человека,
+  // который поручал месяцами, это десятки полётов до базы подряд, и окно
+  // «Убрать из команды» висело всё это время. Строки хроники друг от друга
+  // не зависят и пишутся разом.
+  const taskIds = work.authoredTasks.map((t) => t.id);
+  const meetingIds = work.authoredMeetings.map((m) => m.id);
+  const [tasksMoved, meetingsMoved] = await Promise.all([
+    taskIds.length ? admin.from("tasks").update({ created_by: newAuthor }).in("id", taskIds) : Promise.resolve({ error: null }),
+    meetingIds.length ? admin.from("meetings").update({ created_by: newAuthor }).in("id", meetingIds) : Promise.resolve({ error: null }),
+  ]);
+  if (tasksMoved.error) return tasksMoved.error.message;
+  if (meetingsMoved.error) return meetingsMoved.error.message;
+  await Promise.all(
+    taskIds.map((id) =>
+      recordEvent(admin, { userId: ownerId, kind: "task", itemId: id, text: `${fromName} больше не в команде — постановщик теперь ${newAuthor ? toName : "владелец"}`, actorUserId: ownerId }),
+    ),
+  );
   return "";
 }
 

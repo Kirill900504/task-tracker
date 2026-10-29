@@ -18,6 +18,18 @@ export function dateStr(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
+// «Сегодня» на сервере — московское, строкой YYYY-MM-DD.
+//
+// Есть ради одной ошибки, найденной аудитом 29.10.2026 в семи местах бота:
+// `new Date().toISOString().slice(0, 10)` — это сегодня по ГРИНВИЧУ, и с
+// полуночи до трёх ночи по Москве оно было вчерашним днём. В эти три часа
+// «📌 Сегодня» показывало вчерашние задачи, «просрочено» не видело
+// просроченного вчера, а «сдвинуть на день» ставило срок на сегодня вместо
+// завтра.
+export function todayMoscow(now: number = Date.now()): string {
+  return dateStr(new Date(now + 3 * 60 * 60 * 1000));
+}
+
 export function minutesOfDay(d: Date): number {
   return d.getUTCHours() * 60 + d.getUTCMinutes();
 }

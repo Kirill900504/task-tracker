@@ -9,6 +9,7 @@ import { mirrorAnswer } from "@/lib/botMirror";
 import type { BotContext } from "@/lib/botPipeline";
 import { replyContext } from "@/lib/botMemory";
 import { MAX_CHANNEL } from "@/lib/botTransport";
+import { secretMatches } from "@/lib/secretMatch";
 
 // MAX's side of the bot. Everything past "what did this person say" is the
 // same code the Telegram webhook runs — see botPipeline.ts.
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, skipped: "Бот MAX не подключён" });
   }
   const secret = req.headers.get("x-max-bot-api-secret");
-  if (!settings.secret || secret !== settings.secret) {
+  if (!secretMatches(secret, settings.secret)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

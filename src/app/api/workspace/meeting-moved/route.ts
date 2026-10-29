@@ -48,7 +48,13 @@ export async function POST(req: Request) {
   }
   if (!from || !to) return NextResponse.json({ error: "Встреча не найдена" }, { status: 404 });
   // Переносит тот, кто назначил, — то же правило, что у отмены.
-  if ((from.created_by || from.user_id) !== user.id || from.user_id !== to.user_id) {
+  //
+  // И НОВАЯ встреча тоже должна быть его (аудит 29.10.2026): проверялась
+  // только прежняя, а `toId` брался из запроса как есть. Подставив id чужой
+  // встречи того же пространства, свою встречу можно было «перенести» в
+  // неё — маршрут писал строку в чужое обсуждение и рассылал её участникам
+  // приглашение «было → стало» от своего имени.
+  if ((from.created_by || from.user_id) !== user.id || (to.created_by || to.user_id) !== user.id || from.user_id !== to.user_id) {
     return NextResponse.json({ error: "Это не ваша встреча" }, { status: 403 });
   }
 

@@ -37,8 +37,13 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as
     | { meetingId?: string; result?: string; outcome?: "success" | "no_result" }
     | null;
-  const result = (body?.result || "").trim();
-  const outcome = body?.outcome;
+  // Итог — в разумных пределах, исход — только из двух слов (аудит
+  // 29.10.2026). Без предела итог уезжал в хронику и в сообщение каждому
+  // участнику целиком, а сообщение длиннее ~4 тысяч знаков мессенджер не
+  // принимает вовсе. А исход принимался любой строкой и уходил дальше в
+  // рассылку «встреча закрыта» как есть.
+  const result = (body?.result || "").trim().slice(0, 4000);
+  const outcome = body?.outcome === "success" || body?.outcome === "no_result" ? body.outcome : undefined;
   if (!body?.meetingId || (!result && !outcome)) return NextResponse.json({ error: "Неполный запрос" }, { status: 400 });
 
   const admin = createAdminClient();

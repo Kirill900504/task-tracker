@@ -329,7 +329,7 @@ export function startOutbox(): () => void {
   // задачи и встречи: ответы на них без самих строк получили бы 404.
   const onOnline = () => setTimeout(() => void flushOutbox(), 2500);
   window.addEventListener("online", onOnline);
-  const stopRevive = onRevive(() => void flushOutbox(), { everyMs: RETRY_MS });
+  const stopRevive = onRevive(() => void flushOutbox(), { everyMs: RETRY_MS, background: true });
   // Соседняя вкладка поменяла очередь — значок и лента должны это увидеть.
   const onStorage = (e: StorageEvent) => {
     if (e.key !== storageKey()) return;

@@ -26,6 +26,8 @@ import { selfTaskIds } from "@/lib/selfTaskServer";
 
 type Recipient = { id: string; name: string; targets: { channel: BotChannelConfig; chatId: number }[] };
 
+const MAX_RECIPIENTS = 50;
+
 // Кому и куда. Отдельной строкой здесь стоит владелец: его строка в списке
 // людей («Кирилл (я)») чата не несёт — он подключает мессенджер к учётной
 // записи, — поэтому его чаты спрашиваются у lib/reach, а не у строки.
@@ -50,20 +52,21 @@ async function recipientsByName(
   const linked: Recipient[] = [];
   const unlinked: string[] = [];
   const self: string[] = [];
-  for (const name of wanted) {
-    const row = rows.find((r) => r.name === name);
-    if (!row) {
-      unlinked.push(name);
-      continue;
-    }
-    if (isSelfAssignee(row.name) && row.user_id === senderId) {
-      self.push(name);
-      continue;
-    }
-    const targets = await chatsForPerson(admin, row.user_id, row);
+  // Чаты всех адресатов — разом, а не по одному (аудит 29.10.2026): у
+  // владельца это запрос в базу, и встреча на десятерых ждала десять
+  // запросов подряд, прежде чем отправить первое приглашение. Порядок
+  // ответов — порядок имён, поэтому разбор ниже тот же, что был.
+  const found = wanted.map((name) => ({ name, row: rows.find((r) => r.name === name) }));
+  const chats = await Promise.all(
+    found.map(({ row }) => (row && !(isSelfAssignee(row.name) && row.user_id === senderId) ? chatsForPerson(admin, row.user_id, row) : Promise.resolve(null))),
+  );
+  found.forEach(({ name, row }, i) => {
+    if (!row) return void unlinked.push(name);
+    const targets = chats[i];
+    if (!targets) return void self.push(name);
     if (targets.length) linked.push({ id: row.id, name: row.name, targets: targets.slice(0, 1) });
     else unlinked.push(name);
-  }
+  });
   return { linked, unlinked, self };
 }
 
@@ -114,7 +117,10 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const kind = body?.kind;
   const id = typeof body?.id === "string" ? body.id : "";
-  const to: string[] = Array.isArray(body?.to) ? body.to.filter((n: unknown) => typeof n === "string") : [];
+  // Список адресатов — не длиннее команды (аудит 29.10.2026): предел частоты
+  // считает запросы, а не сообщения, и один запрос со списком из сотен имён
+  // превращался в сотни сообщений от бота.
+  const to: string[] = Array.isArray(body?.to) ? [...new Set<string>(body.to.filter((n: unknown) => typeof n === "string"))].slice(0, MAX_RECIPIENTS) : [];
   if (!id || (kind !== "task" && kind !== "meeting" && kind !== "idea")) {
     return NextResponse.json({ error: "Непонятно, что отправлять" }, { status: 400 });
   }
