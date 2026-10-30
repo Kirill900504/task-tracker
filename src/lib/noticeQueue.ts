@@ -373,7 +373,7 @@ export async function queueNotice(
   toUser: string | null,
   notice: Notice,
 ): Promise<boolean> {
-  const { error } = await admin.from("notification_queue").insert({
+  const row = {
     user_id: userId,
     to_user: toUser,
     kind: notice.kind,
@@ -382,7 +382,13 @@ export async function queueNotice(
     item_number: notice.num ?? null,
     who: notice.who || "",
     what: notice.what || "",
-  });
+  };
+  let { error } = await admin.from("notification_queue").insert(row);
+  // 22P02 — item_id ещё uuid (до миграции 0076), а id дел — текст. Без
+  // повтора каждое событие о деле уходило мимо сводки отдельным сообщением
+  // (так было с 14.10 по 30.10.2026); без id строка склеивается по
+  // названию, как строки до 0054.
+  if (error?.code === "22P02" && row.item_id) ({ error } = await admin.from("notification_queue").insert({ ...row, item_id: null }));
   if (error) {
     console.error("notice queue:", error.message);
     return false;

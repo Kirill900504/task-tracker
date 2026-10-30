@@ -48,6 +48,20 @@ export const REOPEN_PATCH = {
   last_completed_on: null,
 } as const;
 
+// Возвращённый на доработку — «В работе», а не «Ещё не приступал».
+//
+// 30.10.2026, задача №154: исполнитель сдал работу прямо из «Новых», не
+// нажав «Принял», постановщик вернул её — и в карточке у человека стояло
+// «Ещё не приступал», «Взяли 0 из 1». Его слова: статус после возврата
+// «должен становиться „в работе“». Возврат — решение постановщика, что
+// работа продолжается; ждать от вернувшегося ещё и «Принял» значит
+// спрашивать то, на что он уже ответил отчётом. Уже стоящее принятие не
+// перезаписывается: его время — когда человек взялся в первый раз.
+export async function markReturnedAsWorking(admin: SupabaseClient, participantIds: string[], now: string) {
+  if (!participantIds.length) return;
+  await admin.from("task_participants").update({ accepted_at: now }).in("id", participantIds).is("accepted_at", null);
+}
+
 export async function applyReview(
   admin: SupabaseClient,
   task: { id: string; title: string; user_id: string; status?: string | null },
@@ -279,6 +293,11 @@ export async function applyReview(
         "id",
         returning.map((r) => r.id),
       );
+    await markReturnedAsWorking(
+      admin,
+      returning.map((r) => r.id),
+      now,
+    );
   } else if (action === "reopen") {
     await admin.from("tasks").update(REOPEN_PATCH).eq("id", task.id);
   } else {

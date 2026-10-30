@@ -409,7 +409,7 @@ async function colleagueCallback(
             reschedule_reason: null,
           })
           .eq("id", participant.id);
-        const closed = await closeIfEveryoneReported(admin, task.id, whole);
+        await closeIfEveryoneReported(admin, task.id, whole);
         if (whole) {
           await recordEvent(admin, {
             userId: task.user_id,
@@ -418,14 +418,17 @@ async function colleagueCallback(
             text: `🏁 ${withoutSelfMark(colleague.name)} сдал задачу целиком`,
           });
         }
+        // Постановщику отсюда не пишем: следующим сообщением человек
+        // скажет, что именно сделано, и оно уйдёт постановщику целиком —
+        // вместе с «ждёт вашей приёмки» (fillOpenAnswerRow). 30.10.2026,
+        // задача №154: «выполнил…» и через минуту «по задаче…: слова»
+        // приходили двумя сообщениями, и первое лишь повторяло второе
+        // без самого ценного — слов исполнителя. Его слова: «другое лучше
+        // убрать, так как оно дублирует». Задача при этом уже на приёмке
+        // и видна на доске, а через сутки без решения напоминает сама.
         return {
           toast: "Отмечено",
           rewriteTo: `📋 ${numbered(task)}\n\n🏁 ${whole ? "Задача сдана целиком — она у постановщика на приёмке." : "Отмечено выполненным."}\nНапишите одним сообщением, что именно сделано — это увидит постановщик.`,
-          notifyTo: task.created_by,
-          notice: { kind: closed ? "reported_all" : "reported", item: task.title, itemId: task.id, num: task.number ?? null, who: withoutSelfMark(colleague.name) },
-          notifyOwner: closed
-            ? `🏁 ${withoutSelfMark(colleague.name)} выполнил: ${taskRef(task)} — ${whole ? "сдал задачу целиком" : "отчитались все"}, задача ждёт вашей приёмки`
-            : `🏁 ${withoutSelfMark(colleague.name)} выполнил свою часть: ${taskRef(task)}`,
         };
       }
 
@@ -920,7 +923,7 @@ export async function handleColleagueText(
     .from("task_participants")
     .select(
       "id, task_id, done_at, done_comment, declined_at, decline_reason, " +
-        "reschedule_requested_at, reschedule_to, reschedule_reason, tasks(title, number, created_by)",
+        "reschedule_requested_at, reschedule_to, reschedule_reason, tasks(title, number, created_by, approval_state)",
     )
     .eq("assignee_id", colleague.id)
     .eq("user_id", colleague.user_id);
@@ -968,6 +971,8 @@ export async function handleColleagueText(
   return fillOpenAnswer(admin, colleague, rows, body);
 }
 
+type OpenTask = { title: string; number?: number | null; created_by: string | null; approval_state?: string | null };
+
 type OpenRow = {
   id: string;
   task_id: string;
@@ -978,7 +983,7 @@ type OpenRow = {
   reschedule_requested_at: string | null;
   reschedule_to: string | null;
   reschedule_reason: string | null;
-  tasks: { title: string; number?: number | null; created_by: string | null } | { title: string; number?: number | null; created_by: string | null }[] | null;
+  tasks: OpenTask | OpenTask[] | null;
 };
 
 const askedAt = (r: OpenRow) => Date.parse(r.done_at || r.declined_at || r.reschedule_requested_at || "") || 0;
@@ -1020,7 +1025,7 @@ export async function answerOwnOpenQuestion(
     .from("task_participants")
     .select(
       "id, task_id, done_at, done_comment, declined_at, decline_reason, " +
-        "reschedule_requested_at, reschedule_to, reschedule_reason, tasks(title, number, created_by)",
+        "reschedule_requested_at, reschedule_to, reschedule_reason, tasks(title, number, created_by, approval_state)",
     )
     .eq("assignee_id", self.id)
     .eq("user_id", self.user_id);
@@ -1083,11 +1088,15 @@ async function fillOpenAnswerRow(
       itemId: row.task_id,
       text: `🏁 ${withoutSelfMark(colleague.name)} отчитался: ${body}`,
     });
+    // Это единственное сообщение постановщику об отчёте: нажатие «Сделал»
+    // в мессенджере молчит и ждёт этих слов (см. ветку isDone выше),
+    // поэтому «ждёт вашей приёмки» едет здесь же.
+    const awaiting = taskRef?.approval_state === "awaiting_review";
     return {
       reply: `Записал по задаче ${named}: ${body}`,
       notifyTo: taskRef?.created_by ?? null,
-      notifyOwner: `🏁 ${withoutSelfMark(colleague.name)} по задаче ${named}: ${body}`,
-      notice: { kind: "reported", ...ref, what: body },
+      notifyOwner: `🏁 ${withoutSelfMark(colleague.name)} по задаче ${named}: ${body}` + (awaiting ? "\n\nЗадача ждёт вашей приёмки." : ""),
+      notice: { kind: awaiting ? "reported_all" : "reported", ...ref, what: body },
     };
   }
 
