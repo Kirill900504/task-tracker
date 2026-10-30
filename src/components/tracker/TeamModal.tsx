@@ -234,6 +234,10 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
       return;
     }
     setCopied("");
+    if ("sentToChat" in result) {
+      setNotice(`Ссылка на новый пароль ушла ${withoutSelfMark(name)} в мессенджер — в чат с ботом. Почта для входа: ${result.email}.`);
+      return;
+    }
     setInviteFor({ id, name, link: result.link, kind: "access", email: result.email });
   }
 

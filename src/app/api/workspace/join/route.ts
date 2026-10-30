@@ -84,6 +84,14 @@ export async function POST(req: Request) {
     );
   }
 
+  // Человек приглашения — из пространства того, кто приглашает, и не
+  // убранный: до миграции 0074 приглашение мог вписать любой вошедший, со
+  // своим owner_id и чужим человеком.
+  const { data: invitee } = await admin.from("assignees").select("user_id, archived_at").eq("id", invite.assignee_id).maybeSingle();
+  if (!invitee || invitee.user_id !== invite.owner_id || invitee.archived_at) {
+    return NextResponse.json({ error: "Приглашение недействительно или уже использовано" }, { status: 400 });
+  }
+
   // Отключённому доступ не возвращается приглашением (аудит 30.10.2026).
   // Отключить могли человека, который так и не открыл свою ссылку, — и
   // она, живая, ставила ему `active` поверх решения владельца. Возвращает

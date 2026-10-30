@@ -27,6 +27,10 @@ export async function POST(req: Request) {
     | { message?: string; stack?: string; url?: string; release?: string }
     | null;
   const message = (body?.message || "").trim();
+  // Адрес — без «?» и «#»: прежние вкладки присылают его целиком, а там
+  // бывает одноразовый ключ входа (второй аудит 30.10.2026). Ключ уезжал
+  // бы в журнал, в сообщение владельцу и в задачу публичного репозитория.
+  const pageUrl = (body?.url || "").split(/[?#]/)[0].slice(0, 500);
   // Пустое сообщение — это не поломка, а мусор от расширения браузера.
   if (!message) return NextResponse.json({ ok: true, skipped: "empty" });
 
@@ -70,7 +74,7 @@ export async function POST(req: Request) {
     owner_id: ownerId,
     message: message.slice(0, 2000),
     stack: (body?.stack || "").slice(0, 8000) || null,
-    url: (body?.url || "").slice(0, 500) || null,
+    url: pageUrl || null,
     release: (body?.release || "").slice(0, 100) || null,
     fingerprint,
   });
@@ -81,7 +85,7 @@ export async function POST(req: Request) {
   if (shouldNotify(previous?.created_at ?? null)) {
     const who = user?.email && user.id !== ownerId ? user.email : null;
     if (ownerId) {
-      await notifyOwner(admin, ownerId, crashNotice({ message, url: body?.url, release: body?.release, who })).catch(() => {});
+      await notifyOwner(admin, ownerId, crashNotice({ message, url: pageUrl, release: body?.release, who })).catch(() => {});
     }
     // И задача в репозитории — там, где починка и начинается. Молча
     // пропускается, если GitHub не настроен: трекер не должен зависеть от
@@ -90,7 +94,9 @@ export async function POST(req: Request) {
     // Только от вошедшего: текст анонимной «поломки» пишет кто угодно, и
     // каждый новый текст был бы новой задачей в публичном репозитории.
     // Анонимная строка в журнале при этом остаётся.
-    if (user) await createCrashIssue({ message, stack: body?.stack, url: body?.url, release: body?.release, who, fingerprint }).catch(() => null);
+    // И без почты человека: репозиторий публичный, а почта — личные данные;
+    // кто упал, владелец узнаёт из своего сообщения и журнала.
+    if (user) await createCrashIssue({ message, stack: body?.stack, url: pageUrl, release: body?.release, who: null, fingerprint }).catch(() => null);
   }
 
   return NextResponse.json({ ok: true });

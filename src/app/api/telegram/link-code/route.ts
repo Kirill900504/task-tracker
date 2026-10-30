@@ -32,8 +32,20 @@ export async function POST(req: Request) {
     );
   }
 
-  const code = randomCode();
   const admin = createAdminClient();
+  // Код без человека привязывает чат к УЧЁТНОЙ ЗАПИСИ — так подключается
+  // только владелец пространства (второй аудит 30.10.2026). Маршрут
+  // выдавал такой код любому вошедшему: чат участника ложился в таблицу
+  // аккаунтов, и бот дальше разбирал его как владельца пустого
+  // пространства — с чужим меню, чужой сводкой и еженедельной «резервной
+  // копией». Участник подключает свой чат к своей строке
+  // (/api/telegram/invite из «Личного кабинета»).
+  const { data: membership } = await admin.from("workspace_members").select("id").eq("member_id", user.id).limit(1).maybeSingle();
+  if (membership) {
+    return NextResponse.json({ error: "Мессенджер подключается в «Личном кабинете» — своё имя вверху трекера" }, { status: 403 });
+  }
+
+  const code = randomCode();
   const { error } = await admin.from("telegram_link_codes").insert({ code, user_id: user.id, channel });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

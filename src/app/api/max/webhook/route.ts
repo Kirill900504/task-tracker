@@ -149,10 +149,22 @@ export async function POST(req: Request) {
   if (type !== "message_created") return NextResponse.json({ ok: true });
 
   const message = update.message as
-    | { sender?: { user_id?: number; username?: string }; body?: { text?: string; attachments?: unknown }; link?: MaxLink }
+    | {
+        sender?: { user_id?: number; username?: string };
+        recipient?: { chat_type?: string };
+        body?: { text?: string; attachments?: unknown };
+        link?: MaxLink;
+      }
     | undefined;
   const chatId = message?.sender?.user_id;
   if (!chatId) return NextResponse.json({ ok: true });
+  // Только личный диалог с ботом (второй аудит входа 30.10.2026). Ответ в
+  // MAX уходит в личку по user_id, но разбирать бот брался и болтовню в
+  // общем чате, куда его добавили: фраза подключённого человека уходила
+  // репликой в обсуждение его задачи, а код из чужого сообщения — в
+  // подключение. Нет поля — значит диалог (так приходит личная переписка).
+  const chatType = message?.recipient?.chat_type;
+  if (chatType && chatType !== "dialog") return NextResponse.json({ ok: true });
 
   const ctx: BotContext = { admin, transport, channel: MAX_CHANNEL, chatId };
   let text = typeof message?.body?.text === "string" ? message.body.text : "";

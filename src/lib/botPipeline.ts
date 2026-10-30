@@ -679,6 +679,19 @@ export async function handleLinkCode(ctx: BotContext, rawCode: string, username:
     await say(ctx, "Код неверный или уже истёк. Запросите новый в приложении.");
     return true;
   }
+  // Код обязан лежать в пространстве того человека, к которому ведёт, и
+  // человек — не убранный (второй аудит 30.10.2026). Браузерная вставка
+  // кода со своим user_id и чужим assignee_id закрыта миграцией 0074; эта
+  // проверка — чтобы такой код не сработал и тогда, когда его положит
+  // туда кто-то ещё.
+  if (linkRow.assignee_id) {
+    const { data: target } = await ctx.admin.from("assignees").select("user_id, archived_at").eq("id", linkRow.assignee_id).maybeSingle();
+    if (!target || target.user_id !== linkRow.user_id || target.archived_at) {
+      await recordMiss(ctx.admin, ctx.channel, ctx.chatId);
+      await say(ctx, "Код неверный или уже истёк. Запросите новый в приложении.");
+      return true;
+    }
+  }
   // Один аккаунт мессенджера — один человек (lib/linkGuard).
   const takenBy = await chatTakenBy(ctx.admin, ctx.channel, ctx.chatId, (linkRow.assignee_id as string | null) ?? null);
   if (takenBy) {

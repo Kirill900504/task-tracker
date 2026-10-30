@@ -218,7 +218,7 @@ export function useColleagues() {
   // которой человек записан (в интерфейсе её больше негде увидеть), и
   // одноразовую ссылку на смену пароля для того же входа.
   const accessLink = useCallback(
-    async (assigneeId: string): Promise<{ link: string; email: string } | { error: string }> => {
+    async (assigneeId: string): Promise<{ link: string; email: string } | { sentToChat: true; email: string } | { error: string }> => {
       const res = await fetch("/api/workspace/access-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -226,6 +226,9 @@ export function useColleagues() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.error) return { error: data?.error || "Не получилось создать ссылку" };
+      // Подключённому человеку ссылка уходит в его мессенджер сама, на руки
+      // не выдаётся (/api/workspace/access-link).
+      if (data.sentToChat) return { sentToChat: true, email: data.email as string };
       return { link: data.link as string, email: data.email as string };
     },
     [],

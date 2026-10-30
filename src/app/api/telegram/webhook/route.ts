@@ -35,8 +35,22 @@ export async function POST(req: Request) {
 
   const update = await req.json().catch(() => null);
   const updateId: number | undefined = update?.update_id;
-  const callbackQuery = update?.callback_query;
-  const message = update?.message;
+  // Только личный чат с ботом (второй аудит входа 30.10.2026). Чат — это
+  // личность: по нему бот находит человека, выдаёт ссылку «вход», задаёт
+  // «это вы входите?». В группе `chat.id` один на всех её участников — код
+  // подключения, отправленный туда, делал человеком ВСЮ группу: «вход»
+  // приходил ссылкой в общий чат, а кнопки под его задачами и вопросом о
+  // входе мог нажать любой. Нажатие в личном чате приходит от того же
+  // человека, чей это чат (`from.id === chat.id`) — проверяем и это.
+  const privateChat = (chat: { id?: number; type?: string } | undefined, fromId?: number) =>
+    !!chat && chat.type === "private" && (fromId == null || fromId === chat.id);
+  const rawCallback = update?.callback_query;
+  const callbackQuery = rawCallback && privateChat(rawCallback.message?.chat, rawCallback.from?.id) ? rawCallback : undefined;
+  const message = update?.message && privateChat(update.message.chat, update.message.from?.id) ? update.message : undefined;
+  if (rawCallback && !callbackQuery) {
+    await telegramTransport().resolveCallback({ callbackId: rawCallback.id, chatId: 0, toast: "Кнопки бота работают только в личном чате с ним" });
+    return NextResponse.json({ ok: true });
+  }
   const chatId: number | undefined = message?.chat?.id;
   const voiceFileId: string | undefined = message?.voice?.file_id;
   let text: string | undefined = message?.text;
