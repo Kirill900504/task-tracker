@@ -5,7 +5,7 @@ import { readInput, reviewInput } from "@/lib/apiInput";
 import { taskButtons, type ColleagueRow } from "@/lib/colleagues";
 import { sendToPerson } from "@/lib/reach";
 import { recordEvent } from "@/lib/itemHistory";
-import { applyReview, type ReviewAction } from "@/lib/reviewWork";
+import { applyReview, markReturnedAsWorking, type ReviewAction } from "@/lib/reviewWork";
 import { actorName, withoutSelfMark } from "@/lib/actorName";
 import { fmtDate } from "@/lib/taskDisplay";
 import { isSelfAssignee } from "@/lib/trackerRows";
@@ -124,6 +124,7 @@ export async function POST(req: Request) {
       .from("task_participants")
       .update({ done_at: null, done_comment: null, done_files: [], declined_at: null, decline_reason: null })
       .eq("id", one.id);
+    await markReturnedAsWorking(admin, [one.id], new Date().toISOString());
     await admin.from("tasks").update({ approval_state: "open" }).eq("id", task.id).eq("approval_state", "awaiting_review");
     const { data: personRow } = await admin
       .from("assignees")
