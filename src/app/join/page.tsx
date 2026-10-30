@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { emailProblem, passwordProblem } from "@/lib/workspaceInvite";
+import PasswordHints from "@/components/PasswordHints";
 
 // Where a manager comes in. This is the whole of registration: no link from
 // anywhere, no form to find, nothing to sign up for — you are here because
@@ -188,6 +189,9 @@ function JoinForm() {
                   required
                 />
               </div>
+              {/* Те же требования, что сервер проверит при входе в трекер
+                  (lib/workspaceInvite.PASSWORD_RULES), — видны, пока печатают. */}
+              <PasswordHints password={password} repeat={repeat} />
 
               <button type="submit" className="auth-btn" disabled={busy}>
                 {busy ? "Заходим…" : "Войти в трекер"}
