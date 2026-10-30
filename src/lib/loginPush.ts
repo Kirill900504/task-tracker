@@ -82,8 +82,16 @@ export async function findPeople(admin: SupabaseClient, who: string): Promise<Pe
   }
   // Фамилия или «Имя Фамилия» — то, что знает о себе каждый. Людей в
   // трекере десятки, поэтому выборка целиком и сравнение здесь.
-  const { data } = await admin.from("assignees").select(PERSON_COLUMNS).is("archived_at", null);
-  const rows = ((data || []) as PersonRow[]).filter((row) => nameMatches(row.name, value));
+  // Только строки настоящих пространств — тех, чей хозяин сам ничей не
+  // участник. До миграции 0076 синхронизация руководителя заводила копии
+  // имён в его собственном пустом «пространстве», и «Синецкий» находил
+  // троих: вход по фамилии отвечал «нашлось несколько» самому Синецкому.
+  const [{ data }, { data: members }] = await Promise.all([
+    admin.from("assignees").select(PERSON_COLUMNS).is("archived_at", null),
+    admin.from("workspace_members").select("member_id").not("member_id", "is", null),
+  ]);
+  const memberIds = new Set(((members || []) as { member_id: string }[]).map((m) => m.member_id));
+  const rows = ((data || []) as PersonRow[]).filter((row) => !memberIds.has(row.user_id) && nameMatches(row.name, value));
   // Расплывчатое («Иван») не рассылается всем Иванам сразу.
   return rows.length > MAX_NAME_MATCHES ? "vague" : rows;
 }
