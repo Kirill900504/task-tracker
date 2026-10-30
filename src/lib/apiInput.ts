@@ -153,6 +153,14 @@ export const personInput = z.discriminatedUnion("action", [
 ]);
 export const forgotPasswordInput = z.object({ email: EMAIL });
 
+// Вход запросом в мессенджер (lib/loginPush): телефон или почта — одной
+// строкой, разбирает маршрут.
+export const loginPushInput = z.object({
+  token: z.string().regex(/^LOGIN[A-Z0-9]{20}$/, "неверный запрос входа"),
+  channel: z.enum(["telegram", "max"]),
+  who: z.string().trim().min(5, "телефон или почта").max(200),
+});
+
 // Разобрать тело запроса. Ошибка возвращается готовым ответом — с именем
 // поля, а не общим «Неполный запрос»: половина обращений «кнопка не
 // работает» кончалась чтением логов ровно потому, что ответ не говорил

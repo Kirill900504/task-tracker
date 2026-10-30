@@ -1007,6 +1007,17 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 }
 @keyframes ms-spin{to{transform:rotate(360deg);}}
 @media (prefers-reduced-motion: reduce){ .ms-signin-spin{animation:none;} }
+/* Запрос в мессенджер (lib/loginPush): поле «телефон или почта» и число
+   для сверки — крупно, его ищут глазами в чате среди трёх кнопок. */
+.ms-signin-who{display:flex; flex-direction:column; gap:8px;}
+.ms-signin-who .auth-field{margin:0;}
+.ms-signin-alt{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px;}
+.ms-signin-code-row{margin:6px 0 0; line-height:1.6;}
+.ms-signin-code{
+  display:inline-block; min-width:44px; padding:1px 10px; margin:0 2px;
+  border-radius:var(--radius-sm); background:var(--accent); color:#fff;
+  font-size:20px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums;
+}
 .ms-signin-or{
   display:flex; align-items:center; gap:10px; margin:12px 0 10px;
   color:var(--ink-soft); font-size:12px;

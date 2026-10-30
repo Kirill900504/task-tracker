@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inviteLink } from "@/lib/botInvite";
-import { isLoginToken, newLoginToken } from "@/lib/messengerLogin";
+import { isLoginToken, newLoginCode, newLoginToken } from "@/lib/messengerLogin";
+import { pushLoginRequest } from "@/lib/loginPush";
+import { loginPushInput, readInput } from "@/lib/apiInput";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { clientKeyOf } from "@/lib/clientKey";
 
 // Вход на компьютере через мессенджер (lib/messengerLogin), сторона окна.
 //
-// POST — завести запрос: токен и ссылки на ботов с ним. GET — «ну что?»:
+// POST — завести запрос: токен, число для сверки и ссылки на ботов с ним.
+// PUT — прислать вопрос прямо в чат человека по телефону или почте
+// (lib/loginPush). GET — «ну что?»:
 // ждём / отказ / код входа. Код отдаётся ОДИН раз — строка тут же
 // удаляется, — так что подсмотреть его вторым запросом нельзя.
 //
@@ -42,10 +46,38 @@ export async function POST(req: Request) {
   const { count: alive } = await admin.from("login_requests").select("token", { count: "exact", head: true });
   if ((alive ?? 0) >= MAX_ALIVE) return tooMany;
   const token = newLoginToken();
-  const { error } = await admin.from("login_requests").insert({ token });
+  const code = newLoginCode();
+  const { error } = await admin.from("login_requests").insert({ token, code });
   if (error) return NextResponse.json({ error: "Вход через мессенджер сейчас недоступен" }, { status: 500 });
   const [telegram, max] = await Promise.all([inviteLink("telegram", token), inviteLink("max", token)]);
-  return NextResponse.json({ token, telegram: telegram || null, max: max || null });
+  return NextResponse.json({ token, code, telegram: telegram || null, max: max || null });
+}
+
+// Ответ один и тот же, нашёлся человек или нет: по нему нельзя узнать, чей
+// номер записан в трекере. Что делать, если вопрос не пришёл, страница
+// говорит сама — один раз для всех случаев.
+export async function PUT(req: Request) {
+  const { data: body, error: badInput } = await readInput(req, loginPushInput);
+  if (badInput) return badInput;
+  const admin = createAdminClient();
+  const client = clientKeyOf(req);
+  if (client) {
+    const { allowed } = await checkRateLimit(admin, client, "login-push-client", PER_CLIENT, PER_CLIENT_WINDOW_S);
+    if (!allowed) return NextResponse.json({ error: "Слишком много попыток входа — попробуйте через несколько минут" }, { status: 429 });
+  }
+  const { data: request } = await admin
+    .from("login_requests")
+    .select("code, expires_at, approved_at, refused_at")
+    .eq("token", body.token)
+    .maybeSingle();
+  // Число обязательно: вопрос, пришедший сам, без сверки отдал бы вход
+  // любому, кто знает чужой номер (lib/messengerLogin).
+  const stale = !request || request.code == null || request.approved_at || request.refused_at;
+  if (stale || new Date(request.expires_at as string).getTime() < Date.now()) {
+    return NextResponse.json({ error: "Запрос устарел — нажмите кнопку ещё раз" }, { status: 409 });
+  }
+  await pushLoginRequest(admin, body.token, request.code as number, body.channel, body.who);
+  return NextResponse.json({ ok: true });
 }
 
 export async function GET(req: Request) {
