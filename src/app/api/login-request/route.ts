@@ -53,9 +53,9 @@ export async function POST(req: Request) {
   return NextResponse.json({ token, code, telegram: telegram || null, max: max || null });
 }
 
-// Ответ один и тот же, нашёлся человек или нет: по нему нельзя узнать, чей
-// номер записан в трекере. Что делать, если вопрос не пришёл, страница
-// говорит сама — один раз для всех случаев.
+// Ответ говорит, что вышло (lib/loginPush, PushOutcome): немое
+// «отправлено» при неудаче стоило Кириллу двух попыток впустую. Перебору
+// фамилий и номеров мешает предел по адресу ниже.
 export async function PUT(req: Request) {
   const { data: body, error: badInput } = await readInput(req, loginPushInput);
   if (badInput) return badInput;
@@ -76,8 +76,8 @@ export async function PUT(req: Request) {
   if (stale || new Date(request.expires_at as string).getTime() < Date.now()) {
     return NextResponse.json({ error: "Запрос устарел — нажмите кнопку ещё раз" }, { status: 409 });
   }
-  await pushLoginRequest(admin, body.token, request.code as number, body.channel, body.who);
-  return NextResponse.json({ ok: true });
+  const outcome = await pushLoginRequest(admin, body.token, request.code as number, body.channel, body.who);
+  return NextResponse.json({ outcome });
 }
 
 export async function GET(req: Request) {

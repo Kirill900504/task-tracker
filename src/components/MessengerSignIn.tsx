@@ -31,6 +31,22 @@ const LABEL: Record<Channel, string> = { telegram: "Telegram", max: "MAX" };
 // Чем входили в прошлый раз — чтобы не набирать снова после выхода.
 const WHO_KEY = "rokas.loginWho";
 
+// Что сказать, если запрос не ушёл (lib/loginPush, PushOutcome).
+function failureText(outcome: string, who: string, label: string): string {
+  switch (outcome) {
+    case "not_found":
+      return `Не нашли вас по «${who}». Напишите фамилию так, как она записана в трекере.`;
+    case "vague":
+      return `По «${who}» нашлось несколько человек — напишите имя и фамилию.`;
+    case "not_connected":
+      return `У вас не подключён ${label}. Войдите через другой мессенджер или откройте бота ссылкой ниже.`;
+    case "too_many":
+      return "Запросов было слишком много — подождите десять минут.";
+    default:
+      return `${label} сейчас не принял сообщение — попробуйте ещё раз или откройте бота ссылкой ниже.`;
+  }
+}
+
 async function createRequest(): Promise<Request | null> {
   try {
     const res = await fetch("/api/login-request", { method: "POST" });
@@ -139,10 +155,14 @@ export default function MessengerSignIn({ orLabel = "или почтой и па
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: tokenRef.current, channel, who: value }),
       });
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      const data = (await res.json().catch(() => null)) as { error?: string; outcome?: string } | null;
       if (!res.ok) {
         setNote(data?.error || "Не получилось отправить запрос — попробуйте ещё раз.");
         if (res.status === 409) void fresh();
+        return;
+      }
+      if (data?.outcome !== "sent") {
+        setNote(failureText(data?.outcome || "", value, LABEL[channel]));
         return;
       }
       try {
@@ -205,7 +225,7 @@ export default function MessengerSignIn({ orLabel = "или почтой и па
             )}
             {pushed && (
               <div className="auth-hint" style={{ margin: "6px 0 0" }}>
-                Не пришло за полминуты — значит, по введённому вас не нашли (попробуйте имя и фамилию) или {LABEL[waiting]} не подключён.{" "}
+                Не пришло за полминуты — проверьте чат с ботом в {LABEL[waiting]} или откройте его отсюда:{" "}
                 {openBot(waiting)}
               </div>
             )}

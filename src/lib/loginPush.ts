@@ -68,9 +68,9 @@ export function nameMatches(name: string, query: string): boolean {
   return want.length > 0 && want.every((w) => have.has(w));
 }
 
-export async function loginTargets(admin: SupabaseClient, who: string): Promise<Target[]> {
+// Люди по введённому. "vague" — фамилия подошла слишком многим.
+async function findPeople(admin: SupabaseClient, who: string): Promise<PersonRow[] | "vague"> {
   const value = who.trim();
-  let rows: PersonRow[] = [];
   if (value.includes("@")) {
     const user = await findUserByEmail(admin, value);
     if (!user) return [];
@@ -79,38 +79,51 @@ export async function loginTargets(admin: SupabaseClient, who: string): Promise<
     const { data } = membership?.assignee_id
       ? await query.eq("id", membership.assignee_id)
       : await query.eq("user_id", user.id).like("name", "%(я)");
-    rows = (data || []) as PersonRow[];
-  } else if (/\p{L}/u.test(value)) {
+    return (data || []) as PersonRow[];
+  }
+  if (/\p{L}/u.test(value)) {
     // Фамилия или «Имя Фамилия» — то, что знает о себе каждый. Людей в
     // трекере десятки, поэтому выборка целиком и сравнение здесь.
     const { data } = await admin.from("assignees").select(PERSON_COLUMNS).is("archived_at", null);
-    rows = ((data || []) as PersonRow[]).filter((row) => nameMatches(row.name, value));
+    const rows = ((data || []) as PersonRow[]).filter((row) => nameMatches(row.name, value));
     // Расплывчатое («Иван») не рассылается всем Иванам сразу.
-    if (rows.length > MAX_NAME_MATCHES) return [];
-  } else {
-    const phone = normalizePhone(value);
-    if (!phone) return [];
-    const { data } = await admin.from("assignees").select(PERSON_COLUMNS).eq("phone", phone).is("archived_at", null);
-    rows = (data || []) as PersonRow[];
+    return rows.length > MAX_NAME_MATCHES ? "vague" : rows;
   }
-  return (await Promise.all(rows.map((row) => chatsOfRow(admin, row)))).flat();
+  const phone = normalizePhone(value);
+  if (!phone) return [];
+  const { data } = await admin.from("assignees").select(PERSON_COLUMNS).eq("phone", phone).is("archived_at", null);
+  return (data || []) as PersonRow[];
 }
 
-// Прислать вопрос «это вы входите?» в выбранный мессенджер. Ничего не
-// сообщает о том, нашёлся ли человек: ответ маршрута одинаков для всех.
+// Что вышло — странице, словами. До 30.10.2026 маршрут отвечал «отправлено»
+// всегда, чтобы по ответу нельзя было узнать, чей номер записан в трекере.
+// На деле это означало, что Кирилл дважды подряд ждал запрос, которого не
+// было: не нашёлся он, а экран писал «Запрос отправлен». Немое «отправлено»
+// при неудаче — та же поломка, только без следов; поэтому честно, а от
+// перебора защищает предел частоты по адресу в маршруте.
+export type PushOutcome = "sent" | "not_found" | "vague" | "not_connected" | "too_many" | "failed";
+
+// Прислать вопрос «это вы входите?» в выбранный мессенджер.
 export async function pushLoginRequest(
   admin: SupabaseClient,
   token: string,
   code: number,
   channel: "telegram" | "max",
   who: string,
-): Promise<void> {
-  const targets = (await loginTargets(admin, who)).filter((t) => t.channel.id === channel);
-  await Promise.all(
-    targets.map(async (target) => {
+): Promise<PushOutcome> {
+  const people = await findPeople(admin, who);
+  if (people === "vague") return "vague";
+  if (!people.length) return "not_found";
+  const targets = (await Promise.all(people.map((row) => chatsOfRow(admin, row)))).flat().filter((t) => t.channel.id === channel);
+  if (!targets.length) return "not_connected";
+  const results = await Promise.all(
+    targets.map(async (target): Promise<PushOutcome> => {
       const { allowed } = await checkRateLimit(admin, target.key, "login-push", PER_PERSON, PER_PERSON_WINDOW_S);
-      if (!allowed) return;
-      await sendToColleague(target, LOGIN_PROMPT_TEXT, loginButtons(token, code));
+      if (!allowed) return "too_many";
+      const sent = await sendToColleague(target, LOGIN_PROMPT_TEXT, loginButtons(token, code));
+      if (!sent.ok) console.error("login push failed", channel, sent.error);
+      return sent.ok ? "sent" : "failed";
     }),
   );
+  return results.includes("sent") ? "sent" : results.includes("too_many") ? "too_many" : "failed";
 }

@@ -70,10 +70,18 @@ test("вход через бота: окно ждёт подтверждения
   expect(href).toMatch(/^tg:\/\/resolve\?domain=[A-Za-z0-9_]+&start=LOGIN[A-Z0-9]{20}$/);
   const token = /start=(LOGIN[A-Z0-9]{20})/.exec(href)![1];
 
-  // Главная дорога — запрос в чат по фамилии, телефону или почте. Ответ одинаков,
-  // нашёлся человек или нет, и окно начинает ждать с числом для сверки.
+  // Главная дорога — запрос в чат по фамилии, телефону или почте. Не
+  // нашёлся — так и сказано, а не «отправлено» (30.10.2026: дважды ждали
+  // запрос, которого не было).
   await page.locator("#msWho").fill("нет-такой@example.invalid");
   await page.locator("#msPushBtn").click();
+  await expect(page.locator(".ms-signin-who")).toContainText("Не нашли вас");
+  await expect(page.locator(".ms-signin-wait")).toHaveCount(0);
+
+  // Ссылка на бота тоже ставит окно ждать — с числом для сверки. Сам
+  // переход в tg:// гасим: приложения Telegram в прогоне нет.
+  await open.evaluate((a) => a.addEventListener("click", (e) => e.preventDefault()));
+  await open.click();
   await expect(page.locator(".ms-signin-wait")).toBeVisible();
   const { data: row } = await db.from("login_requests").select("code").eq("token", token).single();
   await expect(page.locator("#loginCode")).toHaveText(String(row!.code));
