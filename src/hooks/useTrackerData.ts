@@ -94,6 +94,21 @@ const FAST_PROBE_MS = 5500;
 
 // Rejects rather than hanging: see boot()'s comment about connections that
 // accept a request and never answer.
+// Что лежит в облаке прямо сейчас — одно чтение на старт, догон и раннюю
+// загрузку ниже. Пространство в запросе не названо нарочно: строки отбирают
+// права базы (can_see_item), поэтому ответ не зависит от того, выяснена ли
+// уже роль.
+function queryAll(db: SupabaseClient, retry: boolean) {
+  return Promise.all([
+    db.from("tasks").select("*").is("deleted_at", null).retry(retry),
+    db.from("meetings").select("*").is("deleted_at", null).retry(retry),
+    db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }).retry(retry),
+    // Убранных из команды (миграция 0055) в списке выбора нет.
+    db.from("assignees").select("name, created_at").is("archived_at", null).order("created_at", { ascending: true }).retry(retry),
+    db.from("sections").select("*").order("sort_order", { ascending: true }).retry(retry),
+  ]);
+}
+
 function withTimeout<T>(promise: Promise<T>, ms = NETWORK_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
@@ -146,6 +161,9 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
   const [offline, setOffline] = useState(false);
 
   const dbRef = useRef<SupabaseClient | null>(null);
+  // Чтение, начатое ДО того, как выяснилась роль (эффект ниже), — им boot
+  // и пользуется вместо того, чтобы спрашивать то же самое второй раз.
+  const earlyLoadRef = useRef<ReturnType<typeof queryAll> | null>(null);
   // Mirrors of the state above, read synchronously by persistAll()/
   // scheduleRetry() so they never act on a stale closure — every setter
   // below updates the ref in the same call that updates React state.
@@ -663,6 +681,21 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     }
   }
 
+  // Первый вход на устройстве (30.10.2026, «опять после входа прогружается
+  // долго!!!»): роли в localStorage ещё нет, и она выясняется по сети тремя
+  // запросами подряд, а данные ждали её — замер на боевом, 0,8 с каркаса
+  // ни на что. Но данным роль не нужна (queryAll), поэтому, пока она
+  // выясняется, они уже едут. При обычном открытии роль берётся из
+  // localStorage, `enabled` истинно с первого кадра, и сюда не заходят.
+  useEffect(() => {
+    if (enabled || earlyLoadRef.current) return;
+    const early = queryAll(createClient(), true);
+    // Отказ дождётся boot; без обработчика он стал бы «необработанным» и
+    // ушёл бы в журнал поломок (CrashWatch) раньше, чем его кто-то ждёт.
+    early.catch(() => {});
+    earlyLoadRef.current = early;
+  }, [enabled]);
+
   // ---- Boot: load auth session, initial data, panel layout, seed shadow,
   // subscribe to realtime. Mirrors legacy-tracker.js's boot() function.
   useEffect(() => {
@@ -683,18 +716,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     // ~6 секунд, и всё это время копия выглядела живыми данными. Значок
     // «нет связи» появлялся позже, чем человек успевал что-то записать
     // (QA-проход 06.10.2026; тот же сдвиг годами краснил e2e офлайна).
-    const loadAll = (ms?: number, retry = true) =>
-      withTimeout(
-        Promise.all([
-          db.from("tasks").select("*").is("deleted_at", null).retry(retry),
-          db.from("meetings").select("*").is("deleted_at", null).retry(retry),
-          db.from("ideas").select("*").is("deleted_at", null).order("created_at", { ascending: true }).retry(retry),
-          // Убранных из команды (миграция 0055) в списке выбора нет.
-          db.from("assignees").select("name, created_at").is("archived_at", null).order("created_at", { ascending: true }).retry(retry),
-          db.from("sections").select("*").order("sort_order", { ascending: true }).retry(retry),
-        ]),
-        ms,
-      );
+    const loadAll = (ms?: number, retry = true) => withTimeout(queryAll(db, retry), ms);
 
     let booting = false;
     async function boot() {
@@ -781,7 +803,9 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         // пробуется коротко, и по её молчанию сразу поднимается «нет
         // связи»; настоящая попытка продолжается следом, с обычным
         // терпением, и снимает баннер, когда ответит.
-        results = await loadAll(fastStart ? FAST_PROBE_MS : undefined, !fastStart);
+        const early = earlyLoadRef.current;
+        earlyLoadRef.current = null;
+        results = await (early && !fastStart ? withTimeout(early) : loadAll(fastStart ? FAST_PROBE_MS : undefined, !fastStart));
         // Без повторов отказ сети приходит не исключением, а строкой с
         // ошибкой — для пробы это тот же ответ «связи нет».
         if (fastStart && results.some((r) => r.error)) throw new Error("probe failed");

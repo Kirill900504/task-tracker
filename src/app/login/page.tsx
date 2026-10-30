@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { hasMessengerLaunch, miniAppRedirect } from "@/lib/messengerLaunch";
 import MessengerSignIn from "@/components/MessengerSignIn";
+import { warmTracker } from "@/lib/warmTracker";
 
 // The front door. Shares its look with /join and /reset-password (.auth-*
 // in tracker.css) — they are one screen with different words on it, and
@@ -57,6 +58,12 @@ function LoginScreen() {
     if (hasMessengerLaunch(window.location.hash)) {
       window.location.replace(miniAppRedirect(window.location.hash));
     }
+  }, []);
+
+  // Трекер скачивается, пока человек набирает пароль (lib/warmTracker) — и
+  // обычному входу, и входу через мессенджер.
+  useEffect(() => {
+    warmTracker();
   }, []);
 
   async function handleSubmit(e: FormEvent) {

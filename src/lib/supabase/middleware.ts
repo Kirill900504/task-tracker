@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_COOKIE_OPTIONS } from "./cookieOptions";
+import { WARM_PARAM } from "@/lib/warmTracker";
 
 // A write to /api sent by a page on ANOTHER site. The sign-in cookie is
 // SameSite=None (see cookieOptions — the mini-app lives in MAX's and
@@ -47,6 +48,13 @@ export async function updateSession(request: NextRequest) {
   // /welcome — страница приглашения (lib/welcomeInvite): её открывает
   // человек, у которого ещё нет ни входа, ни сессии.
   if (["/reset-password", "/join", "/app", "/enter", "/welcome"].some((p) => path.startsWith(p))) return NextResponse.next({ request });
+  // Прогрев со страницы входа (lib/warmTracker): человек ещё не вошёл, а
+  // файлы трекера уже качаются. «/» — клиентская оболочка, на сервере она
+  // рисует только каркас, а данные читает браузер под правами базы, так что
+  // без сессии здесь отдавать нечего, кроме ссылок на тот же публичный JS.
+  // Отправь мы этот запрос на /login — прогрева нет, и после «Войти» всё
+  // качается с нуля (замер 30.10.2026: 2,8 с из 5,7).
+  if (path === "/" && request.nextUrl.searchParams.has(WARM_PARAM)) return NextResponse.next({ request });
 
   let supabaseResponse = NextResponse.next({ request });
 
