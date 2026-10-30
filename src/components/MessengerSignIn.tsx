@@ -2,21 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { typePhone } from "@/lib/phone";
 import { MaxBrandIcon, TelegramBrandIcon } from "@/components/tracker/MessengerBrandIcon";
 
 // «Войти через Telegram / MAX» на странице входа (lib/messengerLogin).
 //
 // Главная дорога — запрос, который приходит в чат САМ (lib/loginPush,
-// 30.10.2026): человек пишет фамилию, телефон или почту, бот присылает вопрос, и
+// 30.10.2026): человек пишет фамилию или почту, бот присылает вопрос, и
 // мессенджер показывает его уведомлением на всех устройствах. До этого
 // кнопка была ссылкой t.me, и браузер компьютера открывал не Telegram, а
 // страницу «Start bot / Open in Web» — лишний шаг, на котором и вставали.
 // В чате человек нажимает число, которое видит здесь (сверка: чужой номер
 // ввести может кто угодно, а число видит только тот, кто входит).
 //
-// Ссылка на бота осталась запасной — для того, чьи телефон и почта в
-// трекер не записаны. На компьютере она ведёт в приложение Telegram
+// Ссылка на бота осталась запасной — для того, кого по фамилии и почте
+// не нашли. На компьютере она ведёт в приложение Telegram
 // напрямую (tg://), минуя ту же страницу t.me. Запрос заводится заранее,
 // при открытии страницы: ссылку, полученную после `await`, браузер открыть
 // уже не даст.
@@ -70,7 +69,10 @@ function botHref(link: string): string {
 
 function readWho(): string {
   try {
-    return typeof window === "undefined" ? "" : localStorage.getItem(WHO_KEY) || "";
+    const saved = typeof window === "undefined" ? "" : localStorage.getItem(WHO_KEY) || "";
+    // Номер, запомненный до 30.10.2026, когда в поле принимали телефон, —
+    // по нему больше не ищут, и подставлять его значит снова «не нашли».
+    return /\p{L}/u.test(saved) ? saved : "";
   } catch {
     return "";
   }
@@ -243,7 +245,7 @@ export default function MessengerSignIn({ orLabel = "или почтой и па
           }}
         >
           <div className="auth-field">
-            <label htmlFor="msWho">Ваша фамилия, телефон или почта</label>
+            <label htmlFor="msWho">Ваша фамилия или почта</label>
             <input
               id="msWho"
               type="text"
@@ -251,11 +253,7 @@ export default function MessengerSignIn({ orLabel = "или почтой и па
               autoFocus
               placeholder="Иванов"
               value={who}
-              onChange={(e) => {
-                const raw = e.target.value;
-                // Цифры — это телефон: тот же вид, что в «Моих данных».
-                setWho(/[^\d\s()+\-.]/.test(raw) ? raw : typePhone(raw, who));
-              }}
+              onChange={(e) => setWho(e.target.value)}
             />
           </div>
           <button type="submit" className="auth-btn ms-signin-btn" id="msPushBtn" disabled={sending || !who.trim()}>

@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { chatsFor, type ColleagueRow } from "@/lib/colleagues";
 import { ownerChats, sendToColleague, type OwnerChat } from "@/lib/botDelivery";
 import { findUserByEmail } from "@/lib/findUserByEmail";
-import { normalizePhone } from "@/lib/phone";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { LOGIN_PROMPT_TEXT, loginButtons } from "@/lib/messengerLogin";
 
@@ -13,16 +12,16 @@ import { LOGIN_PROMPT_TEXT, loginButtons } from "@/lib/messengerLogin";
 // Кнопка «Войти через Telegram» была ссылкой t.me с токеном, а t.me в
 // браузере компьютера открывает не Telegram, а свою страницу «Start bot /
 // Open in Web» — третий шаг, на котором человек и останавливался. Теперь
-// окно входа спрашивает телефон или почту, а бот сам присылает вопрос в
+// окно входа спрашивает фамилию или почту, а бот сам присылает вопрос в
 // чат: Telegram и MAX показывают его уведомлением на всех устройствах, где
-// человек вошёл. Ссылка на бота осталась запасной дорогой — для того, чей
-// телефон и почта в трекер не записаны.
+// человек вошёл. Ссылка на бота осталась запасной дорогой — для того, кого
+// по фамилии и почте не нашли.
 //
-// Кому слать — решают фамилия (имя в «Команде»), телефон из «Моих данных»
-// (assignees.phone) или почта входа. Фамилия добавлена в тот же день, после
-// первой же попытки Кирилла: телефон тогда был записан у одного человека из
-// пятнадцати, а почта у большинства служебная, — по ним не находился почти
-// никто, и запрос молча не уходил. Найденному человеку уходит вопрос с числом для сверки
+// Кому слать — решают фамилия (имя в «Команде») или почта входа. Телефона
+// здесь нет нарочно (30.10.2026, его слова: «давай добавим идентификатор
+// фамилию и почту, а телефон уберём, чтобы не путать людей»): он записан
+// у одного человека из пятнадцати, и поле «фамилия, телефон или почта»
+// обещало дорогу, которой у остальных нет. Фамилию знает о себе каждый. Найденному человеку уходит вопрос с числом для сверки
 // (lib/messengerLogin): ввести чужой номер может кто угодно, а число на
 // экране входа видит только тот, кто входит.
 
@@ -81,18 +80,12 @@ async function findPeople(admin: SupabaseClient, who: string): Promise<PersonRow
       : await query.eq("user_id", user.id).like("name", "%(я)");
     return (data || []) as PersonRow[];
   }
-  if (/\p{L}/u.test(value)) {
-    // Фамилия или «Имя Фамилия» — то, что знает о себе каждый. Людей в
-    // трекере десятки, поэтому выборка целиком и сравнение здесь.
-    const { data } = await admin.from("assignees").select(PERSON_COLUMNS).is("archived_at", null);
-    const rows = ((data || []) as PersonRow[]).filter((row) => nameMatches(row.name, value));
-    // Расплывчатое («Иван») не рассылается всем Иванам сразу.
-    return rows.length > MAX_NAME_MATCHES ? "vague" : rows;
-  }
-  const phone = normalizePhone(value);
-  if (!phone) return [];
-  const { data } = await admin.from("assignees").select(PERSON_COLUMNS).eq("phone", phone).is("archived_at", null);
-  return (data || []) as PersonRow[];
+  // Фамилия или «Имя Фамилия» — то, что знает о себе каждый. Людей в
+  // трекере десятки, поэтому выборка целиком и сравнение здесь.
+  const { data } = await admin.from("assignees").select(PERSON_COLUMNS).is("archived_at", null);
+  const rows = ((data || []) as PersonRow[]).filter((row) => nameMatches(row.name, value));
+  // Расплывчатое («Иван») не рассылается всем Иванам сразу.
+  return rows.length > MAX_NAME_MATCHES ? "vague" : rows;
 }
 
 // Что вышло — странице, словами. До 30.10.2026 маршрут отвечал «отправлено»
