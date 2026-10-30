@@ -4,7 +4,7 @@ import { miniAppUrl, trackerUrl } from "@/lib/trackerUrl";
 import { ensureCabinet } from "@/lib/cabinet";
 import { assignerHelp } from "@/lib/ownerQueries";
 import type { BotButton } from "@/lib/botTransport";
-import { encodeCallback, meetingButtons, taskButtons } from "@/lib/colleagues";
+import { encodeCallback, meetingButtons, taskButtons, withoutMenu } from "@/lib/colleagues";
 import { openTaskChoices, openVoteChoices } from "@/lib/answerRules";
 import { botMenu, navRow } from "@/lib/botMenu";
 import { fmtDate } from "@/lib/taskDisplay";
@@ -520,7 +520,7 @@ export async function taskCard(
   const actions = done
     ? [[{ text: own ? "📝 Заметка" : "💬 Ответить", data: encodeCallback("task", "msg", taskId) }]]
     : taskButtons(taskId, row.role, open, own);
-  return { text: lines.join("\n"), buttons: withNav ? [...actions, ...navButtons()] : actions };
+  return { text: lines.join("\n"), buttons: withNav ? [...withoutMenu(actions), ...navButtons()] : actions };
 }
 
 export async function meetingCard(
@@ -579,7 +579,7 @@ export async function meetingCard(
   // «опоздаю», после «опоздаю» и «не смогу» — ничего. «Ответить» в наборе
   // meetingButtons уже есть — второй такой строки здесь не нужно.
   const choices = openVoteChoices(row, Number(meeting.vote_round ?? 1) || 1);
-  return { text: lines.join("\n"), buttons: withNav ? [...meetingButtons(meetingId, choices), ...navButtons()] : meetingButtons(meetingId, choices) };
+  return { text: lines.join("\n"), buttons: withNav ? [...withoutMenu(meetingButtons(meetingId, choices)), ...navButtons()] : meetingButtons(meetingId, choices) };
 }
 
 // Кто идёт на встречу — тот же расклад, что показывает карточка в трекере.

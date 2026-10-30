@@ -33,6 +33,26 @@ export const PEOPLE_CHAT_COLUMNS = "telegram_chat_id, max_user_id, messenger";
 
 export type SendKind = "task" | "meeting" | "idea";
 
+// Дверь в меню под каждым сообщением о задаче или встрече (30.10.2026, его
+// слова: «не хватает кнопки возвращения к главному меню, историю надо
+// листать вверх»). Меню жило только под экранами меню и под сводкой, а
+// задачи, реплики и ответы приходят каждый день — и меню уезжало вверх
+// под ними.
+// Одна кнопка на обе половины бота: `t:list:menu` разбирает половина
+// получателя, а в чате постановщика нажатие, не узнанное постановщиком,
+// пробуется как «коллежское» (lib/botCallback) и показывает меню
+// постановщика (canAssign в colleagueQueries). Кнопка не помечена как
+// экран: под присланной задачей меню открывается новым сообщением, а не
+// стирает задачу.
+export const MENU_DATA = "t:list:menu"; // = encodeCallback("task", "list", "menu")
+export const MENU_BUTTON: BotButton = { text: "☰ Меню", data: MENU_DATA };
+
+// Под экраном, у которого внизу свой ряд «☰ Меню · Мои задачи», вторая
+// такая же кнопка не нужна.
+export function withoutMenu(rows: BotButton[][]): BotButton[][] {
+  return rows.map((r) => r.filter((b) => b.data !== MENU_DATA)).filter((r) => r.length);
+}
+
 // Ответить ровно в это обсуждение.
 //
 // Без этой кнопки написанное коллегой уходило в «самую свежую открытую
@@ -41,7 +61,7 @@ export type SendKind = "task" | "meeting" | "idea";
 // обсуждения и под самой задачей: ответ адресуется тем же нажатием,
 // которым его читают.
 export function replyButtons(kind: "task" | "meeting", itemId: string): BotButton[][] {
-  return [[{ text: "💬 Ответить", data: encodeCallback(kind, "msg", itemId) }]];
+  return [[{ text: "💬 Ответить", data: encodeCallback(kind, "msg", itemId) }, MENU_BUTTON]];
 }
 
 // Кто это нажал и что именно — упаковано в данные кнопки, у которых
@@ -177,7 +197,7 @@ export function taskButtons(
   if (role === "coexecutor") {
     return [
       ...(open.accept ? [[{ text: "✅ Принял", data: encodeCallback("task", "acc", taskId) }]] : []),
-      [{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }],
+      [{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }, MENU_BUTTON],
     ];
   }
   const rows: (BotButton | false)[][] = [
@@ -196,7 +216,7 @@ export function taskButtons(
       // разницу между этими двумя ответами постановщик обязан видеть.
       open.move && { text: "📅 Прошу перенос", data: encodeCallback("task", "mv", taskId) },
     ],
-    [{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }],
+    [{ text: "💬 Ответить", data: encodeCallback("task", "msg", taskId) }, MENU_BUTTON],
   ];
   return rows.map((r) => r.filter((b): b is BotButton => !!b)).filter((r) => r.length);
 }
@@ -220,7 +240,7 @@ export function selfTaskButtons(taskId: string): BotButton[][] {
       { text: "✅ Готово", data: encodeCallback("task", "done", taskId) },
       { text: "📅 Перенести срок", data: encodeCallback("task", "mv", taskId) },
     ],
-    [{ text: "📝 Заметка", data: encodeCallback("task", "msg", taskId) }],
+    [{ text: "📝 Заметка", data: encodeCallback("task", "msg", taskId) }, MENU_BUTTON],
   ];
 }
 
@@ -304,6 +324,7 @@ export function meetingButtons(meetingId: string, choices: VoteChoice[] = ["yes"
     // Предложить другое время (20.10.2026) — организатору и остальным, с
     // «подходит / не подходит» (lib/botMoveFlow.handleProposeCallback).
     [{ text: "📆 Предложить другое время", data: encodeCallback("meeting", "pp", meetingId) }],
+    [MENU_BUTTON],
   ];
 }
 

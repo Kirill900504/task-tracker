@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { encodeCallback, decodeCallback, screenButtons, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, rescheduleButtons, selfRescheduleButtons, shiftedDeadline, chatsFor, findOwnerSelfByChat } from "@/lib/colleagues";
+import { encodeCallback, decodeCallback, screenButtons, taskMessage, meetingMessage, ideaMessage, taskButtons, meetingButtons, ideaButtons, replyButtons, withoutMenu, MENU_DATA, rescheduleButtons, selfRescheduleButtons, shiftedDeadline, chatsFor, findOwnerSelfByChat } from "@/lib/colleagues";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { TELEGRAM_CHANNEL } from "@/lib/botTransport";
 
@@ -280,8 +280,8 @@ describe("номер задачи в сообщении", () => {
 describe("своя задача в мессенджере", () => {
   it("две двери вместо четырёх, и перенос назван тем, что делает", () => {
     const flat = taskButtons("t42", "executor", undefined, true).flat();
-    expect(flat.map((b) => b.text)).toEqual(["✅ Готово", "📅 Перенести срок", "📝 Заметка"]);
-    expect(flat.map((b) => b.data)).toEqual(["t:done:t42", "t:mv:t42", "t:msg:t42"]);
+    expect(flat.map((b) => b.text)).toEqual(["✅ Готово", "📅 Перенести срок", "📝 Заметка", "☰ Меню"]);
+    expect(flat.map((b) => b.data)).toEqual(["t:done:t42", "t:mv:t42", "t:msg:t42", "t:list:menu"]);
     expect(flat.some((b) => /Принял|Не могу|Прошу/.test(b.text))).toBe(false);
   });
 
@@ -300,5 +300,30 @@ describe("своя задача в мессенджере", () => {
     const texts = selfRescheduleButtons("t42", "2026-10-15", "2026-10-14").flat().map((b) => b.text);
     expect(texts).toContain("на 3 дня → 18.10");
     expect(texts).toContain("← Отмена");
+  });
+});
+
+// 30.10.2026: «не хватает кнопки возвращения к главному меню, историю надо
+// листать вверх». Меню — под каждым сообщением о задаче и встрече, одной
+// кнопкой на обе половины бота.
+describe("дверь в меню под сообщением", () => {
+  const hasMenu = (rows: { data: string }[][]) => rows.flat().filter((b) => b.data === MENU_DATA).length;
+
+  it("одна кнопка, и это та же, что у получателя в меню", () => {
+    expect(MENU_DATA).toBe(encodeCallback("task", "list", "menu"));
+  });
+
+  it("есть у каждой роли задачи, у встречи и у реплики — ровно одна", () => {
+    for (const role of ["executor", "coexecutor", "watcher"] as const) expect(hasMenu(taskButtons("t1", role))).toBe(1);
+    expect(hasMenu(taskButtons("t1", "executor", { accept: false, done: false, decline: false, move: false }))).toBe(1);
+    expect(hasMenu(meetingButtons("m1"))).toBe(1);
+    expect(hasMenu(meetingButtons("m1", []))).toBe(1);
+    expect(hasMenu(replyButtons("task", "t1"))).toBe(1);
+  });
+
+  it("под экраном со своим рядом меню вторая не появляется", () => {
+    const rows = withoutMenu(taskButtons("t1", "watcher"));
+    expect(hasMenu(rows)).toBe(0);
+    expect(rows.flat().map((b) => b.data)).toEqual(["t:msg:t1"]);
   });
 });

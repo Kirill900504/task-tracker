@@ -4,7 +4,7 @@ import { closedReply, itemClosed } from "@/lib/closedItem";
 import { isLoginToken, loginPrompt } from "@/lib/messengerLogin";
 import { answerOwnOpenQuestion, colleagueHelp, handleColleagueText } from "@/lib/colleagueReplies";
 import { appReply, matchColleagueCommand, navButtons, signInReply } from "@/lib/colleagueQueries";
-import { encodeCallback, findColleagueByChat, findOwnerSelfByChat, screenButtons } from "@/lib/colleagues";
+import { encodeCallback, findColleagueByChat, findOwnerSelfByChat, MENU_BUTTON, screenButtons } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { parseQuickAdd } from "@/lib/quickAdd";
 import { checkRateLimit } from "@/lib/rateLimit";
@@ -1244,7 +1244,9 @@ export async function handleText(baseCtx: BotContext, text: string, reply: Reply
       }
       const answered = await handleColleagueText(ctx.admin, colleague, trimmed, ctx.channel.id, !!asManager);
       if (answered) {
-        await ctx.transport.send(ctx.chatId, answered.reply, answered.buttons?.length ? { buttons: answered.buttons } : undefined);
+        // «Записал…» без своих кнопок — с дверью в меню: это последнее
+        // сообщение в чате, и до меню иначе пришлось бы листать вверх.
+        await ctx.transport.send(ctx.chatId, answered.reply, { buttons: answered.buttons?.length ? answered.buttons : [[MENU_BUTTON]] });
         if (answered.notifyOwner) await notifyAuthor(ctx.admin, colleague.user_id, answered.notifyTo ?? null, answered.notifyOwner, answered.notice);
         return;
       }
@@ -1349,7 +1351,7 @@ export async function handleText(baseCtx: BotContext, text: string, reply: Reply
   if (self) {
     const answered = await answerOwnOpenQuestion(ctx.admin, self, trimmed);
     if (answered) {
-      await ctx.transport.send(ctx.chatId, answered.reply, answered.buttons?.length ? { buttons: answered.buttons } : undefined);
+      await ctx.transport.send(ctx.chatId, answered.reply, { buttons: answered.buttons?.length ? answered.buttons : [[MENU_BUTTON]] });
       // Telling the author is the point; telling himself is noise.
       if (answered.notifyOwner && answered.notifyTo && answered.notifyTo !== account.user_id) {
         await notifyAuthor(ctx.admin, account.user_id, answered.notifyTo, answered.notifyOwner, answered.notice);
