@@ -11,6 +11,7 @@ import RegisterSW from "./registerSW";
 import CrashWatch from "./CrashWatch";
 import VersionWatch from "./VersionWatch";
 import MiniAppChrome from "./MiniAppChrome";
+import TitleTips from "./TitleTips";
 import AskProvider from "@/components/Ask";
 
 // Self-hosted at build time by next/font (no runtime request, no layout
@@ -77,6 +78,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             закрывающееся от прокрутки. Ничего не рисует и вне
             мини-приложения не делает ничего. */}
         <MiniAppChrome />
+        {/* Подсказки при наведении рисует трекер, а не Windows: см. TitleTips. */}
+        <TitleTips />
         {/* Вопросы задаёт трекер, а не браузер: окно живёт здесь, чтобы
             быть доступным на любой странице и рисоваться поверх всего. */}
         <AskProvider>{children}</AskProvider>
