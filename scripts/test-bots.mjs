@@ -124,6 +124,36 @@ try {
   const { data: acceptedTask } = await admin.from("tasks").select("accepted_at").eq("id", taskId).maybeSingle();
   check("records «принял» on the task", !!acceptedTask?.accepted_at, acceptedTask);
 
+  // ---- «Сделал» в мессенджере — одно сообщение постановщику ----
+  //
+  // 30.10.2026, №154: нажатие слало «выполнил… ждёт приёмки», а через
+  // минуту слова исполнителя приходили вторым сообщением. Теперь нажатие
+  // молчит, а слова несут и отчёт, и «ждёт вашей приёмки».
+  const doneTask = "chkd" + Math.random().toString(36).slice(2, 8);
+  await admin.from("tasks").insert({ id: doneTask, user_id: userId, title: "Проверка отчёта", assignee: "Проверочный Коллега", status: "in_progress" });
+  await post(
+    "/api/telegram/webhook",
+    {
+      update_id: Math.floor(Math.random() * 1e9),
+      callback_query: { id: "cbqd", data: "t:done:" + doneTask, message: { chat: { id: colleagueChat, type: "private" }, message_id: 6 } },
+    },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: noticesAfterPress, error: queueError } = await admin.from("notification_queue").select("kind").eq("user_id", userId).eq("item", "Проверка отчёта");
+  check("очередь уведомлений читается", !queueError, queueError);
+  check("«Сделал» само постановщику не пишет — ждёт слов", (noticesAfterPress || []).length === 0, noticesAfterPress);
+  await post(
+    "/api/telegram/webhook",
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text: "Свёл цифры за октябрь" } },
+    { "x-telegram-bot-api-secret-token": tgSecret },
+  );
+  const { data: noticesAfterWords } = await admin.from("notification_queue").select("kind, what").eq("user_id", userId).eq("item", "Проверка отчёта");
+  check(
+    "слова исполнителя — одно уведомление, и в нём «ждёт приёмки»",
+    noticesAfterWords?.length === 1 && noticesAfterWords[0].kind === "reported_all" && noticesAfterWords[0].what === "Свёл цифры за октябрь",
+    noticesAfterWords,
+  );
+
   // ---- Встреча: «Не смогу» и обязательная причина ----
   //
   // Причина спрашивается не вторым вопросом в очереди, а незаполненной
