@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { MaxBrandIcon, TelegramBrandIcon } from "@/components/tracker/MessengerBrandIcon";
+import { workerSettled } from "@/lib/warmTracker";
 
 // «Войти через Telegram / MAX» на странице входа (lib/messengerLogin).
 //
@@ -131,6 +132,8 @@ export default function MessengerSignIn({ orLabel = "или почтой и па
           void fresh();
           return;
         }
+        // См. lib/warmTracker: переход, ушедший раньше воркера, остаётся без него.
+        await workerSettled();
         window.location.replace("/");
         return;
       }

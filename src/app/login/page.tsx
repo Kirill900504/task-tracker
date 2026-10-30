@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { hasMessengerLaunch, miniAppRedirect } from "@/lib/messengerLaunch";
 import MessengerSignIn from "@/components/MessengerSignIn";
-import { warmTracker } from "@/lib/warmTracker";
+import { warmTracker, workerSettled } from "@/lib/warmTracker";
 
 // The front door. Shares its look with /join and /reset-password (.auth-*
 // in tracker.css) — they are one screen with different words on it, and
@@ -89,6 +89,7 @@ function LoginScreen() {
     // сервера. Мягкий переход ходил за «/» на сервер дважды (push и refresh),
     // и каждый раз через проверку сессии в прослойке. Так же входят через
     // мессенджер (MessengerSignIn) и по ссылке (/enter).
+    await workerSettled();
     window.location.replace("/");
   }
 

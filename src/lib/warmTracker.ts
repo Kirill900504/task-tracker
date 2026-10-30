@@ -50,3 +50,18 @@ export function warmTracker(): void {
     }
   })();
 }
+
+// Полный переход после «Войти» — только когда воркер уже стоит.
+//
+// Воркер берёт под себя открытые страницы при активации (clients.claim), но
+// страницу, чей запрос ушёл ДО неё, он не получит никогда: она приходит из
+// сети, остаётся без воркера, и офлайн-копия «/» до следующего открытия не
+// работает. При мягком переходе этого не было — документ оставался тем же и
+// воркер забирал его. Человек печатает дольше, чем воркер ставится, так что
+// обычно ждать нечего; поймал это e2e, нажимающий «Войти» сразу после
+// загрузки (instantOpen). Ожидание ограничено: воркер — это офлайн, а не вход.
+export async function workerSettled(maxMs = 1500): Promise<void> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  if (navigator.serviceWorker.controller) return;
+  await Promise.race([navigator.serviceWorker.ready.catch(() => {}), new Promise((r) => setTimeout(r, maxMs))]);
+}
