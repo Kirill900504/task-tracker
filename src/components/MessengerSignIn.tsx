@@ -29,7 +29,9 @@ async function createRequest(): Promise<Request | null> {
   }
 }
 
-export default function MessengerSignIn() {
+// `orLabel` — что ниже кнопок: на входе это почта с паролем, а в
+// «Восстановлении пароля» пароля как раз нет — там ниже ссылка в мессенджер.
+export default function MessengerSignIn({ orLabel = "или почтой и паролем" }: { orLabel?: string } = {}) {
   const [request, setRequest] = useState<Request | null>(null);
   const [waiting, setWaiting] = useState<"" | "Telegram" | "MAX">("");
   const [note, setNote] = useState("");
@@ -124,7 +126,7 @@ export default function MessengerSignIn() {
         </>
       )}
       <div className="ms-signin-or">
-        <span>или почтой и паролем</span>
+        <span>{orLabel}</span>
       </div>
     </div>
   );

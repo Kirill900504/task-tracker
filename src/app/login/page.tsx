@@ -150,7 +150,7 @@ function LoginScreen() {
           {/* Самый короткий путь — вообще без пароля: вход через бота, а
               новый пароль потом задаётся в «Личном кабинете» («Мои данные»)
               без старого (вход через бота его не спрашивает). */}
-          <MessengerSignIn />
+          <MessengerSignIn orLabel="или ссылкой на новый пароль" />
 
           <form onSubmit={handleForgotSubmit}>
             {resetError && <div className="auth-error">{resetError}</div>}
