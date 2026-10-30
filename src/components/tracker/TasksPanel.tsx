@@ -863,14 +863,14 @@ export default function TasksPanel({
         title="Только просроченные"
         aria-label="Только просроченные"
       >
-        {/* На телефоне — без слова. Осмотр 21.09.2026: при 390px
-            полоса не помещалась, и кнопка уезжала за край с
-            обрубком «Просроченс» — обрезанная надпись читается как
-            сломанный интерфейс, а знак «внимание» со счётчиком
-            говорит ровно то же самое. Слово не потеряно: оно в
-            title и для читалки экрана. */}
+        {/* Без слова кнопка остаётся только в полосе над доской на
+            телефоне: осмотр 21.09.2026 — при 390px полоса не
+            помещалась, и кнопка уезжала за край с обрубком
+            «Просроченс». В шапке телефона слово есть (30.10.2026, его
+            слова: «сделай кнопки просрочено и отложено прям словами в
+            мобильной версии») — место под него освободили имя и дата. */}
         <Icon name="warning" size={14} />
-        {!isMobile && <span className="fp-word">Просрочено</span>}
+        {(!isMobile || pillsInHeader) && <span className="fp-word">Просрочено</span>}
         {overdueCount > 0 && <span className="filter-pill-count">{overdueCount}</span>}
       </button>
       )}
@@ -885,7 +885,7 @@ export default function TasksPanel({
           onClick={() => setShowSnoozed(!snoozedView)}
         >
           <Icon name="clock" size={14} />
-          {!isMobile && <span className="fp-word">Отложено</span>}
+          {(!isMobile || pillsInHeader) && <span className="fp-word">Отложено</span>}
           <span className="filter-pill-count">{snoozedCount}</span>
         </button>
       )}

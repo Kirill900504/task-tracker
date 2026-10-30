@@ -2353,7 +2353,14 @@
        оставляет: доска кладёт кнопки, только когда есть о чём сказать. */
     .mobile-board-pills{display:flex; gap:6px; flex:none;}
     .mobile-board-pills:empty{display:none;}
-    .mobile-board-pills .filter-pill{min-height:0; height:38px; padding:0 10px; gap:5px;}
+    .mobile-board-pills .filter-pill{min-height:0; height:38px; padding:0 9px; gap:5px;}
+    /* Кнопки подписаны словами (30.10.2026), и обе со словом и числом
+       вместе со знаком и меню в строку 390px не встают. Пока они в шапке,
+       уходит слово «РОКАС» — знак остаётся и говорит то же самое. */
+    .mobile-header:has(.mobile-board-pills:not(:empty)) .mobile-title{display:none;}
+    /* Сжимается свободное место за знаком, а не сам знак: иначе на 320px
+       кнопки ложились на него. */
+    .mobile-brand{min-width:32px;}
     /* 44px — минимальная зона, по которой палец попадает не глядя. */
     .mobile-icon-btn{
       flex:none; width:44px; height:44px; border-radius:var(--radius-sm);
@@ -3988,4 +3995,10 @@
 @media (max-width:380px){
   .toolbar .view-switch-btn{padding:0 2px; gap:2px; font-size:11px;}
   .toolbar .view-switch-btn .filter-pill-count{padding:2px 3px; font-size:10px;}
+}
+/* Шапка телефона уже 380px: слова «Просрочено» и «Отложено» остаются, а
+   знаки при них уходят — слово говорит то же самое, что знак. */
+@media (max-width:380px){
+  .mobile-board-pills .filter-pill svg{display:none;}
+  .mobile-board-pills .filter-pill{padding:0 7px; gap:4px;}
 }
