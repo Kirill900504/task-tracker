@@ -1247,3 +1247,26 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
   .tour-title{font-size:21px;}
   .tour-icon{width:52px; height:52px; border-radius:16px;}
 }
+
+/* ---------- Подсказка при наведении (app/TitleTips.tsx) ----------------
+   Вместо системной серой плашки Windows — своя, в цвет всплывающих окон
+   трекера (.task-peek). Сбрасывает стиль popover по умолчанию (рамка,
+   отступы, inset:0 + margin:auto ставят его в центр экрана). */
+.title-tip{
+  position:fixed; inset:auto; margin:0; left:0; top:0; z-index:2147483000;
+  width:max-content; max-width:min(300px, calc(100vw - 16px));
+  padding:6px 10px; border-radius:var(--radius-sm);
+  background:#151B1E; color:var(--ink); border:1px solid var(--line);
+  box-shadow:0 6px 18px rgba(0,0,0,.35);
+  font-family:var(--sans); font-size:12.5px; font-weight:500; line-height:1.4;
+  white-space:pre-line; overflow-wrap:anywhere; text-align:left;
+  pointer-events:none; opacity:0; visibility:hidden;
+  transition:opacity .12s ease, transform .12s ease;
+}
+.title-tip:not([popover]){display:block;}
+.title-tip.measure{visibility:hidden; opacity:0; transition:none;}
+.title-tip.on{visibility:visible; opacity:1; transform:none;}
+.title-tip[data-side="above"]:not(.on){transform:translateY(3px);}
+.title-tip[data-side="below"]:not(.on){transform:translateY(-3px);}
+@media (hover:none){ .title-tip{display:none !important;} }
+@media (prefers-reduced-motion: reduce){ .title-tip{transition:none;} }
