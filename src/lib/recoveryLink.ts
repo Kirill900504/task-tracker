@@ -71,8 +71,9 @@ export async function signInLink(
 // Прежний адрес `*.vercel.app` (KNOWN_PRODUCTION) стоит здесь явно: когда у
 // проекта появился свой домен, Vercel отдаёт в VERCEL_PROJECT_PRODUCTION_URL
 // уже его, и без этой строки человек, работающий по старому адресу, получал
-// ссылку на новый — а тот доходит не из каждой сети (проверено 29.10.2026:
-// с этой машины не отвечал). Ссылка ведёт туда, откуда её попросили.
+// ссылку на новый — а в первые часы после подключения домена тот
+// доходил не из каждой сети (29.10.2026). Ссылка ведёт туда, откуда её
+// попросили: окно, открытое по старому адресу, и войдёт по старому.
 function trustedHost(host: string): boolean {
   if (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host)) return true;
   const own = [trackerUrl(), KNOWN_PRODUCTION, process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
