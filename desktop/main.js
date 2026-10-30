@@ -19,6 +19,7 @@ const { app, BrowserWindow, Menu, nativeTheme, shell, dialog } = require("electr
 const { autoUpdater } = require("electron-updater");
 const path = require("node:path");
 const fs = require("node:fs");
+const { attachContextMenu } = require("./contextMenu");
 
 // The company domain, not *.vercel.app (29.10.2026): Russian networks cut
 // vercel.app by name, and Черкашин's window showed «Нет связи» on exactly
@@ -155,6 +156,10 @@ function createWindow(offlineFor = null) {
     win.show();
     win.focus();
   });
+
+  // Варианты исправлений и «Копировать / Вставить» по правой кнопке —
+  // у окна Electron своего меню нет вовсе (contextMenu.js).
+  attachContextMenu(win, Menu);
 
   if (state.maximized) win.maximize();
 
