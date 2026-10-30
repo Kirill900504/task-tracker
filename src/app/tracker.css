@@ -3679,6 +3679,13 @@
      HTML, до JavaScript.
      -------------------------------------------------------------- */
   .skel{padding:14px 16px 24px; max-width:1800px; margin:0 auto;}
+  /* Снимок прошлого экрана (lib/bootSnapshot): когда он есть, каркас не
+     нужен вовсе — на месте трекера уже стоит трекер. Это картинка: ни
+     нажатий, ни анимаций, иначе она отыграет их второй раз перед тем,
+     как её заменит настоящий экран. */
+  .boot-snap .skel{display:none;}
+  #bootSnapshot{pointer-events:none;}
+  #bootSnapshot *, #bootSnapshot *::before, #bootSnapshot *::after{animation:none !important; transition:none !important;}
   .skel-head{display:flex; align-items:center; gap:10px; padding:0 2px 14px;}
   .skel-logo{width:28px; height:28px; border-radius:var(--radius-sm); background:var(--paper-soft);}
   .skel-layout{display:grid; grid-template-columns:300px minmax(0,1fr) 320px; gap:14px; align-items:start;}

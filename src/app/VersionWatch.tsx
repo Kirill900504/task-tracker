@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { SERVER_UNREACHABLE_EVENT, setServerUnreachable } from "@/lib/outbox";
+import { cacheShell } from "@/lib/shellCache";
+import { saveSnapshot } from "@/lib/bootSnapshot";
 
 // Открытое окно узнаёт о новой версии и перезагружается само.
 //
@@ -74,7 +76,29 @@ export default function VersionWatch() {
           return;
         }
       }
-      if (stale && !busy()) window.location.reload();
+      if (stale && !busy()) await reloadIntoNewBuild();
+    }
+
+    // Перезагрузка, которую не видно (30.10.2026, «появляется это окно
+    // прогрузки данных… сделать так, чтобы его не было видно»).
+    //
+    // Сперва свежая страница кладётся в кэш воркера: он отдаёт «/» из кэша
+    // ПЕРВЫМ (public/sw.js), а там лежала копия прежней сборки. Без этого
+    // перезагрузка открывала тот же старый код, он снова видел «устарел»
+    // — и окно перезагружалось второй раз подряд, оба раза через каркас.
+    // Затем — снимок нынешнего экрана: на нём новая сборка и откроется
+    // (lib/bootSnapshot), пока за ним не встанет настоящий трекер.
+    let reloading = false;
+    async function reloadIntoNewBuild() {
+      if (reloading) return;
+      reloading = true;
+      await Promise.race([cacheShell(), new Promise((r) => setTimeout(r, 8000))]);
+      if (busy()) {
+        reloading = false;
+        return;
+      }
+      saveSnapshot();
+      window.location.reload();
     }
 
     const onVisible = () => {

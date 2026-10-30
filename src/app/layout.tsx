@@ -13,6 +13,7 @@ import VersionWatch from "./VersionWatch";
 import MiniAppChrome from "./MiniAppChrome";
 import TitleTips from "./TitleTips";
 import AskProvider from "@/components/Ask";
+import { RESTORE_SCRIPT } from "@/lib/bootSnapshot";
 
 // Self-hosted at build time by next/font (no runtime request, no layout
 // shift) — Manrope's Cyrillic subset covers Russian, so it works as the
@@ -83,6 +84,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Вопросы задаёт трекер, а не браузер: окно живёт здесь, чтобы
             быть доступным на любой странице и рисоваться поверх всего. */}
         <AskProvider>{children}</AskProvider>
+        {/* После страницы и до первой отрисовки: кладёт снимок прошлого
+            экрана на место каркаса, если он есть (lib/bootSnapshot). На
+            других страницах места для снимка нет, и скрипт не делает ничего. */}
+        <script dangerouslySetInnerHTML={{ __html: RESTORE_SCRIPT }} />
       </body>
     </html>
   );

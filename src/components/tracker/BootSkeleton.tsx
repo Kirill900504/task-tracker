@@ -18,6 +18,14 @@
 // сервере вместе со страницей, то есть попадает в первый же HTML и виден
 // до того, как выполнится хоть строчка JavaScript.
 //
+// С 30.10.2026 и каркас виден редко: у трекера, который уже открывался на
+// этом устройстве, место `#bootSnapshot` до первого кадра React заполняет
+// снимок его прошлого экрана (lib/bootSnapshot, скрипт в layout.tsx), и
+// каркас прячется. Его слова: «появляется это окно прогрузки данных…
+// сделать так, чтобы его не было видно». Пустой `__html` и
+// suppressHydrationWarning — нарочно: содержимое кладёт скрипт до React, и
+// React не должен ни ругаться на него, ни стирать его при гидрации.
+//
 // Пульсация — одна на все блоки и отключается у тех, кто просил систему
 // не анимировать (см. `prefers-reduced-motion` в tracker.css).
 
@@ -34,57 +42,60 @@ function Card() {
   );
 }
 
-export default function BootSkeleton() {
+export default function BootSkeleton({ snapshot = false }: { snapshot?: boolean }) {
   return (
-    <div className="skel" aria-hidden>
-      <div className="skel-head">
-        <div className="skel-logo" />
-        <Line w="180px" h={11} />
-      </div>
+    <>
+      {snapshot && <div id="bootSnapshot" aria-hidden dangerouslySetInnerHTML={{ __html: "" }} suppressHydrationWarning />}
+      <div className="skel" aria-hidden>
+        <div className="skel-head">
+          <div className="skel-logo" />
+          <Line w="180px" h={11} />
+        </div>
 
-      <div className="skel-layout">
-        <div className="skel-col">
-          <div className="skel-panel skel-cal">
-            <Line w="60%" />
-            <div className="skel-grid">
-              {Array.from({ length: 28 }).map((_, i) => (
-                <div className="skel-day" key={i} />
+        <div className="skel-layout">
+          <div className="skel-col">
+            <div className="skel-panel skel-cal">
+              <Line w="60%" />
+              <div className="skel-grid">
+                {Array.from({ length: 28 }).map((_, i) => (
+                  <div className="skel-day" key={i} />
+                ))}
+              </div>
+            </div>
+            <div className="skel-panel">
+              <Line w="40%" />
+              <Card />
+              <Card />
+            </div>
+          </div>
+
+          <div className="skel-col skel-col-wide">
+            <div className="skel-toolbar">
+              <div className="skel-pill" style={{ width: 128 }} />
+              <div className="skel-pill" style={{ width: 220 }} />
+              <div className="skel-pill" style={{ width: 96 }} />
+            </div>
+            <div className="skel-board">
+              {[0, 1, 2].map((col) => (
+                <div className="skel-column" key={col}>
+                  <Line w="50%" h={11} />
+                  <Card />
+                  {col === 0 && <Card />}
+                </div>
               ))}
             </div>
           </div>
-          <div className="skel-panel">
-            <Line w="40%" />
-            <Card />
-            <Card />
-          </div>
-        </div>
 
-        <div className="skel-col skel-col-wide">
-          <div className="skel-toolbar">
-            <div className="skel-pill" style={{ width: 128 }} />
-            <div className="skel-pill" style={{ width: 220 }} />
-            <div className="skel-pill" style={{ width: 96 }} />
-          </div>
-          <div className="skel-board">
-            {[0, 1, 2].map((col) => (
-              <div className="skel-column" key={col}>
-                <Line w="50%" h={11} />
-                <Card />
-                {col === 0 && <Card />}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="skel-col">
-          <div className="skel-panel">
-            <Line w="55%" />
-            <Card />
-            <Card />
-            <Card />
+          <div className="skel-col">
+            <div className="skel-panel">
+              <Line w="55%" />
+              <Card />
+              <Card />
+              <Card />
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

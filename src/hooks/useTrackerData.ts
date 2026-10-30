@@ -46,6 +46,7 @@ import type { Idea, Meeting, Section, Task } from "@/types/tracker";
 import { clearSnapshot, loadSnapshot, saveSnapshot, type Snapshot, type TrackerLists } from "@/lib/offlineStore";
 import { applyLocalChanges, applyLocalNameChanges, hasUnsyncedWork } from "@/lib/offlineMerge";
 import { cacheShell } from "@/lib/shellCache";
+import { dropSnapshot, setSnapshotOwner } from "@/lib/bootSnapshot";
 import { onRevive } from "@/lib/revive";
 
 type Shadow = {
@@ -637,6 +638,10 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
     } catch {
       /* приватный режим — там и класть было некуда */
     }
+    // Снимок экрана для быстрого старта (lib/bootSnapshot) — та же причина:
+    // это картинка его задач.
+    setSnapshotOwner("");
+    dropSnapshot();
     router.push("/login");
     return { ok: true };
   }, [router]);

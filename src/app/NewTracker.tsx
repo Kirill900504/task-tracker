@@ -66,6 +66,7 @@ import { useMyMessenger } from "@/hooks/useMyMessenger";
 import type { SearchResult } from "@/lib/localSearch";
 import Icon from "@/components/tracker/Icon";
 import BootSkeleton from "@/components/tracker/BootSkeleton";
+import { useBootSnapshot } from "@/hooks/useBootSnapshot";
 import { isCreatedByMe } from "@/lib/ownership";
 import { isTaskVisible, isMeetingVisible, resolveMyName } from "@/lib/itemVisibility";
 import { withViewTransition } from "@/lib/viewTransition";
@@ -896,6 +897,9 @@ export default function NewTracker() {
   // ждут, стоит в самой задаче и в самой встрече — TaskAnswer и
   // MeetingAnswer, — и трекер у всех действительно один и тот же.
 
+  // Снимок экрана для следующего старта — вместо каркаса (lib/bootSnapshot).
+  useBootSnapshot(!identity.loading && !loading && !loadError, identity.userId);
+
   if (loadError) {
     // Not a dead end: the tracker keeps trying in the background and opens
     // itself the moment the connection answers. The buttons are for the
@@ -920,7 +924,7 @@ export default function NewTracker() {
   // экрана (см. BootSkeleton: он и есть ответ на «чёрный экран и
   // „Загрузка…“»). Каркас уходит в серверный HTML, то есть виден до
   // того, как выполнится первая строчка JavaScript.
-  if (identity.loading || loading) return <BootSkeleton />;
+  if (identity.loading || loading) return <BootSkeleton snapshot />;
 
   return (
     <>
