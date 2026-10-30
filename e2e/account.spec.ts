@@ -54,6 +54,32 @@ test("в «Моих данных» сохраняется телефон, и о�
   await expect(page.locator("#profileDot")).toHaveCount(0);
 });
 
+// 30.10.2026: «при заполнении телефона сделай сразу +7… если копируют номер
+// 89897201133, первую цифру так же всегда вставляй +7». Набор и вставка
+// идут настоящими нажатиями — onChange поля проверяется только так.
+test("поле телефона начинается с +7 и превращает первую 8 в +7", async ({ page }) => {
+  await login(page);
+  await page.click("#accountBtn");
+  const phone = page.locator("#accountPhone");
+  await phone.fill("");
+  await page.locator("#accountEmail").focus();
+  await phone.focus();
+  await expect(phone).toHaveValue("+7 ");
+  // Вставка поверх приставки — без второй семёрки.
+  await page.keyboard.insertText("89897201133");
+  await expect(phone).toHaveValue("+7 989 720-11-33");
+  // Набор с восьмёрки в пустое поле.
+  await phone.fill("");
+  await phone.pressSequentially("89897201133");
+  await expect(phone).toHaveValue("+7 989 720-11-33");
+  // Одна приставка, оставленная пустой, не остаётся в поле.
+  await phone.fill("");
+  await page.locator("#accountEmail").focus();
+  await phone.focus();
+  await page.locator("#accountEmail").focus();
+  await expect(phone).toHaveValue("");
+});
+
 test("смайлик из кнопки у поля встаёт на место курсора", async ({ page }) => {
   const title = `E2E смайлик ${Date.now()}`;
   await login(page);
