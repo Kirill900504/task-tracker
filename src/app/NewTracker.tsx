@@ -283,6 +283,11 @@ export default function NewTracker() {
   // ref: доска рисует в него порталом и должна перерисоваться, когда шапка
   // смонтировалась.
   const [boardPillsSlot, setBoardPillsSlot] = useState<HTMLElement | null>(null);
+  // То же место в шапке телефона (MobileHeader). Доска на телефоне
+  // смонтирована дважды («Задачи» и «В работе»), и кнопки в шапку кладёт
+  // только та, чья вкладка открыта: две доски в одном месте дали бы две
+  // пары кнопок, а на прочих вкладках фильтровать в шапке нечего.
+  const [mobilePillsSlot, setMobilePillsSlot] = useState<HTMLElement | null>(null);
   const [teamOpen, setTeamOpen] = useState(false);
   // Сессия начинается с задач — см. DEFAULT_MOBILE_TAB.
   const [mobileTab, setMobileTab] = useState<MobileTab>(DEFAULT_MOBILE_TAB);
@@ -844,6 +849,7 @@ export default function NewTracker() {
           <TasksPanel
             {...mainColProps}
             mobileColumn="new"
+            headerSlot={mobileTab === "tasks" ? mobilePillsSlot : null}
             openTaskRequest={mobileTab === "work" ? null : openTaskRequest}
             openExistingTaskId={mobileTab === "work" ? null : openExistingTaskId}
           />
@@ -852,6 +858,7 @@ export default function NewTracker() {
           <TasksPanel
             {...mainColProps}
             mobileColumn="work"
+            headerSlot={mobileTab === "work" ? mobilePillsSlot : null}
             openTaskRequest={mobileTab === "work" ? openTaskRequest : null}
             openExistingTaskId={mobileTab === "work" ? openExistingTaskId : null}
           />
@@ -987,8 +994,7 @@ export default function NewTracker() {
               столбиком, и цветная наклейка от системы рядом со словом
               выглядит приклеенной. */}
           <MobileHeader
-            clockText={clockText}
-            accountName={withoutSelfMark(myName)}
+            pillsRef={setMobilePillsSlot}
             extra={<ConnectionStatus offline={offline} />}
             items={[
               { id: "account", label: profile.incomplete ? "Личный кабинет · заполните данные" : "Личный кабинет", icon: "users" as const, onSelect: () => setAccountOpen(true) },

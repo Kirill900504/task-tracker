@@ -32,17 +32,21 @@ export type MobileMenuItem = {
 };
 
 export default function MobileHeader({
-  clockText,
-  accountName,
   extra,
+  pillsRef,
   items,
 }: {
-  clockText: string;
-  // Имя того, кто сейчас вошёл — под датой, там же, где на компьютере
-  // стоит кнопка личного кабинета. Слова Кирилла 23.09.2026: «чтоб каждый
-  // видел, что они сидят под личным аккаунтом в системе» — на телефоне
-  // до этого не было ни одной подсказки, чей это вход.
-  accountName?: string;
+  // Ни имени, ни даты со временем под «РОКАС» больше нет. 30.10.2026, его
+  // слова: «просрочено и отложено перенеси на верхнюю панель, можем убрать
+  // в мобильной версии оттуда имя, дату время и тд, чтобы освободить
+  // место». Имя (23.09.2026 — «чтоб каждый видел, что они сидят под
+  // личным аккаунтом») осталось первой строкой меню этой кнопки — «Личный
+  // кабинет», а время и так в строке состояния телефона.
+  //
+  // Сюда доска кладёт «Просрочено» и «Отложено» (TasksPanel, headerSlot),
+  // так же как на компьютере рядом с лупой: полоса над доской остаётся
+  // одной неподвижной строкой.
+  pillsRef?: (el: HTMLDivElement | null) => void;
   // Значки статуса (связь, отказ синхронизации) — перед основной кнопкой,
   // как в шапке компьютера. Слот, а не жёстко вшитый компонент: шапка не
   // должна знать про ConnectionStatus, чтобы не читать про облако там,
@@ -63,9 +67,9 @@ export default function MobileHeader({
         <img className="mobile-logo" src="/favicon.png" alt="РОКАС" />
         <div className="mobile-brand-text">
           <div className="mobile-title">РОКАС</div>
-          <div className="mobile-date">{accountName ? `${accountName} · ${clockText}` : clockText}</div>
         </div>
       </div>
+      <div className="mobile-board-pills" ref={pillsRef} />
       {extra}
       <button
         className={"mobile-icon-btn" + (menuOpen ? " active" : "")}

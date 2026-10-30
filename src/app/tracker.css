@@ -162,7 +162,7 @@
   .subtitle, .pill, .pill-date, .idea-meta, .cal-day, .mini-cal-day,
   .meeting-chip .mdate, .meeting-chip .mtime, .filter-pill-count,
   .tp-progress, .chat-time, .search-hit-meta, .team-status,
-  .mobile-date, .today-meeting-time, .section-title .count, #syncStatus{
+  .today-meeting-time, .section-title .count, #syncStatus{
     font-variant-numeric:tabular-nums lining-nums;
   }
 
@@ -2348,7 +2348,12 @@
     .mobile-logo{width:32px; height:32px; border-radius:var(--radius-xs); flex:none;}
     .mobile-brand-text{min-width:0;}
     .mobile-title{font-family:var(--display); font-size:15px; font-weight:700; color:var(--ink); line-height:1.1;}
-    .mobile-date{font-family:var(--display); font-size:10.5px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    /* «Просрочено» и «Отложено» в шапке (MobileHeader, 30.10.2026) — той
+       же высоты, что значок связи рядом. Пустая обёртка промежутка не
+       оставляет: доска кладёт кнопки, только когда есть о чём сказать. */
+    .mobile-board-pills{display:flex; gap:6px; flex:none;}
+    .mobile-board-pills:empty{display:none;}
+    .mobile-board-pills .filter-pill{min-height:0; height:38px; padding:0 10px; gap:5px;}
     /* 44px — минимальная зона, по которой палец попадает не глядя. */
     .mobile-icon-btn{
       flex:none; width:44px; height:44px; border-radius:var(--radius-sm);
@@ -3754,7 +3759,7 @@
      читают (даты, люди, метки фактов). */
   @media (max-width:800px){
     .mobile-tab{font-size:11.5px;}
-    .idea-meta, .mobile-date, .chat-time, .cal-wd{font-size:12.5px;}
+    .idea-meta, .chat-time, .cal-wd{font-size:12.5px;}
     .today-heading, .fact-label, .mobile-main .panel-title{font-size:12.5px;}
     .task-meta, .meeting-chip .mdate, .meeting-chip .mtime, .meeting-chip .mpeople,
     .result-when, .results-note, .done-list-note, .search-hit-meta, .search-group,
@@ -3964,3 +3969,23 @@
   .section-tab{padding:3px 4px; font-size:11px;}
 }
 
+
+/* Телефон: полоса над доской неподвижна (30.10.2026, его слова: «панель
+   выделенная красным — должна быть статична в мобильной версии»). На
+   снимке она была прокручена вбок: «+» уехал за левый край, «Я поручил»
+   был срезан, а «Просрочено» и «Отложено» торчали справа. Теперь те две
+   ушли в шапку (MobileHeader), а оставшиеся «+» и четыре вида делят
+   ширину сами: переключатель тянется на всё свободное место, его кнопки
+   сжимаются полями, а не обрезаются, и вбок полоса не едет вовсе. */
+@media (max-width:800px){
+  .toolbar{overflow:hidden; touch-action:pan-y;}
+  .toolbar .view-switch{flex:1 1 auto; min-width:0;}
+  .toolbar .view-switch-btn{flex:1 1 auto; min-width:0; justify-content:center; padding:0 4px; gap:3px; font-size:12px; white-space:nowrap;}
+  .toolbar .view-switch-btn .filter-pill-count{padding:2px 4px;}
+}
+/* Узкий Android (360 и уже): «Я поручил» с числом иначе ломался на две
+   строки — те же кнопки, только мельче шрифт и поля. */
+@media (max-width:380px){
+  .toolbar .view-switch-btn{padding:0 2px; gap:2px; font-size:11px;}
+  .toolbar .view-switch-btn .filter-pill-count{padding:2px 3px; font-size:10px;}
+}

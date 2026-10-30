@@ -673,3 +673,44 @@ test("окно задачи на телефоне: стоит на месте, �
   expect(back!.y).toBeGreaterThanOrEqual(0);
   expect(back!.y).toBeLessThan(80);
 });
+
+// «Просрочено» и «Отложено» — в шапке, полоса над доской неподвижна
+// (30.10.2026, его снимок: полоса уехала вбок, «+» за левым краем, а обе
+// кнопки торчали справа). Под «РОКАС» больше нет имени и даты — место
+// отдано этим двум кнопкам.
+test("«Просрочено» в шапке телефона, полоса над доской не едет вбок", async ({ page }) => {
+  await clearBoard();
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const id = `mob-late-${Date.now()}`;
+  const { error } = await admin
+    .from("tasks")
+    .insert({ id, user_id: userId, title: `E2E горит моб ${Date.now()}`, assignee: "", status: "in_progress", deadline: "2020-01-01" });
+  expect(error).toBeNull();
+  await login(page);
+  await expect(page.locator(`.task[data-id="${id}"]:visible`)).toBeVisible({ timeout: 30_000 });
+
+  await expect(page.locator("#mobileHeader #filterOverdueBtn")).toBeVisible();
+  await expect(page.locator(".toolbar:visible #filterOverdueBtn")).toHaveCount(0);
+  await expect(page.locator("#filterOverdueBtn:visible")).toHaveCount(1);
+  await expect(page.locator(".mobile-date")).toHaveCount(0);
+
+  // Полоса не прокручивается: ни содержимое шире её, ни сдвиг вбок.
+  const bar = await page.evaluate(() => {
+    const el = [...document.querySelectorAll(".toolbar")].find((e) => (e as HTMLElement).offsetParent !== null) as HTMLElement;
+    el.scrollLeft = 200;
+    return { overflow: el.scrollWidth - el.clientWidth, left: el.scrollLeft };
+  });
+  expect(bar.overflow).toBeLessThanOrEqual(1);
+  expect(bar.left).toBe(0);
+
+  // Кнопка в шапке по-прежнему фильтрует доску открытой вкладки.
+  await page.click("#mobileHeader #filterOverdueBtn");
+  await expect(page.locator("#mobileHeader #filterOverdueBtn")).toHaveAttribute("aria-pressed", "true");
+  await page.click("#mobileHeader #filterOverdueBtn");
+
+  // На вкладках без доски фильтровать в шапке нечего.
+  await page.click('[data-tab="meetings"]');
+  await expect(page.locator("#mobileHeader #filterOverdueBtn")).toHaveCount(0);
+});
