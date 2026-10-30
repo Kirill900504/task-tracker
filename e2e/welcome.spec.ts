@@ -60,16 +60,23 @@ test("вход через бота: окно ждёт подтверждения
   const guest = await browser.newContext();
   const page = await guest.newPage();
   await page.goto("/login");
-  const tg = page.locator("#messengerSignIn a", { hasText: "Войти через Telegram" });
+  const tg = page.locator("#messengerSignIn button", { hasText: "Войти через Telegram" });
   await expect(tg).toBeVisible({ timeout: 20_000 });
-  const href = (await tg.getAttribute("href"))!;
-  const token = new URL(href).searchParams.get("start")!;
-  expect(token).toMatch(/^LOGIN[A-Z0-9]{20}$/);
+  await tg.click();
+  // Запасная дорога — ссылка на бота; на компьютере она ведёт прямо в
+  // приложение (tg://), а не на страницу t.me.
+  const open = page.locator(".ms-signin-open");
+  const href = (await open.getAttribute("href"))!;
+  expect(href).toMatch(/^tg:\/\/resolve\?domain=[A-Za-z0-9_]+&start=LOGIN[A-Z0-9]{20}$/);
+  const token = /start=(LOGIN[A-Z0-9]{20})/.exec(href)![1];
 
-  // Нажатие уводит в Telegram новой вкладкой — её закрываем, нам важна эта.
-  const [popup] = await Promise.all([page.waitForEvent("popup"), tg.click()]);
-  await popup.close();
+  // Главная дорога — запрос в чат по фамилии, телефону или почте. Ответ одинаков,
+  // нашёлся человек или нет, и окно начинает ждать с числом для сверки.
+  await page.locator("#msWho").fill("нет-такой@example.invalid");
+  await page.locator("#msPushBtn").click();
   await expect(page.locator(".ms-signin-wait")).toBeVisible();
+  const { data: row } = await db.from("login_requests").select("code").eq("token", token).single();
+  await expect(page.locator("#loginCode")).toHaveText(String(row!.code));
 
   // То, что делает бот на «✅ Да, войти».
   const { data: link } = await db.auth.admin.generateLink({ type: "magiclink", email });

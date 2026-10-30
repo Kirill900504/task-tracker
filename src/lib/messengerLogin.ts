@@ -45,9 +45,56 @@ async function personOfChat(admin: SupabaseClient, chatId: number, channel: BotC
 
 export type LoginPrompt = { text: string; buttons?: { text: string; data: string }[][] };
 
-// Ответ бота на /start LOGIN…: вопрос с двумя кнопками.
+// Число для сверки (30.10.2026): его показывает экран входа, а в чате
+// оно стоит среди трёх кнопок. Запрос теперь приходит в чат сам — по
+// телефону или почте, которые может ввести кто угодно, — и вопрос «это
+// вы?» с кнопкой «Да» стал бы входом для любого, кто знает чужой номер:
+// привычное «да» нажимают не читая. Число с экрана знает только тот, кто
+// этот экран видит.
+export function newLoginCode(): number {
+  const bytes = new Uint8Array(1);
+  crypto.getRandomValues(bytes);
+  return 10 + (bytes[0] % 90);
+}
+
+// Три числа: верное и два других, в случайном порядке.
+export function codeChoices(code: number): number[] {
+  const out = [code];
+  while (out.length < 3) {
+    const n = newLoginCode();
+    if (!out.includes(n)) out.push(n);
+  }
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = newLoginCode() % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+export const LOGIN_PROMPT_TEXT =
+  "💻 Вход в трекер на новом устройстве.\n\n" +
+  "Если это вы — нажмите число, которое показано на экране входа. " +
+  "Если вы ничего не открывали — «Это не я»: без вашего нажатия в трекер не войти.";
+
+// Запрос без числа — заведённый до 30.10.2026 — отвечается прежним «Да».
+export function loginButtons(token: string, code: number | null): { text: string; data: string }[][] {
+  if (code == null) {
+    return [
+      [
+        { text: "✅ Да, войти", data: `t:lgok:${token}` },
+        { text: "✖ Нет", data: `t:lgno:${token}` },
+      ],
+    ];
+  }
+  return [
+    codeChoices(code).map((n) => ({ text: String(n), data: `t:lgok:${token}.${n}` })),
+    [{ text: "✖ Это не я", data: `t:lgno:${token}` }],
+  ];
+}
+
+// Ответ бота на /start LOGIN…: тот же вопрос, что приходит сам.
 export async function loginPrompt(admin: SupabaseClient, chatId: number, channel: BotChannelConfig, token: string): Promise<LoginPrompt> {
-  const { data: request } = await admin.from("login_requests").select("expires_at, approved_at").eq("token", token).maybeSingle();
+  const { data: request } = await admin.from("login_requests").select("expires_at, approved_at, code").eq("token", token).maybeSingle();
   if (!request || new Date(request.expires_at as string).getTime() < Date.now()) {
     return { text: "Эта кнопка входа устарела. Нажмите «Войти через " + channel.label + "» на странице входа ещё раз." };
   }
@@ -55,17 +102,7 @@ export async function loginPrompt(admin: SupabaseClient, chatId: number, channel
   if (!person) {
     return { text: "Этот чат ещё не подключён к трекеру. Откройте ссылку-приглашение, которую вам прислали, и нажмите «Start» оттуда." };
   }
-  return {
-    text:
-      "💻 Вход в трекер на компьютере.\n\n" +
-      "Это вы сейчас входите? Если вы ничего не открывали — нажмите «Нет»: значит, ссылку вам прислал кто-то другой.",
-    buttons: [
-      [
-        { text: "✅ Да, войти", data: `t:lgok:${token}` },
-        { text: "✖ Нет", data: `t:lgno:${token}` },
-      ],
-    ],
-  };
+  return { text: LOGIN_PROMPT_TEXT, buttons: loginButtons(token, (request.code as number | null) ?? null) };
 }
 
 export function isLoginAction(action: { kind: string; action: string }): boolean {
@@ -77,15 +114,27 @@ export async function resolveLogin(
   admin: SupabaseClient,
   chatId: number,
   channel: BotChannelConfig,
-  token: string,
+  id: string,
   yes: boolean,
 ): Promise<string> {
-  const { data: request } = await admin.from("login_requests").select("expires_at, approved_at, refused_at").eq("token", token).maybeSingle();
+  // id кнопки — «ТОКЕН» или «ТОКЕН.число» (см. loginButtons).
+  const [token, picked] = id.split(".");
+  const { data: request } = await admin
+    .from("login_requests")
+    .select("expires_at, approved_at, refused_at, code")
+    .eq("token", token)
+    .maybeSingle();
   if (!request || new Date(request.expires_at as string).getTime() < Date.now()) return "Эта кнопка входа устарела — начните вход на компьютере заново.";
   if (request.approved_at || request.refused_at) return "Уже отвечено.";
   if (!yes) {
     await admin.from("login_requests").update({ refused_at: new Date().toISOString() }).eq("token", token);
     return "✖ Вход отклонён. Если вы ничего не открывали — ничего делать не нужно, без вашей кнопки в трекер не войти.";
+  }
+  // Не то число — отказ, а не «попробуйте ещё»: перебирать три кнопки по
+  // кругу нельзя, а настоящий хозяин просто начнёт вход заново.
+  if (request.code != null && Number(picked) !== request.code) {
+    await admin.from("login_requests").update({ refused_at: new Date().toISOString() }).eq("token", token).is("approved_at", null);
+    return "✖ Число не совпало с экраном входа — вход отменён. Если входили вы, начните заново и нажмите число, которое видите на экране.";
   }
 
   const person = await personOfChat(admin, chatId, channel);
