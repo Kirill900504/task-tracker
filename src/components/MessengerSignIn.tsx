@@ -8,7 +8,7 @@ import { MaxBrandIcon, TelegramBrandIcon } from "@/components/tracker/MessengerB
 // «Войти через Telegram / MAX» на странице входа (lib/messengerLogin).
 //
 // Главная дорога — запрос, который приходит в чат САМ (lib/loginPush,
-// 30.10.2026): человек пишет телефон или почту, бот присылает вопрос, и
+// 30.10.2026): человек пишет фамилию, телефон или почту, бот присылает вопрос, и
 // мессенджер показывает его уведомлением на всех устройствах. До этого
 // кнопка была ссылкой t.me, и браузер компьютера открывал не Telegram, а
 // страницу «Start bot / Open in Web» — лишний шаг, на котором и вставали.
@@ -205,7 +205,7 @@ export default function MessengerSignIn({ orLabel = "или почтой и па
             )}
             {pushed && (
               <div className="auth-hint" style={{ margin: "6px 0 0" }}>
-                Не пришло за полминуты — значит, этот телефон или почта не записаны в трекере или {LABEL[waiting]} не подключён.{" "}
+                Не пришло за полминуты — значит, по введённому вас не нашли (попробуйте имя и фамилию) или {LABEL[waiting]} не подключён.{" "}
                 {openBot(waiting)}
               </div>
             )}
@@ -223,14 +223,13 @@ export default function MessengerSignIn({ orLabel = "или почтой и па
           }}
         >
           <div className="auth-field">
-            <label htmlFor="msWho">Телефон или почта, записанные в трекере</label>
+            <label htmlFor="msWho">Ваша фамилия, телефон или почта</label>
             <input
               id="msWho"
               type="text"
-              inputMode="email"
               autoComplete="username"
               autoFocus
-              placeholder="+7 900 123-45-67"
+              placeholder="Иванов"
               value={who}
               onChange={(e) => {
                 const raw = e.target.value;

@@ -18,8 +18,11 @@ import { LOGIN_PROMPT_TEXT, loginButtons } from "@/lib/messengerLogin";
 // человек вошёл. Ссылка на бота осталась запасной дорогой — для того, чей
 // телефон и почта в трекер не записаны.
 //
-// Кому слать — решают телефон из «Моих данных» (assignees.phone) или почта
-// входа. Найденному человеку уходит вопрос с числом для сверки
+// Кому слать — решают фамилия (имя в «Команде»), телефон из «Моих данных»
+// (assignees.phone) или почта входа. Фамилия добавлена в тот же день, после
+// первой же попытки Кирилла: телефон тогда был записан у одного человека из
+// пятнадцати, а почта у большинства служебная, — по ним не находился почти
+// никто, и запрос молча не уходил. Найденному человеку уходит вопрос с числом для сверки
 // (lib/messengerLogin): ввести чужой номер может кто угодно, а число на
 // экране входа видит только тот, кто входит.
 
@@ -46,6 +49,25 @@ async function chatsOfRow(admin: SupabaseClient, row: PersonRow): Promise<Target
   return chatsFor(row).map((c) => ({ ...c, key: row.id }));
 }
 
+const MAX_NAME_MATCHES = 3;
+
+function nameWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/\(я\)/g, " ")
+    .split(/[^\p{L}-]+/u)
+    .filter(Boolean);
+}
+
+// Каждое введённое слово — целое слово имени: «кучеренко» и «Кирилл
+// Кучеренко» находят «Кирилл Кучеренко (я)», а «Кир» — никого.
+export function nameMatches(name: string, query: string): boolean {
+  const have = new Set(nameWords(name));
+  const want = nameWords(query);
+  return want.length > 0 && want.every((w) => have.has(w));
+}
+
 export async function loginTargets(admin: SupabaseClient, who: string): Promise<Target[]> {
   const value = who.trim();
   let rows: PersonRow[] = [];
@@ -58,6 +80,13 @@ export async function loginTargets(admin: SupabaseClient, who: string): Promise<
       ? await query.eq("id", membership.assignee_id)
       : await query.eq("user_id", user.id).like("name", "%(я)");
     rows = (data || []) as PersonRow[];
+  } else if (/\p{L}/u.test(value)) {
+    // Фамилия или «Имя Фамилия» — то, что знает о себе каждый. Людей в
+    // трекере десятки, поэтому выборка целиком и сравнение здесь.
+    const { data } = await admin.from("assignees").select(PERSON_COLUMNS).is("archived_at", null);
+    rows = ((data || []) as PersonRow[]).filter((row) => nameMatches(row.name, value));
+    // Расплывчатое («Иван») не рассылается всем Иванам сразу.
+    if (rows.length > MAX_NAME_MATCHES) return [];
   } else {
     const phone = normalizePhone(value);
     if (!phone) return [];

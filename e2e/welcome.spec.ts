@@ -70,7 +70,7 @@ test("вход через бота: окно ждёт подтверждения
   expect(href).toMatch(/^tg:\/\/resolve\?domain=[A-Za-z0-9_]+&start=LOGIN[A-Z0-9]{20}$/);
   const token = /start=(LOGIN[A-Z0-9]{20})/.exec(href)![1];
 
-  // Главная дорога — запрос в чат по телефону или почте. Ответ одинаков,
+  // Главная дорога — запрос в чат по фамилии, телефону или почте. Ответ одинаков,
   // нашёлся человек или нет, и окно начинает ждать с числом для сверки.
   await page.locator("#msWho").fill("нет-такой@example.invalid");
   await page.locator("#msPushBtn").click();
