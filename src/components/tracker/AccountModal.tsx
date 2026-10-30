@@ -5,7 +5,7 @@ import type { MessengerState } from "@/hooks/useMyMessenger";
 import type { ColleagueChannel } from "@/hooks/useColleagues";
 import { emailProblem, passwordProblem } from "@/lib/workspaceInvite";
 import { humanError } from "@/lib/humanError";
-import { normalizePhone } from "@/lib/phone";
+import { isBarePhonePrefix, normalizePhone, typePhone } from "@/lib/phone";
 import Modal from "./Modal";
 import Icon, { type IconName } from "./Icon";
 import MessengerLink from "./MessengerLink";
@@ -103,7 +103,9 @@ export default function AccountModal({
 
   const email = saved?.email ?? "";
   const emailChanged = draftEmail.trim().toLowerCase() !== email.toLowerCase();
-  const phoneChanged = draftPhone.trim() !== (saved?.phone ?? "");
+  // «+7 », which the field puts in by itself on focus, is not a number.
+  const phoneDraft = isBarePhonePrefix(draftPhone) ? "" : draftPhone.trim();
+  const phoneChanged = phoneDraft !== (saved?.phone ?? "");
   const changed = emailChanged || phoneChanged || !!password;
   // Поле текущего пароля появляется, только когда меняют вход, — менять
   // телефон оно не мешает.
@@ -117,7 +119,7 @@ export default function AccountModal({
     const problem =
       (emailChanged && draftEmail.trim() ? emailProblem(draftEmail) : "") ||
       (password ? passwordProblem(password) : "") ||
-      (phoneChanged && normalizePhone(draftPhone) === null ? "Не похоже на номер телефона — например, +7 900 123-45-67" : "");
+      (phoneChanged && normalizePhone(phoneDraft) === null ? "Не похоже на номер телефона — например, +7 900 123-45-67" : "");
     if (problem) return setNote({ ok: false, text: problem });
     if (emailChanged && draftEmail.trim() && !email && !password) {
       return setNote({ ok: false, text: "Придумайте пароль — без него с компьютера не войти" });
@@ -131,7 +133,7 @@ export default function AccountModal({
         body: JSON.stringify({
           ...(emailChanged ? { email: draftEmail } : {}),
           ...(password ? { password } : {}),
-          ...(phoneChanged ? { phone: draftPhone } : {}),
+          ...(phoneChanged ? { phone: phoneDraft } : {}),
           ...(askCurrent ? { currentPassword: current } : {}),
         }),
       });
@@ -235,7 +237,9 @@ export default function AccountModal({
                   inputMode="tel"
                   placeholder="+7 900 123-45-67"
                   value={draftPhone}
-                  onChange={(e) => setDraftPhone(e.target.value)}
+                  onChange={(e) => setDraftPhone(typePhone(e.target.value, draftPhone))}
+                  onFocus={() => !draftPhone.trim() && setDraftPhone("+7 ")}
+                  onBlur={() => isBarePhonePrefix(draftPhone) && setDraftPhone("")}
                 />
               </label>
               <label className="account-field">
