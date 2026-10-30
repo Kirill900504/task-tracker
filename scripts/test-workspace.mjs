@@ -231,8 +231,15 @@ try {
   const returnNoComment = await post(owner, "/api/workspace/review", { action: "return", taskId });
   check("возврат без комментария отклоняется", returnNoComment.status === 400, returnNoComment);
 
+  const { data: beforeReturn } = await admin.from("task_participants").select("accepted_at").eq("id", partA.id).maybeSingle();
   const returned = await post(owner, "/api/workspace/review", { action: "return", taskId, comment: "Нет разбивки по филиалам" });
   check("возврат на доработку проходит", returned.status === 200, returned);
+
+  // Вернувшийся — «В работе», даже если «Принял» не нажимал (B отказался
+  // сразу, №154 сдал прямо из «Новых»); у A время принятия прежнее.
+  const { data: workingAgain } = await admin.from("task_participants").select("id, accepted_at").eq("task_id", taskId).eq("role", "executor");
+  check("после возврата все вернувшиеся «в работе»", (workingAgain || []).length === 2 && workingAgain.every((p) => !!p.accepted_at), workingAgain);
+  check("уже принятое время не переписано", workingAgain?.find((p) => p.id === partA.id)?.accepted_at === beforeReturn?.accepted_at, { beforeReturn, workingAgain });
 
   const { data: afterReturn } = await admin.from("tasks").select("approval_state").eq("id", taskId).maybeSingle();
   check("approval_state = returned", afterReturn?.approval_state === "returned", afterReturn);
