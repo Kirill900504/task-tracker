@@ -231,8 +231,15 @@ try {
   const returnNoComment = await post(owner, "/api/workspace/review", { action: "return", taskId });
   check("возврат без комментария отклоняется", returnNoComment.status === 400, returnNoComment);
 
+  const { data: beforeReturn } = await admin.from("task_participants").select("accepted_at").eq("id", partA.id).maybeSingle();
   const returned = await post(owner, "/api/workspace/review", { action: "return", taskId, comment: "Нет разбивки по филиалам" });
   check("возврат на доработку проходит", returned.status === 200, returned);
+
+  // Вернувшийся — «В работе», даже если «Принял» не нажимал (B отказался
+  // сразу, №154 сдал прямо из «Новых»); у A время принятия прежнее.
+  const { data: workingAgain } = await admin.from("task_participants").select("id, accepted_at").eq("task_id", taskId).eq("role", "executor");
+  check("после возврата все вернувшиеся «в работе»", (workingAgain || []).length === 2 && workingAgain.every((p) => !!p.accepted_at), workingAgain);
+  check("уже принятое время не переписано", workingAgain?.find((p) => p.id === partA.id)?.accepted_at === beforeReturn?.accepted_at, { beforeReturn, workingAgain });
 
   const { data: afterReturn } = await admin.from("tasks").select("approval_state").eq("id", taskId).maybeSingle();
   check("approval_state = returned", afterReturn?.approval_state === "returned", afterReturn);
@@ -840,11 +847,13 @@ try {
   section("Потерянный доступ");
 
   const lost = await post(owner, "/api/workspace/access-link", { assigneeId: personA.id });
-  check("владелец получает ссылку для вошедшего", lost.status === 200 && !!lost.body?.link, lost);
+  // Подключённому ссылка уходит в его мессенджер, на руки владельцу не
+  // выдаётся (второй аудит 30.10.2026); неподключённому — выдаётся.
+  check("ссылка выдаётся или уходит человеку в чат", lost.status === 200 && (!!lost.body?.link || lost.body?.sentToChat === true), lost);
   check("вместе с почтой, под которой человек входит", lost.body?.email === emailA, lost.body?.email);
   check(
     "ссылка ведёт на трекер, а не на supabase.co",
-    typeof lost.body?.link === "string" && lost.body.link.startsWith(base + "/reset-password?token_hash="),
+    lost.body?.sentToChat === true || (typeof lost.body?.link === "string" && lost.body.link.startsWith(base + "/reset-password?token_hash=")),
     lost.body?.link,
   );
 

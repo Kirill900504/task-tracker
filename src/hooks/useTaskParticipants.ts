@@ -150,6 +150,10 @@ function writeCache(grouped: Record<string, Participant[]>, people: PersonOption
 // ответил», и «Сделал», нажатое без связи, исчезало с экрана, хотя оно
 // никуда не делось и уйдёт, как только появится сеть. Сеть, которая режет
 // только наш сайт, — ровно такой случай: база читается, а маршрут нет.
+// Что возврат снимает с ответившего; acceptedAt ставится рядом — см.
+// markReturnedAsWorking в lib/reviewWork.
+const returnedPatch = { doneAt: null, doneComment: null, doneFiles: [], declinedAt: null, declineReason: null };
+
 function withPending(grouped: Record<string, Participant[]>): Record<string, Participant[]> {
   const queued = [...pendingPosts("/api/workspace/report"), ...pendingPosts("/api/workspace/review")];
   if (!queued.length) return grouped;
@@ -158,10 +162,14 @@ function withPending(grouped: Record<string, Participant[]>): Record<string, Par
   const each = (fn: (p: Participant, taskId: string) => void) => {
     for (const [taskId, list] of Object.entries(next)) for (const p of list) fn(p, taskId);
   };
-  const clear = { doneAt: null, doneComment: null, doneFiles: [], declinedAt: null, declineReason: null };
   // По порядку нажатий: очередь уходит так же.
   for (const e of queued.sort((a, b) => a.at - b.at)) {
     const body = e.body;
+    // Возвращённый — «В работе» (markReturnedAsWorking на сервере).
+    // Сервер трогает только ответивших, и экран тоже: молчавший «Принял»
+    // не нажимал, и возврат чужого отчёта его в работу не ставит.
+    const clear = (p: Participant) =>
+      p.doneAt || p.declinedAt ? { ...returnedPatch, acceptedAt: p.acceptedAt || new Date(e.at).toISOString() } : {};
     if (e.url === "/api/workspace/report") {
       const patch = answerPatch(body as AnswerPayload, new Date(e.at).toISOString());
       if (patch) each((p) => void (p.id === body.participantId && Object.assign(p, patch)));
@@ -170,9 +178,9 @@ function withPending(grouped: Record<string, Participant[]>): Record<string, Par
     const action = String(body.action || "");
     const ids = Array.isArray(body.participantIds) ? (body.participantIds as string[]) : null;
     if (action === "return") {
-      each((p, taskId) => void (taskId === body.taskId && (ids ? ids.includes(p.id) : p.role === "executor") && Object.assign(p, clear)));
+      each((p, taskId) => void (taskId === body.taskId && (ids ? ids.includes(p.id) : p.role === "executor") && Object.assign(p, clear(p))));
     } else if (action === "return_one") {
-      each((p) => void (p.id === body.participantId && Object.assign(p, clear)));
+      each((p) => void (p.id === body.participantId && Object.assign(p, clear(p))));
     } else if (action === "moved" || action === "kept") {
       each((p) => void (p.id === body.participantId && Object.assign(p, { rescheduleTo: null, rescheduleReason: null })));
     }
@@ -582,8 +590,8 @@ export function useTaskParticipants() {
       return {
         ...prev,
         [taskId]: list.map((p) =>
-          (only ? only.includes(p.id) : p.role === "executor")
-            ? { ...p, doneAt: null, doneComment: null, doneFiles: [], declinedAt: null, declineReason: null }
+          (only ? only.includes(p.id) && (p.doneAt || p.declinedAt) : p.role === "executor" && (p.doneAt || p.declinedAt))
+            ? { ...p, ...returnedPatch, acceptedAt: p.acceptedAt || new Date().toISOString() }
             : p,
         ),
       };

@@ -25,7 +25,10 @@ export function reportCrash(error: unknown, extra?: { where?: string }) {
   const body = JSON.stringify({
     message,
     stack: err.stack || "",
-    url: window.location.href,
+    // Без адресной строки после «?» и «#»: там бывает одноразовый ключ входа
+    // (/enter?token_hash=…, /reset-password?token_hash=…), а поломка на
+    // этих страницах случается ровно до того, как ключ из адреса стёрт.
+    url: window.location.origin + window.location.pathname,
     release: process.env.NEXT_PUBLIC_RELEASE || "",
   });
 
