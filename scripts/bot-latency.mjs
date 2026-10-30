@@ -43,7 +43,7 @@ async function hook(body) {
   await res.text();
   return { ms: Math.round(performance.now() - t0), status: res.status, region: res.headers.get("x-vercel-id") || "" };
 }
-const press = (chat, data, mid = 100) => hook({ callback_query: { id: "cb" + upd, data, from: { id: chat }, message: { chat: { id: chat }, message_id: mid } } });
+const press = (chat, data, mid = 100) => hook({ callback_query: { id: "cb" + upd, data, from: { id: chat }, message: { chat: { id: chat, type: "private" }, message_id: mid } } });
 const { data: botRow } = await admin.from("bot_settings").select("max_webhook_secret").eq("id", true).maybeSingle();
 const maxSecret = process.env.MAX_WEBHOOK_SECRET || botRow?.max_webhook_secret || "";
 async function maxHook(body) {
@@ -54,7 +54,7 @@ async function maxHook(body) {
 }
 const maxPress = (user, payload) => maxHook({ update_type: "message_callback", callback: { callback_id: "cb" + ++upd + Math.random(), payload, user: { user_id: user } } });
 const maxOwner = Math.floor(Math.random() * 1e9) + 3e9;
-const say = (chat, text) => hook({ message: { chat: { id: chat }, from: { id: chat, username: "lat" }, text } });
+const say = (chat, text) => hook({ message: { chat: { id: chat, type: "private" }, from: { id: chat, username: "lat" }, text } });
 
 try {
   await say(ownerChat, "/start " + (await code()));

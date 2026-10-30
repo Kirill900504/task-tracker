@@ -308,7 +308,7 @@ export default function IdeaItem({
             >
               Создать
             </button>
-            {teammates.length > 0 && (
+            {canEdit && teammates.length > 0 && (
               <>
                 <button
                   type="button"

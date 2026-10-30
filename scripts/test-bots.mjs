@@ -57,7 +57,7 @@ try {
   const tgCode = await makeCode("telegram");
   const start = await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, from: { username: "checker" }, text: "/start " + tgCode } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, from: { username: "checker" }, text: "/start " + tgCode } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   check("responds 200 to /start", start.status === 200, start);
@@ -68,14 +68,14 @@ try {
   const { data: usedCode } = await admin.from("telegram_link_codes").select("code").eq("code", tgCode).maybeSingle();
   check("burns the code", usedCode === null, usedCode);
 
-  const forbidden = await post("/api/telegram/webhook", { message: { chat: { id: tgChat }, text: "привет" } }, { "x-telegram-bot-api-secret-token": "wrong" });
+  const forbidden = await post("/api/telegram/webhook", { message: { chat: { id: tgChat, type: "private" }, text: "привет" } }, { "x-telegram-bot-api-secret-token": "wrong" });
   check("refuses a request without the right secret", forbidden.status === 403, forbidden);
 
   // A read-only command: no model call, but it goes through account lookup,
   // the rate limit and the shared pipeline.
   const query = await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "сегодня" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: "сегодня" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   check("answers a query command", query.status === 200, query);
@@ -93,7 +93,7 @@ try {
   });
   const crashes = await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "ошибки" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: "ошибки" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   check("answers the crash log command", crashes.status === 200, crashes);
@@ -104,7 +104,7 @@ try {
   const colleagueCode = await makeCode("telegram", assignee.id);
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "/start " + colleagueCode } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text: "/start " + colleagueCode } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: linkedColleague } = await admin.from("assignees").select("telegram_chat_id").eq("id", assignee.id).maybeSingle();
@@ -116,7 +116,7 @@ try {
     "/api/telegram/webhook",
     {
       update_id: Math.floor(Math.random() * 1e9),
-      callback_query: { id: "cbq1", data: "t:acc:" + taskId, message: { chat: { id: colleagueChat }, message_id: 5 } },
+      callback_query: { id: "cbq1", data: "t:acc:" + taskId, message: { chat: { id: colleagueChat, type: "private" }, message_id: 5 } },
     },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
@@ -145,7 +145,7 @@ try {
     "/api/telegram/webhook",
     {
       update_id: Math.floor(Math.random() * 1e9),
-      callback_query: { id: "cbq2", data: "m:no:" + meetingId, message: { chat: { id: colleagueChat }, message_id: 6 } },
+      callback_query: { id: "cbq2", data: "m:no:" + meetingId, message: { chat: { id: colleagueChat, type: "private" }, message_id: 6 } },
     },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
@@ -162,7 +162,7 @@ try {
     "/api/telegram/webhook",
     {
       update_id: Math.floor(Math.random() * 1e9),
-      message: { chat: { id: colleagueChat }, text: "Буду в Севастополе на приёмке" },
+      message: { chat: { id: colleagueChat, type: "private" }, text: "Буду в Севастополе на приёмке" },
     },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
@@ -181,7 +181,7 @@ try {
     "/api/telegram/webhook",
     {
       update_id: Math.floor(Math.random() * 1e9),
-      callback_query: { id: "cbq2b", data: "m:yes:" + meetingId, message: { chat: { id: colleagueChat }, message_id: 6 } },
+      callback_query: { id: "cbq2b", data: "m:yes:" + meetingId, message: { chat: { id: colleagueChat, type: "private" }, message_id: 6 } },
     },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
@@ -201,7 +201,7 @@ try {
   // что вопрос НЕ стал репликой: именно это и было поломкой.
   const asked = await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "мои задачи" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text: "мои задачи" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   check("отвечает коллеге на «мои задачи»", asked.status === 200, asked);
@@ -221,7 +221,7 @@ try {
     "/api/telegram/webhook",
     {
       update_id: Math.floor(Math.random() * 1e9),
-      callback_query: { id: "cbq3", data: "t:msg:" + taskId, message: { chat: { id: colleagueChat }, message_id: 7 } },
+      callback_query: { id: "cbq3", data: "t:msg:" + taskId, message: { chat: { id: colleagueChat, type: "private" }, message_id: 7 } },
     },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
@@ -235,7 +235,7 @@ try {
 
   const spoke = await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "Сделал половину, вторая к пятнице" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text: "Сделал половину, вторая к пятнице" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   check("принимает сообщение после «Ответить»", spoke.status === 200, spoke);
@@ -268,7 +268,7 @@ try {
     "/api/telegram/webhook",
     {
       update_id: Math.floor(Math.random() * 1e9),
-      callback_query: { id: "cbq4", data: "t:mv:" + mvTask, message: { chat: { id: colleagueChat }, message_id: 8 } },
+      callback_query: { id: "cbq4", data: "t:mv:" + mvTask, message: { chat: { id: colleagueChat, type: "private" }, message_id: 8 } },
     },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
@@ -278,7 +278,7 @@ try {
     "/api/telegram/webhook",
     {
       update_id: Math.floor(Math.random() * 1e9),
-      callback_query: { id: "cbq5", data: "t:mv3:" + mvTask, message: { chat: { id: colleagueChat }, message_id: 9 } },
+      callback_query: { id: "cbq5", data: "t:mv3:" + mvTask, message: { chat: { id: colleagueChat, type: "private" }, message_id: 9 } },
     },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
@@ -299,7 +299,7 @@ try {
 
   const whyMove = await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "Поставщик сдвинул отгрузку" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text: "Поставщик сдвинул отгрузку" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   check("принимает причину переноса", whyMove.status === 200, whyMove);
@@ -329,7 +329,7 @@ try {
     "/api/telegram/webhook",
     {
       update_id: Math.floor(Math.random() * 1e9),
-      callback_query: { id: "cbq6", data: "m:late:" + lateMeeting, message: { chat: { id: colleagueChat }, message_id: 10 } },
+      callback_query: { id: "cbq6", data: "m:late:" + lateMeeting, message: { chat: { id: colleagueChat, type: "private" }, message_id: 10 } },
     },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
@@ -346,7 +346,7 @@ try {
     "/api/telegram/webhook",
     {
       update_id: Math.floor(Math.random() * 1e9),
-      callback_query: { id: "cbq7", data: "m:who:" + lateMeeting, message: { chat: { id: colleagueChat }, message_id: 11 } },
+      callback_query: { id: "cbq7", data: "m:who:" + lateMeeting, message: { chat: { id: colleagueChat, type: "private" }, message_id: 11 } },
     },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
@@ -377,7 +377,7 @@ try {
 
   const dictated = await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "поручи Проверочному Коллеге собрать смету" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text: "поручи Проверочному Коллеге собрать смету" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   check("принимает надиктованное поручение", dictated.status === 200, dictated);
@@ -387,7 +387,7 @@ try {
 
   const confirmed = await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "да" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text: "да" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   check("создаёт по «да»", confirmed.status === 200, confirmed);
@@ -404,7 +404,7 @@ try {
   // Мысль теперь записывается от его имени, а «меня не будет» — на его
   // строке (lib/botSelf), как кнопка в личном кабинете.
   const mgrSay = (text) =>
-    post("/api/telegram/webhook", { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text } }, { "x-telegram-bot-api-secret-token": tgSecret });
+    post("/api/telegram/webhook", { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text } }, { "x-telegram-bot-api-secret-token": tgSecret });
   await mgrSay("мысль: проверить ценники на кассах проверочного магазина");
   const { data: mgrIdeas } = await admin.from("ideas").select("text, created_by").eq("user_id", userId).eq("created_by", memberUser.user.id);
   check("мысль руководителя словами — записана от его имени", (mgrIdeas || []).some((i) => /ценник/i.test(i.text)), mgrIdeas);
@@ -460,7 +460,7 @@ try {
       "/api/telegram/webhook",
       {
         update_id: Math.floor(Math.random() * 1e9),
-        callback_query: { id, data, message: { chat: { id: colleagueChat }, message_id: 40 } },
+        callback_query: { id, data, message: { chat: { id: colleagueChat, type: "private" }, message_id: 40 } },
       },
       { "x-telegram-bot-api-secret-token": tgSecret },
     );
@@ -534,7 +534,7 @@ try {
 
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "не хватает сметы по филиалам" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text: "не хватает сметы по филиалам" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: mgrReturned } = await admin.from("tasks").select("approval_state, approval_comment").eq("id", mgrTask).maybeSingle();
@@ -557,7 +557,7 @@ try {
       "/api/telegram/webhook",
       {
         update_id: Math.floor(Math.random() * 1e9),
-        callback_query: { id, data, message: { chat: { id: tgChat }, message_id: 20 } },
+        callback_query: { id, data, message: { chat: { id: tgChat, type: "private" }, message_id: 20 } },
       },
       { "x-telegram-bot-api-secret-token": tgSecret },
     );
@@ -626,7 +626,7 @@ try {
 
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "переделай смету" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: "переделай смету" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: returned } = await admin.from("tasks").select("approval_state, approval_comment").eq("id", ownerTask).maybeSingle();
@@ -648,7 +648,7 @@ try {
   const ownerSaid = "вопрос по смете " + Date.now();
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: ownerSaid } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: ownerSaid } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: written } = await admin
@@ -698,7 +698,7 @@ try {
   const wizardTitle = "Задача из мастера " + Date.now();
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: wizardTitle } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: wizardTitle } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: wizardWho } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
@@ -707,7 +707,7 @@ try {
   const wizardDesc = "Детали из мастера: смета на трёх листах";
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: wizardDesc } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: wizardDesc } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: wizardAfterDesc } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
@@ -736,7 +736,7 @@ try {
     "/api/telegram/webhook",
     {
       update_id: Math.floor(Math.random() * 1e9),
-      callback_query: { id: "own9", data: "m:mno:" + ownMeeting, message: { chat: { id: tgChat }, message_id: 21 } },
+      callback_query: { id: "own9", data: "m:mno:" + ownMeeting, message: { chat: { id: tgChat, type: "private" }, message_id: 21 } },
     },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
@@ -781,14 +781,14 @@ try {
   });
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: `Перенеси телемост с поставщиком на ${dd}.${mm} в то же время` } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: `Перенеси телемост с поставщиком на ${dd}.${mm} в то же время` } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: phrasePending } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
   check("фраза «перенеси … на ДД.ММ в то же время» → предложенный перенос", phrasePending?.pending_action?.kind === "move_item" && phrasePending?.pending_action?.id === phraseMeetingId && phrasePending?.pending_action?.date === msk(6) && phrasePending?.pending_action?.time === "15:00", phrasePending);
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "да" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: "да" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: phraseOld } = await admin.from("meetings").select("status, moved_to_date").eq("id", phraseMeetingId).maybeSingle();
@@ -810,14 +810,14 @@ try {
   await admin.from("meetings").insert({ id: bulkId, user_id: userId, date: workday(1), time: "18:30", title: "Проверка массового переноса", participants: [], status: "planned" });
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "перенеси все завтрашние встречи на следующую неделю" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: "перенеси все завтрашние встречи на следующую неделю" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: bulkPending } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
   check("«перенеси все завтрашние встречи…» → план массового переноса", bulkPending?.pending_action?.kind === "bulk_move" && (bulkPending?.pending_action?.plan?.meetings || []).some((m) => m.id === bulkId), bulkPending);
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "да" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: "да" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: bulkOld } = await admin.from("meetings").select("status, moved_to_date").eq("id", bulkId).maybeSingle();
@@ -828,7 +828,7 @@ try {
   await admin.from("meetings").insert({ id: cancelId, user_id: userId, date: msk(4), time: "12:00", title: "Встреча с банком", participants: [], status: "planned" });
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "отмени встречу с банком, клиент заболел" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: "отмени встречу с банком, клиент заболел" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: cancelPending } = await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle();
@@ -837,7 +837,7 @@ try {
   check("и до «да» встреча на месте", stillThere && !stillThere.deleted_at, stillThere);
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: "да" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: "да" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: cancelled } = await admin.from("meetings").select("deleted_at").eq("id", cancelId).maybeSingle();
@@ -848,7 +848,7 @@ try {
   // Десять умений словами (20.10.2026, lib/botSkills) — на боевом, с
   // настоящей моделью. Фразы — те, какими их скажет человек.
   const say = (text) =>
-    post("/api/telegram/webhook", { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text } }, { "x-telegram-bot-api-secret-token": tgSecret });
+    post("/api/telegram/webhook", { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text } }, { "x-telegram-bot-api-secret-token": tgSecret });
   const pendingNow = async () => (await admin.from("telegram_accounts").select("pending_action").eq("telegram_chat_id", tgChat).maybeSingle()).data?.pending_action;
 
   const skillTask = "sk" + Math.random().toString(36).slice(2, 8);
@@ -865,7 +865,7 @@ try {
   // не уходит репликой в обсуждение задачи.
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "по смете склада отметь цены" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text: "по смете склада отметь цены" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: cl3 } = await admin.from("task_checklist").select("text, done").eq("task_id", skillTask).order("position");
@@ -880,7 +880,7 @@ try {
   await admin.from("workspace_members").update({ status: "disabled" }).eq("assignee_id", assignee.id);
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat }, text: "по смете склада отметь отправить в банк" } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: colleagueChat, type: "private" }, text: "по смете склада отметь отправить в банк" } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   await admin.from("workspace_members").update({ status: "active" }).eq("assignee_id", assignee.id);
@@ -912,7 +912,7 @@ try {
   if (agendaMeetingId) {
     await post(
       "/api/telegram/webhook",
-      { update_id: Math.floor(Math.random() * 1e9), callback_query: { id: "cbqagd", data: "m:magd:" + agendaMeetingId, message: { chat: { id: tgChat }, message_id: 21 } } },
+      { update_id: Math.floor(Math.random() * 1e9), callback_query: { id: "cbqagd", data: "m:magd:" + agendaMeetingId, message: { chat: { id: tgChat, type: "private" }, message_id: 21 } } },
       { "x-telegram-bot-api-secret-token": tgSecret },
     );
     const agendaPending = await pendingNow();
@@ -976,7 +976,7 @@ try {
   const ideaText = "Проверочная мысль " + Date.now();
   await post(
     "/api/telegram/webhook",
-    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat }, text: ideaText } },
+    { update_id: Math.floor(Math.random() * 1e9), message: { chat: { id: tgChat, type: "private" }, text: ideaText } },
     { "x-telegram-bot-api-secret-token": tgSecret },
   );
   const { data: ideaRow } = await admin.from("ideas").select("id, user_id").eq("text", ideaText).maybeSingle();

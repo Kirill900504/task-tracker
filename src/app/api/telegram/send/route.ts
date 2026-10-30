@@ -100,6 +100,17 @@ async function deliver(
 // приглашение во встречу человека без мессенджера оставляло красную строку
 // в консоли браузера, хотя у большинства людей мессенджера нет и это
 // обычное состояние, а не сбой (QA-проход 06.10.2026).
+// Отправляет дело только его автор (второй аудит 30.10.2026). Маршрут
+// проверял одно «вижу ли я это» — то есть участник чужой задачи,
+// наблюдатель или получатель чужой мысли мог разослать её кому угодно из
+// команды, а у мысли адресаты к тому же записывались в idea_recipients, и
+// чужая личная мысль становилась видна всем, кому её переслали. Своё у
+// владельца — строки с пустым created_by (lib/ownership).
+function isAuthor(row: { created_by?: string | null; user_id?: string | null }, userId: string): boolean {
+  return row.created_by ? row.created_by === userId : row.user_id === userId;
+}
+const NOT_YOURS = "Отправить в мессенджер может только тот, кто это поставил";
+
 function nobodyReachable(unlinked: string[], fallback: string): string {
   return unlinked.length ? `Не подключены ни к Telegram, ни к MAX: ${unlinked.join(", ")}` : fallback;
 }
@@ -144,9 +155,22 @@ export async function POST(req: Request) {
   const failed: string[] = [];
 
   if (kind === "task") {
-    const { data: task } = await supabase.from("tasks").select("id, title, description, deadline, priority, assignee, number").eq("id", id).maybeSingle();
+    const { data: task } = await supabase.from("tasks").select("id, title, description, deadline, priority, assignee, number, created_by, user_id").eq("id", id).maybeSingle();
     if (!task) return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
-    const { linked, unlinked, self } = await recipientsByName(supabase, admin, to.length ? to : [task.assignee as string], user.id);
+    const author = isAuthor(task, user.id);
+    const found = await recipientsByName(supabase, admin, to.length ? to : [task.assignee as string], user.id);
+    // «Отправить участнику» в меню карточки есть и у исполнителя — но только
+    // тем, кто на задаче и так стоит: напомнить напарнику можно, показать
+    // чужую задачу постороннему нельзя.
+    if (!author) {
+      const { data: onTask } = await admin.from("task_participants").select("assignee_id").eq("task_id", task.id);
+      const allowed = new Set(((onTask || []) as { assignee_id: string }[]).map((r) => r.assignee_id));
+      const outside = found.linked.filter((p) => !allowed.has(p.id));
+      if (outside.length && !found.linked.some((p) => allowed.has(p.id))) return NextResponse.json({ error: NOT_YOURS }, { status: 403 });
+      found.linked = found.linked.filter((p) => allowed.has(p.id));
+      for (const p of outside) failed.push(`${p.name} (не участник задачи)`);
+    }
+    const { linked, unlinked, self } = found;
     // Задача самому себе: отправлять нечего и некому, но это не ошибка.
     if (!linked.length && self.length && !unlinked.length) return NextResponse.json({ sentTo, failed, self });
     if (!linked.length) {
@@ -194,9 +218,13 @@ export async function POST(req: Request) {
   }
 
   if (kind === "meeting") {
-    const { data: meeting } = await supabase.from("meetings").select("id, title, date, time, participants, status, slot_options").eq("id", id).maybeSingle();
+    const { data: meeting } = await supabase.from("meetings").select("id, title, date, time, participants, status, slot_options, created_by, user_id").eq("id", id).maybeSingle();
     if (!meeting) return NextResponse.json({ error: "Встреча не найдена" }, { status: 404 });
-    const names = to.length ? to : ((meeting.participants as string[]) || []);
+    // Встречу рассылает тот, кто её собрал; остальным — только тем, кто в
+    // ней и так стоит (то же правило, что у задачи выше).
+    const invitedNames = (meeting.participants as string[]) || [];
+    const names = (to.length ? to : invitedNames).filter((n) => isAuthor(meeting, user.id) || invitedNames.includes(n));
+    if (!names.length) return NextResponse.json({ error: NOT_YOURS }, { status: 403 });
     const { linked, unlinked, self } = await recipientsByName(supabase, admin, names, user.id);
     if (!linked.length && self.length && !unlinked.length) return NextResponse.json({ sentTo, failed, self });
     if (!linked.length) {
@@ -235,8 +263,9 @@ export async function POST(req: Request) {
     // Отправить или поделиться (миграция 0051, решение Кирилла 23.09.2026).
     // Всё, что не «share», — «send», как было до этого всегда.
     const mode: "send" | "share" = body?.mode === "share" ? "share" : "send";
-    const { data: idea } = await supabase.from("ideas").select("id, text").eq("id", id).maybeSingle();
+    const { data: idea } = await supabase.from("ideas").select("id, text, created_by, user_id").eq("id", id).maybeSingle();
     if (!idea) return NextResponse.json({ error: "Мысль не найдена" }, { status: 404 });
+    if (!isAuthor(idea, user.id)) return NextResponse.json({ error: NOT_YOURS }, { status: 403 });
     const { linked, unlinked, self } = await recipientsByName(supabase, admin, to, user.id);
     if (!linked.length && self.length && !unlinked.length) return NextResponse.json({ sentTo, failed, self });
     // Мысль доходит не только мессенджером: у получателя она появляется в

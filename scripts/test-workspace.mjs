@@ -840,11 +840,13 @@ try {
   section("Потерянный доступ");
 
   const lost = await post(owner, "/api/workspace/access-link", { assigneeId: personA.id });
-  check("владелец получает ссылку для вошедшего", lost.status === 200 && !!lost.body?.link, lost);
+  // Подключённому ссылка уходит в его мессенджер, на руки владельцу не
+  // выдаётся (второй аудит 30.10.2026); неподключённому — выдаётся.
+  check("ссылка выдаётся или уходит человеку в чат", lost.status === 200 && (!!lost.body?.link || lost.body?.sentToChat === true), lost);
   check("вместе с почтой, под которой человек входит", lost.body?.email === emailA, lost.body?.email);
   check(
     "ссылка ведёт на трекер, а не на supabase.co",
-    typeof lost.body?.link === "string" && lost.body.link.startsWith(base + "/reset-password?token_hash="),
+    lost.body?.sentToChat === true || (typeof lost.body?.link === "string" && lost.body.link.startsWith(base + "/reset-password?token_hash=")),
     lost.body?.link,
   );
 
