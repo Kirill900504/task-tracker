@@ -387,7 +387,7 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         // нет вовсе: список имён только растёт.
         const assigneesNow = liveRef.current.assignees;
         const { added } = diffAssignees(assigneesNow, shadowRef.current.assignees);
-        // Людей заводит владелец пространства (миграция 0076): у
+        // Людей заводит владелец пространства (миграция 0077): у
         // руководителя такая вставка ложилась строкой в его собственное
         // пустое «пространство», а теперь база её и не примет.
         if (added.length && !manager) {

@@ -60,6 +60,21 @@ const INPUT_STYLE = {
 
 type Status = "idle" | "loading" | "clarify" | "idea-preview" | "task-preview" | "meeting-preview" | "answer" | "notes-preview";
 
+// The live board's slot, never the one inside the boot snapshot. The
+// snapshot (lib/bootSnapshot) is a copy of the whole screen, ids included,
+// and it is still on the page when this component first renders — the
+// lazy initializer found the copy's #quickAddSlot, portalled the field
+// into it, and the field vanished with the picture a moment later
+// (30.10.2026, «пропало поле поиска»). A slot that left the document is
+// no slot either.
+function findSlot(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  for (const el of document.querySelectorAll<HTMLElement>("#quickAddSlot")) {
+    if (el.isConnected && !el.closest("#bootSnapshot")) return el;
+  }
+  return null;
+}
+
 export default function QuickAdd({
   provider,
   sheetOpen = false,
@@ -90,15 +105,13 @@ export default function QuickAdd({
   // short while instead of a single one-shot lookup means a late-arriving
   // element still gets picked up rather than leaving the bar silently gone
   // for the rest of the session.
-  const [slot, setSlot] = useState<HTMLElement | null>(() =>
-    typeof document !== "undefined" ? document.getElementById("quickAddSlot") : null,
-  );
+  const [slot, setSlot] = useState<HTMLElement | null>(findSlot);
   useEffect(() => {
     if (slot) return;
     let attempts = 0;
     const interval = setInterval(() => {
       attempts++;
-      const el = document.getElementById("quickAddSlot");
+      const el = findSlot();
       if (el || attempts > 50) {
         setSlot(el);
         clearInterval(interval);
