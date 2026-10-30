@@ -84,14 +84,53 @@ export async function POST(req: Request) {
     );
   }
 
+  // Человек приглашения — из пространства того, кто приглашает, и не
+  // убранный: до миграции 0074 приглашение мог вписать любой вошедший, со
+  // своим owner_id и чужим человеком.
+  const { data: invitee } = await admin.from("assignees").select("user_id, archived_at").eq("id", invite.assignee_id).maybeSingle();
+  if (!invitee || invitee.user_id !== invite.owner_id || invitee.archived_at) {
+    return NextResponse.json({ error: "Приглашение недействительно или уже использовано" }, { status: 400 });
+  }
+
+  // Отключённому доступ не возвращается приглашением (аудит 30.10.2026).
+  // Отключить могли человека, который так и не открыл свою ссылку, — и
+  // она, живая, ставила ему `active` поверх решения владельца. Возвращает
+  // доступ только владелец, кнопкой в «Команде».
+  const { data: existing } = await admin
+    .from("workspace_members")
+    .select("status")
+    .eq("owner_id", invite.owner_id)
+    .eq("assignee_id", invite.assignee_id)
+    .maybeSingle();
+  if (existing?.status === "disabled") {
+    return NextResponse.json({ error: "Приглашение недействительно или уже использовано" }, { status: 400 });
+  }
+
+  // Занять приглашение — ДО того, как заводить вход, и условием в самой
+  // записи: два одновременных открытия одной ссылки проходили проверку
+  // `used_at` оба, и второе переписывало человеку вход на свой. Не
+  // удалось дальше — приглашение возвращается.
+  const { data: claimed } = await admin
+    .from("workspace_invites")
+    .update({ used_at: new Date().toISOString() })
+    .eq("code", invite.code)
+    .is("used_at", null)
+    .select("code");
+  if (!claimed?.length) {
+    return NextResponse.json({ error: "Приглашение недействительно или уже использовано" }, { status: 400 });
+  }
+  const release = () => admin.from("workspace_invites").update({ used_at: null }).eq("code", invite.code);
+
   let memberId = sessionUser?.id || "";
   let memberEmail = sessionUser?.email || "";
 
   if (!memberId) {
     const emailError = emailProblem(email);
-    if (emailError) return NextResponse.json({ error: emailError }, { status: 400 });
-    const passwordError = passwordProblem(password);
-    if (passwordError) return NextResponse.json({ error: passwordError }, { status: 400 });
+    const passwordError = emailError ? null : passwordProblem(password);
+    if (emailError || passwordError) {
+      await release();
+      return NextResponse.json({ error: emailError || passwordError }, { status: 400 });
+    }
 
     // Confirmed on creation: the invitation link IS the confirmation that
     // this address was reachable — it was sent to the person by the owner,
@@ -103,6 +142,7 @@ export async function POST(req: Request) {
       email_confirm: true,
     });
     if (createError || !created?.user) {
+      await release();
       const alreadyThere = (createError?.message || "").toLowerCase().includes("already");
       return NextResponse.json(
         {
@@ -135,6 +175,7 @@ export async function POST(req: Request) {
       });
 
   if (memberError) {
+    await release();
     // One login belongs to one workspace (see the unique index in migration
     // 0019). Hitting it means this person is already somebody else's
     // manager, which is a real situation and not a bug — so it gets a real
@@ -148,7 +189,7 @@ export async function POST(req: Request) {
 
   await admin
     .from("workspace_invites")
-    .update({ used_at: new Date().toISOString(), used_by: memberId })
+    .update({ used_by: memberId })
     .eq("code", invite.code);
 
   // The password is never sent back; the browser signs in with what the

@@ -108,7 +108,7 @@ function LoginScreen() {
     const res = await fetch("/api/workspace/forgot-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: resetEmail }),
+      body: JSON.stringify({ who: resetEmail }),
     });
     const data = await res.json().catch(() => null);
     setResetLoading(false);
@@ -137,12 +137,13 @@ function LoginScreen() {
               человек, у которого мессенджер не привязан, остаётся перед
               экраном «всё хорошо» и ждёт письма, которого не будет. */}
           <p className="auth-sub">
-            Если <b style={{ color: "var(--ink)" }}>{resetEmail}</b> есть в трекере и к ней привязан Telegram или MAX —
+            Если <b style={{ color: "var(--ink)" }}>{resetEmail}</b> есть в трекере и у вас подключён Telegram или MAX —
             ссылка уже там, в чате с ботом. Она действует час.
           </p>
           <p className="auth-sub">
-            Ничего не пришло? Значит мессенджер к этой почте не привязан — попросите ссылку у Кирилла: в «Команде»
-            напротив вашего имени есть кнопка «Ссылка ещё раз».
+            Ничего не пришло? Проверьте, что фамилия написана так, как в трекере (или напишите имя и фамилию). Если
+            мессенджер у вас не подключён — попросите ссылку у Кирилла: в «Команде» напротив вашего имени есть кнопка
+            «Ссылка ещё раз».
           </p>
           <button type="button" className="auth-btn auth-btn-quiet" onClick={() => setMode("signin")}>
             Назад ко входу
@@ -168,12 +169,12 @@ function LoginScreen() {
             {resetError && <div className="auth-error">{resetError}</div>}
 
             <div className="auth-field">
-              <label htmlFor="resetEmail">Почта</label>
+              <label htmlFor="resetEmail">Почта или фамилия</label>
               <input
                 id="resetEmail"
-                type="email"
-                autoComplete="email"
-                placeholder="ivanov@company.ru"
+                type="text"
+                autoComplete="username"
+                placeholder="Иванов или ivanov@company.ru"
                 value={resetEmail}
                 onChange={(e) => setResetEmail(e.target.value)}
                 required

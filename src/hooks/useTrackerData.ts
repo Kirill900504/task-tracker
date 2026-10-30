@@ -387,7 +387,10 @@ export function useTrackerData({ enabled = true, workspace }: { enabled?: boolea
         // нет вовсе: список имён только растёт.
         const assigneesNow = liveRef.current.assignees;
         const { added } = diffAssignees(assigneesNow, shadowRef.current.assignees);
-        if (added.length) {
+        // Людей заводит владелец пространства (миграция 0076): у
+        // руководителя такая вставка ложилась строкой в его собственное
+        // пустое «пространство», а теперь база её и не примет.
+        if (added.length && !manager) {
           const { error } = await db.from("assignees").upsert(
             added.map((name) => ({ name })),
             { onConflict: "user_id,name" },

@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { accessLinkInput, readInput } from "@/lib/apiInput";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { originOf, recoveryLink } from "@/lib/recoveryLink";
+import { accountChat } from "@/lib/accountChat";
+import { sendToColleague } from "@/lib/botDelivery";
 
 // Возвращение доступа человеку, который УЖЕ вошёл когда-то.
 //
@@ -90,6 +92,25 @@ export async function POST(req: Request) {
   const link = await recoveryLink(admin, email, originOf(req));
   if ("error" in link) {
     return NextResponse.json({ error: "Не получилось создать ссылку: " + link.error }, { status: 500 });
+  }
+
+  // Ссылка уходит САМОМУ человеку, в его мессенджер, если он подключён
+  // (второй аудит 30.10.2026). Выданная владельцу на руки, она была ключом
+  // от чужого кабинета: открыв её сам, владелец задавал человеку пароль и
+  // читал его личные мысли и переписки — то, что концепция равноправия и
+  // конфиденциальности закрывает от него и на экране, и в базе. На руки
+  // ссылка выдаётся только тому, до кого бот не достаёт: переслать её
+  // иначе некому.
+  const chat = membership.status === "disabled" ? null : await accountChat(admin, membership.member_id as string);
+  if (chat) {
+    const sent = await sendToColleague(
+      chat,
+      `🔑 Ссылка на новый пароль для трекера (вход: ${email})\n\n${link.link}\n\n` +
+        "Её запросил Кирилл в «Команде». Ссылка действует час и сработает один раз. Если пароль вы не забывали — просто не открывайте её.",
+    ).catch(() => ({ ok: false as const }));
+    if (sent.ok) {
+      return NextResponse.json({ sentToChat: true, email, name: assignee.name, disabled: false });
+    }
   }
 
   return NextResponse.json({

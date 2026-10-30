@@ -114,20 +114,23 @@ export default function WelcomePage() {
               <h2>Подключите бота</h2>
               <p>Сюда приходят задачи и встречи, отвечать можно кнопками. Выберите мессенджер и нажмите в нём «Start».</p>
               <div className="welcome-buttons welcome-ms">
-                {info.telegram && (
+                {/* Подключён один — второй по этой ссылке уже не подключить
+                    (lib/linkGuard.welcomeRefusal), и кнопка, ведущая к отказу,
+                    хуже отсутствующей. */}
+                {info.telegram && (!connected || info.telegram.connected) && (
                   <a className={"welcome-btn ms-tg" + (info.telegram.connected ? " on" : "")} href={info.telegram.link} target="_blank" rel="noopener noreferrer" id="welcomeTelegram">
                     <TelegramBrandIcon size={22} />
                     {info.telegram.connected ? "Telegram подключён" : "Telegram"}
                   </a>
                 )}
-                {info.max && (
+                {info.max && (!connected || info.max.connected) && (
                   <a className={"welcome-btn ms-max" + (info.max.connected ? " on" : "")} href={info.max.link} target="_blank" rel="noopener noreferrer" id="welcomeMax">
                     <MaxBrandIcon size={22} />
                     {info.max.connected ? "MAX подключён" : "MAX"}
                   </a>
                 )}
               </div>
-              {connected && <p className="welcome-ok">Готово — вы на связи. Второй мессенджер можно подключить про запас.</p>}
+              {connected && <p className="welcome-ok">Готово — вы на связи. Второй мессенджер, если нужен, подключается в самом трекере: своё имя вверху → «Личный кабинет».</p>}
             </div>
           </li>
 

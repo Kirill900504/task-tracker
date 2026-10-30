@@ -122,7 +122,9 @@ async function testServerOnlyTable(table, row) {
   console.log(`\n${table} (server-only):`);
   const a = await makeUser("a");
   try {
-    const { error } = await a.client.from(table).insert(row);
+    // Строка может зависеть от входа: «свой» user_id — самый честный случай,
+    // его пропускала бы политика «user_id = auth.uid()».
+    const { error } = await a.client.from(table).insert(typeof row === "function" ? row(a.id) : row);
     check("a signed-in user cannot insert", !!error);
     const { data } = await a.client.from(table).select("*").limit(5);
     check("a signed-in user sees nothing", (data || []).length === 0);
@@ -184,15 +186,14 @@ async function main() {
     route: "rls-test",
   }));
 
-  // Same: link codes are issued by /api/telegram/link-code.
-  await testTable(
-    "telegram_link_codes",
-    (ownerId) => ({
-      user_id: ownerId,
-      code: "rls" + Math.random().toString(36).slice(2, 8),
-    }),
-    "code",
-  );
+  // Коды подключения и приглашения — только сервер (миграция 0074): код и
+  // есть вход, и браузерная вставка своего кода с чужим assignee_id делала
+  // любого вошедшего этим человеком.
+  await testServerOnlyTable("telegram_link_codes", (id) => ({ user_id: id, code: "rls" + Math.random().toString(36).slice(2, 8) }));
+  // Членство — тоже (миграция 0075): строка «я владелец, а член — чужой вход»
+  // уводила ссылку на пароль владельца в чат того, кто её вписал.
+  await testServerOnlyTable("workspace_members", (id) => ({ owner_id: id, member_id: id, role: "manager", status: "active" }));
+  await testServerOnlyTable("workspace_invites", (id) => ({ code: "rls" + Math.random().toString(36).slice(2, 10), owner_id: id, assignee_id: "00000000-0000-0000-0000-000000000000" }));
 
   await testUserPrefs();
 

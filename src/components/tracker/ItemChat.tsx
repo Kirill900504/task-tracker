@@ -616,8 +616,12 @@ export default function ItemChat({
                       }
                       data-comment-id={c.id}
                       onContextMenu={(e) => {
+                        // Поле правки лежит внутри пузыря: правая кнопка там —
+                        // это варианты исправления слова и «Вставить», а не
+                        // меню сообщения (30.10.2026).
+                        if (editingThis) return;
                         e.preventDefault();
-                        if (c.sending || editingThis) return;
+                        if (c.sending) return;
                         setMenuFor({ id: c.id, at: { x: e.clientX, y: e.clientY } });
                       }}
                       {...(c.sending || editingThis ? {} : longPressProps(c.id))}

@@ -234,14 +234,20 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
       return;
     }
     setCopied("");
+    if ("sentToChat" in result) {
+      setNotice(`Ссылка на новый пароль ушла ${withoutSelfMark(name)} в мессенджер — в чат с ботом. Почта для входа: ${result.email}.`);
+      return;
+    }
     setInviteFor({ id, name, link: result.link, kind: "access", email: result.email });
   }
 
   // Приглашения всем неподключённым — одним нажатием (п.1.1 предложений,
   // 07.10.2026). Разослать за Кирилла трекер не может — у неподключённого нет
   // чата, в этом и дело, — поэтому он отдаёт готовые сообщения с именами:
-  // каждое можно скопировать или «Поделиться» прямо в чат человеку, а все
-  // разом — вставить в общий чат. Неподключённый — без мессенджера: вход у
+  // каждое можно скопировать или «Поделиться» прямо в чат человеку. «Всё
+  // разом — в общий чат» убрано (аудит 30.10.2026): ссылка и есть вход, по
+  // ней подключается тот, кто откроет её первым, — в общем чате любой мог
+  // стать любым. Неподключённый — без мессенджера: вход у
   // него может и быть, но задачи до него из бота не доходят.
   const unreached = colleagues.filter((p) => !p.isMe && !p.linked);
   const [bulk, setBulk] = useState<{ lines: BulkLine[]; busy: boolean } | null>(null);
@@ -550,6 +556,9 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
             {bulk && bulk.lines.length > 0 && (
               <div className="team-invite" id="bulkInviteBlock" ref={revealInvite}>
                 <label>Приглашения — по одному на человека, действуют 7 дней</label>
+                <div className="team-hint" id="bulkInviteWarning">
+                  Каждую ссылку — лично этому человеку, не в общий чат: по ней входит в трекер тот, кто откроет её первым.
+                </div>
                 <div className="team-bulk-links">
                   {bulk.lines.map((l) =>
                     l.error || !l.link ? (
@@ -574,22 +583,6 @@ export default function TeamModal({ onClose }: { onClose: () => void }) {
                 </div>
                 {!bulk.busy && (
                   <div className="outcome-actions">
-                    <button
-                      className="btn btn-small btn-primary"
-                      id="copyAllInvitesBtn"
-                      onClick={() =>
-                        void copy(
-                          bulk.lines
-                            .filter((l) => l.link)
-                            .map((l) => `${l.name}: ${l.link}`)
-                            .join("\n"),
-                          "all",
-                          "bulk",
-                        )
-                      }
-                    >
-                      {copied === "all" ? "Скопировано" : "Скопировать всё"}
-                    </button>
                     <button className="btn btn-small" onClick={() => void reload()}>
                       Проверить, кто подключился
                     </button>

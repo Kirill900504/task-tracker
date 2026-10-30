@@ -71,10 +71,53 @@ export function codeChoices(code: number): number[] {
   return out;
 }
 
-export const LOGIN_PROMPT_TEXT =
-  "💻 Вход в трекер на новом устройстве.\n\n" +
-  "Если это вы — нажмите число, которое показано на экране входа. " +
-  "Если вы ничего не открывали — «Это не я»: без вашего нажатия в трекер не войти.";
+// Устройство словами — из заголовка браузера, без версий: «Chrome · Windows».
+// Его и время видит человек в вопросе (аудит 30.10.2026): «новое
+// устройство» без подробностей не отличить от своего, а под вопросом три
+// числа, и нажатое наугад из любопытства верно в одном случае из трёх.
+export function deviceOf(userAgent: string | null | undefined): string {
+  const ua = userAgent || "";
+  if (!ua) return "";
+  const browser = /Electron\//.test(ua)
+    ? "приложение для ПК"
+    : /Edg\//.test(ua)
+      ? "Edge"
+      : /YaBrowser\//.test(ua)
+        ? "Яндекс Браузер"
+        : /OPR\//.test(ua)
+          ? "Opera"
+          : /Firefox\//.test(ua)
+            ? "Firefox"
+            : /Chrome\//.test(ua)
+              ? "Chrome"
+              : /Safari\//.test(ua)
+                ? "Safari"
+                : "";
+  const system = /Windows/.test(ua)
+    ? "Windows"
+    : /iPhone|iPad/.test(ua)
+      ? "iPhone"
+      : /Android/.test(ua)
+        ? "Android"
+        : /Mac OS X/.test(ua)
+          ? "Mac"
+          : /Linux/.test(ua)
+            ? "Linux"
+            : "";
+  return [browser, system].filter(Boolean).join(" · ");
+}
+
+export function loginPromptText(device?: string | null, at: Date = new Date()): string {
+  const when = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit" }).format(at);
+  return (
+    `💻 Вход в трекер на новом устройстве${device ? ` (${device})` : ""}, ${when} МСК.\n\n` +
+    "Если входите вы — нажмите число, которое видите на экране входа.\n" +
+    "Если вы сейчас ничего не открывали — нажмите «Это не я» и не выбирайте число наугад. " +
+    "Никому не называйте это число и не нажимайте его по чьей-то просьбе."
+  );
+}
+
+export const LOGIN_PROMPT_TEXT = loginPromptText();
 
 // Запрос без числа — заведённый до 30.10.2026 — отвечается прежним «Да».
 export function loginButtons(token: string, code: number | null): { text: string; data: string }[][] {
@@ -94,7 +137,7 @@ export function loginButtons(token: string, code: number | null): { text: string
 
 // Ответ бота на /start LOGIN…: тот же вопрос, что приходит сам.
 export async function loginPrompt(admin: SupabaseClient, chatId: number, channel: BotChannelConfig, token: string): Promise<LoginPrompt> {
-  const { data: request } = await admin.from("login_requests").select("expires_at, approved_at, code").eq("token", token).maybeSingle();
+  const { data: request } = await admin.from("login_requests").select("expires_at, approved_at, code, device").eq("token", token).maybeSingle();
   if (!request || new Date(request.expires_at as string).getTime() < Date.now()) {
     return { text: "Эта кнопка входа устарела. Нажмите «Войти через " + channel.label + "» на странице входа ещё раз." };
   }
@@ -102,7 +145,19 @@ export async function loginPrompt(admin: SupabaseClient, chatId: number, channel
   if (!person) {
     return { text: "Этот чат ещё не подключён к трекеру. Откройте ссылку-приглашение, которую вам прислали, и нажмите «Start» оттуда." };
   }
-  return { text: LOGIN_PROMPT_TEXT, buttons: loginButtons(token, (request.code as number | null) ?? null) };
+  return { text: loginPromptText(request.device as string | null), buttons: loginButtons(token, (request.code as number | null) ?? null) };
+}
+
+// Отказ («Это не я» или не то число) на час закрывает присылку вопросов
+// этому человеку (lib/loginPush). Без этого чужой мог присылать вопрос раз
+// за разом — пять раз за десять минут, — пока одно из нажатий наугад не
+// попадёт в верное число. Сам человек входит, как и прежде: ссылкой на
+// бота со страницы входа, где вопрос он открывает себе сам.
+export const REFUSAL_ROUTE = "login-refused";
+export const REFUSAL_WINDOW_S = 3600;
+
+async function noteRefusal(admin: SupabaseClient, assigneeId: string): Promise<void> {
+  await admin.from("api_rate_limits").insert({ user_id: assigneeId, route: REFUSAL_ROUTE });
 }
 
 export function isLoginAction(action: { kind: string; action: string }): boolean {
@@ -126,18 +181,20 @@ export async function resolveLogin(
     .maybeSingle();
   if (!request || new Date(request.expires_at as string).getTime() < Date.now()) return "Эта кнопка входа устарела — начните вход на компьютере заново.";
   if (request.approved_at || request.refused_at) return "Уже отвечено.";
+  const person = await personOfChat(admin, chatId, channel);
   if (!yes) {
     await admin.from("login_requests").update({ refused_at: new Date().toISOString() }).eq("token", token);
-    return "✖ Вход отклонён. Если вы ничего не открывали — ничего делать не нужно, без вашей кнопки в трекер не войти.";
+    if (person) await noteRefusal(admin, person.id);
+    return "✖ Вход отклонён. Если вы ничего не открывали — ничего делать не нужно: без вашего нажатия в трекер не войти. Час такие запросы вам приходить не будут.";
   }
   // Не то число — отказ, а не «попробуйте ещё»: перебирать три кнопки по
   // кругу нельзя, а настоящий хозяин просто начнёт вход заново.
   if (request.code != null && Number(picked) !== request.code) {
     await admin.from("login_requests").update({ refused_at: new Date().toISOString() }).eq("token", token).is("approved_at", null);
-    return "✖ Число не совпало с экраном входа — вход отменён. Если входили вы, начните заново и нажмите число, которое видите на экране.";
+    if (person) await noteRefusal(admin, person.id);
+    return "✖ Число не совпало с экраном входа — вход отменён. Если входили вы — нажмите на странице входа «Открыть бота» и выберите число, которое видите на экране.";
   }
 
-  const person = await personOfChat(admin, chatId, channel);
   if (!person) return "Этот чат не подключён к трекеру.";
   const cabinet = await ensureCabinet(admin, person.id);
   if (!cabinet.ok) return cabinet.error;

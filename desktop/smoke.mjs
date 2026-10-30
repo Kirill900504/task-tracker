@@ -102,6 +102,28 @@ const check = (ok, what) => {
 
   await shot(win, path.join(here, "smoke-login.png"));
 
+  // Правая кнопка по слову с ошибкой: у окна Electron своего меню нет, и
+  // без обработчика подчёркнутое слово исправить было нечем (30.10.2026).
+  // Само меню — чистая функция, её проверяем на выдуманном нажатии; у окна
+  // — что обработчик действительно висит.
+  console.log("Меню правой кнопки:");
+  const { contextMenuTemplate } = createRequire(import.meta.url)("./contextMenu.js");
+  const replaced = [];
+  const typo = contextMenuTemplate(
+    { isEditable: true, misspelledWord: "превет", dictionarySuggestions: ["привет", "пребудет"], editFlags: { canCopy: true, canPaste: true } },
+    { replace: (w) => replaced.push(w), learn: () => {} },
+  );
+  check(typo[0]?.label === "привет" && typo[1]?.label === "пребудет", "варианты исправлений стоят первыми");
+  typo[0]?.click?.();
+  check(replaced[0] === "привет", "нажатие варианта заменяет слово");
+  check(typo.some((i) => i.label === "Добавить в словарь"), "есть «Добавить в словарь»");
+  check(typo.some((i) => i.role === "paste"), "в поле есть «Вставить»");
+  check(contextMenuTemplate({ isEditable: false, selectionText: "" }, {}).length === 0, "мимо полей и выделения меню нет — как прежде");
+  const listening = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.listenerCount("context-menu"),
+  );
+  check(listening > 0, "окно слушает правую кнопку");
+
   // Нажатие на уведомление поднимает свёрнутое окно. Страница подаёт знак
   // меткой в адресе (useDesktopAlerts.raiseWindow), оболочка его ловит;
   // если метку переименуют с одной стороны и забудут с другой, уведомление

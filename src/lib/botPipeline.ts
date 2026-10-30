@@ -25,6 +25,7 @@ import { searchTracker, summariseSearch } from "@/lib/trackerSearch";
 import { deadlineNote, newTaskRow } from "@/lib/newTask";
 import { ownerListReply, ownerMeetingsReply, ownerMenu, ownerNav } from "@/lib/ownerQueries";
 import { botMenu } from "@/lib/botMenu";
+import { chatTakenBy, recordMiss, takenText, tellInviter, tooManyMisses, welcomeRefusal } from "@/lib/linkGuard";
 import { DESC_QUESTION, descButtons, nextNewTaskStep, whoButtons, type NewTaskPending } from "@/lib/ownerNewTask";
 import { closeMeeting } from "@/lib/meetingRecap";
 import { applyReview } from "@/lib/reviewWork";
@@ -653,6 +654,11 @@ export async function handleLinkCode(ctx: BotContext, rawCode: string, username:
     return true;
   }
 
+  if (await tooManyMisses(ctx.admin, ctx.channel, ctx.chatId)) {
+    await say(ctx, "Слишком много неверных кодов подряд — попробуйте через час или попросите новую ссылку.");
+    return true;
+  }
+
   const { data: linkRow, error: lookupError } = await ctx.admin
     .from("telegram_link_codes")
     .select("user_id, expires_at, assignee_id, channel")
@@ -669,23 +675,47 @@ export async function handleLinkCode(ctx: BotContext, rawCode: string, username:
   // принимают оба бота, и при подключении оно не сгорает.
   const welcome = linkRow?.channel === "any";
   if (!linkRow || (linkRow.channel !== ctx.channel.id && !welcome) || new Date(linkRow.expires_at).getTime() < Date.now()) {
+    await recordMiss(ctx.admin, ctx.channel, ctx.chatId);
     await say(ctx, "Код неверный или уже истёк. Запросите новый в приложении.");
+    return true;
+  }
+  // Код обязан лежать в пространстве того человека, к которому ведёт, и
+  // человек — не убранный (второй аудит 30.10.2026). Браузерная вставка
+  // кода со своим user_id и чужим assignee_id закрыта миграцией 0074; эта
+  // проверка — чтобы такой код не сработал и тогда, когда его положит
+  // туда кто-то ещё.
+  if (linkRow.assignee_id) {
+    const { data: target } = await ctx.admin.from("assignees").select("user_id, archived_at").eq("id", linkRow.assignee_id).maybeSingle();
+    if (!target || target.user_id !== linkRow.user_id || target.archived_at) {
+      await recordMiss(ctx.admin, ctx.channel, ctx.chatId);
+      await say(ctx, "Код неверный или уже истёк. Запросите новый в приложении.");
+      return true;
+    }
+  }
+  // Один аккаунт мессенджера — один человек (lib/linkGuard).
+  const takenBy = await chatTakenBy(ctx.admin, ctx.channel, ctx.chatId, (linkRow.assignee_id as string | null) ?? null);
+  if (takenBy) {
+    await say(ctx, takenText(ctx.channel, takenBy));
     return true;
   }
   // Живущий неделю код не должен перепривязать уже подключённого человека
   // к чужому чату: ссылку пересылают, и открыть её может не тот, кому её
   // дали. Свой же чат — просто приветствие ещё раз.
+  // И подключает она только ПЕРВЫЙ мессенджер (lib/linkGuard.welcomeRefusal).
+  let alreadyHere = false;
   if (welcome && linkRow.assignee_id) {
     const { data: current } = await ctx.admin
       .from("assignees")
-      .select(ctx.channel.chatColumn)
+      .select("telegram_chat_id, max_user_id")
       .eq("id", linkRow.assignee_id)
       .maybeSingle();
-    const existing = (current as Record<string, unknown> | null)?.[ctx.channel.chatColumn];
-    if (existing && Number(existing) !== Number(ctx.chatId)) {
-      await say(ctx, `Этот человек уже подключён к ${ctx.channel.label} с другого аккаунта. Если это вы и аккаунт новый — попросите у Кирилла новую ссылку.`);
+    const chats = (current as { telegram_chat_id: number | null; max_user_id: number | null } | null) ?? { telegram_chat_id: null, max_user_id: null };
+    const refusal = welcomeRefusal(chats, ctx.channel, ctx.chatId);
+    if (refusal) {
+      await say(ctx, refusal);
       return true;
     }
+    alreadyHere = Number(chats[ctx.channel.chatColumn]) === Number(ctx.chatId);
   }
 
   // A code issued for a colleague attaches this chat to that person instead
@@ -707,6 +737,7 @@ export async function handleLinkCode(ctx: BotContext, rawCode: string, username:
       return true;
     }
     if (!welcome) await ctx.admin.from("telegram_link_codes").delete().eq("code", code);
+    if (!alreadyHere) await tellInviter(ctx.admin, linkRow.user_id as string, (person?.name as string) || "", ctx.channel, username);
     // Подключение — это и есть вход в трекер: дальше человеку не нужно ни
     // приглашения, ни пароля. Кабинет заведётся при первом открытии
     // приложения (lib/cabinet), поэтому кнопка стоит прямо в приветствии,

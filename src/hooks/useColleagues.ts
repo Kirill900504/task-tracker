@@ -218,7 +218,7 @@ export function useColleagues() {
   // которой человек записан (в интерфейсе её больше негде увидеть), и
   // одноразовую ссылку на смену пароля для того же входа.
   const accessLink = useCallback(
-    async (assigneeId: string): Promise<{ link: string; email: string } | { error: string }> => {
+    async (assigneeId: string): Promise<{ link: string; email: string } | { sentToChat: true; email: string } | { error: string }> => {
       const res = await fetch("/api/workspace/access-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -226,6 +226,9 @@ export function useColleagues() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.error) return { error: data?.error || "Не получилось создать ссылку" };
+      // Подключённому человеку ссылка уходит в его мессенджер сама, на руки
+      // не выдаётся (/api/workspace/access-link).
+      if (data.sentToChat) return { sentToChat: true, email: data.email as string };
       return { link: data.link as string, email: data.email as string };
     },
     [],
@@ -266,15 +269,15 @@ export function useColleagues() {
       team.update((list) =>
         list.map((p) => (p.id === assigneeId ? { ...p, member: (active ? "active" : "disabled") as MemberState } : p)),
       );
-      const db = createClient();
-      await db
-        .from("workspace_members")
-        .update(
-          active
-            ? { status: "active", disabled_at: null }
-            : { status: "disabled", disabled_at: new Date().toISOString() },
-        )
-        .eq("assignee_id", assigneeId);
+      // Маршрутом, а не записью из браузера: кроме строки членства он
+      // запрещает вход на сервере входа и убирает живые ссылки
+      // (/api/workspace/access). Запись строки сама по себе оставляла
+      // отключённому его сессии.
+      await fetch("/api/workspace/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigneeId, active }),
+      }).catch(() => null);
       await reload();
     },
     [reload],
