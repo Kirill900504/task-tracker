@@ -266,15 +266,15 @@ export function useColleagues() {
       team.update((list) =>
         list.map((p) => (p.id === assigneeId ? { ...p, member: (active ? "active" : "disabled") as MemberState } : p)),
       );
-      const db = createClient();
-      await db
-        .from("workspace_members")
-        .update(
-          active
-            ? { status: "active", disabled_at: null }
-            : { status: "disabled", disabled_at: new Date().toISOString() },
-        )
-        .eq("assignee_id", assigneeId);
+      // Маршрутом, а не записью из браузера: кроме строки членства он
+      // запрещает вход на сервере входа и убирает живые ссылки
+      // (/api/workspace/access). Запись строки сама по себе оставляла
+      // отключённому его сессии.
+      await fetch("/api/workspace/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigneeId, active }),
+      }).catch(() => null);
       await reload();
     },
     [reload],

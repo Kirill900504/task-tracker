@@ -151,7 +151,18 @@ export const personInput = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("restore"), assigneeId: UUID }),
 ]);
-export const forgotPasswordInput = z.object({ email: EMAIL });
+// «Забыли пароль?» — почта ИЛИ фамилия (аудит 30.10.2026): у большинства
+// вход заведён ботом на служебной почте, которую человек не видел ни разу,
+// и поле «Почта» было для них тупиком. Ключ `email` остался ради прежних
+// вызовов; что именно пришло, разбирает маршрут.
+export const forgotPasswordInput = z
+  .object({ email: z.string().trim().max(200).optional(), who: z.string().trim().max(200).optional() })
+  .transform((v) => {
+    const who = (v.who || v.email || "").trim();
+    return { who: who.includes("@") ? who.toLowerCase() : who };
+  })
+  .refine((v) => v.who.length >= 2, { message: "укажите почту или фамилию", path: ["who"] })
+  .refine((v) => !v.who.includes("@") || EMAIL.safeParse(v.who).success, { message: "не похоже на почту", path: ["who"] });
 
 // Вход запросом в мессенджер (lib/loginPush): телефон или почта — одной
 // строкой, разбирает маршрут.

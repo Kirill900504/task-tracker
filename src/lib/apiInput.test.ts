@@ -33,8 +33,13 @@ describe("схема приёмки", () => {
 describe("схема «забыли пароль»", () => {
   it("приводит почту к нижнему регистру и отсекает не-почту", () => {
     const ok = forgotPasswordInput.safeParse({ email: "  Igor@Example.RU " });
-    expect(ok.success && ok.data.email).toBe("igor@example.ru");
-    expect(forgotPasswordInput.safeParse({ email: "игорь" }).success).toBe(false);
+    expect(ok.success && ok.data.who).toBe("igor@example.ru");
+    expect(forgotPasswordInput.safeParse({ email: "игорь@" }).success).toBe(false);
+    expect(forgotPasswordInput.safeParse({}).success).toBe(false);
+  });
+  it("принимает фамилию — у большинства служебная почта, которую они не знают", () => {
+    const ok = forgotPasswordInput.safeParse({ who: " Кучеренко " });
+    expect(ok.success && ok.data.who).toBe("Кучеренко");
     // А кириллический адрес — это адрес: встроенная проверка zod его
     // отвергала, и на этом падал сценарий рабочего пространства.
     expect(forgotPasswordInput.safeParse({ email: "нет-такой@example.invalid" }).success).toBe(true);

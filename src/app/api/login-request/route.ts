@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { inviteLink } from "@/lib/botInvite";
-import { isLoginToken, newLoginCode, newLoginToken } from "@/lib/messengerLogin";
+import { deviceOf, isLoginToken, newLoginCode, newLoginToken } from "@/lib/messengerLogin";
 import { pushLoginRequest } from "@/lib/loginPush";
 import { loginPushInput, readInput } from "@/lib/apiInput";
 import { checkRateLimit } from "@/lib/rateLimit";
@@ -47,7 +47,10 @@ export async function POST(req: Request) {
   if ((alive ?? 0) >= MAX_ALIVE) return tooMany;
   const token = newLoginToken();
   const code = newLoginCode();
-  const { error } = await admin.from("login_requests").insert({ token, code });
+  // Чем входят — для вопроса в чате (миграция 0073): человек должен узнать
+  // в нём своё устройство, а не «какое-то новое».
+  const device = deviceOf(req.headers.get("user-agent")) || null;
+  const { error } = await admin.from("login_requests").insert({ token, code, device });
   if (error) return NextResponse.json({ error: "Вход через мессенджер сейчас недоступен" }, { status: 500 });
   const [telegram, max] = await Promise.all([inviteLink("telegram", token), inviteLink("max", token)]);
   return NextResponse.json({ token, code, telegram: telegram || null, max: max || null });
@@ -67,7 +70,7 @@ export async function PUT(req: Request) {
   }
   const { data: request } = await admin
     .from("login_requests")
-    .select("code, expires_at, approved_at, refused_at")
+    .select("code, expires_at, approved_at, refused_at, device")
     .eq("token", body.token)
     .maybeSingle();
   // Число обязательно: вопрос, пришедший сам, без сверки отдал бы вход
@@ -76,7 +79,7 @@ export async function PUT(req: Request) {
   if (stale || new Date(request.expires_at as string).getTime() < Date.now()) {
     return NextResponse.json({ error: "Запрос устарел — нажмите кнопку ещё раз" }, { status: 409 });
   }
-  const outcome = await pushLoginRequest(admin, body.token, request.code as number, body.channel, body.who);
+  const outcome = await pushLoginRequest(admin, body.token, request.code as number, body.channel, body.who, request.device as string | null);
   return NextResponse.json({ outcome });
 }
 

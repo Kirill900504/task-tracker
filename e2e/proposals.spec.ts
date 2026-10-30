@@ -110,7 +110,9 @@ test("«Пригласить всех» в «Команде» выдаёт пр�
   const block = page.locator("#bulkInviteBlock");
   await expect(block).toContainText(name, { timeout: 20_000 });
   await expect(block).toContainText("/welcome/");
-  await expect(block.getByRole("button", { name: "Скопировать всё" })).toBeVisible();
+  // Ссылка и есть вход — общей кнопки «в общий чат» больше нет (30.10.2026).
+  await expect(block.getByRole("button", { name: "Скопировать всё" })).toHaveCount(0);
+  await expect(page.locator("#bulkInviteWarning")).toContainText("не в общий чат");
 });
 
 test("готовый ответ вставляется в отчёт одним нажатием, но не отправляет его сам", async ({ page, browser }) => {

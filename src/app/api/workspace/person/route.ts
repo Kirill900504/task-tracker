@@ -10,6 +10,7 @@ import { recordEvent } from "@/lib/itemHistory";
 import { sendToPerson } from "@/lib/reach";
 import { withoutSelfMark } from "@/lib/actorName";
 import { ownerSeesTask, ownerSight } from "@/lib/ownerVisible";
+import { setAccessBan } from "@/lib/accessBan";
 
 // Люди в «Команде»: завести, убрать, вернуть (14.10.2026).
 //
@@ -373,6 +374,10 @@ async function retire(admin: SupabaseClient, person: Person): Promise<{ archived
   // Вход — так же, как «Отключить вход»: отключённый не получает ни одной
   // двери (см. lib/cabinet). Остальное — то, что могло бы человека вернуть
   // в обход: неиспользованные ссылки и закрепление за разделами.
+  // И запрет на сервере входа (lib/accessBan): одна строка членства
+  // закрывала данные, но не сессии убранного человека.
+  const { data: member } = await admin.from("workspace_members").select("member_id").eq("assignee_id", person.id).maybeSingle();
+  if (member?.member_id) await setAccessBan(admin, member.member_id as string, true);
   await Promise.all([
     admin.from("workspace_members").update({ status: "disabled", disabled_at: new Date().toISOString() }).eq("assignee_id", person.id),
     admin.from("workspace_invites").delete().eq("assignee_id", person.id),

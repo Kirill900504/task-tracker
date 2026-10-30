@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeChoices, isLoginAction, isLoginToken, LOGIN_PREFIX, loginButtons, newLoginCode, newLoginToken } from "./messengerLogin";
+import { codeChoices, deviceOf, isLoginAction, isLoginToken, LOGIN_PREFIX, loginButtons, loginPromptText, newLoginCode, newLoginToken } from "./messengerLogin";
 import { decodeCallback } from "./colleagues";
 
 // Токен входа через бота едет в ссылке t.me/<бот>?start=… и обратно в
@@ -58,5 +58,25 @@ describe("вход через бота", () => {
     expect(decodeCallback(rows[1][0].data)).toMatchObject({ action: "lgno", id: token });
     // Старый запрос без числа — прежние «Да / Нет».
     expect(loginButtons(token, null)[0].map((b) => b.data)).toEqual([`t:lgok:${token}`, `t:lgno:${token}`]);
+  });
+});
+
+// Аудит 30.10.2026: вопрос «это вы?» говорил только «новое устройство»,
+// и человек, который ничего не открывал, не мог отличить чужой вход от
+// своего — а одно число из трёх наугад угадывается в трети случаев.
+describe("вопрос о входе называет устройство и время", () => {
+  it("браузер и система словами", () => {
+    expect(deviceOf("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36")).toBe("Chrome · Windows");
+    expect(deviceOf("Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/130.0 Safari/537.36 Edg/130.0")).toBe("Edge · Windows");
+    expect(deviceOf("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1")).toBe("Safari · iPhone");
+    expect(deviceOf("Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/128 Electron/32.0 Safari/537.36")).toBe("приложение для ПК · Windows");
+    expect(deviceOf("")).toBe("");
+  });
+  it("в тексте — устройство, время и просьба не нажимать наугад", () => {
+    const text = loginPromptText("Chrome · Windows", new Date("2026-10-30T09:05:00Z"));
+    expect(text).toContain("Chrome · Windows");
+    expect(text).toContain("12:05");
+    expect(text).toMatch(/не выбирайте число наугад/);
+    expect(text).toMatch(/по чьей-то просьбе/);
   });
 });

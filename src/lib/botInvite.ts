@@ -32,9 +32,17 @@ export async function inviteLink(channel: InviteChannel, code: string): Promise<
 
 // A code has to survive being read aloud and retyped: no 0/O/1/I, no
 // lowercase, and short enough to fit a deep link comfortably.
+//
+// The code IS the proof of identity: whoever presses «Start» with it becomes
+// that person, cabinet and all (lib/cabinet). Until 30.10.2026 it came from
+// Math.random, whose generator state can be recovered from a handful of its
+// outputs — every invitation link handed out was a sample. crypto now, and
+// 32 letters divide 256 evenly, so the modulo is uniform.
 export function randomCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(8);
+  globalThis.crypto.getRandomValues(bytes);
   let out = "";
-  for (let i = 0; i < 8; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  for (const b of bytes) out += alphabet[b % alphabet.length];
   return out;
 }
