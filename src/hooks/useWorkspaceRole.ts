@@ -177,12 +177,20 @@ export function useWorkspaceRole(): WorkspaceIdentity {
           setState(known);
           setLoading(false);
         }
-        const { data: row } = await db
-          .from("workspace_members")
-          .select("owner_id, assignee_id, status, role, assignees(name)")
-          .eq("member_id", userId)
-          .eq("status", "active")
-          .maybeSingle();
+        // Оба вопроса — разом. Своя строка «(я)» нужна только владельцу, но
+        // кто владелец, известно лишь по ответу на первый: спрашивая по
+        // очереди, владелец платил за два полёта до базы подряд, а это и
+        // есть время, которое на первом входе (кэша роли ещё нет) он
+        // смотрит на каркас. Лишний короткий запрос у руководителя дешевле.
+        const [{ data: row }, { data: mine }] = await Promise.all([
+          db
+            .from("workspace_members")
+            .select("owner_id, assignee_id, status, role, assignees(name)")
+            .eq("member_id", userId)
+            .eq("status", "active")
+            .maybeSingle(),
+          db.from("assignees").select("id, name").eq("user_id", userId),
+        ]);
         const member = row as {
           owner_id: string;
           assignee_id: string;
@@ -191,7 +199,6 @@ export function useWorkspaceRole(): WorkspaceIdentity {
         } | null;
         if (member) return { userId, member, selfAssigneeId: "" };
         // Владелец: своя строка в списке людей — та, что помечена «(я)».
-        const { data: mine } = await db.from("assignees").select("id, name").eq("user_id", userId);
         const self = (mine || []).find((r) => isSelfAssignee((r.name as string) || ""));
         return { userId, member, selfAssigneeId: (self?.id as string) || "" };
       })

@@ -53,11 +53,24 @@ export function isChunkLoadError(error: unknown): boolean {
 export async function cacheShell(): Promise<void> {
   try {
     if (typeof caches === "undefined" || !("serviceWorker" in navigator)) return;
-    const response = await fetch("/", { credentials: "same-origin" });
+    await storeShell(await fetch("/", { credentials: "same-origin" }));
+  } catch {
+    /* no connection, or storage refused — whatever was cached before stands */
+  }
+}
+
+// The one place a response becomes the stored "/". The shell is the same for
+// everyone (the server paints only the skeleton; data is read by the browser
+// under the database's rights), so a copy fetched before sign-in is as good as
+// one fetched after — which is what lets the sign-in page leave it here
+// (lib/warmTracker) for the navigation that follows «Войти».
+export async function storeShell(response: Response): Promise<void> {
+  try {
+    if (typeof caches === "undefined" || !("serviceWorker" in navigator)) return;
     if (!response.ok || response.redirected) return;
     const cache = await caches.open(SHELL_CACHE);
     await cache.put("/", response.clone());
   } catch {
-    /* no connection, or storage refused — whatever was cached before stands */
+    /* storage refused — the navigation simply goes to the network */
   }
 }

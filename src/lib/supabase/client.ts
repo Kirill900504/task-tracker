@@ -68,9 +68,39 @@ async function reachable(url: string): Promise<boolean> {
   }
 }
 
+// «Прямой хост только что ответил» — на несколько минут и в пределах вкладки.
+//
+// Проба стоит ~0,2 с, и все запросы к базе ждут её. Страница входа делает её,
+// пока человек печатает (lib/warmTracker), а «Войти» — полный переход на «/»,
+// где модуль начинается с нуля и спрашивал то же самое ещё раз, уже перед
+// первой строкой данных (замер 30.10.2026). Сеть за эти секунды не меняется;
+// а если всё же поменялась, первый же упавший запрос переводит на /sb сам
+// (routedFetch ниже). sessionStorage, а не localStorage: другая вкладка или
+// завтрашний запуск — уже другая сеть, и там проба честно идёт заново.
+const DIRECT_OK_KEY = "rokas-sb-direct-at";
+const DIRECT_OK_FOR_MS = 5 * 60_000;
+
+function directRecentlyOk(): boolean {
+  try {
+    const at = Number(window.sessionStorage.getItem(DIRECT_OK_KEY));
+    return at > 0 && Date.now() - at < DIRECT_OK_FOR_MS;
+  } catch {
+    return false;
+  }
+}
+
+function rememberDirectOk() {
+  try {
+    window.sessionStorage.setItem(DIRECT_OK_KEY, String(Date.now()));
+  } catch {
+    /* storage refused — the next page just probes again */
+  }
+}
+
 async function probe(): Promise<boolean> {
   if (await reachable(`${SUPABASE_URL}/auth/v1/health`)) {
     remember(false);
+    rememberDirectOk();
     return false;
   }
   // The direct host is silent. If our own origin answers, this is that host
@@ -93,6 +123,8 @@ function route(): Promise<boolean> {
       void reachable(`${SUPABASE_URL}/auth/v1/health`).then((ok) => {
         if (ok) remember(false);
       });
+    } else if (directRecentlyOk()) {
+      decision = Promise.resolve(false);
     } else {
       decision = probe().then((useProxy) => {
         routedThroughProxy = useProxy;

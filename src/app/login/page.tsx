@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState, type FormEvent } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { hasMessengerLaunch, miniAppRedirect } from "@/lib/messengerLaunch";
 import MessengerSignIn from "@/components/MessengerSignIn";
@@ -25,7 +25,6 @@ export default function LoginPage() {
 }
 
 function LoginScreen() {
-  const router = useRouter();
   // /login?forgot=1 — сразу «Восстановление пароля»: туда ведёт кнопка
   // «Получить новую ссылку» со страницы, где старая не подошла. Без этого
   // человека с просроченной ссылкой отправляли на вход, где ему нечего
@@ -73,8 +72,10 @@ function LoginScreen() {
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
+    // «Входим…» остаётся до самого перехода: кнопка, вернувшаяся к «Войти»
+    // на полсекунды до трекера, зовёт нажать её ещё раз.
     if (error) {
+      setLoading(false);
       // Нет связи — это не «неверный пароль», и отправлять человека
       // восстанавливать пароль, который у него верный, — худшее, что тут
       // можно сделать.
@@ -83,8 +84,12 @@ function LoginScreen() {
       setWrongPassword(!offline);
       return;
     }
-    router.push("/");
-    router.refresh();
+    // Полный переход, а не router.push: «/» воркер отдаёт из кэша, куда её
+    // уже положил прогрев (lib/warmTracker), — первый кадр трекера не ждёт
+    // сервера. Мягкий переход ходил за «/» на сервер дважды (push и refresh),
+    // и каждый раз через проверку сессии в прослойке. Так же входят через
+    // мессенджер (MessengerSignIn) и по ссылке (/enter).
+    window.location.replace("/");
   }
 
   // Ссылка уходит В МЕССЕНДЖЕР, а не письмом.

@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_COOKIE_OPTIONS } from "./cookieOptions";
-import { WARM_PARAM } from "@/lib/warmTracker";
+import { WARM_PARAM } from "@/lib/warmParam";
 
 // A write to /api sent by a page on ANOTHER site. The sign-in cookie is
 // SameSite=None (see cookieOptions — the mini-app lives in MAX's and
