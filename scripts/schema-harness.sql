@@ -31,6 +31,21 @@ as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;
 
+-- The role the request came in as, read from the same claims. Migration 0077
+-- uses it to tell the browser from the service role; with no claim set (the
+-- harness itself, standing in for the service key) it is null, as it is for
+-- a direct database connection in production.
+create or replace function auth.role()
+returns text
+language sql
+stable
+as $$
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.role', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'
+  )::text
+$$;
+
 do $$
 begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
@@ -49,6 +64,7 @@ $$;
 
 grant usage on schema public, auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;
+grant execute on function auth.role() to anon, authenticated, service_role;
 
 -- Хранилище файлов Supabase. Здесь его нет, но миграция 0020 заводит в нём
 -- корзину и права, а значит проверка должна уметь их применить. Стоят
