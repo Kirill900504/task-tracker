@@ -14,7 +14,7 @@ import { userFilePath } from "./userFile";
 //    the cache. Here the network for the page itself never answers at all.
 // 2. Every open from a messenger waited for the sign-in route before going
 //    anywhere, even for someone signed in on this phone yesterday.
-const { email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
+const { id: userId, email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -91,4 +91,32 @@ test("из мессенджера уже вошедший человек поп�
   await page.waitForTimeout(1_500);
   await expect(page).toHaveURL(/\/(#.*)?$/);
   await expect(page.locator("#mobileNav")).toBeVisible();
+});
+
+test("быстрый ввод переживает стартовый снимок и смену мобильной раскладки", async ({ page }) => {
+  // Exercise the real snapshot path: ordinary automation intentionally skips
+  // it and therefore could not catch the field being portalled into a copy.
+  await page.addInitScript(() => Object.defineProperty(navigator, "webdriver", { get: () => false }));
+  await signInAndWaitForShell(page);
+  await page.setViewportSize({ width: 1100, height: 844 });
+  const input = page.getByPlaceholder("Что добавить?", { exact: true });
+  await expect(input).toBeVisible();
+  // Seed a valid copy with the duplicate slot that caused the regression.
+  // This stays in the disposable browser/account, never in production data.
+  await page.evaluate((id) => {
+    localStorage.setItem("kkt_boot_snapshot", JSON.stringify({
+      u: id, m: false, t: Date.now(),
+      h: '<div class="toolbar"><div id="quickAddSlot"></div></div>',
+    }));
+  }, userId);
+  await page.reload();
+  await expect(input).toBeVisible();
+  await input.fill("Черновик проверки");
+  await page.setViewportSize({ width: 780, height: 844 });
+  await page.locator("#mobileMoreBtn").click();
+  await page.getByRole("button", { name: "Записать голосом", exact: true }).click();
+  await expect(page.locator(".quick-add-sheet input")).toHaveValue("Черновик проверки");
+  await page.setViewportSize({ width: 1100, height: 844 });
+  await expect(page.locator("#quickAddSlot input")).toHaveValue("Черновик проверки");
+  await expect(page.locator("#bootSnapshot input")).toHaveCount(0);
 });

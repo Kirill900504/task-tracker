@@ -4002,3 +4002,22 @@
   .mobile-board-pills .filter-pill svg{display:none;}
   .mobile-board-pills .filter-pill{padding:0 7px; gap:4px;}
 }
+
+/* Keep words, counters, connection indicators and the menu reachable even
+   together on a 320px phone. Filters belong to the header, but need their
+   own row when there is not enough room beside the account controls. */
+@media (max-width:600px){
+  .mobile-header{flex-wrap:wrap;}
+  .mobile-header:has(.mobile-board-pills:not(:empty)) .mobile-title{display:block;}
+  .mobile-board-pills{order:1; flex:1 0 100%; min-width:0;}
+  .mobile-board-pills .filter-pill{flex:1 1 0; min-width:0; justify-content:center; flex-wrap:wrap; height:auto; min-height:44px; padding:6px;}
+  .mobile-board-pills .filter-pill-count{max-width:100%; overflow-wrap:anywhere;}
+}
+@media (max-width:800px){
+  .mobile-header .conn-status-btn{flex:none;}
+}
+/* Four words and four badges cannot share their baselines on 320px.
+   Stack each badge inside its own button, keeping the toolbar one row. */
+@media (max-width:480px){
+  .toolbar .view-switch-btn{flex-direction:column; gap:2px; padding:3px 2px; min-height:44px;}
+}

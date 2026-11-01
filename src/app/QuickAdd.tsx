@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import Icon from "@/components/tracker/Icon";
 import AddButton from "@/components/tracker/AddButton";
 import { withoutSelfMark } from "@/lib/actorName";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 export type TaskFields = {
   title: string;
@@ -46,7 +47,6 @@ export interface QuickAddProvider {
   closeMeetingWithResult: (m: { id: string; summary: string }) => void;
 }
 
-const MOBILE_QUERY = "(max-width: 768px)";
 const INPUT_STYLE = {
   flex: 1,
   padding: "7px 9px",
@@ -98,40 +98,27 @@ export default function QuickAdd({
   const api = provider;
   const ask = useAsk();
 
-  // The desktop portal target is normally already in the DOM by the time
-  // this mounts (it's part of the static markup rendered alongside it), so
-  // this usually resolves on the very first check. But it's been reported
-  // missing entirely in at least one mobile in-app browser — polling for a
-  // short while instead of a single one-shot lookup means a late-arriving
-  // element still gets picked up rather than leaving the bar silently gone
-  // for the rest of the session.
+  // The portal follows the live board even if it arrives late or is replaced
+  // by a responsive layout switch. A detached slot must never retain input.
   const [slot, setSlot] = useState<HTMLElement | null>(findSlot);
   useEffect(() => {
-    if (slot) return;
-    let attempts = 0;
-    const interval = setInterval(() => {
-      attempts++;
-      const el = findSlot();
-      if (el || attempts > 50) {
-        setSlot(el);
-        clearInterval(interval);
-      }
-    }, 100);
-    return () => clearInterval(interval);
-  }, [slot]);
+    // Layout switches can remove a previously valid target. Observe its
+    // lifetime, not only the first five seconds of the page.
+    const update = () => setSlot((previous) => {
+      const next = findSlot();
+      return previous === next ? previous : next;
+    });
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true });
+    update();
+    return () => observer.disconnect();
+  }, []);
 
   // Phones need a fundamentally different affordance than the desktop
   // toolbar bar: a thumb-reachable floating button that opens a bottom
   // sheet, rather than a bar the user has to scroll up to reach. Same form,
   // same logic underneath — only where/how it's presented differs.
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia(MOBILE_QUERY);
-    const update = () => setIsMobile(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
+  const isMobile = useIsMobile();
 
   const [text, setText] = useState("");
   const [status, setStatus] = useState<Status>("idle");

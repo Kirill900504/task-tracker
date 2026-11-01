@@ -3,6 +3,7 @@ import type { BotButton, BotChannelConfig } from "@/lib/botTransport";
 import { transportFor, TELEGRAM_CHANNEL, MAX_CHANNEL } from "@/lib/botDelivery";
 import { meetingCard, taskCard } from "@/lib/colleagueQueries";
 import { todayMoscow } from "@/lib/taskLogic";
+import { withMenu } from "@/lib/colleagues";
 
 // Один ответ — во всех мессенджерах сразу.
 //
@@ -59,7 +60,7 @@ export async function rememberSent(
 
 // Элемента больше нет в прежнем виде — встречу отменили или перенесли. Все
 // приглашения о нём, у всех людей и во всех мессенджерах, переписываются
-// одной фразой и теряют кнопки: «Буду» под отменённой встречей читается
+// одной фразой и теряют действия (выход в меню остаётся): «Буду» под отменённой встречей читается
 // как вопрос, на который ещё ждут ответа.
 export async function mirrorClosed(admin: SupabaseClient, kind: "task" | "meeting", itemId: string, text: string): Promise<void> {
   try {
@@ -71,7 +72,7 @@ export async function mirrorClosed(admin: SupabaseClient, kind: "task" | "meetin
       .eq("item_id", itemId)
       .gte("created_at", since);
     const rows = (data || []) as { channel: "telegram" | "max"; chat_id: number; message_id: string }[];
-    await Promise.all(rows.map((t) => transportFor(t.channel === "max" ? MAX_CHANNEL : TELEGRAM_CHANNEL).edit(t.chat_id, t.message_id, text, [])));
+    await Promise.all(rows.map((t) => transportFor(t.channel === "max" ? MAX_CHANNEL : TELEGRAM_CHANNEL).edit(t.chat_id, t.message_id, text, withMenu())));
   } catch (e) {
     console.error("bot mirror:", e instanceof Error ? e.message : String(e));
   }
@@ -118,7 +119,7 @@ export async function mirrorMeetingClosed(
           t.chat_id,
           t.message_id,
           text,
-          t.assignee_id === organizer ? organizerButtons : [],
+          withMenu(t.assignee_id === organizer ? organizerButtons : []),
         ),
       ),
     );

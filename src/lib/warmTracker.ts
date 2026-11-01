@@ -33,18 +33,20 @@ export function assetUrls(html: string): string[] {
 }
 
 let started = false;
+let warming: Promise<void> | undefined;
 
 export function warmTracker(): void {
   if (started || typeof window === "undefined") return;
   started = true;
   createClient();
-  void (async () => {
+  warming = (async () => {
     try {
       const res = await fetch(`/?${WARM_PARAM}=1`, { credentials: "same-origin" });
       if (!res.ok || res.redirected) return;
-      void storeShell(res.clone());
       // Не все разом и не впереди того, что нужно странице входа сейчас.
+      const shell = res.clone();
       await Promise.all(assetUrls(await res.text()).map((u) => fetch(u, { priority: "low" } as RequestInit).catch(() => {})));
+      await storeShell(shell);
     } catch {
       /* без связи прогревать нечего — вход и так скажет об этом */
     }
@@ -62,6 +64,23 @@ export function warmTracker(): void {
 // загрузки (instantOpen). Ожидание ограничено: воркер — это офлайн, а не вход.
 export async function workerSettled(maxMs = 1500): Promise<void> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
-  if (navigator.serviceWorker.controller) return;
-  await Promise.race([navigator.serviceWorker.ready.catch(() => {}), new Promise((r) => setTimeout(r, maxMs))]);
+  const worker = navigator.serviceWorker;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onControllerChange: () => void = () => {};
+  const controlled = new Promise<void>((resolve) => {
+    onControllerChange = () => { if (worker.controller) resolve(); };
+    worker.addEventListener("controllerchange", onControllerChange);
+    onControllerChange();
+  });
+  try {
+    // `ready` promises an active registration, not control of this page.
+    // Bound control and warming together: neither can hold sign-in hostage.
+    await Promise.race([
+      Promise.all([controlled, warming]),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, maxMs); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    worker.removeEventListener("controllerchange", onControllerChange);
+  }
 }

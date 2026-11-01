@@ -267,6 +267,8 @@ export default function NewTracker() {
   // каждой из них своя иконка и своё окно, а здесь остался ровно столбец.
   // Запоминается между запусками, как и фильтры доски (useSavedSetting).
   const [showDone, setShowDone] = useSavedSetting("board.showDone", false);
+  // One temporary view for all mounted copies of the board; never persisted.
+  const [showSnoozed, setShowSnoozed] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [openTaskRequest, setOpenTaskRequest] = useState<TaskPrefill | null>(null);
   const [openMeetingRequest, setOpenMeetingRequest] = useState<MeetingPrefill | null>(null);
@@ -729,6 +731,8 @@ export default function NewTracker() {
   // TasksPanel (полное на компьютере и два мобильных, каждое на свой
   // столбец) не расходились друг с другом лишним нажатием клавиш.
   const mainColProps = {
+    showSnoozed,
+    onShowSnoozedChange: setShowSnoozed,
     isAdmin,
     myUserId: mineOnlyId,
     myMemberAssigneeId: identity.assigneeId,

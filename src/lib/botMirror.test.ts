@@ -30,7 +30,7 @@ vi.mock("@/lib/colleagueQueries", () => ({
   taskCard: (...args: unknown[]) => card(...args),
 }));
 
-const { mirrorAnswer, rememberSent } = await import("./botMirror");
+const { mirrorAnswer, mirrorClosed, mirrorMeetingClosed, rememberSent } = await import("./botMirror");
 
 function fakeAdmin(messages: { channel: string; chat_id: number; message_id: string }[], inserted: unknown[] = []): SupabaseClient {
   return {
@@ -56,6 +56,35 @@ beforeEach(() => {
 });
 
 describe("mirrorAnswer", () => {
+  it("отмена снимает действия, сохраняя меню в обоих мессенджерах", async () => {
+    const admin = fakeAdmin([
+      { channel: "telegram", chat_id: 11, message_id: "100" },
+      { channel: "max", chat_id: 22, message_id: "200" },
+    ]);
+    await mirrorClosed(admin, "meeting", "m1", "Встреча отменена");
+    expect(edits).toHaveLength(2);
+    for (const edit of edits) expect(edit.buttons).toEqual([[{ text: "☰ Меню", data: "t:list:menu" }]]);
+  });
+
+  it("закрытие встречи оставляет меню участнику и организатору", async () => {
+    const admin = {
+      from(table: string) {
+        const chain = {
+          select: () => chain, eq: () => chain, like: () => chain, order: () => chain, limit: () => chain,
+          gte: async () => ({ data: [
+            { assignee_id: "organizer", channel: "telegram", chat_id: 11, message_id: "100" },
+            { assignee_id: "guest", channel: "max", chat_id: 22, message_id: "200" },
+          ] }),
+          maybeSingle: async () => ({ data: table === "meetings" ? { user_id: "owner", created_by: null } : { id: "organizer" } }),
+        };
+        return chain;
+      },
+    } as unknown as SupabaseClient;
+    await mirrorMeetingClosed(admin, "m1", "Встреча завершена", [[{ text: "Записать итог", data: "m:recap:m1" }]]);
+    expect(edits).toHaveLength(2);
+    expect(edits[0].buttons).toEqual([[{ text: "Записать итог", data: "m:recap:m1" }], [{ text: "☰ Меню", data: "t:list:menu" }]]);
+    expect(edits[1].buttons).toEqual([[{ text: "☰ Меню", data: "t:list:menu" }]]);
+  });
   it("переписывает сообщение в другом мессенджере и не трогает нажатое", async () => {
     card.mockResolvedValue({ text: "📅 Тест\n\n✅ Вы подтвердили участие", buttons: [[{ text: "🕐 Опоздаю", data: "m:late:m1" }]] });
     const admin = fakeAdmin([

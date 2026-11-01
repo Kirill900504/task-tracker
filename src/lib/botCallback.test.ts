@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { asScreen } from "@/lib/botCallback";
-import { decodeCallback, encodeCallback, screenButtons } from "@/lib/colleagues";
+import { decodeCallback, encodeCallback, screenButtons, MENU_DATA } from "@/lib/colleagues";
 import type { CallbackAction } from "@/lib/colleagues";
 
 // Экран бота: следующий уровень занимает место прежнего.
@@ -17,6 +17,22 @@ const fromScreen = (action: string): CallbackAction =>
 const fromMessage = (action: string): CallbackAction => decodeCallback(encodeCallback("task", action, "id1"))!;
 
 describe("экран бота", () => {
+  it("закрытие своей задачи сохраняет выход в меню без пометки экрана", () => {
+    const out = asScreen(fromMessage("done"), { toast: "Готово", rewriteTo: "Задача закрыта", rewriteButtons: [] });
+    expect(out.rewriteButtons?.flat().map((b) => b.data)).toEqual([MENU_DATA]);
+    const menu = asScreen(decodeCallback(MENU_DATA)!, { toast: "Меню", say: "Главное меню" });
+    expect(menu.say).toBe("Главное меню");
+    expect(menu.rewriteTo).toBeUndefined();
+  });
+
+  it("после закрытия внутри экрана меню продолжает редактировать этот экран", () => {
+    const out = asScreen(fromScreen("done"), { toast: "Готово", rewriteTo: "Задача закрыта", rewriteButtons: [] });
+    expect(decodeCallback(out.rewriteButtons![0][0].data)).toMatchObject({ action: "list", id: "menu", fromScreen: true });
+  });
+
+  it("подтверждение входа не получает навигацию по задачам", () => {
+    expect(asScreen(fromMessage("lgok"), { toast: "Вход", rewriteTo: "Подтверждено" }).rewriteButtons).toBeUndefined();
+  });
   it("показывает следующий уровень на месте прежнего, когда нажали внутри экрана", () => {
     const out = asScreen(fromScreen("olist"), { toast: "Открываю", say: "📋 Задачи (2)", sayButtons: [[{ text: "☰ Меню", data: "t:omenu:x" }]] });
     expect(out.rewriteTo).toBe("📋 Задачи (2)");

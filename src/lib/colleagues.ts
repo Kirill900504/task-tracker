@@ -38,14 +38,21 @@ export type SendKind = "task" | "meeting" | "idea";
 // листать вверх»). Меню жило только под экранами меню и под сводкой, а
 // задачи, реплики и ответы приходят каждый день — и меню уезжало вверх
 // под ними.
-// Одна кнопка на обе половины бота: `t:list:menu` разбирает половина
-// получателя, а в чате постановщика нажатие, не узнанное постановщиком,
-// пробуется как «коллежское» (lib/botCallback) и показывает меню
-// постановщика (canAssign в colleagueQueries). Кнопка не помечена как
-// экран: под присланной задачей меню открывается новым сообщением, а не
-// стирает задачу.
+// The recipient routes t:list:menu through colleagueQueries; an assigner
+// handles it directly, without requiring an owner-self people row. It is
+// not screen-marked: opening a menu must not overwrite a delivered task.
 export const MENU_DATA = "t:list:menu"; // = encodeCallback("task", "list", "menu")
 export const MENU_BUTTON: BotButton = { text: "☰ Меню", data: MENU_DATA };
+
+// Terminal states remove item actions, never the way back to navigation.
+// Recognize screen-marked and owner menus too, so existing nav rows stay single.
+export function withMenu(rows: BotButton[][] = []): BotButton[][] {
+  if (rows.flat().some((b) => {
+    const action = decodeCallback(b.data);
+    return action?.kind === "task" && (action.action === "omenu" || (action.action === "list" && action.id === "menu"));
+  })) return rows;
+  return [...rows, [MENU_BUTTON]];
+}
 
 // Под экраном, у которого внизу свой ряд «☰ Меню · Мои задачи», вторая
 // такая же кнопка не нужна.

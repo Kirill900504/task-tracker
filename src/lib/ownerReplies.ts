@@ -408,7 +408,7 @@ export async function handleOwnerCallback(
   // `oper` — карточка человека из удалённого раздела «👥 Люди» (21.10.2026:
   // сводка о чужой загрузке противоречит конфиденциальности). Кнопка ещё
   // живёт в старых сообщениях, и молчать ей нельзя — отвечает меню.
-  if (action.action === "omenu" || action.action === "oper") {
+  if (action.action === "omenu" || action.action === "oper" || (action.kind === "task" && action.action === "list" && action.id === "menu")) {
     const menu = ownerMenu();
     return { toast: "Меню", say: menu.text, sayButtons: menu.buttons };
   }

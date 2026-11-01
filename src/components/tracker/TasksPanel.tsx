@@ -83,6 +83,8 @@ export default function TasksPanel({
   justCreatedId,
   mobileColumn,
   headerSlot,
+  showSnoozed,
+  onShowSnoozedChange: setShowSnoozed,
 }: {
   // Уже сужено родителем до «моё» — где я постановщик, исполнитель,
   // соисполнитель или наблюдатель (см. NewTracker.tsx, 23.09.2026, правило
@@ -177,6 +179,8 @@ export default function TasksPanel({
   // (MobileHeader), и получает его только доска открытой вкладки. Нет
   // места — кнопки остаются в полосе над доской.
   headerSlot?: HTMLElement | null;
+  showSnoozed: boolean;
+  onShowSnoozedChange: (show: boolean) => void;
 }) {
   // «Просрочено» — не сортировка и не раздел, а вопрос «что горит»: он
   // задаётся чаще всех прочих фильтров вместе взятых.
@@ -189,7 +193,6 @@ export default function TasksPanel({
   // НЕ запоминается между запусками, в отличие от фильтров рядом: это
   // взгляд «только отложенное», и открыть трекер утром на нём значило бы
   // увидеть доску без единой рабочей задачи.
-  const [showSnoozed, setShowSnoozed] = useState(false);
   // Чьи задачи показывает доска: то, что ждут от меня, то, что поручил я,
   // или всё сразу.
   //
@@ -964,11 +967,12 @@ export default function TasksPanel({
                       data-filter={f.key}
                       className={"view-switch-btn" + (on ? " active" : "")}
                       aria-pressed={on}
-                      title={f.title + (on ? " — нажмите ещё раз, чтобы снять" : "")}
+                      title={f.title + (burning > 0 ? ` · Просрочено: ${burning}` : "") + (on ? " — нажмите ещё раз, чтобы снять" : "")}
+                      aria-label={f.label + (burning > 0 ? ` · Просрочено: ${burning}` : "")}
                       onClick={() => setSavedFilter((prev: unknown) => toggleBoardFilter(cleanBoardFilter(prev), f.key))}
                     >
                       {f.label}
-                      {burning > 0 && <span className="filter-pill-count">{burning}</span>}
+                      {burning > 0 && <span className="filter-pill-count" aria-hidden="true">{isMobile && burning > 99 ? "99+" : burning}</span>}
                     </button>
                   );
                 })}

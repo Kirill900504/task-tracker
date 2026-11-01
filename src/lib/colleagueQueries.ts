@@ -4,7 +4,7 @@ import { miniAppUrl, trackerUrl } from "@/lib/trackerUrl";
 import { ensureCabinet } from "@/lib/cabinet";
 import { assignerHelp } from "@/lib/ownerQueries";
 import type { BotButton } from "@/lib/botTransport";
-import { encodeCallback, meetingButtons, taskButtons, withoutMenu } from "@/lib/colleagues";
+import { encodeCallback, meetingButtons, taskButtons, withoutMenu, withMenu } from "@/lib/colleagues";
 import { openTaskChoices, openVoteChoices } from "@/lib/answerRules";
 import { botMenu, navRow } from "@/lib/botMenu";
 import { fmtDate } from "@/lib/taskDisplay";
@@ -520,7 +520,7 @@ export async function taskCard(
   const actions = done
     ? [[{ text: own ? "📝 Заметка" : "💬 Ответить", data: encodeCallback("task", "msg", taskId) }]]
     : taskButtons(taskId, row.role, open, own);
-  return { text: lines.join("\n"), buttons: withNav ? [...withoutMenu(actions), ...navButtons()] : actions };
+  return { text: lines.join("\n"), buttons: withNav ? [...withoutMenu(actions), ...navButtons()] : withMenu(actions) };
 }
 
 export async function meetingCard(

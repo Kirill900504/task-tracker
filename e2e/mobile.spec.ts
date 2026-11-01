@@ -714,3 +714,44 @@ test("«Просрочено» в шапке телефона, полоса на
   await page.click('[data-tab="meetings"]');
   await expect(page.locator("#mobileHeader #filterOverdueBtn")).toHaveCount(0);
 });
+
+test("фильтры шапки синхронны между вкладками и помещаются на узком экране", async ({ page }) => {
+  await clearBoard();
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const stamp = Date.now();
+  const { error } = await admin.from("tasks").insert([
+    { id: `ux-late-${stamp}`, user_id: userId, title: "E2E просроченная", assignee: "", status: "in_progress", deadline: "2020-01-01" },
+    { id: `ux-snoozed-${stamp}`, user_id: userId, title: "E2E отложенная", assignee: "", status: "in_progress", snoozed_until: "2099-01-01" },
+  ]);
+  expect(error).toBeNull();
+  await login(page);
+  const overdue = page.locator("#mobileHeader #filterOverdueBtn");
+  const snoozed = page.locator("#mobileHeader #showSnoozedBtn");
+  await expect(overdue).toBeVisible({ timeout: 30_000 });
+  await expect(snoozed).toBeVisible();
+  // Remove a saved selection left by an earlier test before checking both
+  // mounted boards. The test must not depend on their execution order.
+  if (await overdue.getAttribute("aria-pressed") === "true") await overdue.click();
+  await overdue.click();
+  await page.click('[data-tab="work"]');
+  await expect(overdue).toHaveAttribute("aria-pressed", "true");
+  await overdue.click();
+  await snoozed.click();
+  await page.click('[data-tab="tasks"]');
+  await expect(overdue).toHaveAttribute("aria-pressed", "false");
+  await expect(snoozed).toHaveAttribute("aria-pressed", "true");
+  await snoozed.click();
+
+  for (const width of [320, 360, 380, 390, 480, 600, 800]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const button of [overdue, snoozed, page.locator("#mobileMoreBtn")]) {
+      await expect(button).toBeVisible();
+      const box = await button.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  }
+});

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BotChannelConfig } from "@/lib/botTransport";
 import type { CallbackAction } from "@/lib/colleagues";
 import { isLoginAction, resolveLogin } from "@/lib/messengerLogin";
-import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, screenButtons, type ColleagueRow } from "@/lib/colleagues";
+import { findColleagueByChat, findOwnerSelfByChat, meetingButtons, screenButtons, withMenu, type ColleagueRow } from "@/lib/colleagues";
 import { notifyAuthor } from "@/lib/botDelivery";
 import { sendToPerson } from "@/lib/reach";
 import { handleColleagueCallback } from "@/lib/colleagueReplies";
@@ -64,6 +64,13 @@ import { todayMoscow } from "@/lib/taskLogic";
 export function asScreen(action: CallbackAction, outcome: CallbackOutcome): CallbackOutcome {
   const next: CallbackOutcome = { ...outcome };
   const wasScreen = action.fromScreen === true;
+  // A reply can finish an item or a wizard and deliberately clear its actions.
+  // Keep navigation even then; login confirmations have their own lifecycle.
+  const opensMenu = action.action === "omenu" || action.action === "oper" || (action.action === "list" && action.id === "menu");
+  if ((action.kind === "task" || action.kind === "meeting") && !isLoginAction(action) && !opensMenu) {
+    if (next.say) next.sayButtons = withMenu(next.sayButtons);
+    if (next.rewriteTo) next.rewriteButtons = withMenu(next.rewriteButtons);
+  }
   if (wasScreen && next.say && !next.rewriteTo) {
     next.rewriteTo = next.say;
     next.rewriteButtons = next.sayButtons;
