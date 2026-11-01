@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Switch the tracker to a freshly uploaded build:  activate <sha>
-# Called by deploy.yml after it uploads /srv/tracker/incoming.tgz.
+# Switch the tracker to a freshly fetched build:  activate <sha>
+# Called by pull.sh after it downloads /srv/tracker/incoming.tgz.
 #
 # Each build gets its own folder and `current` is a symlink, so going back
 # is one command — `activate <older sha>` with a folder that is still there —

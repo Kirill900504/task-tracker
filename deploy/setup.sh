@@ -15,9 +15,6 @@ set -euo pipefail
 NODE_VERSION=24.11.1
 APP=/srv/tracker
 DOMAIN=tracker.rokass.ru
-# The key GitHub Actions deploys with (deploy.yml). Its private half lives
-# only in the repository's secrets.
-ACTIONS_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPXGhp7aGgHeyDY1LqdXUS67pk2yTa8BoTTkMKyr8M0n rokas-tracker-github-actions'
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
@@ -43,12 +40,10 @@ if ! swapon --show | grep -q /swapfile; then
 fi
 
 id tracker >/dev/null 2>&1 || useradd --system --create-home --home-dir "$APP" --shell /bin/bash tracker
-mkdir -p "$APP/releases" "$APP/bin" "$APP/.ssh"
-grep -qF "$ACTIONS_KEY" "$APP/.ssh/authorized_keys" 2>/dev/null || echo "$ACTIONS_KEY" >> "$APP/.ssh/authorized_keys"
-chmod 700 "$APP/.ssh"
-chmod 600 "$APP/.ssh/authorized_keys"
+mkdir -p "$APP/releases" "$APP/bin"
 
 install -m 755 "$(dirname "$0")/activate.sh" "$APP/bin/activate"
+install -m 755 "$(dirname "$0")/pull.sh" "$APP/bin/pull"
 install -m 755 "$(dirname "$0")/cron.sh" "$APP/bin/cron"
 chown -R tracker:tracker "$APP"
 
@@ -69,9 +64,11 @@ chmod 440 /etc/sudoers.d/rokas-tracker
 install -m 644 "$(dirname "$0")/Caddyfile" /etc/caddy/Caddyfile
 systemctl reload caddy || systemctl restart caddy
 
-# What Vercel did for us besides serving pages: the reminders pinger (every
-# five minutes) and the weekly backup (vercel.json, Mondays 06:00 UTC).
+# What Vercel did for us besides serving pages: deploying every push (now
+# pulled, see pull.sh), the reminders pinger (every five minutes) and the
+# weekly backup (vercel.json, Mondays 06:00 UTC).
 cat > /etc/cron.d/rokas-tracker <<CRON
+* * * * * tracker $APP/bin/pull >> $APP/pull.log 2>&1
 */5 * * * * tracker $APP/bin/cron reminders
 0 6 * * 1 tracker $APP/bin/cron backup
 CRON

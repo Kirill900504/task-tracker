@@ -6,7 +6,8 @@ name: Deploy
 #
 # The build happens HERE, not on the server: `next build` wants more memory
 # than the server's 2 GB, and a build that fails on a GitHub machine leaves
-# the running tracker untouched. Only .next/standalone travels.
+# the running tracker untouched. Only .next/standalone travels — and it
+# travels by the server fetching it, see "Publish for the server".
 
 on:
   push:
@@ -17,11 +18,11 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
-    # Until the server exists there is nowhere to deploy, and a red run on
-    # every push would only teach people to ignore this workflow.
-    if: vars.DEPLOY_HOST != ''
     runs-on: ubuntu-latest
     env:
       BUILD_STANDALONE: "1"
@@ -48,20 +49,23 @@ jobs:
           mkdir -p .next/standalone/.next
           cp -r .next/static .next/standalone/.next/static
           tar -czf build.tgz -C .next/standalone .
-      - name: Upload and switch
+      # The server PULLS the build (deploy/pull.sh, once a minute) from a
+      # pre-release named server-build, so nothing here needs a key to the
+      # server and no secret lives in the repository. The repository is
+      # public, so the build is no more public than the code it is made of.
+      # A PRE-release on purpose: /releases/latest — which the desktop
+      # updater and /api/download read — never returns one. build.sha goes
+      # up last: it is the signal that build.tgz is complete.
+      - name: Publish for the server
         env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          HOST: ${{ vars.DEPLOY_HOST }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          scp -q build.tgz "tracker@$HOST:/srv/tracker/incoming.tgz"
-          ssh "tracker@$HOST" "/srv/tracker/bin/activate ${GITHUB_SHA::7}"
+          echo "${GITHUB_SHA::7}" > build.sha
+          gh release view server-build >/dev/null 2>&1 || gh release create server-build --prerelease --target "$GITHUB_SHA" --title "Сборка для сервера" --notes "Последняя сборка main для tracker.rokass.ru. Сервер забирает её сам (deploy/pull.sh); не удалять."
+          gh release upload server-build build.tgz --clobber
+          gh release upload server-build build.sha --clobber
       # Logs of a run are visible only to repository admins; an annotation
       # is public, so whoever waits for the deploy can see why it failed.
       - name: Explain a failure
         if: failure()
-        run: echo "::error::Выкладка на сервер не прошла — трекер остался на прежней сборке. Смотрите шаг, отмеченный красным."
+        run: echo "::error::Сборка для сервера не прошла — трекер остался на прежней. Смотрите шаг, отмеченный красным."
