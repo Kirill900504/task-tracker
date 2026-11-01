@@ -116,15 +116,24 @@ export default function MessengerSignIn({ orLabel = "или почтой и па
   useEffect(() => {
     if (!waiting) return;
     let stopped = false;
-    const timer = window.setInterval(async () => {
+    // Один вопрос за раз: медленный ответ не должен догонять следующий.
+    let inFlight = false;
+    // Подтверждение случается в ДРУГОМ окне — в Telegram или MAX, — и
+    // человек возвращается сюда сразу после нажатия. Возврат и есть лучший
+    // повод спросить: по таймеру окно узнавало о входе через секунду-две
+    // после того, как человек уже смотрел на него (30.10.2026, «после входа
+    // прогружается долго»). Таймер остался — для второго монитора и
+    // телефона, с которого подтверждают, не уходя из окна.
+    async function check() {
       const token = tokenRef.current;
-      if (!token || stopped) return;
+      if (!token || stopped || inFlight) return;
+      inFlight = true;
       const res = await fetch(`/api/login-request?token=${encodeURIComponent(token)}`, { cache: "no-store" }).catch(() => null);
       const data = (await res?.json().catch(() => null)) as { state?: string; tokenHash?: string } | null;
+      inFlight = false;
       if (!data || stopped) return;
       if (data.state === "approved" && data.tokenHash) {
         stopped = true;
-        window.clearInterval(timer);
         const { error } = await createClient().auth.verifyOtp({ type: "magiclink", token_hash: data.tokenHash });
         if (error) {
           setWaiting("");
@@ -139,15 +148,23 @@ export default function MessengerSignIn({ orLabel = "или почтой и па
       }
       if (data.state === "refused" || data.state === "expired") {
         stopped = true;
-        window.clearInterval(timer);
         setWaiting("");
         setNote(data.state === "refused" ? "Вход отклонён в мессенджере." : "Время вышло — нажмите кнопку ещё раз.");
         void fresh();
       }
-    }, 2000);
+    }
+    // После «stopped» тики таймера ничего не делают; снимает его уборка ниже.
+    const timer = window.setInterval(() => void check(), 1000);
+    const onBack = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    window.addEventListener("focus", onBack);
+    document.addEventListener("visibilitychange", onBack);
     return () => {
       stopped = true;
       window.clearInterval(timer);
+      window.removeEventListener("focus", onBack);
+      document.removeEventListener("visibilitychange", onBack);
     };
   }, [waiting, fresh]);
 
