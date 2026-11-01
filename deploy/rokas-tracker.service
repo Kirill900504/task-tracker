@@ -1,0 +1,19 @@
+[Unit]
+Description=Планировщик задач (tracker.rokass.ru)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tracker
+Group=tracker
+WorkingDirectory=/srv/tracker/current
+EnvironmentFile=/etc/rokas-tracker.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/local/bin/node server.js
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

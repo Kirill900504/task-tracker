@@ -69,9 +69,16 @@ const nextConfig: NextConfig = {
   // нет», и ответить на него можно только временем сборки на глаз. Vercel
   // кладёт хеш коммита в переменную окружения сам; локально её нет, и это
   // честно означает «собрано у себя».
+  // На своём сервере (с 01.11.2026) хеш кладёт workflow выкладки — в
+  // GITHUB_SHA, как его называет GitHub Actions.
   env: {
-    NEXT_PUBLIC_RELEASE: (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || "локальная сборка",
+    NEXT_PUBLIC_RELEASE: (process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "").slice(0, 7) || "локальная сборка",
   },
+  // Self-contained server bundle for the Moscow server: the build runs on
+  // GitHub's machine (2 GB of RAM on the server is not enough for `next
+  // build`) and only .next/standalone travels. Off by default, because
+  // `next start` — which the local e2e runs use — refuses a standalone build.
+  ...(process.env.BUILD_STANDALONE === "1" ? { output: "standalone" as const } : {}),
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

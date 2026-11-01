@@ -24,6 +24,7 @@ export function transportFor(channel: BotChannelConfig): BotTransport {
 // than read.
 export async function activeChannels(): Promise<BotChannelConfig[]> {
   const max = await maxConfigured();
+  // BOT_CHANNELS already lacks Telegram when it is switched off.
   return BOT_CHANNELS.filter((c) => (c.id === "max" ? max : !!process.env.TELEGRAM_BOT_TOKEN));
 }
 

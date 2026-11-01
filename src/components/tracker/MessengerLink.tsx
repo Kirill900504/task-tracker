@@ -3,6 +3,7 @@
 import { useState, type ReactElement } from "react";
 import type { MessengerState } from "@/hooks/useMyMessenger";
 import type { ColleagueChannel } from "@/hooks/useColleagues";
+import { TELEGRAM_ENABLED } from "@/lib/botTransport";
 import { checkedButNotLinked, showCode } from "@/lib/messengerLink";
 import { MaxBrandIcon, TelegramBrandIcon } from "./MessengerBrandIcon";
 import Icon from "./Icon";
@@ -65,7 +66,10 @@ export default function MessengerLink({ messenger, embedded = false }: { messeng
   const [notYet, setNotYet] = useState(false);
   const [dismissed, setDismissed] = useState(readDismissed);
 
-  const { telegram, max, loading } = messenger;
+  const { max, loading } = messenger;
+  // Telegram switched off for this deployment (TELEGRAM_ENABLED): a chat
+  // linked there earlier receives nothing, so it must not read as «на связи».
+  const telegram = TELEGRAM_ENABLED ? messenger.telegram : { ...messenger.telegram, connected: false };
   const connected = telegram.connected || max.connected;
 
   async function ask(channel: ColleagueChannel) {
@@ -99,7 +103,7 @@ export default function MessengerLink({ messenger, embedded = false }: { messeng
   if (loading) return null;
 
   const offer: ColleagueChannel[] = [];
-  if (!telegram.connected) offer.push("telegram");
+  if (TELEGRAM_ENABLED && !telegram.connected) offer.push("telegram");
   if (max.available && !max.connected) offer.push("max");
 
   // Свёрнутое напоминание закрыто крестиком: ничего не рисуем, пока не

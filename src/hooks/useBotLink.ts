@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useMaxBot } from "@/hooks/useMaxBot";
 import { type ColleagueChannel } from "@/hooks/useColleagues";
+import { TELEGRAM_ENABLED } from "@/lib/botTransport";
 import { useAsk } from "@/components/Ask";
 import { humanError } from "@/lib/humanError";
 
@@ -49,7 +50,7 @@ export function useBotLink() {
 
   // Собирается при отрисовке, а не в эффекте: «бот есть» и «чат не
   // привязан» приходят порознь и в разное время.
-  const needs = { telegram: unlinked.telegram, max: maxBot.available && unlinked.max };
+  const needs = { telegram: TELEGRAM_ENABLED && unlinked.telegram, max: maxBot.available && unlinked.max };
 
   const link = useCallback(
     async (channel: ColleagueChannel) => {

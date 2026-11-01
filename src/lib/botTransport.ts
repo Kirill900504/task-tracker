@@ -88,7 +88,16 @@ export const MAX_CHANNEL: BotChannelConfig = {
   linkedAtColumn: "max_linked_at",
 };
 
-export const BOT_CHANNELS: BotChannelConfig[] = [TELEGRAM_CHANNEL, MAX_CHANNEL];
+// Telegram can be switched off for a whole deployment (01.11.2026: the
+// tracker moved off Vercel to a server in Moscow, and api.telegram.org does
+// not answer from Russian data centres at all — 0 of 10 measured). The flag
+// is NEXT_PUBLIC_ because the browser and the server must agree: a person
+// whose only chat is Telegram has to read as «не подключён» on both sides,
+// not as «отправлено» into a channel nothing can reach. Unset means on, so
+// local runs and the test suites are unchanged.
+export const TELEGRAM_ENABLED = process.env.NEXT_PUBLIC_TELEGRAM_ENABLED !== "0";
+
+export const BOT_CHANNELS: BotChannelConfig[] = TELEGRAM_ENABLED ? [TELEGRAM_CHANNEL, MAX_CHANNEL] : [MAX_CHANNEL];
 
 export function channelById(id: string): BotChannelConfig | null {
   return BOT_CHANNELS.find((c) => c.id === id) ?? null;

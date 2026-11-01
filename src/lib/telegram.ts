@@ -1,8 +1,19 @@
 import type { BotTransport } from "@/lib/botTransport";
 import { stripSelfMarks } from "@/lib/botText";
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+import { TELEGRAM_ENABLED } from "@/lib/botTransport";
+
+const TOKEN = TELEGRAM_ENABLED ? process.env.TELEGRAM_BOT_TOKEN : undefined;
 const API = `https://api.telegram.org/bot${TOKEN}`;
+
+// Without a token every call refuses at once instead of going to the network.
+// From a Russian server api.telegram.org does not refuse — it never answers,
+// and each send to an old Telegram chat would hold its caller until the
+// TCP timeout (see TELEGRAM_ENABLED).
+function fetch(input: string, init?: RequestInit): Promise<Response> {
+  if (!TOKEN) return Promise.reject(new Error("Telegram не подключён"));
+  return globalThis.fetch(input, init);
+}
 
 // One row of the buttons attached under a message. Telegram calls these
 // inline keyboards; pressing one sends `callback_data` back to the webhook

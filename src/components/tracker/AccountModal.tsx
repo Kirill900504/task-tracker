@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { MessengerState } from "@/hooks/useMyMessenger";
 import type { ColleagueChannel } from "@/hooks/useColleagues";
+import { TELEGRAM_ENABLED } from "@/lib/botTransport";
 import { emailProblem, passwordProblem } from "@/lib/workspaceInvite";
 import { humanError } from "@/lib/humanError";
 import { isBarePhonePrefix, normalizePhone, typePhone } from "@/lib/phone";
@@ -183,9 +184,9 @@ export default function AccountModal({
 
   // Выбирать есть из чего, только когда подключены оба: с одним трекер и
   // так пишет в него.
-  const bothConnected = messenger
+  const bothConnected = TELEGRAM_ENABLED && (messenger
     ? messenger.telegram.connected && messenger.max.connected
-    : !!owner && owner.maxAvailable && !owner.needs.telegram && !owner.needs.max;
+    : !!owner && owner.maxAvailable && !owner.needs.telegram && !owner.needs.max);
 
   return (
     <Modal onClose={onClose} id="accountModal" dismissOnBackdrop={false}>
@@ -294,9 +295,11 @@ export default function AccountModal({
           {messenger && <MessengerLink messenger={messenger} embedded />}
           {owner && (
             <div className="account-owner-ms">
-              <span className="ms-link-on">
-                <TelegramBrandIcon size={16} /> Telegram — {owner.needs.telegram ? "не подключён" : "подключён"}
-              </span>
+              {TELEGRAM_ENABLED && (
+                <span className="ms-link-on">
+                  <TelegramBrandIcon size={16} /> Telegram — {owner.needs.telegram ? "не подключён" : "подключён"}
+                </span>
+              )}
               {owner.needs.telegram && (
                 <button type="button" className="btn btn-small btn-primary" onClick={() => owner.link("telegram")}>
                   Подключить

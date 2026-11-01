@@ -3,6 +3,7 @@
 // routes stay about permissions rather than about URL formats.
 
 import { maxSettings } from "@/lib/botSettings";
+import { TELEGRAM_ENABLED } from "@/lib/botTransport";
 
 export type InviteChannel = "telegram" | "max";
 
@@ -18,7 +19,7 @@ export async function botUsername(channel: InviteChannel): Promise<string> {
     const settings = await maxSettings();
     return settings?.username || "";
   }
-  return process.env.TELEGRAM_BOT_USERNAME || "";
+  return (TELEGRAM_ENABLED && process.env.TELEGRAM_BOT_USERNAME) || "";
 }
 
 // Both messengers carry the code the same way — as a `start` payload on a

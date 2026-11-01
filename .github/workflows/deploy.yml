@@ -1,0 +1,67 @@
+name: Deploy
+
+# Every push to main goes to the tracker's own server (tracker.rokass.ru),
+# the way it used to go to Vercel. See deploy/setup.sh for why the tracker
+# left Vercel on 01.11.2026.
+#
+# The build happens HERE, not on the server: `next build` wants more memory
+# than the server's 2 GB, and a build that fails on a GitHub machine leaves
+# the running tracker untouched. Only .next/standalone travels.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Until the server exists there is nowhere to deploy, and a red run on
+    # every push would only teach people to ignore this workflow.
+    if: vars.DEPLOY_HOST != ''
+    runs-on: ubuntu-latest
+    env:
+      BUILD_STANDALONE: "1"
+      # The server is in Moscow, where api.telegram.org does not answer:
+      # the tracker runs with MAX only (lib/botTransport TELEGRAM_ENABLED).
+      NEXT_PUBLIC_TELEGRAM_ENABLED: "0"
+      # Public values — the same ones ci.yml carries, and already in every
+      # browser that opens the site.
+      NEXT_PUBLIC_SUPABASE_URL: https://mglynwkucpcbkdeuymoa.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1nbHlud2t1Y3BjYmtkZXV5bW9hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyODc0ODEsImV4cCI6MjEwMzg2MzQ4MX0.KxRDP5VAVeZWZRjaVKPIo5gdFQ8ppjOvaBDJOAaDMMQ
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # A standalone build leaves static files and public/ out on purpose
+      # (a CDN is expected to serve them); here the same server does.
+      - name: Pack
+        run: |
+          cp -r public .next/standalone/public
+          mkdir -p .next/standalone/.next
+          cp -r .next/static .next/standalone/.next/static
+          tar -czf build.tgz -C .next/standalone .
+      - name: Upload and switch
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          scp -q build.tgz "tracker@$HOST:/srv/tracker/incoming.tgz"
+          ssh "tracker@$HOST" "/srv/tracker/bin/activate ${GITHUB_SHA::7}"
+      # Logs of a run are visible only to repository admins; an annotation
+      # is public, so whoever waits for the deploy can see why it failed.
+      - name: Explain a failure
+        if: failure()
+        run: echo "::error::Выкладка на сервер не прошла — трекер остался на прежней сборке. Смотрите шаг, отмеченный красным."
