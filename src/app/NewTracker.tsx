@@ -1086,6 +1086,9 @@ export default function NewTracker() {
             <img className="brand-logo" src="/favicon.png" alt="РОКАС" />
             <div className="subtitle" id="dateNow">
               {clockText}
+              {/* Красная точка справа от времени — 03.11.2026, его слова:
+                  «сделай справа от времени маленькую красную точку». */}
+              <span className="clock-dot" aria-hidden="true" />
             </div>
           </div>
           {/* Ни названия, ни цитаты: шапка — узкая полоса «знак · дата ·

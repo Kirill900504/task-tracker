@@ -184,6 +184,7 @@
     color:var(--ink); font-weight:800;
   }
   .subtitle{color:var(--ink-soft); font-size:12px; font-family:var(--display); white-space:nowrap;}
+  .clock-dot{display:inline-block; width:6px; height:6px; margin-left:6px; border-radius:50%; background:#E5484D; vertical-align:middle; position:relative; top:-1px;}
   .header-row .header-btns{justify-content:flex-end;}
   .btn{
     border:1px solid var(--line-soft); background:var(--paper-soft); color:var(--ink);
