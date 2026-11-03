@@ -18,7 +18,6 @@ import { fmtDate } from "@/lib/taskDisplay";
 import { isSelfAssignee, sanitizeAssigneeList } from "@/lib/trackerRows";
 import { withoutSelfMark } from "@/lib/actorName";
 import { uid } from "@/lib/uid";
-import MicButton from "./MicButton";
 import AddButton from "./AddButton";
 import MiniCalendar from "./MiniCalendar";
 import AutoGrowTextarea from "./AutoGrowTextarea";
@@ -583,7 +582,7 @@ export default function MeetingModal({
                 </>
               ) : (
                 <>
-                  <div className="input-with-mic">
+                  <div className="input-row">
                     {/* Enter завершает встречу успешно — по правилу Кирилла
                         21.09.2026 «любые заполнения результатов или итогов
                         должны закрываться нажатием Enter после заполнения,
@@ -613,7 +612,6 @@ export default function MeetingModal({
                         if (meeting && result.trim() !== (meeting.result || "").trim()) onSave({ ...meeting, title: title.trim() || meeting.title, result: result.trim() });
                       }}
                     />
-                    <MicButton value={result} onChange={setResult} title="Надиктовать итог" />
                   </div>
                   <AttachFiles files={recapFiles} onChange={setRecapFiles} onError={setRecapError} />
                   {recapError && <div className="ms-answer-error">{recapError}</div>}
@@ -867,7 +865,7 @@ export default function MeetingModal({
                 собираемся. */}
             <div className="field">
               <label>Название встречи</label>
-              <div className="input-with-mic">
+              <div className="input-row">
                 <AutoGrowTextarea
                   id="mTitle"
                   placeholder="О чём встреча"
@@ -876,7 +874,6 @@ export default function MeetingModal({
                   singleLine
                   focusAtEnd={!isEditing && !!prefill?.fromIdeaId}
                 />
-                <MicButton value={title} onChange={setTitle} title="Надиктовать название" />
               </div>
             </div>
 

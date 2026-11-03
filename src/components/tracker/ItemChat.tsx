@@ -6,7 +6,6 @@ import { useAsk } from "@/components/Ask";
 import ChatMessageMenu, { type ChatMenuAction } from "./ChatMessageMenu";
 import Icon from "./Icon";
 import FileList from "./FileList";
-import MicButton from "./MicButton";
 import { humanError } from "@/lib/humanError";
 import { nameLegacyRole, withoutSelfMark } from "@/lib/actorName";
 import { useColleagues } from "@/hooks/useColleagues";
@@ -979,7 +978,7 @@ export default function ItemChat({
         )}
         {/* Ряд устроен как в Telegram (14.10.2026, «скопируй всё у
             телеграм»): скрепка слева, поле во всю оставшуюся ширину со
-            смайликом внутри, справа микрофон и круглая «отправить». До
+            смайликом внутри, справа круглая «отправить». До
             этого поле было одним из пяти равных соседей и на телефоне
             сжималось до четверти ряда, а подсказка в нём рвалась на шесть
             строк. Подсказка теперь одно слово — как у мессенджеров. */}
@@ -1083,15 +1082,6 @@ export default function ItemChat({
             e.target.value = "";
           }}
         />
-        {/* Диктовка — тот же микрофон, что у названия задачи и мысли.
-            Отзыв Витовского 25.09.2026: «добавить голосовой ввод в
-            обсуждениях». Надиктованное дописывается в поле, а не уходит
-            само: распознавание ошибается, и прочесть перед отправкой
-            дешевле, чем исправлять отправленное. */}
-        {/* Микрофон стоит всегда, а не сменяется кнопкой отправки, как в
-            Telegram: надиктованное дописывается в поле, и подмена кнопки
-            посреди диктовки сняла бы сам микрофон. */}
-        <MicButton value={draft} onChange={setDraft} title="Надиктовать сообщение" />
         <button
           type="button"
           className="chat-round chat-send btn-primary"

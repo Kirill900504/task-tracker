@@ -114,7 +114,7 @@ test("быстрый ввод переживает стартовый снимо
   await input.fill("Черновик проверки");
   await page.setViewportSize({ width: 780, height: 844 });
   await page.locator("#mobileMoreBtn").click();
-  await page.getByRole("button", { name: "Записать голосом", exact: true }).click();
+  await page.getByRole("button", { name: "Быстрый ввод", exact: true }).click();
   await expect(page.locator(".quick-add-sheet input")).toHaveValue("Черновик проверки");
   await page.setViewportSize({ width: 1100, height: 844 });
   await expect(page.locator("#quickAddSlot input")).toHaveValue("Черновик проверки");

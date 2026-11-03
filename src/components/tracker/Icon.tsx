@@ -31,14 +31,12 @@ export type IconName =
   | "plus"
   | "calendar"
   | "clock"
-  | "mic"
   | "send"
   | "check"
   | "chevron"
   | "close"
   | "clip"
   | "ban"
-  | "recording"
   | "arrow-up"
   | "arrow-down"
   | "arrow-right"
@@ -150,13 +148,6 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M16 3v4" />
     </>
   ),
-  mic: (
-    <>
-      <rect x="9" y="3" width="6" height="11" rx="3" />
-      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" />
-      <path d="M12 18v3" />
-    </>
-  ),
   send: (
     <>
       <path d="M21 3 10.5 13.5" />
@@ -175,10 +166,6 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="m6.5 6.5 11 11" />
     </>
   ),
-  // Идёт запись: единственный залитый значок в наборе, и намеренно —
-  // «сейчас пишется» должно читаться как горящая лампа, а не как ещё один
-  // контур среди контуров. Кнопка в это время и сама мигает.
-  recording: <circle cx="12" cy="12" r="6" fill="currentColor" stroke="none" />,
   "arrow-up": (
     <>
       <path d="M12 19V5" />

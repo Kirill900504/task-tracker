@@ -17,7 +17,6 @@ import type { Participant, PendingParticipant, PersonOption } from "@/hooks/useT
 import PeoplePicker, { type PickedPerson } from "./PeoplePicker";
 import ChipChoice from "./ChipChoice";
 import MiniCalendar from "./MiniCalendar";
-import MicButton from "./MicButton";
 import AutoGrowTextarea from "./AutoGrowTextarea";
 import { useAsk } from "@/components/Ask";
 import Modal from "./Modal";
@@ -1111,7 +1110,7 @@ export default function TaskModal({
           <>
             <div className="field">
               <label>Название задачи</label>
-              <div className="input-with-mic">
+              <div className="input-row">
                 <AutoGrowTextarea
                   id="fTitle"
                   placeholder="Что нужно сделать"
@@ -1123,7 +1122,6 @@ export default function TaskModal({
                   // дополнения или редактирования»).
                   focusAtEnd={!task && !!prefill?.fromIdeaId}
                 />
-                <MicButton value={form.title} onChange={(text) => setForm((f) => ({ ...f, title: text }))} title="Надиктовать название" />
               </div>
             </div>
 
@@ -1133,9 +1131,8 @@ export default function TaskModal({
             {descOpen ? (
               <div className="field">
                 <label>Описание (необязательно)</label>
-                <div className="input-with-mic">
+                <div className="input-row">
                   <AutoGrowTextarea id="fDesc" placeholder="Детали, контекст…" value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} minRows={2} maxRows={12} />
-                  <MicButton value={form.desc} onChange={(text) => setForm((f) => ({ ...f, desc: text }))} title="Надиктовать описание" />
                 </div>
                 {/* Документы к описанию — техзадание, макет, скриншот
                     (13.10.2026, «при создании задачи в блок описание добавь

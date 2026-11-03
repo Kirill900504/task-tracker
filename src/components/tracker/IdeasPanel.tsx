@@ -13,7 +13,6 @@ import IdeaItem from "./IdeaItem";
 import Icon from "./Icon";
 import type { useToasts } from "@/hooks/useToasts";
 import AutoGrowTextarea from "./AutoGrowTextarea";
-import MicButton from "./MicButton";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { ideasToReview, isReviewDay, reviewWeek } from "@/lib/ideaReview";
 import IncomingIdeas from "./IncomingIdeas";
@@ -260,9 +259,6 @@ export default function IdeasPanel({
       <div className="idea-add">
         <AutoGrowTextarea
           id="ideaInput"
-          // Без эмодзи: значок микрофона стоит тут же, справа от поля, — и
-          // нарисованный, а не в виде наклейки посреди подсказки, где он к
-          // тому же ломал её на две строки.
           placeholder="Новая мысль"
           value={text}
           onChange={setText}
@@ -271,19 +267,18 @@ export default function IdeasPanel({
         />
         {/* Кнопка вернулась 23.09.2026 по прямой просьбе Кирилла — «там где
             идеи все же нужен маленький „+“ для добавления новых». Набранная
-            мысль по-прежнему сохраняется по Enter, надиктованная — сама; эта
+            мысль по-прежнему сохраняется по Enter; эта
             кнопка просто даёт третий, явный способ отправить то, что уже
             напечатано, тем же движением, что и везде в трекере. */}
         <button
           type="button"
-          className="field-mic-btn field-add-btn idea-add-btn"
+          className="field-btn field-add-btn idea-add-btn"
           title="Добавить мысль"
           disabled={!text.trim()}
           onClick={add}
         >
           <Icon name="plus" size={16} />
         </button>
-        <MicButton value={text} onChange={setText} onDone={(finalText) => addText(finalText)} title="Надиктовать мысль" />
       </div>
       <IncomingIdeas
         rows={incoming}

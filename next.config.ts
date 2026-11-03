@@ -58,9 +58,10 @@ const SECURITY_HEADERS = [
   { key: "Content-Security-Policy", value: CSP },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  // The microphone is used for dictation, by this origin only; nothing else
-  // is needed, so everything else is switched off.
-  { key: "Permissions-Policy", value: "microphone=(self), camera=(), geolocation=(), payment=(), usb=()" },
+  // Nothing here needs any of these. The microphone was the last one, and
+  // went with dictation on 01.11.2026 (voice notes to the bots are decoded
+  // server-side and never touch the browser).
+  { key: "Permissions-Policy", value: "microphone=(), camera=(), geolocation=(), payment=(), usb=()" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
 ];
 const nextConfig: NextConfig = {
@@ -137,15 +138,6 @@ const nextConfig: NextConfig = {
     // список файлов. Строки тут не было, то есть расшифровка голосовых в
     // MAX на боевом не могла работать вовсе.
     "/api/max/webhook": [
-      "./node_modules/@huggingface/transformers/**",
-      "./node_modules/@huggingface/jinja/**",
-      "./node_modules/@huggingface/tokenizers/**",
-      "./node_modules/onnxruntime-web/**",
-      "./node_modules/onnxruntime-common/**",
-    ],
-    // Диктовка в самом трекере: браузер присылает сюда записанный звук,
-    // когда распознавание браузера не достучалось до своего сервиса.
-    "/api/speech": [
       "./node_modules/@huggingface/transformers/**",
       "./node_modules/@huggingface/jinja/**",
       "./node_modules/@huggingface/tokenizers/**",

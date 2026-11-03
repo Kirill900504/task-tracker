@@ -144,12 +144,7 @@ function resampleTo16k(input: Float32Array, inputRate: number): Float32Array {
 }
 
 // Расшифровать готовый моно-PCM 16кГц — то, что Whisper ждёт на входе.
-//
-// Отдельно от разбора Ogg нарочно: из браузера звук приходит уже таким
-// (см. lib/dictation.ts — микрофон там открывается сразу на 16кГц, и
-// контейнера у записи нет вовсе), и упаковывать его в Opus только ради
-// того, чтобы здесь же распаковать обратно, значило бы возить воду.
-export async function transcribePcm16k(pcm: Float32Array): Promise<string> {
+async function transcribePcm16k(pcm: Float32Array): Promise<string> {
   if (!pcm.length) return "";
   const transcriber = await getTranscriber();
   const result = await transcriber(pcm, { language: "russian", task: "transcribe" });

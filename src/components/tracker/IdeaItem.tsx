@@ -7,7 +7,6 @@ import type { Idea } from "@/types/tracker";
 import ActionMenu from "./ActionMenu";
 import SendMenu from "./SendMenu";
 import AutoGrowTextarea from "./AutoGrowTextarea";
-import MicButton from "./MicButton";
 import AddButton from "./AddButton";
 import Icon from "./Icon";
 import PopLayer from "./PopLayer";
@@ -183,10 +182,7 @@ export default function IdeaItem({
       <div className="idea-body">
         <div className="idea-head">
           {editing ? (
-            // The mic sits inside the edit row so a thought can be corrected by
-            // voice too. Dictating counts as typing here — it fills the draft
-            // and you still confirm with Enter (or by clicking away).
-            <div className="input-with-mic">
+            <div className="input-row">
               <AutoGrowTextarea
                 className="idea-edit-input"
                 autoFocus
@@ -198,8 +194,7 @@ export default function IdeaItem({
                 onChange={setDraft}
                 onEnter={save}
                 // Clicking away still saves, as it always has — except when the
-                // click landed on this row's own mic button, which would
-                // otherwise end the edit before it could dictate anything.
+                // click landed on this row's own «+», which saves by itself.
                 onBlur={(e) => {
                   if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) save();
                 }}
@@ -208,7 +203,6 @@ export default function IdeaItem({
                 }}
               />
               <AddButton title="Сохранить мысль" disabled={!draft.trim()} onClick={save} />
-              <MicButton value={draft} onChange={setDraft} title="Надиктовать мысль" />
             </div>
           ) : (
             <div className="idea-text" title="Нажмите, чтобы отредактировать" onClick={startEdit}>

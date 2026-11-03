@@ -1,7 +1,6 @@
 "use client";
 
 import AutoGrowTextarea from "./AutoGrowTextarea";
-import MicButton from "./MicButton";
 import AddButton from "./AddButton";
 
 // Повестка в форме НОВОЙ встречи (21.10.2026, его слова: «поле повестка
@@ -59,7 +58,7 @@ export default function AgendaDraft({
           ))}
         </ol>
       )}
-      <div className="input-with-mic">
+      <div className="input-row">
         <AutoGrowTextarea
           id="mAgenda"
           placeholder={items.length ? "Ещё пункт" : "Что обсудим?"}
@@ -69,7 +68,6 @@ export default function AgendaDraft({
           onEnter={add}
         />
         <AddButton id="agendaAddBtn" title="Добавить пункт" disabled={!text.trim()} onClick={add} />
-        <MicButton value={text} onChange={onText} title="Надиктовать пункт повестки" />
       </div>
     </div>
   );

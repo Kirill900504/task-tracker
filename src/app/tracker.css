@@ -397,18 +397,6 @@
   }
   @keyframes quick-add-sheet-up{ from{transform:translateY(100%);} to{transform:translateY(0);} }
   .quick-add-sheet-handle{width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 12px;}
-  .quick-add-mic-btn{
-    flex:none; border:1px solid var(--line-soft); background:var(--paper-soft); color:var(--ink-soft);
-    border-radius:var(--radius-sm); width:40px; display:flex; align-items:center; justify-content:center;
-    cursor:pointer; padding:0; box-shadow:var(--edge);
-    transition:color .12s ease, border-color .12s ease;
-  }
-  .quick-add-mic-btn:hover{color:var(--accent); border-color:var(--accent);}
-  /* Идёт запись — красным и с пульсацией. Цвет здесь на самом значке, а не
-     заливкой кнопки: контурный микрофон в красном читается как «пишу», а
-     красный прямоугольник — как «ошибка». */
-  .quick-add-mic-btn.listening{color:var(--high); border-color:var(--high); background:var(--high-bg); animation:quick-add-mic-pulse 1s ease-in-out infinite;}
-  @keyframes quick-add-mic-pulse{ 0%,100%{opacity:1;} 50%{opacity:.55;} }
   .quick-add-preview{display:flex; flex-direction:column; gap:8px; font-size:13px;}
   .quick-add-preview .qap-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
   /* Название в превью — то, что будет создано, поэтому целиком, но в
@@ -518,7 +506,7 @@
   .cal-filter-note{display:flex; align-items:center; gap:8px; margin-top:7px; font-size:12px; color:var(--ink-soft); flex-wrap:wrap;}
 
   /* Ideas */
-  /* Строка мысли: поле и микрофон стоят на одной линии и одной высоты.
+  /* Строка мысли: поле и «+» стоят на одной линии и одной высоты.
      Слова Кирилла 20.09.2026: «в разделе мысли выровнять строку ввода».
      Разъезжалось потому, что высоту поля задавали отступы и кегль
      (получалось ~35px), а кнопка была нарисована квадратом в 40 — и на
@@ -532,7 +520,7 @@
     min-height:38px; padding:9px 11px; border:1px solid var(--line); border-radius:var(--radius-sm);
     font-family:var(--sans); font-size:13px; line-height:1.35; background:var(--paper-soft); color:var(--ink);
   }
-  .idea-add .field-mic-btn{width:38px; height:38px;}
+  .idea-add .field-btn{width:38px; height:38px;}
   .idea-item{
     border:1px solid var(--line-soft); border-radius:var(--radius-md); padding:8px 10px; margin-bottom:5px;
     display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; align-items:flex-start; background:var(--paper-soft);
@@ -577,7 +565,7 @@
   /* Тело мысли: текст во всю ширину, справа сверху — «Важно» и ×. */
   .idea-body{flex:1; min-width:0;}
   .idea-head{display:flex; align-items:flex-start; gap:6px;}
-  .idea-head > .idea-text, .idea-head > .input-with-mic{flex:1; min-width:0;}
+  .idea-head > .idea-text, .idea-head > .input-row{flex:1; min-width:0;}
   .idea-corner{display:flex; gap:4px; flex:none; margin:-2px -3px 0 0;}
   /* «Важно» и «Удалить» — цветные кнопки с рамкой, видимые всегда (как
      крестик встречи, .meeting-del): значок, проступающий на наведение, на
@@ -1226,18 +1214,17 @@
      scrollbar ever appears, and no resize grip since the height is managed. */
   .auto-grow{overflow:hidden; resize:none;}
   .field .auto-grow{min-height:0;}
-  /* A field you can dictate into: the mic sits beside the input, aligned to
-     its top so it stays put next to a textarea that has been dragged taller. */
-  .input-with-mic{display:flex; gap:6px; align-items:flex-start;}
-  .input-with-mic > input, .input-with-mic > textarea{flex:1; min-width:0;}
-  .field-mic-btn{
+  /* A field with its own square button («+») beside it, aligned to its top
+     so it stays put next to a textarea that has been dragged taller. */
+  .input-row{display:flex; gap:6px; align-items:flex-start;}
+  .input-row > input, .input-row > textarea{flex:1; min-width:0;}
+  .field-btn{
     flex:none; border:1px solid var(--line-soft); background:var(--paper-soft); color:var(--ink-soft);
     border-radius:var(--radius-sm); width:40px; height:40px; display:flex; align-items:center; justify-content:center;
     cursor:pointer; padding:0; box-shadow:var(--edge);
     transition:color .12s ease, border-color .12s ease;
   }
-  .field-mic-btn:hover{color:var(--accent); border-color:var(--accent);}
-  .field-mic-btn.listening{color:var(--high); border-color:var(--high); background:var(--high-bg); animation:quick-add-mic-pulse 1s ease-in-out infinite;}
+  .field-btn:hover{color:var(--accent); border-color:var(--accent);}
   /* Пустое поле — нечего добавлять, и кнопка говорит об этом заранее, а не
      нажатием в пустоту. */
   .idea-add-btn:disabled{opacity:.45; cursor:default;}
@@ -2480,7 +2467,7 @@
        при фокусе, а приближать её больше нечем (масштаб выключен,
        см. viewport в layout.tsx). */
     .idea-add .auto-grow{min-height:44px; font-size:16px; padding:11px 12px;}
-    .idea-add .field-mic-btn{width:44px; height:44px;}
+    .idea-add .field-btn{width:44px; height:44px;}
 
     /* Карточки под палец */
     .task{padding:14px 12px; margin-bottom:9px;}

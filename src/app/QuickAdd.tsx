@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, type FormEvent, type ReactNode } from "react";
-import { speechErrorText, useSpeechInput } from "@/hooks/useSpeechInput";
 import { useAsk } from "@/components/Ask";
 import { createPortal } from "react-dom";
-import Icon from "@/components/tracker/Icon";
 import AddButton from "@/components/tracker/AddButton";
 import { withoutSelfMark } from "@/lib/actorName";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -85,8 +83,8 @@ export default function QuickAdd({
   //
   // Круглая «+» теперь заводит то, в каком разделе её нажали (слова
   // Кирилла 20.09.2026: «если в разделе задачи → ЗАДАЧУ, если в разделе
-  // встречи → ВСТРЕЧУ и с мыслями так же»), а разбор фразы голосом
-  // открывается строкой «Записать голосом» в меню шапки. Две круглых
+  // встречи → ВСТРЕЧУ и с мыслями так же»), а разбор фразы открывается
+  // строкой «Быстрый ввод» в меню шапки. Две круглых
   // кнопки в одном углу были бы ровно тем, чего он не хочет: одинаковые
   // на вид, разные по смыслу.
   sheetOpen?: boolean;
@@ -130,7 +128,7 @@ export default function QuickAdd({
   // Ошибки этой формы — всплывающее окно, а не строка под полем.
   //
   // До 23.09.2026 отказ рисовался прямо под строкой ввода и раздвигал
-  // саму панель/лист снизу — растущий блок под полем при диктовке читался
+  // саму панель/лист снизу — растущий блок под полем читался
   // как поломка формы, а не как объяснение. Правило Кирилла общее для
   // всего трекера: ошибка не должна расширять форму или блок, в котором
   // она возникла — она всплывает поверх. Текст не сбрасывает набранное:
@@ -146,23 +144,6 @@ export default function QuickAdd({
   // Action items extracted from dictated meeting notes — shown for review,
   // created only when the user confirms.
   const [notes, setNotes] = useState<{ summary: string; tasks: ExtractedTask[]; meeting: MatchedMeeting | null } | null>(null);
-
-  // Voice input (browser-native, free, no server round trip). Dictation is
-  // the whole interaction here: when you stop talking, the phrase goes
-  // straight off to be parsed — no "Добавить" button to reach for
-  // afterwards. Typed text still submits with Enter.
-  const speech = useSpeechInput({
-    onTranscript: setText,
-    onDone: (finalText) => send(finalText, false),
-    // Диктовка здесь — не удобство, а весь способ ввода: кнопка, которая
-    // загорелась и ничего не сделала, оставляет человека ни с чем. Причина
-    // пишется тем же местом, что и остальные отказы этой формы.
-    onError: (code) => showError(speechErrorText(code)),
-  });
-
-  // Подпись микрофона: три состояния, и все три надо назвать. Молчащая
-  // кнопка неотличима от сломанной — а здесь диктовка и есть весь ввод.
-  const micLabel = speech.transcribing ? "Расшифровываю…" : speech.listening ? "Остановить запись" : "Надиктовать";
 
   function noteDropped(droppedNames: string[]) {
     if (droppedNames.length) {
@@ -391,35 +372,16 @@ export default function QuickAdd({
               placeholder={
                 status === "loading"
                   ? "Думаю…"
-                  : speech.transcribing
-                    ? "Расшифровываю сказанное…"
-                    : speech.listening
-                      ? "Говорите…"
-                      : // Коротко: поле узкое, и длинная подсказка обрезалась
-                        // на полуслове («…🎤 — на»), что читается как поломка
-                        // (QA 06.10.2026). Про микрофон говорит сама кнопка
-                        // рядом, а полная подсказка — на наведение.
-                        "Что добавить?"
+                  : // Коротко: поле узкое, и длинная подсказка обрезалась
+                    // на полуслове, что читается как поломка (QA
+                    // 06.10.2026). Полная подсказка — на наведение.
+                    "Что добавить?"
               }
-              title="Напишите задачу, встречу или мысль своими словами и нажмите Enter — или надиктуйте кнопкой с микрофоном"
+              title="Напишите задачу, встречу или мысль своими словами и нажмите Enter"
               disabled={status === "loading"}
               style={INPUT_STYLE}
             />
             <AddButton type="submit" className="quick-add-plus-btn" title="Добавить" disabled={status === "loading" || !text.trim()} />
-            {speech.supported && (
-              <button
-                type="button"
-                className={
-                  "quick-add-mic-btn" + (speech.listening ? " listening" : "") + (speech.transcribing ? " transcribing" : "")
-                }
-                onClick={speech.toggle}
-                disabled={status === "loading" || speech.transcribing}
-                title={micLabel}
-                aria-label={micLabel}
-              >
-                <Icon name={speech.transcribing ? "clock" : speech.listening ? "recording" : "mic"} size={16} />
-              </button>
-            )}
           </form>
         )}
 

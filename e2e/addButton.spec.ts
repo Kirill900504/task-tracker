@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs";
 import { userFilePath } from "./userFile";
 import { pickSelfExecutor, CARD_CORNER } from "./helpers";
 
-// «+» слева от микрофона у каждого поля, из которого что-то заводится, и в
-// фирменной заливке (21.10.2026, его слова: «слева от микрофона такую же
-// фирменную кнопку „+“… с полной адаптацией под мобильную версию»).
-// Проверяется то, что видит человек: где кнопка стоит относительно
-// микрофона, чем залита (вычисленный цвет, а не класс) и что нажатие делает
-// то же, что Enter. Отдельным файлом — вход живёт локально, спеки друг друга
-// не импортируют.
+// «+» у каждого поля, из которого что-то заводится, и в фирменной заливке
+// (21.10.2026, его слова: «такую же фирменную кнопку „+“… с полной
+// адаптацией под мобильную версию»). Проверяется то, что видит человек: чем
+// кнопка залита (вычисленный цвет, а не класс) и что нажатие делает то же,
+// что Enter. И что микрофона нет нигде — голосовой ввод убран из трекера
+// 01.11.2026. Отдельным файлом — вход живёт локально, спеки друг друга не
+// импортируют.
 
 const { email, password } = JSON.parse(readFileSync(userFilePath(), "utf8"));
 
@@ -21,24 +21,12 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/$/);
 }
 
-// «+» в той же строке, что поле, слева от микрофона (если микрофон в этом
-// браузере есть вообще), и залит фирменным цветом, а не серым.
-async function expectBrandPlusBeforeMic(row: Locator) {
+// «+» в той же строке, что поле, залит фирменным цветом, а не серым, и
+// микрофона рядом нет.
+async function expectBrandPlus(row: Locator) {
   const plus = row.locator(".field-add-btn");
   await expect(plus).toBeVisible();
-  const mic = row.locator(".field-mic-btn:not(.field-add-btn)");
-  if (await mic.count()) {
-    // Оба прямоугольника — в ОДНОМ кадре: окно появляется с анимацией, и
-    // два отдельных замера попадали в разные её моменты.
-    const [p, m] = await row.evaluate((el) =>
-      [".field-add-btn", ".field-mic-btn:not(.field-add-btn)"].map((sel) => {
-        const r = el.querySelector(sel)!.getBoundingClientRect();
-        return { x: r.x, y: r.y, width: r.width };
-      }),
-    );
-    expect(p.x + p.width).toBeLessThanOrEqual(m.x + 1);
-    expect(Math.abs(p.y - m.y)).toBeLessThan(2);
-  }
+  await expect(row.locator(".field-btn:not(.field-add-btn)")).toHaveCount(0);
   const bg = await plus.evaluate((el) => getComputedStyle(el).backgroundColor);
   const accent = await plus.evaluate((el) => {
     const probe = document.createElement("span");
@@ -54,11 +42,16 @@ async function expectBrandPlusBeforeMic(row: Locator) {
   expect(box.height).toBeGreaterThanOrEqual(36);
 }
 
+// Ни одной кнопки диктовки на экране: все они подписывались «Надиктовать…».
+async function expectNoMic(page: Page) {
+  await expect(page.locator('[title^="Надиктовать"], [aria-label^="Надиктовать"]')).toHaveCount(0);
+}
+
 async function checkForms(page: Page, openIdeas: () => Promise<void>, openMeetings: () => Promise<void>, openTasks: () => Promise<void>) {
   // Мысли: «+» фирменный и добавляет набранное.
   await openIdeas();
   const ideaRow = page.locator(".idea-add");
-  await expectBrandPlusBeforeMic(ideaRow);
+  await expectBrandPlus(ideaRow);
   await expect(ideaRow.locator(".field-add-btn")).toBeDisabled();
   const thought = `Мысль плюсом ${Date.now()}`;
   await page.fill("#ideaInput", thought);
@@ -71,13 +64,12 @@ async function checkForms(page: Page, openIdeas: () => Promise<void>, openMeetin
   // целиком, повторяя «Создать», а читался как «сохранить это поле».
   await openTasks();
   await page.click("#newTaskBtn");
-  const titleRow = page.locator(".field", { has: page.locator("#fTitle") }).locator(".input-with-mic");
-  await expect(titleRow.locator(".field-mic-btn:not(.field-add-btn)")).toBeVisible();
-  await expect(titleRow.locator(".field-add-btn")).toHaveCount(0);
+  const titleRow = page.locator(".field", { has: page.locator("#fTitle") }).locator(".input-row");
+  await expect(titleRow.locator(".field-btn")).toHaveCount(0);
   await page.click("#addDescBtn");
-  const descRow = page.locator(".field", { has: page.locator("#fDesc") }).locator(".input-with-mic");
-  await expect(descRow.locator(".field-mic-btn:not(.field-add-btn)")).toBeVisible();
-  await expect(descRow.locator(".field-add-btn")).toHaveCount(0);
+  const descRow = page.locator(".field", { has: page.locator("#fDesc") }).locator(".input-row");
+  await expect(descRow.locator(".field-btn")).toHaveCount(0);
+  await expectNoMic(page);
   // На телефоне × спрятан за стрелкой «назад» — Escape закрывает везде.
   await page.keyboard.press("Escape");
   await expect(page.locator("#fTitle")).toHaveCount(0);
@@ -87,8 +79,8 @@ async function checkForms(page: Page, openIdeas: () => Promise<void>, openMeetin
   await openMeetings();
   await page.click("#addMeetingBtn");
   await expect(page.locator(".field", { has: page.locator("#mTitle") }).locator(".field-add-btn")).toHaveCount(0);
-  const agenda = page.locator("#agendaDraft .input-with-mic");
-  await expectBrandPlusBeforeMic(agenda);
+  const agenda = page.locator("#agendaDraft .input-row");
+  await expectBrandPlus(agenda);
   await page.fill("#mAgenda", "Смета");
   await page.click("#agendaAddBtn");
   await expect(page.locator(".agenda-draft-item", { hasText: "Смета" })).toBeVisible();
@@ -98,7 +90,7 @@ async function checkForms(page: Page, openIdeas: () => Promise<void>, openMeetin
   await expect(page.locator("#mTitle")).toHaveCount(0);
 }
 
-test("«+» слева от микрофона — на компьютере", async ({ page }) => {
+test("«+» у полей и ни одного микрофона — на компьютере", async ({ page }) => {
   await login(page);
   await expect(page.locator("#newTaskBtn")).toBeVisible();
   await checkForms(
@@ -112,7 +104,7 @@ test("«+» слева от микрофона — на компьютере", a
 test.describe("на телефоне", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test("«+» слева от микрофона — на телефоне, и строка не вылезает за экран", async ({ page }) => {
+  test("«+» у полей и ни одного микрофона — на телефоне, и строка не вылезает за экран", async ({ page }) => {
     await login(page);
     await checkForms(
       page,
@@ -146,8 +138,8 @@ test("«+» и в полях правки: мысль, описание зада
   await page.press("#ideaInput", "Enter");
   const idea = page.locator(".idea-item", { hasText: thought });
   await idea.locator(".idea-text").click();
-  const ideaRow = idea.locator(".input-with-mic");
-  await expectBrandPlusBeforeMic(ideaRow);
+  const ideaRow = idea.locator(".input-row");
+  await expectBrandPlus(ideaRow);
   await ideaRow.locator("textarea").press("End");
   await ideaRow.locator("textarea").pressSequentially(" правка");
   await ideaRow.locator(".field-add-btn").click();
@@ -164,7 +156,7 @@ test("«+» и в полях правки: мысль, описание зада
   await card.first().click(CARD_CORNER);
   const modal = page.locator("dialog[open]");
   await modal.locator("#editDescBtn").click();
-  await expectBrandPlusBeforeMic(modal.locator("#taskDesc .input-with-mic"));
+  await expectBrandPlus(modal.locator("#taskDesc .input-row"));
   await page.fill("#taskDescEdit", "Описание плюсом");
   await modal.locator("#descAddBtn").click();
   await expect(page.locator("#taskDescEdit")).toHaveCount(0);
@@ -183,8 +175,8 @@ test("«+» и в полях правки: мысль, описание зада
   const chip = page.locator(".meeting-chip", { hasText: mTitle });
   await expect(chip).toBeVisible();
   await chip.click(CARD_CORNER);
-  const resultRow = page.locator(".input-with-mic", { has: page.locator("#mResult") });
-  await expectBrandPlusBeforeMic(resultRow);
+  const resultRow = page.locator(".input-row", { has: page.locator("#mResult") });
+  await expectBrandPlus(resultRow);
   await expect(page.locator("#resultAddBtn")).toBeDisabled();
   await page.fill("#mResult", "Решили плюсом");
   await page.click("#resultAddBtn");

@@ -618,7 +618,7 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
    телеграм». Два изменения. Лента занимает своё место всегда, даже пустая:
    окно открывается с готовой перепиской, а не с полосой «пока тихо», под
    которой разворачивается чат после первого сообщения. И строка ввода —
-   одна: скрепка, поле во всю ширину со смайликом внутри, микрофон, круглая
+   одна: скрепка, поле во всю ширину со смайликом внутри, круглая
    «отправить». Поле раньше было соседом четырёх кнопок и с field-sizing
    сжималось по ширине до своей подсказки — на телефоне до четверти ряда. */
 .chat-feed{min-height:260px;}
@@ -648,14 +648,13 @@ button.tperson:hover{border-color:var(--accent); background:var(--accent-soft);}
 .chat-round:hover{color:var(--ink); border-color:var(--line);}
 .chat-round.chat-send{background:var(--accent); border-color:var(--accent); color:#F3F8FA;}
 .chat-round.chat-send:disabled{opacity:.45; cursor:default;}
-.chat-composer .field-mic-btn{flex:none; width:42px; height:42px; border-radius:50%;}
 @media (max-width:800px){
   /* На телефоне лента — половина экрана: переписку видно сразу, а поле
      ввода остаётся в пределах одного пролистывания от сводки задачи. */
   .chat-feed{min-height:46vh;}
   .chat-composer textarea{font-size:16px;}
   .chat-composer{gap:5px;}
-  .chat-round, .chat-composer .field-mic-btn{width:40px; height:40px;}
+  .chat-round{width:40px; height:40px;}
 }
 
 /* ---------- Окно стоит на месте (14.10.2026) ---------------------------
@@ -881,16 +880,16 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
    («Добавить» у описания) и кнопка-контур («Принудительное закрытие»)
    читались статусом, а не действием. Высоту каждая кнопка сохраняет свою:
    в шапке 38px — под номер и ×, в строке срока 32px. */
-.item-head-btn, .desc-edit, .modal .input-with-mic .field-mic-btn, .btn-primary{
+.item-head-btn, .desc-edit, .modal .input-row .field-btn, .btn-primary{
   color:#fff; background:var(--accent); border:1px solid rgba(255,255,255,.14);
   box-shadow:0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18);
   transition:background .12s ease, transform .08s ease, box-shadow .12s ease;
 }
-.item-head-btn:hover, .desc-edit:hover, .modal .input-with-mic .field-mic-btn:hover, .btn-primary:hover{
+.item-head-btn:hover, .desc-edit:hover, .modal .input-row .field-btn:hover, .btn-primary:hover{
   color:#fff; background:#4A9BBB; border-color:rgba(255,255,255,.14); opacity:1;
   box-shadow:0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18);
 }
-.item-head-btn:active, .desc-edit:active, .modal .input-with-mic .field-mic-btn:active, .btn-primary:active{
+.item-head-btn:active, .desc-edit:active, .modal .input-row .field-btn:active, .btn-primary:active{
   transform:translateY(1px); box-shadow:0 1px 3px rgba(0,0,0,.35);
 }
 .item-head-btn:disabled:hover, .btn-primary:disabled:hover{background:var(--accent); transform:none;}
@@ -908,31 +907,26 @@ input::placeholder, textarea::placeholder{text-overflow:ellipsis; white-space:no
 .btn-primary.btn-done{color:#E6F4EB; background:#3A7A55;}
 .btn-primary.btn-done:hover{color:#fff; background:#428A60;}
 .btn-primary.btn-done:disabled:hover{background:#3A7A55;}
-/* Микрофон в окне — квадратом, как «+». Запись — та же кнопка, залитая
-   красным: что идёт запись, говорит цвет, а не другая форма. */
-.modal .input-with-mic .field-mic-btn.listening, .modal .input-with-mic .field-mic-btn.listening:hover{
-  color:#fff; background:#B4513F; border-color:rgba(255,255,255,.14);
-}
-.modal .input-with-mic .field-mic-btn:disabled{opacity:.6; cursor:default;}
-/* «+» слева от микрофона (AddButton) — та же залитая фирменная кнопка, и
+.modal .input-row .field-btn:disabled{opacity:.6; cursor:default;}
+/* «+» у поля (AddButton) — та же залитая фирменная кнопка, и
    не только в окне: в строке мыслей и в быстром вводе тоже (21.10.2026,
    «кнопку „+“ хотелось бы сделать в фирменном цвете»). Селектор двойной
-   нарочно: .field-mic-btn:hover и .idea-add-btn:disabled:hover в
+   нарочно: .field-btn:hover и .idea-add-btn:disabled:hover в
    tracker.css красят значок в фирменный цвет — на фирменной заливке это
    невидимый плюс. Пустое поле гасит кнопку прозрачностью, а не серым:
    форма та же, нажимать пока нечего. */
-.field-mic-btn.field-add-btn,
-.field-mic-btn.field-add-btn:hover,
-.field-mic-btn.field-add-btn:disabled:hover{
+.field-btn.field-add-btn,
+.field-btn.field-add-btn:hover,
+.field-btn.field-add-btn:disabled:hover{
   color:#fff; background:var(--accent); border:1px solid rgba(255,255,255,.14);
   box-shadow:0 2px 6px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18);
   transition:background .12s ease, transform .08s ease, box-shadow .12s ease, opacity .12s ease;
 }
-.field-mic-btn.field-add-btn:hover:not(:disabled){background:#4A9BBB;}
-.field-mic-btn.field-add-btn:active:not(:disabled){transform:translateY(1px); box-shadow:0 1px 3px rgba(0,0,0,.35);}
-.field-mic-btn.field-add-btn:disabled, .modal .input-with-mic .field-mic-btn.field-add-btn:disabled{opacity:.5; cursor:default; transform:none;}
-/* В быстром вводе кнопки тянутся по высоте поля, как микрофон рядом. */
-.field-mic-btn.quick-add-plus-btn{width:40px; height:auto; align-self:stretch;}
+.field-btn.field-add-btn:hover:not(:disabled){background:#4A9BBB;}
+.field-btn.field-add-btn:active:not(:disabled){transform:translateY(1px); box-shadow:0 1px 3px rgba(0,0,0,.35);}
+.field-btn.field-add-btn:disabled, .modal .input-row .field-btn.field-add-btn:disabled{opacity:.5; cursor:default; transform:none;}
+/* В быстром вводе «+» тянется по высоте поля. */
+.field-btn.quick-add-plus-btn{width:40px; height:auto; align-self:stretch;}
 
 /* Строка срока — ОДНОЙ строкой всегда (22.10.2026, его слова: «поле
    строк в одну строку все кнопки умеси!!!» — и про строку «Срок» в
