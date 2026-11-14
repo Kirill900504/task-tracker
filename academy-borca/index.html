@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101a35"><title>Академия борца</title>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101a35"><title>Академия борца — живая арена</title>
 <style>
 :root{--bg:#0d1730;--panel:#172444;--panel2:#1d2d52;--line:#344466;--white:#f4f7ff;--muted:#a5b3d0;--yellow:#ffd164;--mint:#80e2be;--blue:#91bcff;--pink:#ff9caa;--shadow:0 18px 45px #050c203c}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0%,#263e73 0,transparent 37%),radial-gradient(circle at 0% 90%,#173a51 0,transparent 32%),var(--bg);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--white);min-height:100vh}button{font:inherit;cursor:pointer}button:focus-visible{outline:3px solid var(--yellow);outline-offset:3px}.app{max-width:1220px;margin:auto;padding:21px 22px 55px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}.logo{display:flex;align-items:center;gap:12px;font-weight:900;letter-spacing:-.5px;font-size:20px}.logoicon{height:48px;width:48px;background:var(--yellow);color:#18244a;display:grid;place-items:center;border-radius:16px;font-size:27px;box-shadow:0 8px 25px #ffd16435}.profile{display:flex;align-items:center;gap:9px}.small{font-size:13px;color:var(--muted)}.select,.outline{background:var(--panel);border:1px solid var(--line);color:var(--white);border-radius:13px;padding:11px 13px}.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:7px;margin-bottom:20px;scrollbar-width:thin}.tab{flex-shrink:0;border:1px solid var(--line);background:#152344;color:var(--muted);border-radius:14px;padding:12px 17px;font-weight:750}.tab.active{background:var(--yellow);color:#1b2544;border-color:var(--yellow)}.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:stretch}.card{background:linear-gradient(150deg,#1c2d50,#14213e);border:1px solid #3a4966;border-radius:24px;padding:25px;box-shadow:var(--shadow)}.card h1{font-size:clamp(27px,4vw,45px);line-height:1.08;letter-spacing:-1.3px;margin:10px 0 13px}.card h2{font-size:25px;margin:0 0 12px}.card h3{font-size:18px;margin:4px 0 10px}.lead{font-size:17px;color:#cedaf4;line-height:1.55}.eyebrow{font-size:12px;letter-spacing:1.8px;text-transform:uppercase;color:var(--mint);font-weight:900}.btn{padding:14px 20px;background:var(--yellow);border:0;color:#172344;font-weight:850;border-radius:15px;box-shadow:0 8px 20px #ffd16422;transition:transform .15s}.btn:hover{transform:translateY(-2px)}.btn.secondary{background:#30466e;color:white;box-shadow:none}.btn.soft{background:#24375b;color:#dce8ff;border:1px solid #466080;box-shadow:none}.btn:disabled{opacity:.45;cursor:default}.btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:19px}.illustration{min-height:245px;position:relative;overflow:hidden;background:radial-gradient(circle at 50% 50%,#3b6994,#1a2e53 60%);border-radius:18px;border:1px solid #60758a;margin-bottom:14px}.arena{width:100%;height:100%;min-height:245px}.arena .pulse{transform-origin:center;animation:pulse 3s ease-in-out infinite}.fighter-one{animation:stepA 2.5s ease-in-out infinite;transform-origin:center}.fighter-two{animation:stepB 2.5s ease-in-out infinite;transform-origin:center}.arena.action .fighter-one{animation:attackA 2.2s ease-in-out infinite}.arena.action .fighter-two{animation:defendB 2.2s ease-in-out infinite}@keyframes stepA{0%,100%{transform:translateX(0)}50%{transform:translateX(12px)}}@keyframes stepB{0%,100%{transform:translateX(0)}50%{transform:translateX(-12px)}}@keyframes attackA{0%,100%{transform:translateX(-10px) translateY(0)}42%{transform:translateX(32px) translateY(12px)}}@keyframes defendB{0%,100%{transform:translateX(0)}45%{transform:translateX(21px)}}@keyframes pulse{50%{opacity:.55}}.arena-label{position:absolute;bottom:13px;left:16px;font-size:12px;color:#d8e8ff;background:#182e52c9;padding:7px 10px;border-radius:10px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:15px}.stat{background:#1a2b4c;padding:15px;border-radius:17px}.stat strong{font-size:28px;display:block;color:var(--yellow)}.stat span{font-size:12px;color:var(--muted)}.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-top:18px}.tile{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:22px;text-align:left;color:inherit;transition:.15s}.tile:hover{transform:translateY(-3px);border-color:var(--yellow)}.tile .emoji{font-size:42px;display:block;margin-bottom:14px}.tile h3{margin:0 0 8px;font-size:19px}.tile p{font-size:14px;color:var(--muted);line-height:1.5;margin:0}.screen{display:none}.screen.active{display:block}.maincol{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px}.pill{display:inline-block;color:var(--yellow);border:1px solid #806b44;background:#51432545;padding:7px 12px;border-radius:30px;font-size:12px;font-weight:800}.progress{height:10px;background:#344362;border-radius:20px;overflow:hidden;margin:14px 0}.progress>div{height:100%;width:0;background:linear-gradient(90deg,#80e2be,#ffd164);border-radius:20px;transition:width .3s}.question{font-size:27px;line-height:1.26;margin:17px 0}.options{display:grid;gap:11px}.option{border:2px solid #455879;border-radius:16px;background:#233454;color:white;text-align:left;padding:17px;font-size:16px;min-height:60px;display:flex;align-items:center;gap:12px}.option:hover:not(:disabled){border-color:#a4c2ff;background:#2b4368}.option.correct{border-color:var(--mint);background:#214c50}.option.incorrect{border-color:var(--pink);background:#543647}.option:disabled{cursor:default}.option b{width:29px;height:29px;border-radius:50%;background:#40547b;display:grid;place-items:center;flex-shrink:0}.feedback{border-radius:18px;padding:19px;margin-top:16px;background:#244b4c;border:1px solid #4a9a84;animation:rise .25s ease}.feedback.bad{background:#4d3444;border-color:#986578}.feedback strong{font-size:20px}.feedback p{line-height:1.55;color:#eff7ff}.mentor{font-size:14px;color:var(--muted);line-height:1.55}.mentor ul{padding-left:20px}.mentor li{margin:8px 0}.section-head{margin:0 0 18px}.section-head h1{font-size:35px;letter-spacing:-1px;margin:3px 0 6px}.section-head p{color:var(--muted);margin:0;line-height:1.5}.modes{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}.mode{border:1px solid #4a6085;border-radius:40px;padding:9px 15px;background:#213458;color:white}.mode.active{background:var(--mint);color:#142d31;border-color:var(--mint);font-weight:800}.symbolrow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:15px}.symbol{border:2px solid #455879;color:#fff;border-radius:20px;background:#263b60;padding:19px 8px;font-size:18px;font-weight:850;min-height:130px}.symbol span{font-size:45px;display:block;margin-bottom:9px}.symbol:disabled{opacity:.6}.symbol:hover:not(:disabled){border-color:var(--yellow)}.cuebox{text-align:center;border-radius:22px;background:radial-gradient(circle,#335586,#1b3155);padding:22px;min-height:165px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}.cuebox .big{font-size:42px;font-weight:900;animation:rise .3s ease}.cuebox p{margin:0;color:#e0eaff;max-width:490px}.center{text-align:center}.hint{background:#1d3452;border-left:4px solid var(--mint);border-radius:10px;padding:14px 17px;margin:16px 0;line-height:1.5;color:#d9e8f3}.rank{display:flex;gap:12px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}.rank:last-child{border:0}.rank .medal{font-size:25px;width:39px}.track{height:10px;background:#35476a;border-radius:12px;overflow:hidden;margin-top:7px}.track>div{background:var(--mint);height:100%;border-radius:12px}.lesson-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.lesson{background:#203252;border:1px solid #455a7b;padding:18px;border-radius:18px}.lesson .number{display:inline-block;font-weight:900;color:#172344;background:var(--yellow);width:30px;height:30px;border-radius:50%;text-align:center;line-height:30px}.lesson p{color:#b8c7e2;line-height:1.45}.lesson .caption{color:var(--mint);font-size:13px}.mini-card{background:#1d3052;border:1px solid #425779;border-radius:16px;padding:15px;margin-top:12px}.mini-card p{line-height:1.5;color:#c5d5ee;font-size:14px}.footer{color:#92a3c7;text-align:center;font-size:12px;margin-top:35px;line-height:1.55}.overlay{position:fixed;inset:0;background:#080f23cf;display:grid;place-items:center;z-index:99;padding:20px}.modal{max-width:480px;background:#1d2e52;border:1px solid #617598;border-radius:24px;padding:28px;box-shadow:0 40px 100px #0009}.hidden{display:none!important}.toast{position:fixed;bottom:20px;right:20px;background:#274e4d;color:#fff;padding:14px 18px;border-radius:15px;z-index:90;box-shadow:var(--shadow);animation:rise .2s}.quote{font-size:18px;font-weight:800;color:var(--yellow);padding:10px 0}.choices-row{display:flex;gap:9px;flex-wrap:wrap}.chip{border:1px solid #4b6388;color:#d5e5ff;background:#24385c;border-radius:12px;padding:9px 12px}.chip.active{background:#ffd164;color:#172344;border-color:#ffd164}.character{font-size:65px;animation:bounce 2s infinite;display:inline-block}.scenario-art{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:15px}.artstep{background:#1e3355;border:1px solid #3b5478;padding:11px;border-radius:15px;font-size:13px;text-align:center;color:#bfcde5}.artstep .icon{font-size:30px;display:block;margin:5px}.switchline{display:flex;gap:12px;align-items:center}.switchline input{accent-color:#ffd164;width:18px;height:18px}.tiny{font-size:12px;color:#9fb0d0}.spark{position:absolute;animation:spark 1.4s infinite;font-size:20px}@keyframes spark{0%{transform:translateY(10px) scale(.8);opacity:0}50%{opacity:1}100%{transform:translateY(-45px) scale(1.2);opacity:0}}@keyframes rise{from{opacity:.5;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}@media(max-width:850px){.hero,.maincol{grid-template-columns:1fr}.tiles{grid-template-columns:1fr 1fr}.app{padding:13px 13px 38px}.top{align-items:flex-start}.logo{font-size:17px}.profile{flex-wrap:wrap;justify-content:flex-end}.lesson-grid{grid-template-columns:1fr}}@media(max-width:520px){.tiles{grid-template-columns:1fr}.card{padding:18px;border-radius:19px}.symbol{min-height:112px;padding:13px 4px;font-size:14px}.symbol span{font-size:36px}.question{font-size:23px}.section-head h1{font-size:29px}.stats{gap:6px}.stat{padding:11px}.stat strong{font-size:23px}.logo .word{max-width:134px}.select{max-width:128px;padding:10px 6px}.arena{min-height:200px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
@@ -68,6 +68,35 @@ button,select{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .logo{font-size:13px}.logoicon{height:38px;width:38px;flex-basis:38px}
 .select{max-width:118px}
 }
+
+/* Живая арена: мобильная компоновка */
+.arena-new{background:#152544;border:1px solid #344f76;border-radius:22px;padding:12px}
+.arena-selector{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.arena-episode{border:1px solid #40587c;border-radius:13px;padding:11px 8px;background:#1d3152;color:#d6e6ff;text-align:left;min-height:53px;display:flex;align-items:center;gap:9px;font-size:13px;font-weight:750;line-height:1.15}
+.arena-episode.active{background:#80e2be;color:#11302c;border-color:#80e2be}
+.arena-episode .episode-icon{font-size:22px;flex:0 0 auto}
+.arena-stage{position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 22%,#315b80 0%,#172d50 65%,#102039 100%);aspect-ratio:1.18;border-radius:17px;border:1px solid #567596;min-height:260px}
+.arena-stage svg{display:block;width:100%;height:100%;touch-action:pan-y}
+.arena-stage .figure-shadow{filter:blur(4px)}
+.arena-under{padding:12px 3px 2px}
+.arena-phase{display:flex;align-items:center;justify-content:space-between;gap:9px;font-size:12px;margin-bottom:9px}
+.arena-phase>span:first-child{color:#80e2be;font-weight:900;white-space:nowrap}
+.arena-phase strong{font-size:13px;flex:1;color:#f5f7ff}
+.arena-phase>span:last-child{color:#a8b6d3;font-variant-numeric:tabular-nums}
+#arenaSeek{display:block;appearance:none;width:100%;height:8px;background:linear-gradient(to right,#80e2be 0%,#80e2be var(--seek,0%),#364e73 var(--seek,0%),#364e73 100%);border-radius:50px;outline:0;margin:12px 0 16px;touch-action:pan-y}
+#arenaSeek::-webkit-slider-thumb{appearance:none;width:23px;height:23px;border-radius:50%;background:#ffd164;border:3px solid #172743;box-shadow:0 1px 8px #0008}
+.arena-controls{display:grid;grid-template-columns:1fr 1.3fr .85fr .95fr;gap:7px}
+.arena-control{background:#30466d;border:1px solid #4c6790;border-radius:12px;min-height:49px;padding:7px 4px;color:#eef4ff;font-size:13px;font-weight:850}
+.arena-control.primary{background:#ffd164;color:#192646;border-color:#ffd164}
+.arena-details{margin-top:15px}
+.arena-details h2{font-size:22px;margin:5px 0 8px}
+.arena-details p{color:#d5e1f4;font-size:15px;line-height:1.55;margin:0}
+.arena-kicker{font-size:11px;letter-spacing:1.5px;font-weight:900;color:#80e2be}
+.arena-tip{margin-top:13px;display:flex;align-items:flex-start;gap:10px;padding:13px;border:1px solid #3f746c;border-radius:12px;background:#1e414b;color:#d9fff3;font-size:14px;line-height:1.45}
+.arena-next{display:block;width:100%;margin-top:13px}
+.arena-warning{color:#a8b8d5;font-size:12px;line-height:1.5;padding:12px 4px}
+@media(min-width:720px){.arena-new{max-width:790px;margin:auto}.arena-stage{aspect-ratio:1.8}.arena-selector{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(max-width:430px){.arena-new{padding:9px;border-radius:16px}.arena-stage{aspect-ratio:1.02;min-height:230px}.arena-episode{min-height:48px;font-size:12px;padding:8px 6px}.arena-episode .episode-icon{font-size:19px}.arena-control{font-size:12px}.arena-control span{display:none}}
 </style><link rel="manifest" href="./manifest.webmanifest?v=2"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=2"><link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=2"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
 <body><noscript><div style="padding:18px;background:#ffecb2;color:#222;font:16px sans-serif">Для запуска игр необходимо включить JavaScript и открыть скачанный HTML-файл в обычном браузере (Safari, Chrome или Edge), а не в предпросмотре файла.</div></noscript><div id="startupWarning" style="position:fixed;z-index:99999;bottom:12px;left:12px;right:12px;background:#fff2bb;color:#25202b;padding:13px;border-radius:12px;font:14px system-ui;box-shadow:0 6px 32px #0008">⚠️ Если кнопки не реагируют, просмотрщик заблокировал JavaScript. Скачайте файл и откройте его в Safari, Chrome или Edge.</div><div class="app"><header class="top"><button type="button" class="logo brand-home" data-page="home" aria-label="На главную — Академия борца"><span class="logoicon">🤼</span><span class="word">АКАДЕМИЯ<br>БОРЦА</span></button><div class="profile"><span class="small">Сегодня тренируется</span><select class="select" id="kidSelect" aria-label="Выбрать ребёнка"><option value="older">Старший · 7 лет</option><option value="younger">Младший · 6 лет</option></select></div></header>
 <nav class="tabs" aria-label="Игры и разделы">
@@ -82,7 +111,28 @@ button,select{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 <section id="home" class="screen active"><div class="hero"><div class="card"><span class="eyebrow">Играй • Думай • Не сдавайся</span><h1>Сильный борец<br>начинается <span style="color:var(--yellow)">с умной головы!</span></h1><p class="lead">Здесь не нужно быть самым сильным. Научись замечать, что происходит, выбирать решение и продолжать после ошибки.</p><div class="btnrow"><button class="btn" data-go="mind">🧠 Начать приключение</button><button class="btn secondary" data-go="elements" data-quick="1">🎮 Быстрая игра</button></div><div class="stats"><div class="stat"><strong id="homeStars">0</strong><span>звёзд собрано</span></div><div class="stat"><strong id="homeMissions">0</strong><span>заданий решено</span></div><div class="stat"><strong id="homeStreak">0</strong><span>дней практики</span></div></div></div><div class="card"><div class="illustration" id="homeArt"></div><div class="eyebrow">Правило чемпиона</div><div class="quote">«Не получилось? Я всё равно продолжаю!»</div><p class="small">Победа — это не только баллы. Смелость попробовать, спокойствие и умение думать тоже считаются.</p></div></div></section>
 <section id="mind" class="screen"><div class="section-head"><span class="eyebrow">Приключение с выбором</span><h1>🧠 Умный борец</h1><p>24 игровых ситуации. Здесь можно ошибаться сколько угодно — мы учимся думать, а не сдаём экзамен.</p></div><div class="modes" id="mindCategories"></div><div class="maincol"><div class="card"><div class="pill" id="mindCounter">Ситуация 1</div><div class="progress"><div id="mindBar"></div></div><div class="illustration" id="mindArt"></div><h2 id="mindTitle">Загрузка</h2><p class="lead" id="mindStory"></p><div class="question" id="mindQuestion"></div><div class="options" id="mindOptions"></div><div id="mindFeedback" class="hidden"></div><div class="btnrow"><button class="btn secondary" id="mindPrev">← Назад</button><button class="btn" id="mindNext">Дальше →</button></div></div><aside class="card"><div class="eyebrow">Подсказки папе</div><h3 id="parentAim">Задача</h3><p class="mentor" id="parentTip"></p><div class="hint">💡 Важно: не подсказывайте ответ заранее. Сначала спросите: «Почему ты так думаешь?»</div><div class="mini-card"><strong>Правило дня</strong><p id="mindRule"></p></div><label class="switchline small" style="margin-top:20px"><input type="checkbox" id="soundToggle">Звуковые сигналы</label></aside></div></section>
 <section id="elements" class="screen"><div class="section-head"><span class="eyebrow">Реакция • Внимание • Спокойствие</span><h1>🪨 Камень, вода, борец</h1><p>Три стратегии, много ситуаций. Выбирай, как думает хороший борец, а не кто сильнее толкает.</p></div><div class="maincol"><div class="card"><div class="modes"><button class="mode active" data-elmode="learn">📖 Учусь</button><button class="mode" data-elmode="play">🎮 Играю</button><button class="mode" data-elmode="challenge">⚡ Испытание</button></div><div class="cuebox" id="elementCue"><span class="character" id="elEmoji">🪨</span><span class="big" id="elTitle">КАМЕНЬ</span><p id="elDesc">Стой устойчиво. Сохраняй равновесие.</p></div><div class="symbolrow"><button class="symbol" data-symbol="rock"><span>🪨</span>КАМЕНЬ</button><button class="symbol" data-symbol="water"><span>💧</span>ВОДА</button><button class="symbol" data-symbol="wrestler"><span>🤼</span>БОРЕЦ</button></div><div id="elFeedback" class="feedback hidden"></div><div class="btnrow"><button class="btn" id="elNext">▶ Новая ситуация</button><button class="btn secondary" id="elReset">↻ Сначала</button></div></div><aside class="card"><div class="eyebrow">Три суперсилы</div><div class="mini-card"><h3>🪨 КАМЕНЬ</h3><p>Устойчивость, правильная стойка, сохранение контроля. Не означает стоять неподвижно.</p></div><div class="mini-card"><h3>💧 ВОДА</h3><p>Движение, изменение направления, поиск более удобного положения. Не означает убегать.</p></div><div class="mini-card"><h3>🤼 БОРЕЦ</h3><p>Замечай момент и выбирай знакомое действие: атакуй, защищайся или продолжай.</p></div><div class="mini-card"><strong>За эту игру</strong><p><span id="elScore">0</span> верных ответов · <span id="elRound">0</span> раундов</p><div class="track"><div id="elScoreBar" style="width:0"></div></div></div><p class="tiny">В «Испытании» есть таймер на 12 секунд. После окончания времени можно спокойно ответить: штрафов нет.</p></aside></div></section>
-<section id="arena" class="screen"><div class="section-head"><span class="eyebrow">Посмотри • Объясни • Выбери</span><h1>🏟️ Арена решений</h1><p>Анимированная схема помогает узнавать спортивные ситуации. Это не инструкция для исполнения приёмов.</p></div><div class="maincol"><div class="card"><div class="modes" id="arenaModes"></div><div class="illustration" style="min-height:340px" id="arenaArt"></div><h2 id="arenaTitle"></h2><p class="lead" id="arenaDescription"></p><div class="btnrow"><button class="btn" id="arenaPlay">⏸ Остановить</button><button class="btn secondary" id="arenaSwitch">Следующий эпизод →</button></div><div class="hint" id="arenaTakeaway"></div></div><aside class="card"><h2>Как смотреть вместе</h2><p class="mentor">1. Посмотрите движение несколько раз.<br><br>2. Спросите: «Что изменилось?»<br><br>3. Спросите: «Где борцу стало неудобно?»<br><br>4. Обсудите одно возможное решение.<br><br>5. Пусть ребёнок объяснит своими словами.</p><div class="mini-card"><strong>Важно для безопасности</strong><p>Рисунки условные. Не повторяйте броски и контактные приёмы по анимациям. Их учат на ковре под руководством тренера.</p></div></aside></div></section>
+<section id="arena" class="screen">
+<div class="section-head"><span class="eyebrow">Смотри • Замечай • Понимай</span><h1>🤼 Живая арена</h1><p>Два юных борца показывают основные движения и спортивные ситуации. Смотри в замедлении и разбирай каждый момент.</p></div>
+<div class="arena-new">
+<div class="arena-selector" id="arenaModes" aria-label="Выберите эпизод"></div>
+<div class="arena-stage" id="arenaArt" role="img" aria-label="Анимированные борцы на ковре"></div>
+<div class="arena-under">
+<div class="arena-phase"><span id="arenaPhaseNum">ШАГ 1 / 4</span><strong id="arenaPhaseName">Смотрим на соперника</strong><span id="arenaTime">0:00</span></div>
+<input type="range" id="arenaSeek" min="0" max="1000" value="0" step="1" aria-label="Перемотать движение" />
+<div class="arena-controls">
+<button class="arena-control" id="arenaReplay" aria-label="Сначала">↺ <span>Сначала</span></button>
+<button class="arena-control primary" id="arenaPlay">⏸ Пауза</button>
+<button class="arena-control" id="arenaSpeed" aria-label="Скорость воспроизведения">0.75×</button>
+<button class="arena-control" id="arenaStep" aria-label="Следующий шаг">Шаг →</button>
+</div>
+<div class="arena-details">
+<div class="arena-kicker">ЧТО ПРОИСХОДИТ?</div><h2 id="arenaTitle">Стойка борца</h2><p id="arenaDescription"></p>
+<div class="arena-tip"><span>💡</span><span id="arenaTakeaway"></span></div>
+</div>
+<button class="btn arena-next" id="arenaSwitch">Следующий эпизод →</button>
+</div></div>
+<div class="arena-warning">🛡️ Это учебная визуализация для понимания ситуации, а не инструкция по самостоятельной отработке бросков. Контактные приёмы и страховку показывает тренер на ковре.</div>
+</section>
 <section id="academy" class="screen"><div class="section-head"><span class="eyebrow">Просто и понятно</span><h1>📚 Азбука маленького борца</h1><p>Короткие объяснения, игровые вопросы и правила, которые полезно знать каждому начинающему.</p></div><div class="lesson-grid" id="lessonGrid"></div><div class="card" style="margin-top:16px"><h2>🎯 План для дома</h2><p class="lead">Два-три раза в неделю по 10–15 минут, когда детям самим хочется. 3 минуты игры, 5–7 минут знакомого навыка, 3 минуты весёлого завершения.</p><p class="mentor">Дома: карточки, безопасные бесконтактные игры на движение и реакцию. На тренировке: технические приёмы, парная борьба, падения и защита — только с тренерами.</p></div></section>
 <section id="progress" class="screen"><div class="section-head"><span class="eyebrow">У каждого свой путь</span><h1>🏆 Мои маленькие победы</h1><p>Здесь нет сравнения братьев. Считаем попытки, любознательность и пройденные задания.</p></div><div class="maincol"><div class="card"><h2>Мои достижения</h2><div class="stats" style="margin-bottom:20px"><div class="stat"><strong id="pStars">0</strong><span>звёзд</span></div><div class="stat"><strong id="pSolved">0</strong><span>правильных решений</span></div><div class="stat"><strong id="pRounds">0</strong><span>игровых раундов</span></div></div><h3>Значки отважного ученика</h3><div id="badges"></div><div class="btnrow"><button class="btn secondary" id="exportProgress">📋 Скопировать отчёт</button><button class="btn soft" id="resetProgress">Сбросить мой прогресс</button></div></div><aside class="card"><h2>Папина заметка</h2><p class="mentor">Запишите маленькую победу: «Сегодня сам начал бороться» или «После ошибки продолжил». Здесь не нужен рейтинг спортсменов.</p><textarea id="parentNotes" placeholder="Что сегодня получилось у сына?" style="background:#142543;color:white;border:1px solid #4a648b;border-radius:14px;padding:12px;width:100%;height:180px;resize:vertical;font:inherit"></textarea><div class="btnrow"><button class="btn" id="saveNote">Сохранить заметку</button></div><p class="tiny">Данные остаются в браузере этого устройства. Для переноса можно скопировать отчёт; сервер и аккаунт не используются.</p></aside></div></section>
 </main><div class="footer">Семейная обучающая игра • Для детей 6–7 лет вместе со взрослым • Не заменяет тренера по вольной борьбе<br>Схемы и ситуации обучают мышлению; силовые и контактные приёмы осваиваются только с тренером.</div></div>
@@ -170,16 +220,158 @@ function newElement(){clearInterval(elementTimer);elementLocked=false;let i;do{i
 function renderElement(){const isLearn=elementMode==='learn';const c=elementCurrent;$('elEmoji').textContent=isLearn?'✨':c?'❓':'🎯';$('elTitle').textContent=isLearn?'ТРИ СУПЕРСИЛЫ':c?'ТВОЙ ВЫБОР':'НАЖМИ «НОВАЯ СИТУАЦИЯ»';$('elDesc').textContent=isLearn?'Выбери камень, воду или борца и узнай их секрет.':c?c[0]:'Смотри на ситуацию и выбирай подходящую стратегию.';$('elFeedback').className='hidden';$('elScore').textContent=elementCorrect;$('elRound').textContent=elementRound;$('elScoreBar').style.width=(elementRound?100*elementCorrect/elementRound:0)+'%';$('elNext').textContent=isLearn?'🎮 Начать игру':'▶ Новая ситуация';document.querySelectorAll('[data-symbol]').forEach(b=>b.disabled=false)}
 function chooseElement(k){if(elementMode==='learn'){let d={rock:'КАМЕНЬ: ноги устойчивы, стойка готова. Это не значит стоять неподвижно.',water:'ВОДА: меняй направление и положение. Это не значит убегать.',wrestler:'БОРЕЦ: замечай, выбирай и делай знакомое действие.'};$('elEmoji').textContent=sym[k][0];$('elTitle').textContent=sym[k][1];$('elDesc').textContent=d[k];return;}if(!elementCurrent||elementLocked){toast('Нажми «Новая ситуация»');return;}elementLocked=true;clearInterval(elementTimer);const good=k===elementCurrent[1];if(good){elementCorrect++;state[kid].elementCorrect++;reward(1)}beep(good);$('elEmoji').textContent=sym[elementCurrent[1]][0];$('elTitle').textContent=good?'🌟 ВЕРНО!':'💛 УЧИМСЯ ДАЛЬШЕ';$('elDesc').textContent=elementCurrent[0];const f=$('elFeedback');f.className='feedback '+(good?'':'bad');f.innerHTML=`<strong>${good?'Отличный выбор!':'Подходящая стратегия — '+sym[elementCurrent[1]][1].toLowerCase()}</strong><p>${escapeHTML(elementCurrent[2])}</p>`;document.querySelectorAll('[data-symbol]').forEach(b=>b.disabled=true);$('elScore').textContent=elementCorrect;$('elScoreBar').style.width=(100*elementCorrect/elementRound)+'%';}
 document.querySelectorAll('[data-symbol]').forEach(b=>b.addEventListener('click',()=>chooseElement(b.dataset.symbol)));$('elNext').onclick=()=>{if(elementMode==='learn'){setElMode('play');newElement()}else newElement()};$('elReset').onclick=()=>{setElMode(elementMode);toast('Можно начать заново!')};
+
+/* Ключевые положения и покадровая анимация учебных эпизодов. */
 const arenaScenes=[
-['Стойка','Оба мальчика готовятся к борьбе. Обратите внимание: ноги согнуты, руки впереди, оба наблюдают друг за другом.','Вопрос: почему удобная стойка помогает и атаковать, и защищаться?',false],
-['Дистанция','Когда борцы перемещаются навстречу друг другу, расстояние меняется. От этого зависит, можно ли начать знакомое действие.','Вопрос: что случится, если пытаться атаковать слишком далеко?',false],
-['Изменение положения','Один борец пытается сблизиться. Второй замечает движение и старается не терять удобную позицию.','Вопрос: кто сейчас должен подстраиваться к движению?',true],
-['Атака и защита','Один начинает движение вперёд. Второй реагирует. Действия идут друг за другом, а не заканчиваются после первой попытки.','Вопрос: что делать, если первое действие не удалось?',true],
-['После ошибки','Представьте, что борец пропустил два балла. Сейчас его задача — не торопиться, а вернуться к правильным решениям.','Вопрос: что надо сделать прежде, чем снова идти в атаку?',false],
-['Продолжай борьбу','Задача не обязательно победить каждый раз. Сохраняйте спокойствие, наблюдайте, принимайте решения и продолжайте учиться.','Вопрос: каким своим действием сегодня можно гордиться?',true]
+{icon:'🧍',title:'Стойка и баланс',desc:'Устойчивое положение начинается с ног. Смотри, как борцы сгибают колени, держат руки впереди и мягко переносят вес.',tip:'Ноги согнуты, руки готовы, голова смотрит на соперника.',phases:['Готовимся','Сгибаем колени','Держим баланс','Смотрим на соперника'],pose:['neutral','squat','sway','neutral']},
+{icon:'↔️',title:'Дистанция',desc:'Если соперник далеко, до него сложно дотянуться. При сближении расстояние меняется, и появляется возможность действовать.',tip:'Не тянись руками издалека — сначала оцени расстояние.',phases:['Далеко друг от друга','Подходим ближе','На удобной дистанции','Снова разошлись'],pose:['apart','approach','close','apart']},
+{icon:'🔄',title:'Движение по кругу',desc:'Соперник не стоит на месте. Оба борца делают небольшие шаги в сторону и стараются не потерять удобную стойку.',tip:'Двигай ногами и следи за положением соперника.',phases:['Стоим напротив','Шаг в сторону','Другой отвечает','Меняем направление'],pose:['neutral','circleR','circleL','neutral']},
+{icon:'⬇️',title:'Смена уровня',desc:'Борец опускается за счёт сгибания ног, а не просто наклоняет голову. Так он остаётся собранным и готовым к знакомому действию.',tip:'Положение тела перед атакой важнее скорости.',phases:['Обычная стойка','Сгибаем ноги','Ниже и ближе','Возвращаемся в стойку'],pose:['neutral','squat','low','neutral']},
+{icon:'🦵',title:'Попытка захвата ноги',desc:'Синий борец замечает момент для знакомого прохода в ногу. Посмотри, как он приближается и снижает уровень тела. Красный реагирует.',tip:'Захват ноги — лишь начало эпизода. Завершение приёма изучают с тренером.',phases:['Ищем момент','Вход в атаку','Реакция партнёра','Возвращаемся в стойку'],pose:['neutral','entry','contact','reset']},
+{icon:'🛡️',title:'Защита от атаки',desc:'Красный борец видит движение синего к ногам. Он меняет положение и защищается, вместо того чтобы просто замереть.',tip:'Замечай движение соперника и применяй защиту, которую поставил тренер.',phases:['Оба в стойке','Синий начинает атаку','Красный защищается','Оба восстанавливаются'],pose:['neutral','entry','defense','reset']},
+{icon:'⚖️',title:'Равновесие и контроль',desc:'В парной борьбе важно чувствовать давление и не терять равновесие. Иногда полезнее изменить положение ног, чем тянуть изо всех сил.',tip:'Используй положение тела, а не одну только силу.',phases:['Сближаемся','Появляется контакт','Перестраиваем ноги','Сохраняем устойчивость'],pose:['approach','grip','balance','reset']},
+{icon:'🤼',title:'Контакт и захват',desc:'Борцы аккуратно входят в контакт: руки встречаются на уровне плеч. Теперь каждый ищет удобное положение, не теряя ноги.',tip:'Контакт — это работа с дистанцией и положением, а не соревнование силы.',phases:['Смотрим на соперника','Сближаемся','Контакт руками','Разрываем контакт'],pose:['neutral','approach','grip','reset']},
+{icon:'🧠',title:'После ошибки',desc:'Синий борец пропустил удачное действие. Он не должен спешить. Сначала восстановит стойку, потом снова увидит соперника.',tip:'Пропущенный балл — не конец. Спокойствие помогает следующему решению.',phases:['Неудачный момент','Восстановление','Спокойная стойка','Продолжаем борьбу'],pose:['contact','recover','neutral','circleR']},
+{icon:'⭐',title:'Продолжай борьбу',desc:'Смелость — не отсутствие волнения. Главное — замечать, действовать и не сдаваться после неудачной попытки.',tip:'Маленькие правильные действия складываются в большой прогресс.',phases:['Начинаем','Ищем дистанцию','Пробуем действие','Продолжаем'],pose:['neutral','circleL','entry','reset']}
 ];
-function renderArena(){const sc=arenaScenes[arenaIndex];$('arenaModes').innerHTML=arenaScenes.map((s,i)=>`<button class="mode ${i===arenaIndex?'active':''}" data-arena="${i}">${i+1}. ${escapeHTML(s[0])}</button>`).join('');document.querySelectorAll('[data-arena]').forEach(b=>b.onclick=()=>{arenaIndex=Number(b.dataset.arena);renderArena()});renderArt($('arenaArt'),sc[3],!arenaPlaying,arenaIndex,sc[0]);$('arenaTitle').textContent=sc[0];$('arenaDescription').textContent=sc[1];$('arenaTakeaway').textContent=sc[2];$('arenaPlay').textContent=arenaPlaying?'⏸ Остановить':'▶ Продолжить';const svg=$('arenaArt').querySelector('svg');svg.querySelectorAll('.fighter-one,.fighter-two,.pulse').forEach(e=>e.style.animationPlayState=arenaPlaying?'running':'paused')}
-$('arenaPlay').onclick=()=>{arenaPlaying=!arenaPlaying;renderArena()};$('arenaSwitch').onclick=()=>{arenaIndex=(arenaIndex+1)%arenaScenes.length;renderArena()};
+let arenaProgress=0,arenaSpeed=.75,arenaFrameAt=0,arenaLastAt=0,arenaRaf=0,arenaMounted=false;
+const arenaDuration=7600;
+const arenaPoseLibrary={
+neutral:[[-114,0,0,0,0,0,0],[114,0,0,0,0,0,0]],
+squat:[[-110,0,0,1,0,0,0],[110,0,0,1,0,0,0]],
+sway:[[-108,0,-8,.5,0,-.2,0],[108,0,7,.5,0,.2,0]],
+apart:[[-158,0,0,0,0,0,0],[158,0,0,0,0,0]],
+approach:[[-88,0,0,.25,.45,0,0],[88,0,0,.25,.45,0,0]],
+close:[[-69,0,0,.25,.6,0,0],[69,0,0,.25,.6,0,0]],
+circleR:[[-95,-14,4,.15,.35,.65,0],[112,20,-6,.15,.35,.65,0]],
+circleL:[[-120,14,-3,.2,.3,-.65,0],[90,-18,4,.2,.3,-.65,0]],
+low:[[-78,0,12,1,.75,0,0],[94,0,-4,.45,.5,0,0]],
+entry:[[-63,0,15,.95,1,0,0],[98,0,-4,.2,.35,0,0]],
+contact:[[-44,0,18,.9,1,0,.65],[92,0,-10,.55,1,0,.5]],
+defense:[[-50,0,14,.95,1,0,.35],[115,-4,-10,.85,.95,.3,1]],
+grip:[[-54,0,7,.35,1,0,1],[54,0,-7,.35,1,0,1]],
+balance:[[-70,10,6,.6,1,.6,.85],[77,-10,-5,.6,1,-.5,.85]],
+recover:[[-85,0,-14,.6,.2,0,0],[103,0,0,.3,.25,0,0]],
+reset:[[-112,0,0,.1,.1,0,0],[112,0,0,.1,.1,0,0]]
+};
+function aLerp(a,b,t){return a+(b-a)*t}
+function aEase(t){return t*t*(3-2*t)}
+function aPose(scene,progress,which){
+ const raw=Math.max(0,Math.min(3.9999,progress*4)),k=Math.floor(raw),t=aEase(raw-k);
+ const poses=scene.pose,p1=arenaPoseLibrary[poses[k]][which],p2=arenaPoseLibrary[poses[(k+1)%4]][which];
+ return p1.map((v,i)=>aLerp(v,p2[i],t));
+}
+function aFighter(who,params){
+ const [px,py,lean,crouch,reach,step,grip]=params;
+ const dir=who===0?1:-1;
+ const blue=who===0;
+ const shirt=blue?'#378be9':'#eb6272',light=blue?'#79c4ff':'#ff9eaa',dark=blue?'#18569e':'#a62f4c',shoe=blue?'#2166c9':'#ba354d';
+ const x=310+px,y=292+py*.4;
+ const hipY=y-87+crouch*31,shoulderY=hipY-76+crouch*5,neckY=shoulderY-13;
+ const torsoX=x+lean*.40,shoulderX=torsoX+lean*.18,headX=shoulderX+lean*.10,headY=neckY-29;
+ const frontKneeX=x+dir*(36+step*11),backKneeX=x-dir*(30-step*10);
+ const frontKneeY=hipY+50+crouch*11,backKneeY=hipY+48+crouch*12;
+ const frontFootX=x+dir*(61+step*18),backFootX=x-dir*(50-step*14);
+ const shoulderFrontX=shoulderX+dir*18,shoulderBackX=shoulderX-dir*16;
+ const targetX=shoulderX+dir*(48+reach*26+grip*3),targetY=shoulderY+27+reach*15+grip*4;
+ const elbowX=shoulderFrontX+dir*(25+reach*8),elbowY=shoulderY+29+reach*3;
+ const otherHandX=shoulderX-dir*(38-15*grip),otherHandY=shoulderY+35;
+ const otherElbowX=shoulderBackX-dir*24,otherElbowY=shoulderY+22;
+ const line=(x1,y1,x2,y2,w,color)=>'<path d="M'+x1.toFixed(1)+' '+y1.toFixed(1)+'L'+x2.toFixed(1)+' '+y2.toFixed(1)+'" fill="none" stroke="'+color+'" stroke-width="'+w+'" stroke-linecap="round" stroke-linejoin="round"/>';
+ const circle=(cx,cy,r,color)=>'<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="'+r+'" fill="'+color+'"/>';
+ let out='<g aria-label="'+(blue?'Синий':'Красный')+' борец">';
+ out+='<ellipse class="figure-shadow" cx="'+x+'" cy="'+(y+6)+'" rx="70" ry="9" fill="#061b32" opacity=".6"/>';
+ // rear leg, knee and sneaker
+ out+=line(x-8,hipY+5,backKneeX,backKneeY,24,dark);
+ out+=circle(backKneeX,backKneeY,11,light);
+ out+=line(backKneeX,backKneeY,backFootX,y,20,shirt);
+ out+=line(backFootX-dir*9,y,backFootX+dir*18,y,14,shoe);
+ out+=line(backFootX-dir*8,y-2,backFootX+dir*13,y-2,2,'#fff9');
+ // far arm
+ out+=line(shoulderBackX,shoulderY+5,otherElbowX,otherElbowY,18,dark);
+ out+=line(otherElbowX,otherElbowY,otherHandX,otherHandY,15,light);
+ // front leg
+ out+=line(x+7,hipY+7,frontKneeX,frontKneeY,27,shirt);
+ out+=circle(frontKneeX,frontKneeY,13,light);
+ out+=line(frontKneeX,frontKneeY,frontFootX,y,23,shirt);
+ out+=line(frontFootX-dir*7,y,frontFootX+dir*22,y,16,shoe);
+ out+=line(frontFootX-dir*4,y-3,frontFootX+dir*17,y-3,3,'#d9e9ff');
+ // singlet torso, defined waist and bib
+ out+='<path d="M'+(shoulderX-24)+' '+(shoulderY-4)+' Q'+(shoulderX+lean*.1)+' '+(shoulderY-12)+' '+(shoulderX+25)+' '+(shoulderY-2)+' L'+(x+22)+' '+(hipY+13)+' Q'+x+' '+(hipY+22)+' '+(x-22)+' '+(hipY+8)+'Z" fill="'+shirt+'" stroke="'+dark+'" stroke-width="3"/>';
+ out+='<path d="M'+(shoulderX-19)+' '+(shoulderY+5)+'L'+(x-11)+' '+(hipY-3)+'" stroke="'+light+'" stroke-width="5" stroke-linecap="round" opacity=".85"/>';
+ out+='<path d="M'+(shoulderX+18)+' '+(shoulderY+4)+'L'+(x+13)+' '+(hipY+4)+'" stroke="'+light+'" stroke-width="5" stroke-linecap="round" opacity=".75"/>';
+ out+=line(shoulderX,shoulderY-2,headX,headY+14,16,'#e3ab85');
+ // head, ears, hair, face
+ out+=circle(headX,headY,24,'#f4c49f');
+ out+=circle(headX-dir*19,headY+3,5,'#e4a981');
+ out+='<path d="M'+(headX-22)+' '+(headY-5)+' Q'+(headX-12)+' '+(headY-36)+' '+(headX+11)+' '+(headY-22)+' Q'+(headX+27)+' '+(headY-22)+' '+(headX+20)+' '+(headY-1)+' Q'+(headX+6)+' '+(headY-17)+' '+(headX-4)+' '+(headY-11)+' Q'+(headX-12)+' '+(headY-2)+' '+(headX-22)+' '+(headY-5)+'Z" fill="'+(blue?'#382c34':'#b77928')+'"/>';
+ out+=circle(headX+dir*11,headY-2,2.8,'#192641');
+ out+='<path d="M'+(headX+dir*7)+' '+(headY+12)+'q'+(dir*7)+' 6 '+(dir*13)+' -1" fill="none" stroke="#a15e4b" stroke-width="2" stroke-linecap="round"/>';
+ // near arm with visible elbow and hand
+ out+=line(shoulderFrontX,shoulderY+5,elbowX,elbowY,19,light);
+ out+=circle(elbowX,elbowY,9,'#efbd99');
+ out+=line(elbowX,elbowY,targetX,targetY,16,'#eec09c');
+ out+=circle(targetX,targetY,8,'#efbd99');
+ out+='</g>';
+ return out;
+}
+function aSceneSVG(p){
+ const scene=arenaScenes[arenaIndex];
+ const a=aPose(scene,p,0),b=aPose(scene,p,1);
+ const phase=Math.min(3,Math.floor(p*4));
+ let s='<svg viewBox="0 0 620 390" preserveAspectRatio="xMidYMid meet" aria-label="Два юных борца показывают эпизод: '+scene.title+'">';
+ s+='<defs><radialGradient id="arenaFloor" cx="50%" cy="55%"><stop offset="0" stop-color="#3a7799"/><stop offset="1" stop-color="#163451"/></radialGradient><linearGradient id="matShade" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#245675"/><stop offset="1" stop-color="#122843"/></linearGradient></defs>';
+ s+='<rect width="620" height="390" fill="url(#arenaFloor)"/><ellipse cx="310" cy="275" rx="275" ry="90" fill="url(#matShade)" stroke="#a6d5f1" stroke-opacity=".65" stroke-width="5"/>';
+ s+='<ellipse cx="310" cy="275" rx="130" ry="46" fill="none" stroke="#fdd16e" stroke-width="4" opacity=".8"/>';
+ s+='<path d="M310 185V365M35 275H585" stroke="#bed7e8" stroke-width="1.5" stroke-dasharray="6 9" opacity=".25"/>';
+ s+='<text x="20" y="30" fill="#e5f6ff" font-size="14" font-weight="800">АКАДЕМИЯ БОРЦА</text><text x="602" y="30" text-anchor="end" fill="#d2e9fa" font-size="13">'+String(arenaIndex+1).padStart(2,"0")+' / '+arenaScenes.length+'</text>';
+ // motion arrow + active highlighted region
+ if(['approach','entry','circleR','circleL','contact','defense'].includes(scene.pose[phase])){
+  s+='<path d="M205 331 Q310 351 415 331" stroke="#ffdb77" fill="none" stroke-dasharray="9 9" stroke-width="3" opacity=".8"/>';
+ }
+ s+=aFighter(0,a)+aFighter(1,b);
+ s+='<rect x="13" y="349" width="128" height="27" rx="12" fill="#133655" opacity=".95"/><text x="77" y="367" text-anchor="middle" fill="#a8d3ff" font-size="13" font-weight="800">🔵 СИНИЙ</text>';
+ s+='<rect x="476" y="349" width="130" height="27" rx="12" fill="#4b273f" opacity=".95"/><text x="542" y="367" text-anchor="middle" fill="#ffc4ca" font-size="13" font-weight="800">🔴 КРАСНЫЙ</text></svg>';
+ return s;
+}
+function arenaDraw(){
+ const scene=arenaScenes[arenaIndex],phase=Math.min(3,Math.floor(arenaProgress*4));
+ const stage=$('arenaArt');
+ if(!stage)return;
+ stage.innerHTML=aSceneSVG(arenaProgress);
+ $('arenaPhaseNum').textContent='ШАГ '+(phase+1)+' / 4';
+ $('arenaPhaseName').textContent=scene.phases[phase];
+ $('arenaTime').textContent=Math.floor(arenaProgress*arenaDuration/1000)+':'+String(Math.floor(arenaProgress*arenaDuration%1000/10)).padStart(2,'0');
+ $('arenaSeek').value=String(Math.floor(arenaProgress*1000));
+ $('arenaSeek').style.setProperty('--seek',(arenaProgress*100).toFixed(1)+'%');
+ $('arenaPlay').textContent=arenaPlaying?'⏸ Пауза':'▶ Играть';
+ $('arenaSpeed').textContent=arenaSpeed+'×';
+}
+function arenaTick(now){
+ if(arenaLastAt===0)arenaLastAt=now;
+ const delta=Math.min(70,now-arenaLastAt);arenaLastAt=now;
+ if(page==='arena'&&arenaPlaying){
+  arenaProgress=(arenaProgress+delta*arenaSpeed/arenaDuration)%1;
+  arenaDraw();
+ }
+ arenaRaf=requestAnimationFrame(arenaTick);
+}
+function renderArena(){
+ const sc=arenaScenes[arenaIndex];
+ $('arenaModes').innerHTML=arenaScenes.map((s,i)=>'<button class="arena-episode '+(i===arenaIndex?'active':'')+'" type="button" data-arena="'+i+'"><span class="episode-icon">'+s.icon+'</span><span>'+escapeHTML(s.title)+'</span></button>').join('');
+ $('arenaModes').querySelectorAll('[data-arena]').forEach(button=>button.onclick=()=>{arenaIndex=Number(button.dataset.arena);arenaProgress=0;arenaPlaying=true;renderArena()});
+ $('arenaTitle').textContent=sc.title;
+ $('arenaDescription').textContent=sc.desc;
+ $('arenaTakeaway').textContent=sc.tip;
+ arenaDraw();
+ if(!arenaMounted){arenaMounted=true;arenaRaf=requestAnimationFrame(arenaTick);}
+}
+$('arenaPlay').onclick=()=>{arenaPlaying=!arenaPlaying;arenaLastAt=0;arenaDraw();};
+$('arenaReplay').onclick=()=>{arenaProgress=0;arenaPlaying=true;arenaLastAt=0;arenaDraw();};
+$('arenaSpeed').onclick=()=>{const speeds=[.5,.75,1,1.5];arenaSpeed=speeds[(speeds.indexOf(arenaSpeed)+1)%speeds.length];arenaDraw();};
+$('arenaStep').onclick=()=>{arenaProgress=(Math.floor(arenaProgress*4)+1)%4/4;arenaPlaying=false;arenaDraw();};
+$('arenaSeek').addEventListener('input',e=>{arenaProgress=Number(e.target.value)/1000;arenaPlaying=false;arenaDraw();});
+$('arenaSwitch').onclick=()=>{arenaIndex=(arenaIndex+1)%arenaScenes.length;arenaProgress=0;arenaPlaying=true;renderArena()};
 const lessons=[['🦶','Стойка борца','Ноги согнуты, руки впереди, тело готово двигаться.','Покажи стойку на 5 секунд.'],['↔️','Шаги и движение','Делай небольшие контролируемые шаги, сохраняя равновесие.','Сыграйте в «зеркало».'],['👀','Смотри и замечай','Наблюдай за положением корпуса и ног соперника.','Что изменилось в движении?'],['📏','Дистанция','Чтобы действовать, нужно подходящее расстояние.','Далеко или близко?'],['⚖️','Равновесие','Когда стоишь устойчиво, легче двигаться и реагировать.','Поиграй в «цаплю» без партнёра.'],['🤼','Атака','Не просто хватай. Найди подходящий момент для знакомого действия.','Какой приём сейчас учит тренер?'],['🛡️','Защита','Защищаться — тоже значит активно бороться.','Какую защиту ты уже знаешь?'],['⬇️','Партер','На ковре важно понимать, где верх, низ и как защищаться.','Чем различаются задачи сверху и снизу?'],['🥇','Баллы','Баллы дают за определённые действия по правилам.','Кто объясняет правила на соревновании?'],['✋','Туше и судья','Туше фиксирует судья. По команде судьи нужно остановиться.','Почему важно слушать судью?'],['🧠','Ошибка — не конец','Даже если пропустил баллы, можно снова принимать хорошие решения.','Скажи: «Борюсь дальше».'],['❤️','Уважение','Соперник — не враг, а партнёр по спортивному испытанию.','Как поблагодарить после схватки?']];
 $('lessonGrid').innerHTML=lessons.map((x,i)=>`<div class="lesson"><div class="number">${i+1}</div><h3>${x[0]} ${x[1]}</h3><p>${x[2]}</p><div class="caption">💬 Попробуй: ${x[3]}</div></div>`).join('');
 function renderProgress(){updateStats();const s=state[kid];$('parentNotes').value=s.note||'';const badgeData=[['🌱','Первый шаг',s.solved>=1],['🧠','Думаю сам',s.solved>=5],['🛡️','Знаю защиту',Object.keys(s.mindDone).some(k=>scenarios[Number(k)]?.[0]==='Защита')],['💛','Не сдаюсь',Object.keys(s.mindDone).some(k=>scenarios[Number(k)]?.[0]==='Спокойствие')],['⭐','Десять звёзд',s.stars>=10],['🏅','Мастер решений',s.solved>=24],['🎮','Любитель игр',s.rounds>=10],['🌈','Любопытный борец',Object.keys(s.mindDone).length>=12]];$('badges').innerHTML=badgeData.map(x=>`<div class="rank" style="opacity:${x[2]?1:.42}"><div class="medal">${x[0]}</div><div><strong>${x[1]}</strong><div class="small">${x[2]?'Получено!':'Ещё впереди'}</div></div></div>`).join('')}
@@ -191,7 +383,7 @@ $('startupWarning').remove();
 </script><script>
 /* Обновления без смены адреса: проверка при возврате на экран и по таймеру. */
 (function(){
-const VERSION='2026-11-14-pwa-live-1';
+const VERSION='2026-11-14-arena-2';
 const MARKER='academy-auto-update-marker';
 const LAST='academy-auto-update-check';
 let checking=false;
