@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "Академия борца — умный борец",
+  "short_name": "Академия борца",
+  "description": "Тренажёр мышления борца для детей",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101a35",
+  "theme_color": "#101a35",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
