@@ -168,7 +168,7 @@ function reward(stars=1){const s=state[kid];s.stars+=stars;s.solved++;if(!s.date
 function updateStats(){const s=state[kid];$('homeStars').textContent=s.stars;$('homeMissions').textContent=s.solved;$('homeStreak').textContent=s.dates.length;$('pStars').textContent=s.stars;$('pSolved').textContent=s.solved;$('pRounds').textContent=s.rounds;}
 function toast(str){const e=$('toast');e.textContent=str;e.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.add('hidden'),2300)}
 function beep(ok=true){if(!$('soundToggle').checked)return;try{let ctx=new (window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.value=ok?620:330;g.gain.value=.035;o.start();o.stop(ctx.currentTime+.12)}catch{}}
-function show(pg){if(!document.getElementById(pg)?.classList.contains('screen'))return;page=pg;document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('active',x.id===pg));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.page===pg));if(pg==='home')updateStats();if(pg==='mind')renderMind();if(pg==='elements')renderElement();if(pg==='arena')renderArena();if(pg==='progress')renderProgress();window.scrollTo({top:0,behavior:'smooth'});}
+function show(pg){if(!document.getElementById(pg)?.classList.contains('screen'))return;if(page==='arena'&&pg!=='arena'&&typeof arenaPause==='function')arenaPause();page=pg;document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('active',x.id===pg));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.page===pg));if(pg==='home')updateStats();if(pg==='mind')renderMind();if(pg==='elements')renderElement();if(pg==='arena')renderArena();if(pg==='progress')renderProgress();window.scrollTo({top:0,behavior:'smooth'});}
 document.querySelectorAll('[data-page],[data-go]').forEach(b=>b.addEventListener('click',()=>{const destination=b.dataset.page||b.dataset.go;show(destination);if(b.dataset.quick==='1'){setElMode('play');newElement();}}));
 $('kidSelect').addEventListener('change',e=>{kid=e.target.value;mindIndex=0;mindAnswered=false;elementRound=0;elementCorrect=0;state[kid].rounds=state[kid].rounds||0;show(page);toast('Теперь играет '+(kid==='older'?'старший':'младший')+' брат!')});
 // Illustrations: symbolic diagrams, not technical instruction.
@@ -299,6 +299,7 @@ for(const scene of arenaScenes){
  image.src='./motion/'+scene.asset+'.webp';
 }
 let arenaProgress=0,arenaSpeed=.75,arenaLastAt=0,arenaRaf=0,arenaMounted=false;
+arenaPlaying=false;
 let arenaMode='animation',arenaPlayer=null;
 function arenaSceneDuration(scene){return scene.duration||13000;}
 function arenaSourceMode(scene){return scene.type==='coach'?'coach':arenaMode;}
