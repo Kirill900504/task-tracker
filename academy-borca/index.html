@@ -97,7 +97,7 @@ button,select{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .arena-warning{color:#a8b8d5;font-size:12px;line-height:1.5;padding:12px 4px}
 @media(min-width:720px){.arena-new{max-width:790px;margin:auto}.arena-stage{aspect-ratio:1.8}.arena-selector{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media(max-width:430px){.arena-new{padding:9px;border-radius:16px}.arena-stage{aspect-ratio:1.02;min-height:230px}.arena-episode{min-height:48px;font-size:12px;padding:8px 6px}.arena-episode .episode-icon{font-size:19px}.arena-control{font-size:12px}.arena-control span{display:none}}
-</style><link rel="manifest" href="./manifest.webmanifest?v=2"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=2"><link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=2"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
+.arena-stage{aspect-ratio:.73;min-height:430px}.arena-stage .motion-canvas{display:block;width:100%;height:100%;object-fit:contain}@media(max-width:430px){.arena-stage{aspect-ratio:.73;min-height:390px}}\n</style><link rel="manifest" href="./manifest.webmanifest?v=2"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=2"><link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=2"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
 <body><noscript><div style="padding:18px;background:#ffecb2;color:#222;font:16px sans-serif">Для запуска игр необходимо включить JavaScript и открыть скачанный HTML-файл в обычном браузере (Safari, Chrome или Edge), а не в предпросмотре файла.</div></noscript><div id="startupWarning" style="position:fixed;z-index:99999;bottom:12px;left:12px;right:12px;background:#fff2bb;color:#25202b;padding:13px;border-radius:12px;font:14px system-ui;box-shadow:0 6px 32px #0008">⚠️ Если кнопки не реагируют, просмотрщик заблокировал JavaScript. Скачайте файл и откройте его в Safari, Chrome или Edge.</div><div class="app"><header class="top"><button type="button" class="logo brand-home" data-page="home" aria-label="На главную — Академия борца"><span class="logoicon">🤼</span><span class="word">АКАДЕМИЯ<br>БОРЦА</span></button><div class="profile"><span class="small">Сегодня тренируется</span><select class="select" id="kidSelect" aria-label="Выбрать ребёнка"><option value="older">Старший · 7 лет</option><option value="younger">Младший · 6 лет</option></select></div></header>
 <nav class="tabs" aria-label="Игры и разделы">
 <button type="button" class="tab" data-page="mind"><span class="navemoji">🧠</span><span class="navlabel">Умный<br>борец</span></button>
@@ -223,17 +223,17 @@ document.querySelectorAll('[data-symbol]').forEach(b=>b.addEventListener('click'
 
 /* Ключевые положения и покадровая анимация учебных эпизодов. */
 const arenaScenes=[
-{icon:'🧍',title:'Стойка и баланс',desc:'Устойчивое положение начинается с ног. Смотри, как борцы сгибают колени, держат руки впереди и мягко переносят вес.',tip:'Ноги согнуты, руки готовы, голова смотрит на соперника.',phases:['Готовимся','Сгибаем колени','Держим баланс','Смотрим на соперника'],pose:['neutral','squat','sway','neutral']},
-{icon:'↔️',title:'Дистанция',desc:'Если соперник далеко, до него сложно дотянуться. При сближении расстояние меняется, и появляется возможность действовать.',tip:'Не тянись руками издалека — сначала оцени расстояние.',phases:['Далеко друг от друга','Подходим ближе','На удобной дистанции','Снова разошлись'],pose:['apart','approach','close','apart']},
-{icon:'🔄',title:'Движение по кругу',desc:'Соперник не стоит на месте. Оба борца делают небольшие шаги в сторону и стараются не потерять удобную стойку.',tip:'Двигай ногами и следи за положением соперника.',phases:['Стоим напротив','Шаг в сторону','Другой отвечает','Меняем направление'],pose:['neutral','circleR','circleL','neutral']},
-{icon:'⬇️',title:'Смена уровня',desc:'Борец опускается за счёт сгибания ног, а не просто наклоняет голову. Так он остаётся собранным и готовым к знакомому действию.',tip:'Положение тела перед атакой важнее скорости.',phases:['Обычная стойка','Сгибаем ноги','Ниже и ближе','Возвращаемся в стойку'],pose:['neutral','squat','low','neutral']},
-{icon:'🦵',title:'Попытка захвата ноги',desc:'Синий борец замечает момент для знакомого прохода в ногу. Посмотри, как он приближается и снижает уровень тела. Красный реагирует.',tip:'Захват ноги — лишь начало эпизода. Завершение приёма изучают с тренером.',phases:['Ищем момент','Вход в атаку','Реакция партнёра','Возвращаемся в стойку'],pose:['neutral','entry','contact','reset']},
-{icon:'🛡️',title:'Защита от атаки',desc:'Красный борец видит движение синего к ногам. Он меняет положение и защищается, вместо того чтобы просто замереть.',tip:'Замечай движение соперника и применяй защиту, которую поставил тренер.',phases:['Оба в стойке','Синий начинает атаку','Красный защищается','Оба восстанавливаются'],pose:['neutral','entry','defense','reset']},
-{icon:'⚖️',title:'Равновесие и контроль',desc:'В парной борьбе важно чувствовать давление и не терять равновесие. Иногда полезнее изменить положение ног, чем тянуть изо всех сил.',tip:'Используй положение тела, а не одну только силу.',phases:['Сближаемся','Появляется контакт','Перестраиваем ноги','Сохраняем устойчивость'],pose:['approach','grip','balance','reset']},
-{icon:'🤼',title:'Контакт и захват',desc:'Борцы аккуратно входят в контакт: руки встречаются на уровне плеч. Теперь каждый ищет удобное положение, не теряя ноги.',tip:'Контакт — это работа с дистанцией и положением, а не соревнование силы.',phases:['Смотрим на соперника','Сближаемся','Контакт руками','Разрываем контакт'],pose:['neutral','approach','grip','reset']},
-{icon:'🧠',title:'После ошибки',desc:'Синий борец пропустил удачное действие. Он не должен спешить. Сначала восстановит стойку, потом снова увидит соперника.',tip:'Пропущенный балл — не конец. Спокойствие помогает следующему решению.',phases:['Неудачный момент','Восстановление','Спокойная стойка','Продолжаем борьбу'],pose:['contact','recover','neutral','circleR']},
-{icon:'⭐',title:'Продолжай борьбу',desc:'Смелость — не отсутствие волнения. Главное — замечать, действовать и не сдаваться после неудачной попытки.',tip:'Маленькие правильные действия складываются в большой прогресс.',phases:['Начинаем','Ищем дистанцию','Пробуем действие','Продолжаем'],pose:['neutral','circleL','entry','reset']}
+{icon:'🧍',title:'Стойка и движение',asset:'stance',desc:'Смотри, как мальчики стоят на согнутых ногах, делают небольшие шаги и сохраняют руки перед собой. Обрати внимание на ноги и равновесие.',tip:'Следи за стопами: борец двигается, но не теряет удобную стойку.',phases:['Устойчивая стойка','Небольшой шаг','Смена направления','Снова друг напротив друга']},
+{icon:'🤝',title:'Контакт и захваты',asset:'grip',desc:'Мальчики сначала оценивают расстояние, потом сближаются и осторожно захватывают плечи и руки. Они не толкают друг друга изо всех сил.',tip:'Сначала расстояние, затем контролируемый контакт. Захват нужен для управления положением.',phases:['Подходим ближе','Поднимаем руки','Контакт плечами и руками','Возвращаемся в стойку']},
+{icon:'🦵',title:'Атака на одну ногу',asset:'single_leg',desc:'Синий борец сгибает ноги, снижает положение тела и пробует сделать знакомый вход к ноге. Красный замечает движение. Само завершение приёма изучают с тренером.',tip:'Смотри на смену уровня, шаг и расположение головы. Это иллюстрация момента атаки, а не руководство к броску.',phases:['Ищем момент','Сгибаем ноги','Шаг и сближение','Попытка захвата ноги']},
+{icon:'🛡️',title:'Защита и восстановление',asset:'defense',desc:'Когда синий борец начинает атаку, красный меняет положение, защищает ноги и пытается сохранить равновесие. После эпизода оба снова занимают стойку.',tip:'Не замирай после атаки соперника. Увидел движение — используй защиту, которой научил тренер.',phases:['Замечаем атаку','Соперник сближается','Реагируем на движение','Восстанавливаем стойку']}
 ];
+const arenaAssets={};
+for(const name of ['stance','grip','single_leg','defense']){
+ const image=new Image();arenaAssets[name]=image;
+ image.onload=()=>{if(page==='arena')arenaDraw();};
+ image.src='./motion/'+name+'.webp';
+}
 let arenaProgress=0,arenaSpeed=.75,arenaFrameAt=0,arenaLastAt=0,arenaRaf=0,arenaMounted=false;
 const arenaDuration=7600;
 const arenaPoseLibrary={
@@ -338,7 +338,18 @@ function arenaDraw(){
  const scene=arenaScenes[arenaIndex],phase=Math.min(3,Math.floor(arenaProgress*4));
  const stage=$('arenaArt');
  if(!stage)return;
- stage.innerHTML=aSceneSVG(arenaProgress);
+ if(!stage.querySelector('canvas')){stage.innerHTML='<canvas class="motion-canvas" width="420" height="600" role="img" aria-label="Покадровая иллюстрация движений двух борцов"></canvas>';}
+ const canvas=stage.querySelector('canvas'),ctx=canvas.getContext('2d');
+ const image=arenaAssets[scene.asset];
+ ctx.clearRect(0,0,420,600);
+ ctx.fillStyle='#183655';ctx.fillRect(0,0,420,600);
+ if(image&&image.complete&&image.naturalWidth){
+  const frame=Math.min(7,Math.floor(Math.min(.999999,arenaProgress)*8));
+  const width=252,height=scene.asset==='defense'?762:764;
+  ctx.drawImage(image,(frame%4)*width,Math.floor(frame/4)*height+200,width,400,20,0,380,600);
+ }else{
+  ctx.fillStyle='#d6e9ff';ctx.font='bold 20px system-ui';ctx.textAlign='center';ctx.fillText('Загружаем борцов…',210,300);
+ }
  $('arenaPhaseNum').textContent='ШАГ '+(phase+1)+' / 4';
  $('arenaPhaseName').textContent=scene.phases[phase];
  $('arenaTime').textContent=Math.floor(arenaProgress*arenaDuration/1000)+':'+String(Math.floor(arenaProgress*arenaDuration%1000/10)).padStart(2,'0');
@@ -369,7 +380,7 @@ function renderArena(){
 $('arenaPlay').onclick=()=>{arenaPlaying=!arenaPlaying;arenaLastAt=0;arenaDraw();};
 $('arenaReplay').onclick=()=>{arenaProgress=0;arenaPlaying=true;arenaLastAt=0;arenaDraw();};
 $('arenaSpeed').onclick=()=>{const speeds=[.5,.75,1,1.5];arenaSpeed=speeds[(speeds.indexOf(arenaSpeed)+1)%speeds.length];arenaDraw();};
-$('arenaStep').onclick=()=>{arenaProgress=(Math.floor(arenaProgress*4)+1)%4/4;arenaPlaying=false;arenaDraw();};
+$('arenaStep').onclick=()=>{arenaProgress=(Math.floor(arenaProgress*8)+1)%8/8;arenaPlaying=false;arenaDraw();};
 $('arenaSeek').addEventListener('input',e=>{arenaProgress=Number(e.target.value)/1000;arenaPlaying=false;arenaDraw();});
 $('arenaSwitch').onclick=()=>{arenaIndex=(arenaIndex+1)%arenaScenes.length;arenaProgress=0;arenaPlaying=true;renderArena()};
 const lessons=[['🦶','Стойка борца','Ноги согнуты, руки впереди, тело готово двигаться.','Покажи стойку на 5 секунд.'],['↔️','Шаги и движение','Делай небольшие контролируемые шаги, сохраняя равновесие.','Сыграйте в «зеркало».'],['👀','Смотри и замечай','Наблюдай за положением корпуса и ног соперника.','Что изменилось в движении?'],['📏','Дистанция','Чтобы действовать, нужно подходящее расстояние.','Далеко или близко?'],['⚖️','Равновесие','Когда стоишь устойчиво, легче двигаться и реагировать.','Поиграй в «цаплю» без партнёра.'],['🤼','Атака','Не просто хватай. Найди подходящий момент для знакомого действия.','Какой приём сейчас учит тренер?'],['🛡️','Защита','Защищаться — тоже значит активно бороться.','Какую защиту ты уже знаешь?'],['⬇️','Партер','На ковре важно понимать, где верх, низ и как защищаться.','Чем различаются задачи сверху и снизу?'],['🥇','Баллы','Баллы дают за определённые действия по правилам.','Кто объясняет правила на соревновании?'],['✋','Туше и судья','Туше фиксирует судья. По команде судьи нужно остановиться.','Почему важно слушать судью?'],['🧠','Ошибка — не конец','Даже если пропустил баллы, можно снова принимать хорошие решения.','Скажи: «Борюсь дальше».'],['❤️','Уважение','Соперник — не враг, а партнёр по спортивному испытанию.','Как поблагодарить после схватки?']];
@@ -383,7 +394,7 @@ $('startupWarning').remove();
 </script><script>
 /* Обновления без смены адреса: проверка при возврате на экран и по таймеру. */
 (function(){
-const VERSION='2026-11-14-arena-2';
+const VERSION='2026-11-14-motion-3';
 const MARKER='academy-auto-update-marker';
 const LAST='academy-auto-update-check';
 let checking=false;
