@@ -1,1 +1,20 @@
-const CACHE="akademiya-borca-cdn-v1";const ASSETS=["./index.html","./manifest.webmanifest","./icon.svg"];self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));self.addEventListener("activate",e=>e.waitUntil(self.clients.claim()));self.addEventListener("fetch",e=>{if(e.request.method!=="GET"||new URL(e.request.url).origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{if(r.ok){const c=r.clone();caches.open(CACHE).then(cache=>cache.put(e.request,c))}return r}).catch(()=>caches.match(e.request)))});
+/* Академия борца: всегда пробуем сеть, затем офлайн-кеш. */
+const CACHE='academy-wrestling-online-v2';
+const ASSETS=['./index.html','./manifest.webmanifest','./apple-touch-icon.png','./icon-192.png','./icon-512.webp'];
+self.addEventListener('install',event=>{
+ event.waitUntil(caches.open(CACHE).then(cache=>Promise.allSettled(ASSETS.map(url=>cache.add(url)))).then(()=>self.skipWaiting()));
+});
+self.addEventListener('activate',event=>{
+ event.waitUntil(Promise.all([
+  caches.keys().then(names=>Promise.all(names.filter(name=>name.startsWith('akademiya-borca')||name.startsWith('academy-wrestling-')).filter(name=>name!==CACHE).map(name=>caches.delete(name)))),
+  self.clients.claim()
+ ]));
+});
+self.addEventListener('fetch',event=>{
+ const req=event.request;
+ if(req.method!=='GET'||new URL(req.url).origin!==self.location.origin)return;
+ event.respondWith(fetch(req,{cache:'no-store'}).then(response=>{
+   if(response.ok){const clone=response.clone();event.waitUntil(caches.open(CACHE).then(cache=>cache.put(req,clone)));}
+   return response;
+ }).catch(()=>caches.match(req)));
+});
