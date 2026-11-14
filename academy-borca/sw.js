@@ -1,6 +1,6 @@
 /* Академия борца: всегда пробуем сеть, затем офлайн-кеш. */
-const CACHE='academy-wrestling-motion-v3';
-const ASSETS=['./index.html','./manifest.webmanifest','./apple-touch-icon.png','./icon-192.png','./icon-512.webp','./motion/stance.webp','./motion/grip.webp','./motion/single_leg.webp','./motion/defense.webp'];
+const CACHE='academy-wrestling-finished-v4';
+const ASSETS=['./index.html','./manifest.webmanifest','./apple-touch-icon.png','./icon-192.png','./icon-512.webp','./motion/stance.webp','./motion/grip.webp','./motion/single_leg.webp','./motion/defense.webp','./motion/single_finish.mp4','./motion/single_variant.mp4'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>Promise.allSettled(ASSETS.map(url=>cache.add(url)))).then(()=>self.skipWaiting()));
 });
