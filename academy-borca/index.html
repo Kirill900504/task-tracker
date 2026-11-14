@@ -324,6 +324,8 @@ function arenaSetUI(){
 }
 function arenaBuildMedia(){
  const stage=$('arenaArt'),scene=arenaScenes[arenaIndex];
+ document.querySelectorAll('.arena-video-link').forEach(x=>x.remove());
+ if(arenaPlayer)arenaPlayer.pause();
  stage.innerHTML='';stage.classList.remove('movie','external','frames');arenaPlayer=null;
  const mode=arenaSourceMode(scene);
  const selector=$('arenaMediaSwitch');selector.innerHTML='';
