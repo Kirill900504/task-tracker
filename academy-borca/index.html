@@ -103,6 +103,13 @@ body{width:100%}.app,.card,.maincol,.arena-layout,.arena-view{min-width:0;max-wi
 .topic-report-row .topic-status.weak{color:#ffd164}
 .topic-report-row .topic-track{margin-top:7px;background:#2a4362;border-radius:20px;height:7px;overflow:hidden}
 .topic-report-row .topic-track span{display:block;height:100%;background:#80e2be;border-radius:20px}
+
+.arena-quiz-choices{display:grid;gap:8px;margin-top:12px}
+.arena-quiz-option{border:1px solid #4b638c;border-radius:12px;padding:12px 13px;min-height:50px;text-align:left;color:#fff;background:#20385a;font-size:14px}
+.arena-quiz-option:active{transform:scale(.99)}
+.arena-quiz-option.correct{border-color:#80e2be;background:#1f4d47;color:#e3fff0}
+.arena-quiz-option.incorrect{border-color:#ff9caa;background:#513246}
+.arena-quiz-feedback{font-size:12px;margin:9px 0 0;color:#b9cdea;line-height:1.45}
 </style><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
 <body><noscript><div style="padding:18px;background:#ffecb2;color:#222;font:16px sans-serif">Для запуска игр необходимо включить JavaScript и открыть скачанный HTML-файл в обычном браузере (Safari, Chrome или Edge), а не в предпросмотре файла.</div></noscript><div id="startupWarning" style="position:fixed;z-index:99999;bottom:12px;left:12px;right:12px;background:#fff2bb;color:#25202b;padding:13px;border-radius:12px;font:14px system-ui;box-shadow:0 6px 32px #0008">⚠️ Если кнопки не реагируют, просмотрщик заблокировал JavaScript. Скачайте файл и откройте его в Safari, Chrome или Edge.</div><div class="app"><header class="top"><button type="button" class="logo brand-home" data-page="home" aria-label="Вернуться на главную Академии борца"><span class="logoicon"><img src="./apple-touch-icon.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></span><span class="word">АКАДЕМИЯ<br>БОРЦА</span></button><div class="profile"><span class="small">Сегодня тренируется</span><select class="select" id="kidSelect" aria-label="Выбрать ребёнка"><option value="older">Старший · 7 лет</option><option value="younger">Младший · 6 лет</option></select></div></header>
 <nav class="tabs" aria-label="Игры и разделы">
@@ -254,7 +261,7 @@ function renderArenaPlayer(){
  $('arenaTitle').textContent=sc.title;
  $('arenaDescription').textContent=sc.desc;
  $('arenaTakeaway').textContent='💡 '+sc.tip;
- $('arenaQuestion').innerHTML='<strong>Обсуди с ребёнком:</strong> '+escapeHTML(sc.quiz);
+ $('arenaQuestion').innerHTML='<strong>🎯 Проверь себя после просмотра:</strong> '+escapeHTML(sc.quiz)+(sc.options?'<div class="arena-quiz-choices">'+sc.options.map((value,i)=>'<button type="button" class="arena-quiz-option '+(state[kid].arenaUnderstanding?.[sc.id]&&i===sc.answer?'correct':'')+'" data-answer="'+i+'">'+escapeHTML(value)+'</button>').join('')+'</div><p id="arenaQuizFeedback" class="arena-quiz-feedback">'+(state[kid].arenaUnderstanding?.[sc.id]?'🌟 Уже разобрался в этом эпизоде!':'Посмотри эпизод и выбери, что произошло.')+'</p>':'<p class="arena-quiz-feedback">Обсудите ответ вместе — это полезнее, чем просто смотреть видео.</p>');
  $('arenaPlayer').innerHTML='<video id="arenaVideo" playsinline webkit-playsinline preload="metadata" poster="" aria-label="Учебный видеоэпизод '+escapeHTML(sc.title)+'"><source src="'+sc.src+'" type="video/mp4"></video>';
  const v=$('arenaVideo');v.playbackRate=arenaSpeed;
  v.onloadedmetadata=()=>{if(sc.start)v.currentTime=sc.start;arenaPhaseUpdate()};
@@ -270,6 +277,19 @@ function renderArenaPlayer(){
  $('arenaResult').textContent='👀 Смотри до конца, чтобы узнать результат';
  arenaSetPosition(0)
 }
+$('arenaQuestion').addEventListener('click',event=>{
+ const btn=event.target.closest('[data-answer]');if(!btn)return;
+ const sc=getArenaScene();if(!sc.options)return;
+ const chosen=Number(btn.dataset.answer),correct=chosen===sc.answer;
+ if(correct){state[kid].arenaUnderstanding??={};state[kid].arenaUnderstanding[sc.id]=true;save();toast('🌟 Ты правильно понял, чем закончился эпизод!')}
+ else toast('💛 Посмотри ещё раз, особенно последний кадр');
+ $('arenaQuestion').querySelectorAll('[data-answer]').forEach(b=>{
+  b.disabled=true;
+  if(Number(b.dataset.answer)===sc.answer)b.classList.add('correct');
+  else if(Number(b.dataset.answer)===chosen)b.classList.add('incorrect');
+ });
+ const feedback=$('arenaQuizFeedback');if(feedback)feedback.textContent=correct?'✅ Верно! '+sc.outcome:'Попробуй ещё раз после просмотра. Правильный ответ подсвечен.';
+});
 function renderArena(){renderArenaCatalog();renderArenaPlayer()}
 $('arenaSearch').addEventListener('input',e=>{arenaSearchTerm=e.target.value;renderArenaCatalog()});
 $('arenaPlay').onclick=()=>{
@@ -436,7 +456,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-4-5-20261115';
+const APP_VERSION='academy-4-6-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
