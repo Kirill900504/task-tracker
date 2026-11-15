@@ -207,7 +207,7 @@ body{width:100%}.app,.card,.maincol,.arena-layout,.arena-view{min-width:0;max-wi
       <div id="arenaDirectionDiagram" class="arena-direction-diagram"></div>
       <div class="arena-phase-title" id="arenaPhaseTitle">Первое движение</div>
       <div class="arena-phase-steps" id="arenaPhaseSteps"></div>
-      <p class="arena-note">Стрелки — учебная схема направлений, а не автоматическое отслеживание суставов. Точную технику показывает тренер.</p>
+      <p class="arena-note">Посмотри начало движения, работу ног и корпуса, затем конечный результат. Практику приёмов проводите только с тренером.</p>
     </div>
     <div class="arena-final" id="arenaResult">🏁 Смотри, чем закончится действие</div>
     <p class="arena-short-desc" id="arenaDescription"></p>
@@ -387,7 +387,7 @@ function renderArenaCatalog(){
  showArenaFilters();
  const items=visibleArenaList();
  $('arenaCount').textContent=items.length+' профессиональных видео · '+(arenaGroup==='Все'?'7 этапов курса':arenaGroup);
- strip.innerHTML=items.map(sc=>'<button type="button" class="arena-item '+(sc.index===arenaIndex?'active':'')+'" data-arena="'+sc.index+'"><span>'+sc.icon+' '+escapeHTML(sc.title)+'</span><small>'+'🎓 '+escapeHTML(sc.coach)+' · '+(sc.language==='ru'?'🇷🇺 Русский':sc.language==='en'?'🌍 Английский':'🔎 Язык не проверен')+'</small></button>').join('')||'<p class="small">Ничего не найдено</p>';
+ strip.innerHTML=items.map(sc=>'<button type="button" class="arena-item '+(sc.index===arenaIndex?'active':'')+'" data-arena="'+sc.index+'"><span>'+sc.icon+' '+escapeHTML(sc.title)+'</span><small>'+'🎓 '+escapeHTML(sc.coach)+(sc.advanced?' · ⚠️ С родителем':'')+' · '+(sc.language==='ru'?'🇷🇺 Русский':sc.language==='en'?'🌍 Английский':'🔎 Язык не проверен')+'</small></button>').join('')||'<p class="small">Ничего не найдено</p>';
  // Rebuilding innerHTML must not reset the scrolled position to the first lesson.
  strip.scrollLeft=previousPosition;
  keepSelectedArenaVisible(false);
@@ -656,7 +656,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-video-7-2-20261115';
+const APP_VERSION='academy-video-7-3-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
