@@ -320,12 +320,31 @@ function visibleArenaList(){
  const term=arenaSearchTerm.trim().toLocaleLowerCase('ru');
  return arenaVisible.filter(sc=>(arenaGroup==='Все'||(arenaGroup==='Показ тренера'?!!sc.youtube:!sc.youtube))&&(!term||[sc.title,sc.desc,sc.outcome,sc.coach||''].join(' ').toLocaleLowerCase('ru').includes(term)));
 }
+function keepSelectedArenaVisible(smooth=false){
+ const strip=$('arenaCatalog');
+ const selected=strip.querySelector('.arena-item.active');
+ if(!selected)return;
+ // If the current lesson is already visible, don't move the strip at all.
+ const stripRect=strip.getBoundingClientRect(),itemRect=selected.getBoundingClientRect();
+ const margin=12;
+ if(itemRect.left>=stripRect.left+margin&&itemRect.right<=stripRect.right-margin)return;
+ const offset=itemRect.left-stripRect.left;
+ let target=strip.scrollLeft;
+ if(offset<margin)target+=offset-margin;
+ else if(itemRect.right>stripRect.right-margin)target+=itemRect.right-stripRect.right+margin;
+ strip.scrollTo({left:Math.max(0,target),behavior:smooth?'smooth':'instant'});
+}
 function renderArenaCatalog(){
+ const strip=$('arenaCatalog');
+ const previousPosition=strip.scrollLeft;
  showArenaFilters();
  const items=visibleArenaList();
  $('arenaCount').textContent=items.length+' видео · '+(arenaGroup==='Все'?'Мультфильмы и показы тренера':arenaGroup);
- $('arenaCatalog').innerHTML=items.map(sc=>'<button type="button" class="arena-item '+(sc.index===arenaIndex?'active':'')+'" data-arena="'+sc.index+'"><span>'+sc.icon+' '+escapeHTML(sc.title)+'</span><small>'+(sc.youtube?'🎓 '+escapeHTML(sc.coach):'🎞 Мультфильм')+'</small></button>').join('')||'<p class="small">Ничего не найдено</p>';
- $('arenaCatalog').querySelectorAll('[data-arena]').forEach(btn=>btn.onclick=()=>{
+ strip.innerHTML=items.map(sc=>'<button type="button" class="arena-item '+(sc.index===arenaIndex?'active':'')+'" data-arena="'+sc.index+'"><span>'+sc.icon+' '+escapeHTML(sc.title)+'</span><small>'+(sc.youtube?'🎓 '+escapeHTML(sc.coach):'🎞 Мультфильм')+'</small></button>').join('')||'<p class="small">Ничего не найдено</p>';
+ // Rebuilding innerHTML must not reset the scrolled position to the first lesson.
+ strip.scrollLeft=previousPosition;
+ keepSelectedArenaVisible(false);
+ strip.querySelectorAll('[data-arena]').forEach(btn=>btn.onclick=()=>{
   arenaIndex=Number(btn.dataset.arena);arenaPlaying=false;renderArena();
   if(window.innerWidth<850)$('arenaPlayer').scrollIntoView({behavior:'smooth',block:'center'});
  });
@@ -423,7 +442,7 @@ $('arenaReplay').onclick=()=>{const v=$('arenaVideo');if(!v)return;v.currentTime
 $('arenaSpeed').onclick=()=>{const speeds=[.25,.5,.75,1,1.25];arenaSpeed=speeds[(speeds.indexOf(arenaSpeed)+1)%speeds.length];const v=$('arenaVideo');if(v)v.playbackRate=arenaSpeed;$('arenaSpeed').textContent=arenaSpeed+'×'};
 $('arenaBackStep').onclick=()=>{const v=$('arenaVideo');if(!v)return;v.pause();v.currentTime=Math.max(getArenaScene().start||0,v.currentTime-.5);arenaPhaseUpdate()};
 $('arenaForwardStep').onclick=()=>{const v=$('arenaVideo');if(!v)return;v.pause();v.currentTime=Math.min(getArenaScene().end||v.duration||0,v.currentTime+.5);arenaPhaseUpdate()};
-$('arenaNextFilm').onclick=()=>{const items=visibleArenaList(),index=items.findIndex(sc=>sc.index===arenaIndex);arenaIndex=items[(index+1)%items.length]?.index??0;renderArena()};
+$('arenaNextFilm').onclick=()=>{const items=visibleArenaList();if(!items.length)return;const index=items.findIndex(sc=>sc.index===arenaIndex);arenaIndex=items[(index+1)%items.length]?.index??items[0].index;renderArena();keepSelectedArenaVisible(true)};
 
 const basicLessons=[['🦶','Стойка борца','Ноги согнуты, руки впереди, тело готово двигаться.','Покажи стойку на 5 секунд.'],['↔️','Шаги и движение','Делай небольшие контролируемые шаги, сохраняя равновесие.','Сыграйте в зеркало.'],['👀','Смотри и замечай','Наблюдай за положением корпуса и ног соперника.','Что изменилось в движении?'],['📏','Дистанция','Чтобы действовать, нужно подходящее расстояние.','Далеко или близко?'],['⚖️','Равновесие','Когда стоишь устойчиво, легче двигаться и реагировать.','Поиграй в цаплю без партнёра.'],['🤼','Атака','Не просто хватай. Найди подходящий момент для знакомого действия.','Какой приём сейчас учит тренер?'],['🛡️','Защита','Защищаться — тоже значит активно бороться.','Какую защиту ты уже знаешь?'],['⬇️','Партер','На ковре важно понимать, где верх, низ и как защищаться.','Чем различаются задачи сверху и снизу?'],['🥇','Баллы','Баллы дают за определённые действия по правилам.','Кто объясняет правила на соревновании?'],['✋','Туше и судья','Туше фиксирует судья. По команде судьи нужно остановиться.','Почему важно слушать судью?'],['🧠','Ошибка — не конец','Даже если пропустил баллы, можно снова принимать хорошие решения.','Скажи: «Борюсь дальше».'],['❤️','Уважение','Соперник — не враг, а партнёр по спортивному испытанию.','Как поблагодарить после схватки?']];
 const lessons=(window.ACADEMY_EXTRA?.lessons||basicLessons.map(x=>({category:'Основы',icon:x[0],title:x[1],description:x[2],question:x[3],practice:x[3]})));
@@ -579,7 +598,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-arena-6-1-20261115';
+const APP_VERSION='academy-arena-6-2-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
