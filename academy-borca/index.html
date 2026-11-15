@@ -152,6 +152,28 @@ body{width:100%}.app,.card,.maincol,.arena-layout,.arena-view{min-width:0;max-wi
 #arenaLocalControls[hidden],#arenaProfessionalControls[hidden],#arenaQuestion[hidden]{display:none!important}
 @media(min-width:940px){.arena-focus{display:grid;grid-template-columns:265px minmax(0,1fr);align-items:start}.arena-catalog{display:flex;flex-direction:column;max-height:70vh}.arena-item{flex:0 0 auto}.arena-player{aspect-ratio:16/9}.arena-view-simple{padding:15px}}
 @media(max-width:430px){.arena-player{aspect-ratio:16/10}.arena-headline h2{font-size:18px}.arena-observe-top{font-size:12px}.arena-level{font-size:10px}.arena-item{flex-basis:160px}.arena-direction-diagram svg{max-height:126px}}
+
+/* Видеокурс: этапы вместо мультфильмов */
+.arena-library{padding:12px}
+.arena-toggle-filters{gap:8px;scrollbar-width:thin}
+.arena-filter{font-size:12px;max-width:190px;white-space:normal;line-height:1.25}
+.arena-item{flex-basis:200px;min-height:94px}
+.arena-item span{line-height:1.2}
+.arena-item small{line-height:1.25}
+.arena-pro-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.arena-pro-actions a,.arena-pro-actions button{display:flex;align-items:center;justify-content:center;border:1px solid #5983ad;background:#264a6c;color:#e3f3ff;min-height:47px;border-radius:12px;padding:9px 7px;font-size:13px;font-weight:750;text-align:center;text-decoration:none}
+.arena-pro-actions button{background:#80e2be;color:#142c34;border-color:#80e2be}
+.arena-pro-actions button:disabled{opacity:.5}
+.arena-external-preview{padding:24px 16px;text-align:center;color:#e5f4ff}
+.arena-external-preview .arena-external-icon{font-size:45px}
+.arena-external-preview p{font-size:13px;line-height:1.5;color:#bdcee7}
+.arena-external-preview a{color:#ffdf85;font-weight:800}
+.arena-observe{padding:11px}
+.arena-observe-top{display:none}
+.arena-direction-diagram{display:none}
+.arena-source-note{font-size:12px;line-height:1.5;color:#bdd1e8;margin:9px 0}
+.arena-stage-note{font-size:12px;color:#b5c9e4}
+@media(min-width:940px){.arena-focus{display:block}.arena-catalog{flex-direction:row;max-height:none}.arena-view-simple{margin-top:14px;max-width:820px;margin-left:auto;margin-right:auto}}
 </style><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
 <body><noscript><div style="padding:18px;background:#ffecb2;color:#222;font:16px sans-serif">Для запуска игр необходимо включить JavaScript и открыть скачанный HTML-файл в обычном браузере (Safari, Chrome или Edge), а не в предпросмотре файла.</div></noscript><div id="startupWarning" style="position:fixed;z-index:99999;bottom:12px;left:12px;right:12px;background:#fff2bb;color:#25202b;padding:13px;border-radius:12px;font:14px system-ui;box-shadow:0 6px 32px #0008">⚠️ Если кнопки не реагируют, просмотрщик заблокировал JavaScript. Скачайте файл и откройте его в Safari, Chrome или Edge.</div><div class="app"><header class="top"><button type="button" class="logo brand-home" data-page="home" aria-label="Вернуться на главную Академии борца"><span class="logoicon"><img src="./apple-touch-icon.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></span><span class="word">АКАДЕМИЯ<br>БОРЦА</span></button><div class="profile"><span class="small">Сегодня тренируется</span><select class="select" id="kidSelect" aria-label="Выбрать ребёнка"><option value="older">Старший · 7 лет</option><option value="younger">Младший · 6 лет</option></select></div></header>
 <nav class="tabs" aria-label="Игры и разделы">
@@ -178,14 +200,10 @@ body{width:100%}.app,.card,.maincol,.arena-layout,.arena-view{min-width:0;max-wi
   <div class="arena-view arena-view-simple">
     <div class="arena-headline"><div><span class="eyebrow" id="arenaTypeBadge">ДЕМОНСТРАЦИЯ</span><h2 id="arenaTitle">Приём</h2></div><span class="arena-level" id="arenaOutcomeBadge">Движение</span></div>
     <div class="arena-player" id="arenaPlayer" aria-label="Видео приёма"></div>
-    <div id="arenaLocalControls">
-      <div class="arena-controls-row"><button class="btn" id="arenaPlay">▶ Играть</button><button class="btn secondary" id="arenaReplay">↺ Сначала</button><button class="btn secondary" id="arenaSpeed">0.75×</button></div>
-      <div class="arena-range-wrap"><input type="range" id="arenaSeek" min="0" max="1000" value="0" aria-label="Перемотка видео"></div>
-      <div class="arena-step-controls"><button id="arenaBackStep">← 0,5 сек.</button><button id="arenaForwardStep">0,5 сек. →</button><button id="arenaNextFilm">Следующий →</button></div>
-    </div>
-    <div id="arenaProfessionalControls" hidden><p class="arena-source-note">Профессиональный показ тренера. Скорость, пауза и полный экран — в проигрывателе YouTube.</p><a id="arenaOpenSource" class="arena-original-link" href="#" target="_blank" rel="noopener noreferrer">▶ Смотреть оригинал у автора</a></div>
+    <div id="arenaLocalControls" hidden><button id="arenaPlay">Играть</button><button id="arenaReplay">Сначала</button><button id="arenaSpeed">1×</button><input id="arenaSeek" type="range" min="0" max="1000" value="0"><button id="arenaBackStep">Назад</button><button id="arenaForwardStep">Вперёд</button><button id="arenaNextFilm">Следующий</button></div>
+    <div id="arenaProfessionalControls"></div>
     <div class="arena-observe">
-      <div class="arena-observe-top"><strong>↗ Направления и движения</strong><label class="arena-show-arrows"><input id="arenaArrows" type="checkbox" checked> Показывать стрелки</label></div>
+      <div class="arena-observe-top"><strong>↗ Направления и движения</strong><span class="arena-stage-note">Смотри на положение борцов</span></div>
       <div id="arenaDirectionDiagram" class="arena-direction-diagram"></div>
       <div class="arena-phase-title" id="arenaPhaseTitle">Первое движение</div>
       <div class="arena-phase-steps" id="arenaPhaseSteps"></div>
@@ -297,28 +315,55 @@ let arenaWatchedSeconds=0,arenaLastMediaTime=null;
 for(const k of ['older','younger']){if(!state[k].arenaDone)state[k].arenaDone={};}
 function getArenaScene(){return arenaScenes[arenaIndex]}
 
+
+/* Реальные обучающие видео. URL принадлежат авторам; оригинальные видеодорожки не копируются. */
 const professionalLessons=[
-{id:'pro_single_finish',group:'Показ тренера',icon:'🦵',title:'Проход в одну ногу — завершение',youtube:'hRHebPpbJqI',url:'https://www.youtube.com/watch?v=hRHebPpbJqI',coach:'Кэри Колат',desc:'Тренер показывает конкретное завершение атаки в одну ногу. Следите, как меняется положение ног и чем заканчивается захват.',outcome:'Завершение атаки',phases:['Положение до завершения','Смена опоры','Движение к результату','Конечное положение']},
-{id:'pro_double_leg',group:'Показ тренера',icon:'🤼',title:'Проход в две ноги — от входа до перевода',youtube:'wxNAEByjOoA',url:'https://www.youtube.com/watch?v=wxNAEByjOoA',coach:'Fundamental Wrestling',desc:'Пошаговое объяснение прохода в обе ноги для начинающих, включая поворот и завершение перевода.',outcome:'Перевод в партер',phases:['Подготовка и уровень','Вход в обе ноги','Поворот и направление','Завершение на ковре']},
-{id:'pro_angles',group:'Показ тренера',icon:'↗️',title:'Углы атаки и движение',youtube:'_E1vYOSowlo',url:'https://www.youtube.com/watch?v=_E1vYOSowlo',coach:'Кэри Колат',desc:'Тренер показывает, почему движение под углом отличается от прямого нападения.',outcome:'Меняем угол',phases:['Посмотри на стойку','Найди шаг в сторону','Проследи за поворотом корпуса','Посмотри итог']},
-{id:'pro_sprawl',group:'Показ тренера',icon:'🛡️',title:'Защита от прохода в ноги',youtube:'QMVavyxjlNU',url:'https://www.youtube.com/watch?v=QMVavyxjlNU',coach:'Кэри Колат',desc:'Настоящая демонстрация защитного положения при попытке захвата ног.',outcome:'Атака остановлена',phases:['Соперник входит в атаку','Положение бёдер','Руки и корпус в защите','Защита завершена']},
-{id:'pro_single_defense',group:'Показ тренера',icon:'🤼',title:'Защита, когда ногу уже захватили',youtube:'o7fhBCawzW8',url:'https://www.youtube.com/watch?v=o7fhBCawzW8',coach:'Кэри Колат',desc:'Разбираем ответ на захват одной ноги при неудобном положении.',outcome:'Защитное действие',phases:['Соперник удерживает ногу','Сохраняем опору','Меняем угол тела','Разбираем итог']},
-{id:'pro_duck_under',group:'Показ тренера',icon:'🔄',title:'Подныривание под руку — обход',youtube:'NHWDqs5aXwQ',url:'https://www.youtube.com/watch?v=NHWDqs5aXwQ',coach:'Кэри Колат',desc:'Тренер показывает подныривание и выход на другое положение тела. Сложное движение — только для просмотра с родителем.',outcome:'Выход за спину',phases:['Положение рук','Смена уровня','Поворот корпуса','Завершение']},
-{id:'pro_duck_under_alt',group:'Показ тренера',icon:'↪️',title:'Подныривание — другой показ',youtube:'NKl8u7yhIuc',url:'https://www.youtube.com/watch?v=NKl8u7yhIuc',coach:'Кэри Колат',desc:'Ещё один профессиональный ракурс похожего действия для визуального сравнения.',outcome:'Техника и контроль',phases:['Контакт','Уход под руку','Движение за соперника','Итог']}
+{id:'ru_stance',stage:'01 · Стойка и движение',language:'ru',icon:'🧍',title:'Борцовская стойка — правильная основа',youtube:'9zdvWicFIZ0',coach:'Вольная борьба НЧК · тренер Кирилова Т. Г.',desc:'Как правильно держать стойку. Смотри на положение ног, согнутые колени, руки и равновесие.',outcome:'Устойчивая стойка',phases:['Посмотри на стопы','Согнутые колени','Руки и корпус','Готовность к движению'],voice:'Правильная стойка начинается с устойчивых ног. Посмотри, как борец сгибает колени, держит руки впереди и не теряет равновесие. Дома можно только показать стойку без контакта.'},
+{id:'ru_warmup',stage:'01 · Стойка и движение',language:'unknown',icon:'🏃',title:'Разминка борца',youtube:'LY87834ZATA',coach:'Подборка спортивной школы № 14',desc:'Разминка для борцов, рекомендована в учебной подборке спортивной школы.',outcome:'Подготовка к тренировке',phases:['Посмотри на разминку','Работа суставов','Аккуратные движения','Подготовка'],voice:'Перед борьбой нужно подготовиться. Обрати внимание на простые движения разминки. Подбирай упражнения по рекомендациям ваших тренеров.'},
+{id:'ru_coordination',stage:'01 · Стойка и движение',language:'unknown',icon:'🦶',title:'Координация и равновесие',youtube:'R1qiY74BnP8',coach:'Подборка спортивной школы № 14',desc:'Упражнения на координацию для борцов. Выбирай только безопасные движения по возрасту.',outcome:'Баланс',phases:['Положение ног','Изменение положения','Равновесие','Повтори наблюдение'],voice:'В этом видео следи прежде всего за работой ног. Цель не скорость, а координация и контроль собственного тела.'},
+{id:'ru_fast_feet',stage:'01 · Стойка и движение',language:'unknown',icon:'↔️',title:'Скорость и работа ног',youtube:'cE653Crc6kY',coach:'Подборка спортивной школы № 14',desc:'Упражнения на скорость ног. Сначала посмотри, как сохраняется баланс.',outcome:'Работа ног',phases:['Посмотри шаги','Повороты','Баланс','Итог'],voice:'Борец перемещается ногами. Следи, чтобы движения оставались контролируемыми. Скорость добавляют только после освоения правильного положения.'},
+{id:'ru_drills',stage:'01 · Стойка и движение',language:'unknown',icon:'🔁',title:'Подводящие упражнения борца',youtube:'P_446v-MJIc',coach:'Подборка спортивной школы № 14',desc:'Подводящие упражнения и дриллы, которые помогают понять составные части движения.',outcome:'Понимание движений',phases:['Положение до действия','Начало движения','Основная часть','Возврат'],voice:'У сложного приема есть подготовка и несколько этапов. Смотри на движения по частям, не пытайся повторять контактный прием дома.'},
+{id:'ru_single',stage:'02 · Проходы в ноги',language:'ru',icon:'🦵',title:'Проход в одну ногу',youtube:'EmgqGQtsw20',coach:'Тренер Ильин Ю. В. · Вольная борьба НЧК',desc:'Тренер показывает проход в одну ногу. Найди момент сближения и итог приёма.',outcome:'Захват одной ноги',phases:['Дистанция','Смена уровня','Вход в ногу','Завершение'],voice:'Проход в одну ногу начинается до самого захвата. Важно увидеть дистанцию, понижение уровня и шаг. Затем посмотри, как тренер доводит действие до результата. Самостоятельно не повторяй.'},
+{id:'ru_double',stage:'02 · Проходы в ноги',language:'ru',icon:'🤼',title:'Проход в обе ноги',youtube:'Y3nBnEE1z3c',coach:'Тренер Ильин Ю. В. · Вольная борьба НЧК',desc:'Наглядный проход в две ноги с показом преподавателя.',outcome:'Атака обеих ног',phases:['Подготовка','Сближение','Захват обеих ног','Перевод'],voice:'Сравни проход в обе ноги с проходом в одну. Что происходит со стойкой атакующего и расстоянием между борцами? Смотри обязательно до завершения.'},
+{id:'ru_double_high',stage:'02 · Проходы в ноги',language:'ru',icon:'↘️',title:'Проход в две ноги из высокой стойки',youtube:'gmxyrMXhUV4',coach:'Тренер Ильин Ю. В. · Вольная борьба НЧК',desc:'Вариант входа в обе ноги из более высокой исходной позиции.',outcome:'Смена уровня и перевод',phases:['Исходная стойка','Снижение уровня','Вход','Результат'],voice:'В исходной позиции борец стоит выше. Найди момент, когда он меняет уровень и начинает атаку. Отличие от предыдущего видео обсудите с тренером.'},
+{id:'ru_shot_drill',stage:'02 · Проходы в ноги',language:'ru',icon:'🎯',title:'Отработка прохода в ноги',youtube:'Wy0bTLCPVfQ',coach:'Тренер Ильин Ю. В. · Вольная борьба НЧК',desc:'Повторный показ деталей входа в ноги для закрепления наблюдений.',outcome:'Последовательность прохода',phases:['Стойка','Подготовка входа','Проход','Завершение'],voice:'Посмотри несколько повторений и найди одинаковые элементы. Что первым делает борец ногами? Когда приближается к сопернику?'},
+{id:'ru_leg_errors',stage:'02 · Проходы в ноги',language:'ru',icon:'🛠️',title:'Проход в ноги — ошибки новичков',youtube:'',url:'https://rutube.ru/video/ef538e8233480af005f28ac733f525d0/',coach:'Георгий Каиров и Андрей Чуботару',desc:'Разбор техники прохода в ноги и типичных ошибок начинающих. Открывается у автора на Rutube.',outcome:'Ошибки входа',phases:['Положение тела','Типичная ошибка','Исправление','Правильный пример'],voice:'Даже знакомый прием можно выполнить неправильно. Посмотри, какие ошибки разбирает тренер, и спроси вашего тренера о той детали, которую пока не понял.'},
+{id:'ru_five_attacks',stage:'03 · Атаки и переводы',language:'unknown',icon:'⚡',title:'Пять приёмов в стойке',youtube:'SQ2DtTNURdM',coach:'Подборка спортивной школы № 14',desc:'Обзор нескольких приёмов. Для детей это визуальное знакомство, а не список для самостоятельной отработки.',outcome:'Варианты атаки',phases:['Найди стойку','Заметь подготовку','Сравни приёмы','Заметь итог'],voice:'Здесь показано несколько действий. Не нужно запоминать все сразу. Выбери одно, которое вам уже показал тренер, и найди подготовку и результат.'},
+{id:'ru_takedown',stage:'03 · Атаки и переводы',language:'ru',icon:'⬇️',title:'Перевод в партер — показ тренера',youtube:'HA63SMdBtFk',coach:'Тренер Ильин Ю. В. · Вольная борьба НЧК',desc:'Демонстрация перевода соперника на ковёр.',outcome:'Контроль на ковре',phases:['Стойка','Сближение','Перевод','Контроль'],voice:'Главный признак завершенного перевода — изменение положения. Смотри не только начало движения, но и кто получил контроль на ковре.'},
+{id:'ru_takedown_school',stage:'03 · Атаки и переводы',language:'unknown',icon:'🦵',title:'Проход в ноги — разбор техники',youtube:'PTMAVXKInCs',coach:'Подборка спортивной школы № 14',desc:'Отдельная учебная демонстрация прохода в ноги.',outcome:'Вход и продолжение',phases:['Подготовка','Проход','Работа ног','Итог'],voice:'Обрати внимание на работу ног до захвата и на конечную позицию.'},
+{id:'ru_mill',stage:'03 · Атаки и переводы',language:'ru',icon:'🔄',title:'Приём «Мельница» — сложная техника',youtube:'U2xk-zMqC70',coach:'Тренер Ильин Ю. В. · Вольная борьба НЧК',desc:'Сложный приём для ознакомления вместе с папой. Выполнение — только когда разрешит тренер.',outcome:'Бросковая техника',advanced:true,phases:['Исходный захват','Положение корпуса','Движение','Результат'],voice:'Мельница — сложное действие. Посмотри, как тренер управляет положением тела и соперника. Повторять самостоятельно нельзя.'},
+{id:'ru_basic_throws',stage:'03 · Атаки и переводы',language:'unknown',icon:'🔃',title:'Базовые броски — обзор',youtube:'ypCcd5n_-bg',coach:'Подборка спортивной школы № 14',desc:'Обзор бросковой техники, не программа самостоятельной практики для младшего возраста.',outcome:'Знакомство с бросками',advanced:true,phases:['Подготовка','Контакт','Изменение опоры','Результат'],voice:'Броски требуют страховки и тренера. Наша задача здесь только увидеть, как меняется положение тела.'},
+{id:'ru_fake',stage:'04 · Защита и манёвры',language:'unknown',icon:'👀',title:'Финты и подготовка прохода',youtube:'KBqMI9MocXA',coach:'Подборка спортивной школы № 14',desc:'Обзор финтов перед атакой, рекомендованный в учебной подборке.',outcome:'Подготовка атаки',phases:['Ложное движение','Реакция соперника','Новый момент','Вход'],voice:'Финт нужен, чтобы увидеть реакцию партнера. Не путай ложное движение с выполненным приемом.'},
+{id:'ru_defense_vk',stage:'04 · Защита и манёвры',language:'ru',icon:'🛡️',title:'Защита от бокового прохода в ногу',youtube:'',url:'https://yandex.ru/video/preview/4629606178256962064',coach:'Шамиль Османов',desc:'Разбор защиты и контрприёма от бокового прохода в ногу; исходное видео на VK, доступно по внешней ссылке.',outcome:'Сорванная атака',phases:['Начало атаки','Положение защиты','Контрдвижение','Результат'],voice:'В этой защите важно заметить сам вход. Посмотри, как защищающийся реагирует и что произошло с атакой.'},
+{id:'ru_ground',stage:'05 · Партер и выход',language:'unknown',icon:'⬇️',title:'33 приёма в партере — обзор',youtube:'0gLbwGy7xJQ',coach:'Подборка спортивной школы № 14',desc:'Большой обзор техники в партере. Для младших детей смотреть вместе с родителем, без повторения сложных движений.',outcome:'Обзор партера',advanced:true,phases:['Верхняя позиция','Контроль','Поворот','Возврат'],voice:'В партере у верхнего и нижнего борцов разные задачи. Не пытайся запомнить все приёмы. Найди знакомое положение и обсуди его с тренером.'},
+{id:'ru_ground_master',stage:'05 · Партер и выход',language:'ru',icon:'🤼',title:'Технические действия в стойке и партере',youtube:'',url:'https://ok.ru/video/4541832301167',coach:'Шамиль Османов',desc:'Русскоязычный разбор действий в стойке и партере; видео размещено на OK.',outcome:'Связь стойки и партера',phases:['Исходная позиция','Движение','Контроль','Итог'],voice:'Посмотри, как стойка переходит в борьбу на ковре. Найди момент, когда одна позиция сменилась другой.'},
+{id:'ru_saitiev',stage:'06 · Тактика и наблюдение',language:'unknown',icon:'🏅',title:'Тренировка в школе Сайтиевых',youtube:'lKhQFDZ8FMU',coach:'Подборка спортивной школы № 14',desc:'Наблюдение за тренировкой опытных борцов, выбор движений и дисциплина.',outcome:'Как тренируются борцы',phases:['Разминка','Работа в паре','Выбор действий','Завершение'],voice:'Посмотри, как занимаются опытные борцы. Заметь, что тренировка состоит не только из бросков, но и из повторений и работы над основой.'},
+{id:'ru_barrows',stage:'06 · Тактика и наблюдение',language:'unknown',icon:'🥇',title:'Джордан Барроуз — техника прохода',youtube:'HVZSmAnn7Cc',coach:'Подборка спортивной школы № 14',desc:'Показ техники одного из известных борцов, для визуального анализа с родителем.',outcome:'Тактика атаки',phases:['Дистанция','Скорость входа','Действие ног','Завершение'],voice:'Смотрите как опытный борец выбирает дистанцию и момент для входа. Не нужно повторять его скорость — важнее понять последовательность.'},
+{id:'en_angles',stage:'07 · Мировые тренеры',language:'en',icon:'↗️',title:'Углы атаки и движение — Cary Kolat',youtube:'_E1vYOSowlo',coach:'Cary Kolat',desc:'Профессиональная демонстрация изменения угла нападения.',outcome:'Работа с углом',phases:['Стойка','Шаг в сторону','Поворот','Результат'],voice:'Обрати внимание, что борец меняет угол, а не просто идёт прямо на соперника. Сначала шаг, затем положение корпуса и только потом действие.'},
+{id:'en_sprawl',stage:'07 · Мировые тренеры',language:'en',icon:'🛡️',title:'Защита от прохода — Cary Kolat',youtube:'QMVavyxjlNU',coach:'Cary Kolat',desc:'Демонстрация защиты от прохода в ноги.',outcome:'Защита',phases:['Начало атаки','Работа бёдер','Защитное положение','Итог'],voice:'Заметь как защищающийся меняет положение ног и бёдер. Проверь, удалось ли атакующему завершить проход.'},
+{id:'en_single',stage:'07 · Мировые тренеры',language:'en',icon:'🦵',title:'Завершение прохода в одну ногу — Cary Kolat',youtube:'hRHebPpbJqI',coach:'Cary Kolat',desc:'Детальный разбор завершения захвата одной ноги.',outcome:'Завершение атаки',phases:['Захват','Перемещение','Потеря равновесия','Результат'],voice:'После захвата ноги прием ещё не закончен. Смотри до того момента, когда борцы занимают конечное положение.'},
+{id:'en_double',stage:'07 · Мировые тренеры',language:'en',icon:'🤼',title:'Проход в обе ноги — Fundamental Wrestling',youtube:'wxNAEByjOoA',coach:'Fundamental Wrestling',desc:'Профессиональная демонстрация прохода в две ноги.',outcome:'Перевод',phases:['Подготовка','Вход','Изменение направления','Конечная позиция'],voice:'В этом эпизоде смотри на расстояние, снижение уровня и работу ног. Найди момент, когда соперник оказывается на ковре.'},
+{id:'en_single_def',stage:'07 · Мировые тренеры',language:'en',icon:'🛡️',title:'Защита от удержания ноги — Cary Kolat',youtube:'o7fhBCawzW8',coach:'Cary Kolat',desc:'Защитное действие, когда соперник уже взял ногу.',outcome:'Освобождение из захвата',phases:['Захват ноги','Поиск опоры','Положение корпуса','Итог'],voice:'Когда нога захвачена, задача меняется. Заметь, где борец сохраняет опору и как освобождается.'},
+{id:'en_duck',stage:'07 · Мировые тренеры',language:'en',icon:'🔄',title:'Подныривание под руку — Cary Kolat',youtube:'NHWDqs5aXwQ',coach:'Cary Kolat',desc:'Продвинутая демонстрация смены уровня и обхода.',outcome:'Выход за спину',advanced:true,phases:['Контакт','Уход вниз','Поворот','Завершение'],voice:'Смотри, как борец меняет уровень и направление. Подныривание требует тренера и правильного контроля.'},
+{id:'en_duck_alt',stage:'07 · Мировые тренеры',language:'en',icon:'↪️',title:'Подныривание — второй показ',youtube:'NKl8u7yhIuc',coach:'Cary Kolat',desc:'Второй профессиональный пример подныривания.',outcome:'Смена положения',advanced:true,phases:['Захват','Снижение','Обход','Итог'],voice:'Сравни с первым вариантом. Где одинаковое движение, а где оно отличается?'}
 ];
+professionalLessons.forEach(x=>{if(!x.url&&x.youtube)x.url='https://www.youtube.com/watch?v='+x.youtube;x.type='video';x.group=x.stage;});
 arenaScenes.push(...professionalLessons);
-const arenaFeatured=['stance_basic','distance_circle','grip_basic','single_entry','single_finish','single_variant','defense_reaction','defense_stop','defense_resolution','go_behind','top_control','stand_up'];
-const arenaVisible=arenaScenes.map((scene,index)=>({...scene,index})).filter(scene=>arenaFeatured.includes(scene.id)||scene.youtube);
-const arenaCategories=['Все','Мультфильмы','Показ тренера'];
-let arenaShowArrows=true,arenaEndTimer=null;
+const arenaFeatured=[];
+const arenaVisible=arenaScenes.map((scene,index)=>({...scene,index})).filter(scene=>professionalLessons.some(v=>v.id===scene.id));
+const arenaCategories=['Все',...new Set(professionalLessons.map(x=>x.stage))];
+let arenaShowArrows=false,arenaEndTimer=null;
+const arenaEnglishVoiceEnabled=typeof window.speechSynthesis!=='undefined';
+arenaIndex=arenaScenes.findIndex(x=>x.id==='ru_stance');
+arenaGroup='Все';
 function getArenaScene(){return arenaScenes[arenaIndex]||arenaScenes[0]}
 function showArenaFilters(){
- $('arenaFilters').innerHTML=arenaCategories.map(cat=>'<button class="arena-filter '+(arenaGroup===cat?'active':'')+'" data-filter="'+cat+'">'+cat+'</button>').join('');
+ $('arenaFilters').innerHTML=arenaCategories.map(cat=>'<button class="arena-filter '+(arenaGroup===cat?'active':'')+'" data-filter="'+escapeHTML(cat)+'">'+escapeHTML(cat)+'</button>').join('');
  $('arenaFilters').querySelectorAll('[data-filter]').forEach(btn=>btn.onclick=()=>{arenaGroup=btn.dataset.filter;renderArenaCatalog()});
 }
 function visibleArenaList(){
  const term=arenaSearchTerm.trim().toLocaleLowerCase('ru');
- return arenaVisible.filter(sc=>(arenaGroup==='Все'||(arenaGroup==='Показ тренера'?!!sc.youtube:!sc.youtube))&&(!term||[sc.title,sc.desc,sc.outcome,sc.coach||''].join(' ').toLocaleLowerCase('ru').includes(term)));
+ return arenaVisible.filter(x=>(arenaGroup==='Все'||x.stage===arenaGroup)&&(!term||[x.title,x.desc,x.coach,x.stage].join(' ').toLocaleLowerCase('ru').includes(term)));
 }
 function keepSelectedArenaVisible(smooth=false){
  const strip=$('arenaCatalog');
@@ -339,8 +384,8 @@ function renderArenaCatalog(){
  const previousPosition=strip.scrollLeft;
  showArenaFilters();
  const items=visibleArenaList();
- $('arenaCount').textContent=items.length+' видео · '+(arenaGroup==='Все'?'Мультфильмы и показы тренера':arenaGroup);
- strip.innerHTML=items.map(sc=>'<button type="button" class="arena-item '+(sc.index===arenaIndex?'active':'')+'" data-arena="'+sc.index+'"><span>'+sc.icon+' '+escapeHTML(sc.title)+'</span><small>'+(sc.youtube?'🎓 '+escapeHTML(sc.coach):'🎞 Мультфильм')+'</small></button>').join('')||'<p class="small">Ничего не найдено</p>';
+ $('arenaCount').textContent=items.length+' профессиональных видео · '+(arenaGroup==='Все'?'7 этапов курса':arenaGroup);
+ strip.innerHTML=items.map(sc=>'<button type="button" class="arena-item '+(sc.index===arenaIndex?'active':'')+'" data-arena="'+sc.index+'"><span>'+sc.icon+' '+escapeHTML(sc.title)+'</span><small>'+'🎓 '+escapeHTML(sc.coach)+' · '+(sc.language==='ru'?'🇷🇺 Русский':sc.language==='en'?'🌍 Английский':'🔎 Язык не проверен')+'</small></button>').join('')||'<p class="small">Ничего не найдено</p>';
  // Rebuilding innerHTML must not reset the scrolled position to the first lesson.
  strip.scrollLeft=previousPosition;
  keepSelectedArenaVisible(false);
@@ -371,6 +416,7 @@ function arenaDirectionSVG(kind){
 }
 function updateArenaDirection(){
  const sc=getArenaScene();const box=$('arenaDirectionDiagram');if(!box)return;
+ if(sc.url){box.innerHTML='';return;}
  box.innerHTML=arenaDirectionSVG(arenaDirectionKind(sc));
  box.classList.toggle('no-arrows',!arenaShowArrows);
 }
@@ -393,46 +439,47 @@ function arenaPhaseUpdate(){
  $('arenaResult').textContent=ratio>.89?'🏁 '+sc.outcome:'Смотри движение до конца';
  if(v.currentTime>=end-.06){v.pause();arenaPlaying=false;$('arenaPlay').textContent='▶ Играть';arenaMarkViewed();}
 }
+
 function renderArenaPlayer(){
  if(arenaEndTimer){clearTimeout(arenaEndTimer);arenaEndTimer=null}
- arenaWatchedSeconds=0;arenaLastMediaTime=null;
- const sc=getArenaScene(),external=!!sc.youtube;
- $('arenaTypeBadge').textContent=external?'🎓 ПОКАЗ ТРЕНЕРА':'🎞 МУЛЬТФИЛЬМ';
+ if(window.speechSynthesis)window.speechSynthesis.cancel();
+ const sc=getArenaScene();
+ $('arenaTypeBadge').textContent=sc.language==='ru'?'🇷🇺 РУССКИЙ УРОК':sc.language==='en'?'🌍 АНГЛИЙСКИЙ УРОК':'🎓 ПОКАЗ ТРЕНЕРА';
  $('arenaOutcomeBadge').textContent=sc.outcome;
  $('arenaTitle').textContent=sc.title;
- $('arenaDescription').textContent=sc.desc||'';
- $('arenaTakeaway').textContent=external?'Посмотрите положение ног и корпуса. Контактные действия только с тренером.':('На что смотреть: '+(sc.tip||'Ноги, руки, корпус и итог движения.'));
+ $('arenaDescription').textContent=sc.desc;
+ $('arenaTakeaway').textContent='Автор: '+sc.coach+'. Контактные действия повторять только с тренером.';
  $('arenaQuestion').innerHTML='';
- $('arenaLocalControls').hidden=external;
- $('arenaProfessionalControls').hidden=!external;
- const phases=sc.phases?.length?sc.phases:['Подготовка','Основное движение','Результат'];
- $('arenaPhaseTitle').textContent=external?'Наблюдай: '+phases[0]:'1/'+phases.length+' · '+phases[0];
+ $('arenaLocalControls').hidden=true;
+ $('arenaProfessionalControls').hidden=false;
+ $('arenaResult').textContent='Этап '+(arenaCategories.indexOf(sc.stage))+' из 7 · '+sc.outcome;
+ const phases=sc.phases||['Начало','Движение','Завершение'];
+ $('arenaPhaseTitle').textContent='Смотри по этапам: '+phases[0];
  $('arenaPhaseSteps').innerHTML=phases.map((_,i)=>'<button type="button" class="arena-phase-dot '+(i===0?'active':'')+'" data-phase="'+i+'" aria-label="Этап '+(i+1)+'"></button>').join('');
- $('arenaResult').textContent=external?'Полный профессиональный показ в проигрывателе':'🏁 '+sc.outcome;
- if(external){
-  $('arenaPlayer').innerHTML='<iframe id="arenaProVideo" title="'+escapeHTML(sc.title)+'" src="https://www.youtube-nocookie.com/embed/'+sc.youtube+'?rel=0&playsinline=1" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>';
-  $('arenaOpenSource').href=sc.url;
- }else{
-  $('arenaPlayer').innerHTML='<video id="arenaVideo" playsinline webkit-playsinline preload="metadata" controls aria-label="Мультфильм: '+escapeHTML(sc.title)+'"><source src="'+sc.src+'" type="video/mp4"></video>';
-  const v=$('arenaVideo');v.playbackRate=arenaSpeed;
-  v.onloadedmetadata=()=>{if(sc.start)v.currentTime=sc.start;arenaPhaseUpdate()};
-  v.onplay=()=>{arenaLastMediaTime=v.currentTime;arenaPlaying=true;$('arenaPlay').textContent='⏸ Пауза'};
-  v.onpause=()=>{arenaPlaying=false;$('arenaPlay').textContent='▶ Играть'};
-  v.onseeking=()=>{arenaLastMediaTime=null};
-  v.ontimeupdate=()=>{if(!v.paused&&!v.seeking&&arenaLastMediaTime!==null){const delta=v.currentTime-arenaLastMediaTime;if(delta>0&&delta<1.8)arenaWatchedSeconds+=delta}arenaLastMediaTime=v.currentTime;arenaPhaseUpdate()};
-  v.onended=()=>{arenaPlaying=false;arenaMarkViewed();arenaPhaseUpdate()};
-  v.onerror=()=>{$('arenaResult').textContent='Не удалось загрузить мультфильм. Попробуй обновить страницу'};
-  $('arenaSeek').oninput=e=>{if(v.duration){v.currentTime=(sc.start||0)+(Number(e.target.value)/1000)*(Math.min(sc.end||v.duration,v.duration)-(sc.start||0));arenaPhaseUpdate()}};
-  $('arenaPlay').textContent='▶ Играть';$('arenaSpeed').textContent=arenaSpeed+'×';arenaSetPosition(0);
- }
+ $('arenaDirectionDiagram').innerHTML='';
+ $('arenaOpenSource').href=sc.url;
+ $('arenaPlayer').innerHTML=sc.youtube?
+  '<iframe id="arenaProVideo" title="'+escapeHTML(sc.title)+'" src="https://www.youtube-nocookie.com/embed/'+sc.youtube+'?rel=0&playsinline=1&cc_load_policy=1&hl=ru" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>':
+  '<div class="arena-external-preview"><div class="arena-external-icon">🎓</div><h3>'+escapeHTML(sc.title)+'</h3><p>Видео размещено на другом сайте. Нажмите ниже, чтобы открыть показ тренера.</p><a href="'+sc.url+'" target="_blank" rel="noopener noreferrer">▶ Смотреть видео у автора</a></div>';
+ $('arenaProfessionalControls').innerHTML='<div class="arena-pro-actions"><a id="arenaOpenSource" href="'+sc.url+'" target="_blank" rel="noopener noreferrer">↗ Смотреть оригинал</a><button id="arenaVoiceBrief" type="button"'+(!arenaEnglishVoiceEnabled?' disabled':'')+'>🔊 Русское пояснение</button></div><p class="arena-source-note">Русское пояснение — отдельный учебный комментарий, не перевод речи тренера и не синхронная озвучка видео. Субтитры и аудиодорожки YouTube зависят от автора.</p>';
+ $('arenaProfessionalControls').querySelector('#arenaVoiceBrief').onclick=()=>{
+  if(!window.speechSynthesis)return;
+  window.speechSynthesis.cancel();
+  const words=new SpeechSynthesisUtterance(sc.voice||sc.desc);
+  words.lang='ru-RU';words.rate=.85;words.pitch=1;
+  const voices=window.speechSynthesis.getVoices();
+  const voice=voices.find(v=>v.lang.toLowerCase().startsWith('ru'));
+  if(voice)words.voice=voice;
+  window.speechSynthesis.speak(words);
+ };
  updateArenaDirection();
 }
 function renderArena(){renderArenaCatalog();renderArenaPlayer()}
 $('arenaSearch').addEventListener('input',e=>{arenaSearchTerm=e.target.value;renderArenaCatalog()});
-$('arenaArrows').addEventListener('change',e=>{arenaShowArrows=e.target.checked;updateArenaDirection()});
+
 $('arenaPhaseSteps').addEventListener('click',e=>{
  const target=e.target.closest('[data-phase]');if(!target)return;const sc=getArenaScene();
- if(sc.youtube){$('arenaPhaseTitle').textContent='Найди в видео: '+sc.phases[Number(target.dataset.phase)];return}
+ if(sc.youtube||sc.url){$('arenaPhaseTitle').textContent='Найди в видео: '+sc.phases[Number(target.dataset.phase)];return}
  const v=$('arenaVideo');if(!v||!v.duration)return;
  const start=sc.start||0,end=Math.min(sc.end||v.duration,v.duration),num=sc.phases?.length||3;
  v.pause();v.currentTime=start+Number(target.dataset.phase)/num*(end-start);arenaPhaseUpdate();
@@ -598,7 +645,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-arena-6-2-20261115';
+const APP_VERSION='academy-video-7-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
