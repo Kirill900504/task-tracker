@@ -334,6 +334,8 @@ const professionalLessons=[
 {id:'ru_mill',stage:'03 · Атаки и переводы',language:'ru',icon:'🔄',title:'Приём «Мельница» — сложная техника',youtube:'U2xk-zMqC70',coach:'Тренер Ильин Ю. В. · Вольная борьба НЧК',desc:'Сложный приём для ознакомления вместе с папой. Выполнение — только когда разрешит тренер.',outcome:'Бросковая техника',advanced:true,phases:['Исходный захват','Положение корпуса','Движение','Результат'],voice:'Мельница — сложное действие. Посмотри, как тренер управляет положением тела и соперника. Повторять самостоятельно нельзя.'},
 {id:'ru_basic_throws',stage:'03 · Атаки и переводы',language:'unknown',icon:'🔃',title:'Базовые броски — обзор',youtube:'ypCcd5n_-bg',coach:'Подборка спортивной школы № 14',desc:'Обзор бросковой техники, не программа самостоятельной практики для младшего возраста.',outcome:'Знакомство с бросками',advanced:true,phases:['Подготовка','Контакт','Изменение опоры','Результат'],voice:'Броски требуют страховки и тренера. Наша задача здесь только увидеть, как меняется положение тела.'},
 {id:'ru_fake',stage:'04 · Защита и манёвры',language:'unknown',icon:'👀',title:'Финты и подготовка прохода',youtube:'KBqMI9MocXA',coach:'Подборка спортивной школы № 14',desc:'Обзор финтов перед атакой, рекомендованный в учебной подборке.',outcome:'Подготовка атаки',phases:['Ложное движение','Реакция соперника','Новый момент','Вход'],voice:'Финт нужен, чтобы увидеть реакцию партнера. Не путай ложное движение с выполненным приемом.'},
+{id:'ru_defense_beloglazov',stage:'04 · Защита и манёвры',language:'ru',icon:'🛡️',title:'Защита от прохода в ноги — Анатолий Белоглазов',youtube:'EsQvIP_hZ_A',coach:'Анатолий Белоглазов · WRESTLER TRAINING',desc:'Профессиональный показ защиты от прохода в ноги. Смотри на ноги и бёдра защищающегося.',outcome:'Остановить проход',phases:['Начало атаки','Положение ног','Защитное действие','Итог'],voice:'В этом видео опытный борец показывает защиту от прохода в ноги. Сначала заметь начало атаки, потом положение тела защищающегося, и наконец результат.'},
+{id:'ru_defense_single',stage:'04 · Защита и манёвры',language:'ru',icon:'🦵',title:'Защита от захвата одной ноги',youtube:'QAMIIcVBTFE',coach:'MMA DIARY',desc:'Короткий разбор защиты от прохода в одну ногу. Сравни с защитой от прохода в обе ноги.',outcome:'Сохранить опору',phases:['Попытка захвата','Работа опорной ноги','Защита','Результат'],voice:'Если соперник захватил одну ногу, необходимо защищать равновесие и освобождаться освоенной техникой. Смотри, чем эта защита отличается от защиты от прохода в обе ноги.'},
 {id:'ru_defense_vk',stage:'04 · Защита и манёвры',language:'ru',icon:'🛡️',title:'Защита от бокового прохода в ногу',youtube:'',url:'https://yandex.ru/video/preview/4629606178256962064',coach:'Шамиль Османов',desc:'Разбор защиты и контрприёма от бокового прохода в ногу; исходное видео на VK, доступно по внешней ссылке.',outcome:'Сорванная атака',phases:['Начало атаки','Положение защиты','Контрдвижение','Результат'],voice:'В этой защите важно заметить сам вход. Посмотри, как защищающийся реагирует и что произошло с атакой.'},
 {id:'ru_ground',stage:'05 · Партер и выход',language:'unknown',icon:'⬇️',title:'33 приёма в партере — обзор',youtube:'0gLbwGy7xJQ',coach:'Подборка спортивной школы № 14',desc:'Большой обзор техники в партере. Для младших детей смотреть вместе с родителем, без повторения сложных движений.',outcome:'Обзор партера',advanced:true,phases:['Верхняя позиция','Контроль','Поворот','Возврат'],voice:'В партере у верхнего и нижнего борцов разные задачи. Не пытайся запомнить все приёмы. Найди знакомое положение и обсуди его с тренером.'},
 {id:'ru_ground_master',stage:'05 · Партер и выход',language:'ru',icon:'🤼',title:'Технические действия в стойке и партере',youtube:'',url:'https://ok.ru/video/4541832301167',coach:'Шамиль Османов',desc:'Русскоязычный разбор действий в стойке и партере; видео размещено на OK.',outcome:'Связь стойки и партера',phases:['Исходная позиция','Движение','Контроль','Итог'],voice:'Посмотри, как стойка переходит в борьбу на ковре. Найди момент, когда одна позиция сменилась другой.'},
@@ -581,7 +583,7 @@ $('journeyLevels').addEventListener('click',event=>{
  }else if(task===2){
   const n=arenaScenes.findIndex(x=>x.id===stage.video);
   if(n>=0){
-   const mapping={stance_basic:'ru_stance',distance_circle:'ru_coordination',grip_basic:'ru_stance',single_finish:'ru_single',defense_stop:'ru_defense_vk',stand_up:'ru_ground'};
+   const mapping={stance_basic:'ru_stance',distance_circle:'ru_coordination',grip_basic:'ru_stance',single_finish:'ru_single',defense_stop:'ru_defense_beloglazov',stand_up:'ru_ground'};
    const id=mapping[stage.video]||stage.video;
    const resolved=arenaScenes.findIndex(x=>x.id===id);arenaIndex=resolved>=0?resolved:n;
    arenaGroup='Все';arenaSearchTerm='';$('arenaSearch').value='';show('arena');
@@ -654,7 +656,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-video-7-1-20261115';
+const APP_VERSION='academy-video-7-2-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
