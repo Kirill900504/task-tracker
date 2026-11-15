@@ -77,6 +77,25 @@ body{width:100%}.app,.card,.maincol,.arena-layout,.arena-view{min-width:0;max-wi
 .milestone-row strong{display:block;color:#ffd164;font-size:19px}
 .milestone-row span{font-size:10px;color:#bbd5f1;line-height:1.2;display:block;margin-top:4px}
 @media(max-width:370px){.milestone-row strong{font-size:16px}.milestone-row span{font-size:9px}}
+
+/* Персональный учебный путь v4.1 */
+.journey-panel{margin-top:20px;border:1px solid #456181;background:linear-gradient(145deg,#1d3154,#132440);border-radius:23px;padding:18px}
+.journey-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+.journey-head h2{font-size:24px;margin:5px 0 7px}.journey-head p{line-height:1.45;margin:0}
+.journey-count{white-space:nowrap;color:#172747;background:#ffd164;border-radius:999px;padding:8px 11px;font-size:13px;font-weight:900}
+.journey-levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.journey-level{background:#1b2e50;border:1px solid #3f587d;border-radius:16px;padding:13px;min-width:0}
+.journey-level.finished{border-color:#75d4b8}.journey-level h3{margin:0 0 6px;font-size:16px}
+.journey-level p{margin:0 0 9px;font-size:12px;color:#b5c7e3;line-height:1.45}
+.journey-progress{height:6px;border-radius:8px;background:#344867;margin-bottom:11px;overflow:hidden}
+.journey-progress span{display:block;height:100%;background:#81e1bf;border-radius:8px}
+.journey-tasks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.journey-task{border:1px solid #49648d;border-radius:11px;color:#f0f6ff;background:#2a4167;min-height:58px;padding:8px 6px;font-size:12px;font-weight:750;text-align:left;line-height:1.3}
+.journey-task.done{background:#1e514a;color:#e1fff1;border-color:#4a9e86}
+.lesson-complete{min-height:44px;border-radius:10px;border:1px solid #54856e;background:#244b43;color:#d6fbe6;padding:9px 12px;font-size:13px;font-weight:800}
+.lesson-complete.done{background:#315c4a}
+.journey-task:focus-visible,.lesson-complete:focus-visible{outline:3px solid #ffd164;outline-offset:3px}
+@media(max-width:620px){.journey-panel{padding:13px}.journey-levels{grid-template-columns:1fr}.journey-head h2{font-size:21px}.journey-task{min-height:53px}}
 </style><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
 <body><noscript><div style="padding:18px;background:#ffecb2;color:#222;font:16px sans-serif">Для запуска игр необходимо включить JavaScript и открыть скачанный HTML-файл в обычном браузере (Safari, Chrome или Edge), а не в предпросмотре файла.</div></noscript><div id="startupWarning" style="position:fixed;z-index:99999;bottom:12px;left:12px;right:12px;background:#fff2bb;color:#25202b;padding:13px;border-radius:12px;font:14px system-ui;box-shadow:0 6px 32px #0008">⚠️ Если кнопки не реагируют, просмотрщик заблокировал JavaScript. Скачайте файл и откройте его в Safari, Chrome или Edge.</div><div class="app"><header class="top"><button type="button" class="logo brand-home" data-page="home" aria-label="Вернуться на главную Академии борца"><span class="logoicon"><img src="./apple-touch-icon.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></span><span class="word">АКАДЕМИЯ<br>БОРЦА</span></button><div class="profile"><span class="small">Сегодня тренируется</span><select class="select" id="kidSelect" aria-label="Выбрать ребёнка"><option value="older">Старший · 7 лет</option><option value="younger">Младший · 6 лет</option></select></div></header>
 <nav class="tabs" aria-label="Игры и разделы">
@@ -88,7 +107,7 @@ body{width:100%}.app,.card,.maincol,.arena-layout,.arena-view{min-width:0;max-wi
 <button class="tab quick-tab" data-go="elements" data-quick="1"><span class="tabicon">⚡</span><span>Быстрая игра</span></button>
 </nav>
 <main>
-<section id="home" class="screen active"><div class="hero"><div class="card"><span class="eyebrow">Играй • Думай • Не сдавайся</span><h1>Сильный борец<br>начинается <span style="color:var(--yellow)">с умной головы!</span></h1><p class="lead">Здесь не нужно быть самым сильным. Научись замечать, что происходит, выбирать решение и продолжать после ошибки.</p><div class="btnrow"><button class="btn" data-go="mind">🧠 Начать приключение</button><button class="btn secondary" data-go="elements" data-quick="1">🎮 Быстрая игра</button></div><div class="milestone-row"><div><strong>174</strong><span>ситуации</span></div><div><strong>138</strong><span>мини-игр</span></div><div><strong>106</strong><span>уроков</span></div><div><strong>28</strong><span>анимаций</span></div></div><div class="stats"><div class="stat"><strong id="homeStars">0</strong><span>звёзд собрано</span></div><div class="stat"><strong id="homeMissions">0</strong><span>заданий решено</span></div><div class="stat"><strong id="homeStreak">0</strong><span>дней практики</span></div></div></div><div class="card"><div class="illustration" id="homeArt"></div><div class="eyebrow">Правило чемпиона</div><div class="quote">«Не получилось? Я всё равно продолжаю!»</div><p class="small">Победа — это не только баллы. Смелость попробовать, спокойствие и умение думать тоже считаются.</p></div></div></section>
+<section id="home" class="screen active"><div class="hero"><div class="card"><span class="eyebrow">Играй • Думай • Не сдавайся</span><h1>Сильный борец<br>начинается <span style="color:var(--yellow)">с умной головы!</span></h1><p class="lead">Здесь не нужно быть самым сильным. Научись замечать, что происходит, выбирать решение и продолжать после ошибки.</p><div class="btnrow"><button class="btn" data-go="mind">🧠 Начать приключение</button><button class="btn secondary" data-go="elements" data-quick="1">🎮 Быстрая игра</button></div><div class="milestone-row"><div><strong>174</strong><span>ситуации</span></div><div><strong>138</strong><span>мини-игр</span></div><div><strong>106</strong><span>уроков</span></div><div><strong>28</strong><span>анимаций</span></div></div><div class="stats"><div class="stat"><strong id="homeStars">0</strong><span>звёзд собрано</span></div><div class="stat"><strong id="homeMissions">0</strong><span>заданий решено</span></div><div class="stat"><strong id="homeStreak">0</strong><span>дней практики</span></div></div></div><div class="card"><div class="illustration" id="homeArt"></div><div class="eyebrow">Правило чемпиона</div><div class="quote">«Не получилось? Я всё равно продолжаю!»</div><p class="small">Победа — это не только баллы. Смелость попробовать, спокойствие и умение думать тоже считаются.</p></div></div><div class="journey-panel" id="journeyPanel"><div class="journey-head"><div><span class="eyebrow">Персональная программа</span><h2>🗺️ Путь юного борца</h2><p class="small">Шесть уровней. Каждый день — немного знаний, игры и уверенности. Нет обязательных сроков.</p></div><span class="journey-count" id="journeyCount">0 / 24</span></div><div id="journeyLevels" class="journey-levels"></div></div></section>
 <section id="mind" class="screen"><div class="section-head"><span class="eyebrow">Приключение с выбором</span><h1>🧠 Умный борец</h1><p>174 игровых ситуации. Выбирай тему, запускай случайный вопрос или проходи по порядку. Ошибаться можно: мы учимся думать.</p></div><div class="modes" id="mindCategories"></div><div class="quiz-actions"><button class="btn random-mind-btn" id="mindRandom">🎲 Случайная ситуация</button><span class="daily-label" id="mindRemaining">Новые задания ждут!</span></div><div class="maincol"><div class="card"><div class="pill" id="mindCounter">Ситуация 1</div><div class="progress"><div id="mindBar"></div></div><div class="illustration" id="mindArt"></div><h2 id="mindTitle">Загрузка</h2><p class="lead" id="mindStory"></p><div class="question" id="mindQuestion"></div><div class="options" id="mindOptions"></div><div id="mindFeedback" class="hidden"></div><div class="btnrow"><button class="btn secondary" id="mindPrev">← Назад</button><button class="btn" id="mindNext">Дальше →</button></div></div><aside class="card"><div class="eyebrow">Подсказки папе</div><h3 id="parentAim">Задача</h3><p class="mentor" id="parentTip"></p><div class="hint">💡 Важно: не подсказывайте ответ заранее. Сначала спросите: «Почему ты так думаешь?»</div><div class="mini-card"><strong>Правило дня</strong><p id="mindRule"></p></div><label class="switchline small" style="margin-top:20px"><input type="checkbox" id="soundToggle">Звуковые сигналы</label></aside></div></section>
 <section id="elements" class="screen"><div class="section-head"><span class="eyebrow">Реакция • Внимание • Спокойствие</span><h1>🪨 Камень, вода, борец</h1><p>Три суперсилы и 138 непохожих ситуаций. Узнавай, когда нужна устойчивость, движение или изученное действие.</p></div><div class="maincol"><div class="card"><div class="modes"><button class="mode active" data-elmode="learn">📖 Учусь</button><button class="mode" data-elmode="play">🎮 Играю</button><button class="mode" data-elmode="challenge">⚡ Испытание</button></div><div class="cuebox" id="elementCue"><span class="character" id="elEmoji">🪨</span><span class="big" id="elTitle">КАМЕНЬ</span><p id="elDesc">Стой устойчиво. Сохраняй равновесие.</p></div><div class="symbolrow"><button class="symbol" data-symbol="rock"><span>🪨</span>КАМЕНЬ</button><button class="symbol" data-symbol="water"><span>💧</span>ВОДА</button><button class="symbol" data-symbol="wrestler"><span>🤼</span>БОРЕЦ</button></div><div id="elFeedback" class="feedback hidden"></div><div class="btnrow"><button class="btn" id="elNext">▶ Новая ситуация</button><button class="btn secondary" id="elReset">↻ Сначала</button></div></div><aside class="card"><div class="eyebrow">Три суперсилы</div><div class="mini-card"><h3>🪨 КАМЕНЬ</h3><p>Устойчивость, правильная стойка, сохранение контроля. Не означает стоять неподвижно.</p></div><div class="mini-card"><h3>💧 ВОДА</h3><p>Движение, изменение направления, поиск более удобного положения. Не означает убегать.</p></div><div class="mini-card"><h3>🤼 БОРЕЦ</h3><p>Замечай момент и выбирай знакомое действие: атакуй, защищайся или продолжай.</p></div><div class="mini-card"><strong>За эту игру</strong><p><span id="elScore">0</span> верных ответов · <span id="elRound">0</span> раундов</p><div class="track"><div id="elScoreBar" style="width:0"></div></div></div><p class="tiny">В «Испытании» есть таймер на 12 секунд. После окончания времени можно спокойно ответить: штрафов нет.</p></aside></div></section>
 <section id="arena" class="screen"><div class="section-head"><span class="eyebrow">Смотри • Понимай • Обсуждай</span><h1>🎬 Живая арена</h1><p>Теперь здесь полноценные длинные анимации и завершённые эпизоды. Ребёнок видит не только начало действия, но и итог: атака удалась, защита удалась или борьба продолжилась в нужном положении.</p></div><div class="maincol"><div class="card"><div class="arena-layout"><div class="arena-library"><div class="arena-search"><input type="search" id="arenaSearch" placeholder="🔎 Найти движение…" aria-label="Поиск по анимациям"></div><div class="abc-filters" id="arenaFilters"></div><p class="catalog-count" id="arenaCount"></p><div class="arena-catalog" id="arenaCatalog"></div></div><div class="arena-view"><div class="arena-badges"><span class="badge" id="arenaTypeBadge">ВИДЕО</span><span class="badge secondary" id="arenaOutcomeBadge">Завершённый результат</span></div><div class="arena-player" id="arenaPlayer"></div><div class="arena-controls-row"><button class="btn" id="arenaPlay">▶ Играть</button><button class="btn secondary" id="arenaReplay">↺ Сначала</button><button class="btn secondary" id="arenaSpeed">0.75×</button></div><div class="arena-range-wrap"><input type="range" id="arenaSeek" min="0" max="1000" value="0"></div><div class="arena-step-controls"><button id="arenaBackStep">← Назад 1 сек.</button><button id="arenaForwardStep">Вперёд 1 сек. →</button><button id="arenaNextFilm">Следующий фильм →</button></div><div class="arena-phase-title" id="arenaPhaseTitle">Начало эпизода</div><div class="arena-phase-steps" id="arenaPhaseSteps"></div><div class="outcome-label" id="arenaResult">🏁 Смотри, чем закончится эпизод</div><div class="arena-question" id="arenaQuestion"></div><h2 id="arenaTitle"></h2><p class="lead" id="arenaDescription"></p><div class="hint" id="arenaTakeaway"></div></div></div></div><aside class="card"><h2>Как смотреть вместе</h2><p class="mentor">1. Сначала посмотрите полностью.<br><br>2. Затем замедлите и обсудите: что произошло в начале, середине и в конце?<br><br>3. Спросите ребёнка: «Чем закончился эпизод?»<br><br>4. Отдельно обсудите, что получилось у атакующего или защищающегося.<br><br>5. Напомните: повторять приёмы можно только с тренером на ковре.</p><div class="mini-card"><strong>Важно для безопасности</strong><p>Эти материалы помогают понимать борьбу глазами ребёнка. Они не заменяют живое обучение тренера и страховку на ковре.</p></div></aside></div></section>
@@ -268,11 +287,91 @@ function renderProgress(){updateStats();const s=state[kid];$('parentNotes').valu
 $('saveNote').onclick=()=>{state[kid].note=$('parentNotes').value;save();toast('Заметка сохранена 🌟')};
 $('exportProgress').onclick=async()=>{const s=state[kid],report=`АКАДЕМИЯ БОРЦА — ${kid==='older'?'старший, 7 лет':'младший, 6 лет'}\nЗвёзды: ${s.stars}\nПравильные ответы: ${s.solved}\nИгровые раунды: ${s.rounds}\nДней занятий: ${s.dates.length}\nЗаметка: ${s.note||'—'}`;try{await navigator.clipboard.writeText(report);toast('Отчёт скопирован')}catch{const t=document.createElement('textarea');t.value=report;document.body.append(t);t.select();document.execCommand('copy');t.remove();toast('Отчёт подготовлен')}};
 $('resetProgress').onclick=()=>$('confirmOverlay').classList.remove('hidden');$('cancelReset').onclick=()=>$('confirmOverlay').classList.add('hidden');$('confirmReset').onclick=()=>{state[kid]=fresh();save();$('confirmOverlay').classList.add('hidden');renderProgress();toast('Прогресс сброшен')};
+
+/* Путь юного борца: опирается на уже существующие задания и не меняет их нумерацию. */
+const journeyStages=[
+ {name:'Знакомство с ковром',desc:'Устойчивость, движение и первый спокойный выбор.',topic:'Стойка',video:'stance_basic',lesson:0,target:3},
+ {name:'Вижу соперника',desc:'Дистанция, положение ног и правильный момент.',topic:'Движение',video:'distance_circle',lesson:3,target:7},
+ {name:'Работаю руками',desc:'Контакт, уважение к партнёру и понятные захваты.',topic:'Тактика',video:'grip_basic',lesson:5,target:12},
+ {name:'Пробую знакомую атаку',desc:'От начала действия до его результата.',topic:'Атака',video:'single_finish',lesson:6,target:18},
+ {name:'Умею защищаться',desc:'Распознавание атаки и восстановление позиции.',topic:'Защита',video:'defense_stop',lesson:7,target:25},
+ {name:'Борюсь дальше',desc:'Партер, спокойствие после ошибки и продолжение борьбы.',topic:'Спокойствие',video:'stand_up',lesson:10,target:35}
+];
+for(const k of ['older','younger']){state[k].abcDone??={};state[k].journeyRecord??={};}
+function journeyQuestion(stage){
+ const available=scenarios.map((v,i)=>({v,i})).filter(x=>x.v[0]===stage.topic);
+ return available.length?available[0].i:0;
+}
+function journeyLessonKey(index){return String(index);}
+function journeyTasks(stage){
+ const q=journeyQuestion(stage);
+ return [
+ {kind:'lesson',label:'📚 Прочитать урок',done:!!state[kid].abcDone[journeyLessonKey(stage.lesson)]},
+ {kind:'question',label:'🧠 Решить ситуацию',done:!!state[kid].mindDone[q]},
+ {kind:'video',label:'🤼 Посмотреть приём',done:!!state[kid].arenaDone?.[stage.video]},
+ {kind:'game',label:'🎮 Сыграть '+stage.target+' раундов',done:(state[kid].rounds||0)>=stage.target}
+ ];
+}
+function renderJourney(){
+ const target=$('journeyLevels');if(!target)return;
+ let doneCount=0;
+ target.innerHTML=journeyStages.map((stage,idx)=>{
+  const tasks=journeyTasks(stage);const d=tasks.filter(t=>t.done).length;doneCount+=d;
+  return '<article class="journey-level '+(d===4?'finished':'')+'"><h3>'+(idx+1)+'. '+escapeHTML(stage.name)+(d===4?' ✅':'')+'</h3><p>'+escapeHTML(stage.desc)+'</p><div class="journey-progress"><span style="width:'+(d/4*100)+'%"></span></div><div class="journey-tasks">'+tasks.map((task,i)=>'<button type="button" class="journey-task '+(task.done?'done':'')+'" data-journey="'+idx+'" data-journey-task="'+i+'">'+(task.done?'✓ ':'')+escapeHTML(task.label)+'</button>').join('')+'</div></article>';
+ }).join('');
+ $('journeyCount').textContent=doneCount+' / '+(journeyStages.length*4);
+}
+$('journeyLevels').addEventListener('click',event=>{
+ const button=event.target.closest('[data-journey]');if(!button)return;
+ const stage=journeyStages[Number(button.dataset.journey)],task=Number(button.dataset.journeyTask);
+ if(task===0){
+  abcCategory='Все';abcTerm='';$('abcSearch').value='';show('academy');
+  const card=$('lessonGrid').querySelector('[data-lesson-idx="'+stage.lesson+'"]');
+  if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
+ }else if(task===1){
+  mindCategory='all';mindIndex=journeyQuestion(stage);show('mind');
+  $('mindTitle').scrollIntoView({behavior:'smooth',block:'center'});
+ }else if(task===2){
+  const n=arenaScenes.findIndex(x=>x.id===stage.video);
+  if(n>=0){arenaIndex=n;arenaGroup='Все';arenaSearchTerm='';$('arenaSearch').value='';show('arena');}
+ }else{setElMode('play');show('elements');newElement();}
+});
+/* Урок считается изученным после явного решения ребёнка, а не просмотра страницы. */
+$('lessonGrid').addEventListener('click',event=>{
+ const btn=event.target.closest('[data-lesson-done]');if(!btn)return;
+ const id=btn.dataset.lessonDone,s=state[kid];s.abcDone??={};
+ s.abcDone[id]=!s.abcDone[id];
+ save();renderAbc();renderJourney();toast(s.abcDone[id]?'🌟 Урок изучен!':'Отметка урока снята');
+});
+function renderJourneyAndCurrent(){renderJourney();}
+const journeyOriginalShow=show;
+show=function(pg){
+ if(page==='arena'&&pg!=='arena'){const v=$('arenaVideo');if(v){v.pause();arenaPlaying=false;}}
+ journeyOriginalShow(pg);
+ if(pg==='home'||pg==='progress')renderJourney();
+};
+const journeyOriginalStats=updateStats;
+updateStats=function(){journeyOriginalStats();renderJourney();}
+const journeyOriginalAbc=renderAbc;
+renderAbc=function(){
+ journeyOriginalAbc();
+ $('lessonGrid').querySelectorAll('article.lesson').forEach((article,index)=>{
+  const rawIndex=Number(article.querySelector('.number')?.textContent)-1;if(rawIndex<0)return;
+  article.dataset.lessonIdx=String(rawIndex);
+  const complete=!!state[kid].abcDone?.[String(rawIndex)];
+  const btn=document.createElement('button');btn.type='button';btn.className='lesson-complete'+(complete?' done':'');
+  btn.dataset.lessonDone=String(rawIndex);
+  btn.textContent=complete?'✅ Уже изучено':'⭐ Я изучил этот урок';
+  article.append(btn);
+ });
+};
+renderAbc();renderJourney();
+
 renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-4-20261114';
+const APP_VERSION='academy-4-1-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
