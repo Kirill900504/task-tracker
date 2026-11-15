@@ -284,11 +284,11 @@ $('arenaQuestion').addEventListener('click',event=>{
  if(correct){state[kid].arenaUnderstanding??={};state[kid].arenaUnderstanding[sc.id]=true;save();toast('🌟 Ты правильно понял, чем закончился эпизод!')}
  else toast('💛 Посмотри ещё раз, особенно последний кадр');
  $('arenaQuestion').querySelectorAll('[data-answer]').forEach(b=>{
-  b.disabled=true;
-  if(Number(b.dataset.answer)===sc.answer)b.classList.add('correct');
+  b.classList.remove('incorrect');
+  if(correct){b.disabled=true;if(Number(b.dataset.answer)===sc.answer)b.classList.add('correct')}
   else if(Number(b.dataset.answer)===chosen)b.classList.add('incorrect');
  });
- const feedback=$('arenaQuizFeedback');if(feedback)feedback.textContent=correct?'✅ Верно! '+sc.outcome:'Попробуй ещё раз после просмотра. Правильный ответ подсвечен.';
+ const feedback=$('arenaQuizFeedback');if(feedback)feedback.textContent=correct?'✅ Верно! '+sc.outcome:'Пока нет. Посмотри финал ещё раз и выбери другой ответ.';
 });
 function renderArena(){renderArenaCatalog();renderArenaPlayer()}
 $('arenaPhaseSteps').addEventListener('click',event=>{
@@ -465,7 +465,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-4-7-20261115';
+const APP_VERSION='academy-4-8-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
