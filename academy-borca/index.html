@@ -174,7 +174,7 @@ body{width:100%}.app,.card,.maincol,.arena-layout,.arena-view{min-width:0;max-wi
 .arena-source-note{font-size:12px;line-height:1.5;color:#bdd1e8;margin:9px 0}
 .arena-stage-note{font-size:12px;color:#b5c9e4}
 @media(min-width:940px){.arena-focus{display:block}.arena-catalog{flex-direction:row;max-height:none}.arena-view-simple{margin-top:14px;max-width:820px;margin-left:auto;margin-right:auto}}
-</style><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
+.arena-next-professional{width:100%;border-radius:12px;border:0;background:#ffe087;color:#14233c;font-weight:850;font-size:15px;min-height:48px;margin:8px 0} </style><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
 <body><noscript><div style="padding:18px;background:#ffecb2;color:#222;font:16px sans-serif">Для запуска игр необходимо включить JavaScript и открыть скачанный HTML-файл в обычном браузере (Safari, Chrome или Edge), а не в предпросмотре файла.</div></noscript><div id="startupWarning" style="position:fixed;z-index:99999;bottom:12px;left:12px;right:12px;background:#fff2bb;color:#25202b;padding:13px;border-radius:12px;font:14px system-ui;box-shadow:0 6px 32px #0008">⚠️ Если кнопки не реагируют, просмотрщик заблокировал JavaScript. Скачайте файл и откройте его в Safari, Chrome или Edge.</div><div class="app"><header class="top"><button type="button" class="logo brand-home" data-page="home" aria-label="Вернуться на главную Академии борца"><span class="logoicon"><img src="./apple-touch-icon.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></span><span class="word">АКАДЕМИЯ<br>БОРЦА</span></button><div class="profile"><span class="small">Сегодня тренируется</span><select class="select" id="kidSelect" aria-label="Выбрать ребёнка"><option value="older">Старший · 7 лет</option><option value="younger">Младший · 6 лет</option></select></div></header>
 <nav class="tabs" aria-label="Игры и разделы">
 <button class="tab" data-page="mind"><span class="tabicon">🧠</span><span>Умный борец</span></button>
@@ -457,15 +457,19 @@ function renderArenaPlayer(){
  $('arenaPhaseTitle').textContent='Смотри по этапам: '+phases[0];
  $('arenaPhaseSteps').innerHTML=phases.map((_,i)=>'<button type="button" class="arena-phase-dot '+(i===0?'active':'')+'" data-phase="'+i+'" aria-label="Этап '+(i+1)+'"></button>').join('');
  $('arenaDirectionDiagram').innerHTML='';
- $('arenaOpenSource').href=sc.url;
  $('arenaPlayer').innerHTML=sc.youtube?
   '<iframe id="arenaProVideo" title="'+escapeHTML(sc.title)+'" src="https://www.youtube-nocookie.com/embed/'+sc.youtube+'?rel=0&playsinline=1&cc_load_policy=1&hl=ru" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>':
   '<div class="arena-external-preview"><div class="arena-external-icon">🎓</div><h3>'+escapeHTML(sc.title)+'</h3><p>Видео размещено на другом сайте. Нажмите ниже, чтобы открыть показ тренера.</p><a href="'+sc.url+'" target="_blank" rel="noopener noreferrer">▶ Смотреть видео у автора</a></div>';
- $('arenaProfessionalControls').innerHTML='<div class="arena-pro-actions"><a id="arenaOpenSource" href="'+sc.url+'" target="_blank" rel="noopener noreferrer">↗ Смотреть оригинал</a><button id="arenaVoiceBrief" type="button"'+(!arenaEnglishVoiceEnabled?' disabled':'')+'>🔊 Русское пояснение</button></div><p class="arena-source-note">Русское пояснение — отдельный учебный комментарий, не перевод речи тренера и не синхронная озвучка видео. Субтитры и аудиодорожки YouTube зависят от автора.</p>';
+ $('arenaProfessionalControls').innerHTML='<div class="arena-pro-actions"><a id="arenaOpenSource" href="'+sc.url+'" target="_blank" rel="noopener noreferrer">↗ Смотреть оригинал</a><button id="arenaVoiceBrief" type="button"'+(!arenaEnglishVoiceEnabled?' disabled':'')+'>🔊 Русское пояснение</button></div><button class="arena-next-professional" id="arenaNextProfessional" type="button">Следующий урок →</button><p class="arena-source-note">Русское пояснение — отдельный учебный комментарий, не перевод речи тренера и не синхронная озвучка видео. Субтитры и аудиодорожки YouTube зависят от автора.</p>';
+ $('arenaProfessionalControls').querySelector('#arenaNextProfessional').onclick=()=>{
+  const items=visibleArenaList();if(!items.length)return;
+  const pos=items.findIndex(x=>x.index===arenaIndex);
+  arenaIndex=items[(pos+1)%items.length].index;renderArena();keepSelectedArenaVisible(true);
+ };
  $('arenaProfessionalControls').querySelector('#arenaVoiceBrief').onclick=()=>{
   if(!window.speechSynthesis)return;
   window.speechSynthesis.cancel();
-  const words=new SpeechSynthesisUtterance(sc.voice||sc.desc);
+  const words=new SpeechSynthesisUtterance((sc.voice||sc.desc));
   words.lang='ru-RU';words.rate=.85;words.pitch=1;
   const voices=window.speechSynthesis.getVoices();
   const voice=voices.find(v=>v.lang.toLowerCase().startsWith('ru'));
@@ -576,7 +580,12 @@ $('journeyLevels').addEventListener('click',event=>{
   $('mindTitle').scrollIntoView({behavior:'smooth',block:'center'});
  }else if(task===2){
   const n=arenaScenes.findIndex(x=>x.id===stage.video);
-  if(n>=0){arenaIndex=n;arenaGroup='Все';arenaSearchTerm='';$('arenaSearch').value='';show('arena');}
+  if(n>=0){
+   const mapping={stance_basic:'ru_stance',distance_circle:'ru_coordination',grip_basic:'ru_stance',single_finish:'ru_single',defense_stop:'ru_defense_vk',stand_up:'ru_ground'};
+   const id=mapping[stage.video]||stage.video;
+   const resolved=arenaScenes.findIndex(x=>x.id===id);arenaIndex=resolved>=0?resolved:n;
+   arenaGroup='Все';arenaSearchTerm='';$('arenaSearch').value='';show('arena');
+  }
  }else{setElMode('play');show('elements');newElement();}
 });
 /* Урок считается изученным после явного решения ребёнка, а не просмотра страницы. */
@@ -645,7 +654,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-video-7-20261115';
+const APP_VERSION='academy-video-7-1-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
