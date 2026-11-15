@@ -204,15 +204,16 @@ const sym={rock:['🪨','КАМЕНЬ'],water:['💧','ВОДА'],wrestler:['�
 function setElMode(mode){elementMode=mode;elementRound=0;elementCorrect=0;elementLocked=false;elementCurrent=null;clearInterval(elementTimer);document.querySelectorAll('[data-elmode]').forEach(b=>b.classList.toggle('active',b.dataset.elmode===mode));renderElement();}
 document.querySelectorAll('[data-elmode]').forEach(b=>b.addEventListener('click',()=>setElMode(b.dataset.elmode)));
 let lastElement=-1,remaining=12,elementHistory=[];
-function newElement(){clearInterval(elementTimer);elementLocked=false;let i;do{i=Math.floor(Math.random()*eSituations.length)}while(elementHistory.includes(i)&&eSituations.length>elementHistory.length);elementHistory.push(i);if(elementHistory.length>22)elementHistory.shift();lastElement=i;elementCurrent=eSituations[i];elementRound++;state[kid].rounds++;save();updateStats();renderElement();if(elementMode==='challenge'){remaining=12;const caption=$('elDesc');caption.textContent+=' · ⏱ '+remaining+' сек';elementTimer=setInterval(()=>{remaining--;if(!elementLocked)caption.textContent=elementCurrent[0]+' · ⏱ '+Math.max(0,remaining)+' сек';if(remaining<=0){clearInterval(elementTimer);if(!elementLocked)caption.textContent=elementCurrent[0]+' · Время вышло, отвечай спокойно'}},1000)}}
+function newElement(){clearInterval(elementTimer);elementLocked=false;let i;do{i=Math.floor(Math.random()*eSituations.length)}while(elementHistory.includes(i)&&eSituations.length>elementHistory.length);elementHistory.push(i);if(elementHistory.length>22)elementHistory.shift();lastElement=i;elementCurrent=eSituations[i];elementRound++;renderElement();if(elementMode==='challenge'){remaining=12;const caption=$('elDesc');caption.textContent+=' · ⏱ '+remaining+' сек';elementTimer=setInterval(()=>{remaining--;if(!elementLocked)caption.textContent=elementCurrent[0]+' · ⏱ '+Math.max(0,remaining)+' сек';if(remaining<=0){clearInterval(elementTimer);if(!elementLocked)caption.textContent=elementCurrent[0]+' · Время вышло, отвечай спокойно'}},1000)}}
 function renderElement(){const isLearn=elementMode==='learn';const c=elementCurrent;$('elEmoji').textContent=isLearn?'✨':c?'❓':'🎯';$('elTitle').textContent=isLearn?'ТРИ СУПЕРСИЛЫ':c?'ТВОЙ ВЫБОР':'НАЖМИ «НОВАЯ СИТУАЦИЯ»';$('elDesc').textContent=isLearn?'Выбери камень, воду или борца и узнай их секрет.':c?c[0]:'Смотри на ситуацию и выбирай подходящую стратегию.';$('elFeedback').className='hidden';$('elScore').textContent=elementCorrect;$('elRound').textContent=elementRound;$('elScoreBar').style.width=(elementRound?100*elementCorrect/elementRound:0)+'%';$('elNext').textContent=isLearn?'🎮 Начать игру':'▶ Новая ситуация';document.querySelectorAll('[data-symbol]').forEach(b=>b.disabled=false)}
-function chooseElement(k){if(elementMode==='learn'){let d={rock:'КАМЕНЬ: ноги устойчивы, стойка готова. Это не значит стоять неподвижно.',water:'ВОДА: меняй направление и положение. Это не значит убегать.',wrestler:'БОРЕЦ: замечай, выбирай и делай знакомое действие.'};$('elEmoji').textContent=sym[k][0];$('elTitle').textContent=sym[k][1];$('elDesc').textContent=d[k];return;}if(!elementCurrent||elementLocked){toast('Нажми «Новая ситуация»');return;}elementLocked=true;clearInterval(elementTimer);const good=k===elementCurrent[1];if(good){elementCorrect++;state[kid].elementCorrect++;reward(1)}beep(good);$('elEmoji').textContent=sym[elementCurrent[1]][0];$('elTitle').textContent=good?'🌟 ВЕРНО!':'💛 УЧИМСЯ ДАЛЬШЕ';$('elDesc').textContent=elementCurrent[0];const f=$('elFeedback');f.className='feedback '+(good?'':'bad');f.innerHTML=`<strong>${good?'Отличный выбор!':'Подходящая стратегия — '+sym[elementCurrent[1]][1].toLowerCase()}</strong><p>${escapeHTML(elementCurrent[2])}</p>`;document.querySelectorAll('[data-symbol]').forEach(b=>b.disabled=true);$('elScore').textContent=elementCorrect;$('elScoreBar').style.width=(100*elementCorrect/elementRound)+'%';}
+function chooseElement(k){if(elementMode==='learn'){let d={rock:'КАМЕНЬ: ноги устойчивы, стойка готова. Это не значит стоять неподвижно.',water:'ВОДА: меняй направление и положение. Это не значит убегать.',wrestler:'БОРЕЦ: замечай, выбирай и делай знакомое действие.'};$('elEmoji').textContent=sym[k][0];$('elTitle').textContent=sym[k][1];$('elDesc').textContent=d[k];return;}if(!elementCurrent||elementLocked){toast('Нажми «Новая ситуация»');return;}elementLocked=true;clearInterval(elementTimer);state[kid].rounds=(state[kid].rounds||0)+1;save();updateStats();const good=k===elementCurrent[1];if(good){elementCorrect++;state[kid].elementCorrect++;reward(1)}beep(good);$('elEmoji').textContent=sym[elementCurrent[1]][0];$('elTitle').textContent=good?'🌟 ВЕРНО!':'💛 УЧИМСЯ ДАЛЬШЕ';$('elDesc').textContent=elementCurrent[0];const f=$('elFeedback');f.className='feedback '+(good?'':'bad');f.innerHTML=`<strong>${good?'Отличный выбор!':'Подходящая стратегия — '+sym[elementCurrent[1]][1].toLowerCase()}</strong><p>${escapeHTML(elementCurrent[2])}</p>`;document.querySelectorAll('[data-symbol]').forEach(b=>b.disabled=true);$('elScore').textContent=elementCorrect;$('elScoreBar').style.width=(100*elementCorrect/elementRound)+'%';}
 document.querySelectorAll('[data-symbol]').forEach(b=>b.addEventListener('click',()=>chooseElement(b.dataset.symbol)));$('elNext').onclick=()=>{if(elementMode==='learn'){setElMode('play');newElement()}else newElement()};$('elReset').onclick=()=>{setElMode(elementMode);toast('Можно начать заново!')};
 const arenaScenes=window.ACADEMY_SCENES||[];
 
 arenaIndex=0;arenaPlaying=false;let arenaSpeed=0.75,arenaGroup='Все',arenaSearchTerm='';
 const arenaGroups=['Все',...new Set(arenaScenes.map(x=>x.group))];
 const arenaMedia=$('arenaPlayer');
+let arenaWatchedSeconds=0,arenaLastMediaTime=null;
 for(const k of ['older','younger']){if(!state[k].arenaDone)state[k].arenaDone={};}
 function getArenaScene(){return arenaScenes[arenaIndex]}
 function showArenaFilters(){
@@ -231,6 +232,8 @@ function renderArenaCatalog(){
 function arenaSetPosition(p){$('arenaSeek').value=String(Math.max(0,Math.min(1000,Math.round(p))))}
 function arenaMarkViewed(){
  const sc=getArenaScene();const done=state[kid].arenaDone;
+ const v=$('arenaVideo');const duration=Math.max(.01,Math.min(sc.end||v?.duration||0,v?.duration||0)-(sc.start||0));
+ if(arenaWatchedSeconds<duration*.60)return;
  if(!done[sc.id]){done[sc.id]=true;state[kid].stars+=1;save();updateStats();renderArenaCatalog();toast('⭐ Новая история изучена!');}
 }
 function arenaPhaseUpdate(){
@@ -244,6 +247,7 @@ function arenaPhaseUpdate(){
  if(ratio>=.90)arenaMarkViewed();
 }
 function renderArenaPlayer(){
+ arenaWatchedSeconds=0;arenaLastMediaTime=null;
  const sc=getArenaScene();
  $('arenaTypeBadge').textContent=sc.src.includes('go_behind')?'НОВЫЙ ПРИЁМ':'ВИДЕОУРОК';
  $('arenaOutcomeBadge').textContent=sc.group;
@@ -254,7 +258,9 @@ function renderArenaPlayer(){
  $('arenaPlayer').innerHTML='<video id="arenaVideo" playsinline webkit-playsinline preload="metadata" poster="" aria-label="Учебный видеоэпизод '+escapeHTML(sc.title)+'"><source src="'+sc.src+'" type="video/mp4"></video>';
  const v=$('arenaVideo');v.playbackRate=arenaSpeed;
  v.onloadedmetadata=()=>{if(sc.start)v.currentTime=sc.start;arenaPhaseUpdate()};
- v.ontimeupdate=arenaPhaseUpdate;
+ v.onplay=()=>{arenaLastMediaTime=v.currentTime};
+ v.onseeking=()=>{arenaLastMediaTime=null};
+ v.ontimeupdate=()=>{if(!v.paused&&!v.seeking&&arenaLastMediaTime!==null){const step=v.currentTime-arenaLastMediaTime;if(step>0&&step<=1.8)arenaWatchedSeconds+=step;}arenaLastMediaTime=v.currentTime;arenaPhaseUpdate()};
  v.onended=()=>{arenaPlaying=false;$('arenaPlay').textContent='▶ Играть';arenaMarkViewed();arenaPhaseUpdate()};
  v.onerror=()=>{$('arenaPhaseTitle').textContent='Не удалось загрузить видео. Проверьте подключение и обновите приложение.'};
  $('arenaSeek').oninput=e=>{if(v.duration){v.currentTime=(sc.start||0)+(Number(e.target.value)/1000)*(Math.min(sc.end||v.duration,v.duration)-(sc.start||0));arenaPhaseUpdate()}};
@@ -430,7 +436,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-4-4-20261115';
+const APP_VERSION='academy-4-5-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
