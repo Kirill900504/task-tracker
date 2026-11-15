@@ -96,7 +96,7 @@ body{width:100%}.app,.card,.maincol,.arena-layout,.arena-view{min-width:0;max-wi
 .lesson-complete.done{background:#315c4a}
 .journey-task:focus-visible,.lesson-complete:focus-visible{outline:3px solid #ffd164;outline-offset:3px}
 @media(max-width:620px){.journey-panel{padding:13px}.journey-levels{grid-template-columns:1fr}.journey-head h2{font-size:21px}.journey-task{min-height:53px}}
-</style><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
+</style><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
 <body><noscript><div style="padding:18px;background:#ffecb2;color:#222;font:16px sans-serif">Для запуска игр необходимо включить JavaScript и открыть скачанный HTML-файл в обычном браузере (Safari, Chrome или Edge), а не в предпросмотре файла.</div></noscript><div id="startupWarning" style="position:fixed;z-index:99999;bottom:12px;left:12px;right:12px;background:#fff2bb;color:#25202b;padding:13px;border-radius:12px;font:14px system-ui;box-shadow:0 6px 32px #0008">⚠️ Если кнопки не реагируют, просмотрщик заблокировал JavaScript. Скачайте файл и откройте его в Safari, Chrome или Edge.</div><div class="app"><header class="top"><button type="button" class="logo brand-home" data-page="home" aria-label="Вернуться на главную Академии борца"><span class="logoicon"><img src="./apple-touch-icon.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></span><span class="word">АКАДЕМИЯ<br>БОРЦА</span></button><div class="profile"><span class="small">Сегодня тренируется</span><select class="select" id="kidSelect" aria-label="Выбрать ребёнка"><option value="older">Старший · 7 лет</option><option value="younger">Младший · 6 лет</option></select></div></header>
 <nav class="tabs" aria-label="Игры и разделы">
 <button class="tab" data-page="mind"><span class="tabicon">🧠</span><span>Умный борец</span></button>
@@ -325,7 +325,7 @@ $('journeyLevels').addEventListener('click',event=>{
  const button=event.target.closest('[data-journey]');if(!button)return;
  const stage=journeyStages[Number(button.dataset.journey)],task=Number(button.dataset.journeyTask);
  if(task===0){
-  abcCategory='Все';abcTerm='';$('abcSearch').value='';show('academy');
+  abcCategory='Все';abcTerm='';$('abcSearch').value='';show('academy');renderAbc();
   const card=$('lessonGrid').querySelector('[data-lesson-idx="'+stage.lesson+'"]');
   if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
  }else if(task===1){
@@ -348,6 +348,7 @@ const journeyOriginalShow=show;
 show=function(pg){
  if(page==='arena'&&pg!=='arena'){const v=$('arenaVideo');if(v){v.pause();arenaPlaying=false;}}
  journeyOriginalShow(pg);
+ if(pg==='academy')renderAbc();
  if(pg==='home'||pg==='progress')renderJourney();
 };
 const journeyOriginalStats=updateStats;
@@ -371,7 +372,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-4-1-20261115';
+const APP_VERSION='academy-4-2-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
