@@ -298,6 +298,8 @@ for(const k of ['older','younger']){if(!state[k].arenaDone)state[k].arenaDone={}
 function getArenaScene(){return arenaScenes[arenaIndex]}
 
 const professionalLessons=[
+{id:'pro_single_finish',group:'Показ тренера',icon:'🦵',title:'Проход в одну ногу — завершение',youtube:'hRHebPpbJqI',url:'https://www.youtube.com/watch?v=hRHebPpbJqI',coach:'Кэри Колат',desc:'Тренер показывает конкретное завершение атаки в одну ногу. Следите, как меняется положение ног и чем заканчивается захват.',outcome:'Завершение атаки',phases:['Положение до завершения','Смена опоры','Движение к результату','Конечное положение']},
+{id:'pro_double_leg',group:'Показ тренера',icon:'🤼',title:'Проход в две ноги — от входа до перевода',youtube:'wxNAEByjOoA',url:'https://www.youtube.com/watch?v=wxNAEByjOoA',coach:'Fundamental Wrestling',desc:'Пошаговое объяснение прохода в обе ноги для начинающих, включая поворот и завершение перевода.',outcome:'Перевод в партер',phases:['Подготовка и уровень','Вход в обе ноги','Поворот и направление','Завершение на ковре']},
 {id:'pro_angles',group:'Показ тренера',icon:'↗️',title:'Углы атаки и движение',youtube:'_E1vYOSowlo',url:'https://www.youtube.com/watch?v=_E1vYOSowlo',coach:'Кэри Колат',desc:'Тренер показывает, почему движение под углом отличается от прямого нападения.',outcome:'Меняем угол',phases:['Посмотри на стойку','Найди шаг в сторону','Проследи за поворотом корпуса','Посмотри итог']},
 {id:'pro_sprawl',group:'Показ тренера',icon:'🛡️',title:'Защита от прохода в ноги',youtube:'QMVavyxjlNU',url:'https://www.youtube.com/watch?v=QMVavyxjlNU',coach:'Кэри Колат',desc:'Настоящая демонстрация защитного положения при попытке захвата ног.',outcome:'Атака остановлена',phases:['Соперник входит в атаку','Положение бёдер','Руки и корпус в защите','Защита завершена']},
 {id:'pro_single_defense',group:'Показ тренера',icon:'🤼',title:'Защита, когда ногу уже захватили',youtube:'o7fhBCawzW8',url:'https://www.youtube.com/watch?v=o7fhBCawzW8',coach:'Кэри Колат',desc:'Разбираем ответ на захват одной ноги при неудобном положении.',outcome:'Защитное действие',phases:['Соперник удерживает ногу','Сохраняем опору','Меняем угол тела','Разбираем итог']},
@@ -577,7 +579,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-arena-6-20261115';
+const APP_VERSION='academy-arena-6-1-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
