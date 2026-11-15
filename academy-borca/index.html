@@ -288,7 +288,7 @@ $('arenaQuestion').addEventListener('click',event=>{
   if(correct){b.disabled=true;if(Number(b.dataset.answer)===sc.answer)b.classList.add('correct')}
   else if(Number(b.dataset.answer)===chosen)b.classList.add('incorrect');
  });
- const feedback=$('arenaQuizFeedback');if(feedback)feedback.textContent=correct?'✅ Верно! '+sc.outcome:'Пока нет. Посмотри финал ещё раз и выбери другой ответ.';
+ const feedback=$('arenaQuizFeedback');if(feedback)feedback.textContent=correct?'✅ Верно! '+(sc.quizExplanation||sc.outcome):'Пока нет. Обрати внимание: '+(sc.quizExplanation||sc.outcome)+' Попробуй выбрать ответ ещё раз.';
 });
 function renderArena(){renderArenaCatalog();renderArenaPlayer()}
 $('arenaPhaseSteps').addEventListener('click',event=>{
@@ -465,7 +465,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-5-20261115';
+const APP_VERSION='academy-5-1-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
