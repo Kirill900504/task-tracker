@@ -110,7 +110,49 @@ body{width:100%}.app,.card,.maincol,.arena-layout,.arena-view{min-width:0;max-wi
 .arena-quiz-option.correct{border-color:#80e2be;background:#1f4d47;color:#e3fff0}
 .arena-quiz-option.incorrect{border-color:#ff9caa;background:#513246}
 .arena-quiz-feedback{font-size:12px;margin:9px 0 0;color:#b9cdea;line-height:1.45}
-.arena-phase-steps .arena-phase-dot{cursor:pointer;border:0;min-width:24px;min-height:24px;border-radius:999px;margin:0 2px;touch-action:manipulation}.arena-phase-steps .arena-phase-dot.active{background:#80e2be;box-shadow:0 0 0 2px #80e2be35}.arena-phase-steps{display:flex;align-items:center;justify-content:center;gap:4px} .feedback-choice{border-left:3px solid #80e2be;padding:10px 12px;background:#163f40;border-radius:8px;font-weight:650}.feedback-family{margin-top:14px;padding:12px;border-radius:12px;border:1px solid #456383;background:#1b3150}.feedback-family p{margin:7px 0 0;line-height:1.45}.feedback strong{line-height:1.35}</style><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
+.arena-phase-steps .arena-phase-dot{cursor:pointer;border:0;min-width:24px;min-height:24px;border-radius:999px;margin:0 2px;touch-action:manipulation}.arena-phase-steps .arena-phase-dot.active{background:#80e2be;box-shadow:0 0 0 2px #80e2be35}.arena-phase-steps{display:flex;align-items:center;justify-content:center;gap:4px} .feedback-choice{border-left:3px solid #80e2be;padding:10px 12px;background:#163f40;border-radius:8px;font-weight:650}.feedback-family{margin-top:14px;padding:12px;border-radius:12px;border:1px solid #456383;background:#1b3150}.feedback-family p{margin:7px 0 0;line-height:1.45}.feedback strong{line-height:1.35}
+/* Живая арена: мобильная видеотека без викторин */
+.arena-focus{display:flex;flex-direction:column;gap:13px}
+.arena-library{background:#182a48;border:1px solid #385276;border-radius:18px;padding:13px}
+.arena-toggle-filters{display:flex;gap:7px;overflow:auto;margin:10px 0 8px}
+.arena-filter{flex:0 0 auto;border:1px solid #49668e;background:#243b60;color:#eaf3ff;border-radius:999px;padding:9px 13px;font-weight:750;min-height:42px}
+.arena-filter.active{background:#80e2be;border-color:#80e2be;color:#142c35}
+.arena-catalog{display:flex;gap:9px;overflow-x:auto;scroll-snap-type:x mandatory;padding:5px 1px 7px}
+.arena-item{flex:0 0 174px;scroll-snap-align:start;min-height:78px;border-radius:14px;padding:12px;border:1px solid #425c83;background:#23385c;color:#eef4ff;display:flex;flex-direction:column;justify-content:space-between;text-align:left}
+.arena-item.active{background:#ffe087;color:#1c2a43;border-color:#ffe087}
+.arena-item small{font-size:11px;opacity:.8}
+.arena-view-simple{padding:11px;background:#152744;border:1px solid #3c567c;border-radius:20px}
+.arena-headline{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 3px 11px}
+.arena-headline h2{font-size:20px;margin:4px 0 0}
+.arena-level{font-size:11px;font-weight:800;color:#a5e9d1;text-align:right;max-width:130px}
+.arena-player{position:relative;aspect-ratio:16/10;min-height:0;overflow:hidden;border-radius:14px;background:#101d34}
+.arena-player iframe,.arena-player video{width:100%;height:100%;display:block;object-fit:contain;border:0}
+.arena-controls-row{display:grid;grid-template-columns:1.3fr 1fr .8fr;gap:6px;margin-top:11px}
+.arena-controls-row button{min-height:47px;padding:9px 5px;font-size:13px}
+.arena-step-controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.arena-step-controls button{min-height:43px;padding:6px 3px;font-size:12px;border-radius:10px}
+.arena-observe{background:#203554;border-radius:14px;margin-top:12px;padding:11px}
+.arena-observe-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px}
+.arena-show-arrows{display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
+.arena-show-arrows input{accent-color:#80e2be;width:18px;height:18px}
+.arena-direction-diagram svg{display:block;width:100%;max-height:150px}
+.arena-direction-labels{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
+.arena-direction-labels span{font-size:11px;color:#ffdc84;font-weight:850}
+.arena-direction-diagram.no-arrows .arena-direction-labels{display:none}
+.arena-phase-title{text-align:center;margin-top:10px;font-size:13px;font-weight:750}
+.arena-phase-steps{display:flex;justify-content:center;gap:7px;margin-top:7px}
+.arena-phase-dot{min-width:28px;height:28px;cursor:pointer;border:1px solid #7086a5;border-radius:50%;background:#324b70}
+.arena-phase-dot.active{background:#80e2be;border-color:#80e2be}
+.arena-note{margin:10px 0 0;font-size:11px;color:#a8bdda;line-height:1.5}
+.arena-final{background:#205049;color:#d8fff0;padding:12px;border-radius:11px;margin:12px 0 8px;font-weight:800;font-size:14px}
+.arena-short-desc,.arena-short-tip{font-size:13px;line-height:1.5;color:#d4e3f9;margin:9px 2px}
+.arena-short-tip{color:#9fdccc}
+.arena-source-note{font-size:12px;color:#bdcee7;margin:10px 2px}
+.arena-original-link{display:block;padding:12px;text-align:center;border:1px solid #628bb4;border-radius:11px;color:#cde6ff;text-decoration:none;font-weight:800}
+#arenaLocalControls[hidden],#arenaProfessionalControls[hidden],#arenaQuestion[hidden]{display:none!important}
+@media(min-width:940px){.arena-focus{display:grid;grid-template-columns:265px minmax(0,1fr);align-items:start}.arena-catalog{display:flex;flex-direction:column;max-height:70vh}.arena-item{flex:0 0 auto}.arena-player{aspect-ratio:16/9}.arena-view-simple{padding:15px}}
+@media(max-width:430px){.arena-player{aspect-ratio:16/10}.arena-headline h2{font-size:18px}.arena-observe-top{font-size:12px}.arena-level{font-size:10px}.arena-item{flex-basis:160px}.arena-direction-diagram svg{max-height:126px}}
+</style><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Академия борца"></head>
 <body><noscript><div style="padding:18px;background:#ffecb2;color:#222;font:16px sans-serif">Для запуска игр необходимо включить JavaScript и открыть скачанный HTML-файл в обычном браузере (Safari, Chrome или Edge), а не в предпросмотре файла.</div></noscript><div id="startupWarning" style="position:fixed;z-index:99999;bottom:12px;left:12px;right:12px;background:#fff2bb;color:#25202b;padding:13px;border-radius:12px;font:14px system-ui;box-shadow:0 6px 32px #0008">⚠️ Если кнопки не реагируют, просмотрщик заблокировал JavaScript. Скачайте файл и откройте его в Safari, Chrome или Edge.</div><div class="app"><header class="top"><button type="button" class="logo brand-home" data-page="home" aria-label="Вернуться на главную Академии борца"><span class="logoicon"><img src="./apple-touch-icon.png" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></span><span class="word">АКАДЕМИЯ<br>БОРЦА</span></button><div class="profile"><span class="small">Сегодня тренируется</span><select class="select" id="kidSelect" aria-label="Выбрать ребёнка"><option value="older">Старший · 7 лет</option><option value="younger">Младший · 6 лет</option></select></div></header>
 <nav class="tabs" aria-label="Игры и разделы">
 <button class="tab" data-page="mind"><span class="tabicon">🧠</span><span>Умный борец</span></button>
@@ -124,7 +166,38 @@ body{width:100%}.app,.card,.maincol,.arena-layout,.arena-view{min-width:0;max-wi
 <section id="home" class="screen active"><div class="hero"><div class="card"><span class="eyebrow">Играй • Думай • Не сдавайся</span><h1>Сильный борец<br>начинается <span style="color:var(--yellow)">с умной головы!</span></h1><p class="lead">Здесь не нужно быть самым сильным. Научись замечать, что происходит, выбирать решение и продолжать после ошибки.</p><div class="btnrow"><button class="btn" data-go="mind">🧠 Начать приключение</button><button class="btn secondary" data-go="elements" data-quick="1">🎮 Быстрая игра</button></div><div class="milestone-row"><div><strong>174</strong><span>ситуации</span></div><div><strong>138</strong><span>мини-игр</span></div><div><strong>106</strong><span>уроков</span></div><div><strong>28</strong><span>анимаций</span></div></div><div class="stats"><div class="stat"><strong id="homeStars">0</strong><span>звёзд собрано</span></div><div class="stat"><strong id="homeMissions">0</strong><span>заданий решено</span></div><div class="stat"><strong id="homeStreak">0</strong><span>дней практики</span></div></div></div><div class="card"><div class="illustration" id="homeArt"></div><div class="eyebrow">Правило чемпиона</div><div class="quote">«Не получилось? Я всё равно продолжаю!»</div><p class="small">Победа — это не только баллы. Смелость попробовать, спокойствие и умение думать тоже считаются.</p></div></div><div class="journey-panel" id="journeyPanel"><div class="journey-head"><div><span class="eyebrow">Персональная программа</span><h2>🗺️ Путь юного борца</h2><p class="small">Шесть уровней. Каждый день — немного знаний, игры и уверенности. Нет обязательных сроков.</p></div><span class="journey-count" id="journeyCount">0 / 24</span></div><div id="journeyLevels" class="journey-levels"></div></div></section>
 <section id="mind" class="screen"><div class="section-head"><span class="eyebrow">Приключение с выбором</span><h1>🧠 Умный борец</h1><p>174 игровых ситуации. Выбирай тему, запускай случайный вопрос или проходи по порядку. Ошибаться можно: мы учимся думать.</p></div><div class="modes" id="mindCategories"></div><div class="quiz-actions"><button class="btn random-mind-btn" id="mindRandom">🎲 Случайная ситуация</button><span class="daily-label" id="mindRemaining">Новые задания ждут!</span></div><div class="maincol"><div class="card"><div class="pill" id="mindCounter">Ситуация 1</div><div class="progress"><div id="mindBar"></div></div><div class="illustration" id="mindArt"></div><h2 id="mindTitle">Загрузка</h2><p class="lead" id="mindStory"></p><div class="question" id="mindQuestion"></div><div class="options" id="mindOptions"></div><div id="mindFeedback" class="hidden"></div><div class="btnrow"><button class="btn secondary" id="mindPrev">← Назад</button><button class="btn" id="mindNext">Дальше →</button></div></div><aside class="card"><div class="eyebrow">Подсказки папе</div><h3 id="parentAim">Задача</h3><p class="mentor" id="parentTip"></p><div class="hint">💡 Важно: не подсказывайте ответ заранее. Сначала спросите: «Почему ты так думаешь?»</div><div class="mini-card"><strong>Правило дня</strong><p id="mindRule"></p></div><label class="switchline small" style="margin-top:20px"><input type="checkbox" id="soundToggle">Звуковые сигналы</label></aside></div></section>
 <section id="elements" class="screen"><div class="section-head"><span class="eyebrow">Реакция • Внимание • Спокойствие</span><h1>🪨 Камень, вода, борец</h1><p>Три суперсилы и 138 непохожих ситуаций. Узнавай, когда нужна устойчивость, движение или изученное действие.</p></div><div class="maincol"><div class="card"><div class="modes"><button class="mode active" data-elmode="learn">📖 Учусь</button><button class="mode" data-elmode="play">🎮 Играю</button><button class="mode" data-elmode="challenge">⚡ Испытание</button></div><div class="cuebox" id="elementCue"><span class="character" id="elEmoji">🪨</span><span class="big" id="elTitle">КАМЕНЬ</span><p id="elDesc">Стой устойчиво. Сохраняй равновесие.</p></div><div class="symbolrow"><button class="symbol" data-symbol="rock"><span>🪨</span>КАМЕНЬ</button><button class="symbol" data-symbol="water"><span>💧</span>ВОДА</button><button class="symbol" data-symbol="wrestler"><span>🤼</span>БОРЕЦ</button></div><div id="elFeedback" class="feedback hidden"></div><div class="btnrow"><button class="btn" id="elNext">▶ Новая ситуация</button><button class="btn secondary" id="elReset">↻ Сначала</button></div></div><aside class="card"><div class="eyebrow">Три суперсилы</div><div class="mini-card"><h3>🪨 КАМЕНЬ</h3><p>Устойчивость, правильная стойка, сохранение контроля. Не означает стоять неподвижно.</p></div><div class="mini-card"><h3>💧 ВОДА</h3><p>Движение, изменение направления, поиск более удобного положения. Не означает убегать.</p></div><div class="mini-card"><h3>🤼 БОРЕЦ</h3><p>Замечай момент и выбирай знакомое действие: атакуй, защищайся или продолжай.</p></div><div class="mini-card"><strong>За эту игру</strong><p><span id="elScore">0</span> верных ответов · <span id="elRound">0</span> раундов</p><div class="track"><div id="elScoreBar" style="width:0"></div></div></div><p class="tiny">В «Испытании» есть таймер на 12 секунд. После окончания времени можно спокойно ответить: штрафов нет.</p></aside></div></section>
-<section id="arena" class="screen"><div class="section-head"><span class="eyebrow">Смотри • Понимай • Обсуждай</span><h1>🎬 Живая арена</h1><p>Теперь здесь полноценные длинные анимации и завершённые эпизоды. Ребёнок видит не только начало действия, но и итог: атака удалась, защита удалась или борьба продолжилась в нужном положении.</p></div><div class="maincol"><div class="card"><div class="arena-layout"><div class="arena-library"><div class="arena-search"><input type="search" id="arenaSearch" placeholder="🔎 Найти движение…" aria-label="Поиск по анимациям"></div><div class="abc-filters" id="arenaFilters"></div><p class="catalog-count" id="arenaCount"></p><div class="arena-catalog" id="arenaCatalog"></div></div><div class="arena-view"><div class="arena-badges"><span class="badge" id="arenaTypeBadge">ВИДЕО</span><span class="badge secondary" id="arenaOutcomeBadge">Завершённый результат</span></div><div class="arena-player" id="arenaPlayer"></div><div class="arena-controls-row"><button class="btn" id="arenaPlay">▶ Играть</button><button class="btn secondary" id="arenaReplay">↺ Сначала</button><button class="btn secondary" id="arenaSpeed">0.75×</button></div><div class="arena-range-wrap"><input type="range" id="arenaSeek" min="0" max="1000" value="0"></div><div class="arena-step-controls"><button id="arenaBackStep">← 0,5 сек.</button><button id="arenaForwardStep">0,5 сек. →</button><button id="arenaNextFilm">Следующий фильм →</button></div><div class="arena-phase-title" id="arenaPhaseTitle">Начало эпизода</div><div class="arena-phase-steps" id="arenaPhaseSteps"></div><div class="outcome-label" id="arenaResult">🏁 Смотри, чем закончится эпизод</div><div class="arena-question" id="arenaQuestion"></div><h2 id="arenaTitle"></h2><p class="lead" id="arenaDescription"></p><div class="hint" id="arenaTakeaway"></div></div></div></div><aside class="card"><h2>Как смотреть вместе</h2><p class="mentor">1. Сначала посмотрите полностью.<br><br>2. Затем замедлите и обсудите: что произошло в начале, середине и в конце?<br><br>3. Спросите ребёнка: «Чем закончился эпизод?»<br><br>4. Отдельно обсудите, что получилось у атакующего или защищающегося.<br><br>5. Напомните: повторять приёмы можно только с тренером на ковре.</p><div class="mini-card"><strong>Важно для безопасности</strong><p>Эти материалы помогают понимать борьбу глазами ребёнка. Они не заменяют живое обучение тренера и страховку на ковре.</p></div></aside></div></section>
+
+<section id="arena" class="screen">
+<div class="section-head"><span class="eyebrow">СМОТРИ · ЗАМЕЧАЙ · ПОНИМАЙ</span><h1>🎬 Живая арена</h1><p>Полные движения борцов. Выбери приём, смотри, замедляй и замечай, что делают ноги, корпус и руки.</p></div>
+<div class="arena-focus">
+  <div class="arena-library">
+    <div class="arena-search"><input type="search" id="arenaSearch" placeholder="🔎 Найти приём…" aria-label="Поиск приёма"></div>
+    <div class="arena-toggle-filters" id="arenaFilters"></div>
+    <p class="catalog-count" id="arenaCount"></p><div class="arena-catalog" id="arenaCatalog"></div>
+  </div>
+  <div class="arena-view arena-view-simple">
+    <div class="arena-headline"><div><span class="eyebrow" id="arenaTypeBadge">ДЕМОНСТРАЦИЯ</span><h2 id="arenaTitle">Приём</h2></div><span class="arena-level" id="arenaOutcomeBadge">Движение</span></div>
+    <div class="arena-player" id="arenaPlayer" aria-label="Видео приёма"></div>
+    <div id="arenaLocalControls">
+      <div class="arena-controls-row"><button class="btn" id="arenaPlay">▶ Играть</button><button class="btn secondary" id="arenaReplay">↺ Сначала</button><button class="btn secondary" id="arenaSpeed">0.75×</button></div>
+      <div class="arena-range-wrap"><input type="range" id="arenaSeek" min="0" max="1000" value="0" aria-label="Перемотка видео"></div>
+      <div class="arena-step-controls"><button id="arenaBackStep">← 0,5 сек.</button><button id="arenaForwardStep">0,5 сек. →</button><button id="arenaNextFilm">Следующий →</button></div>
+    </div>
+    <div id="arenaProfessionalControls" hidden><p class="arena-source-note">Профессиональный показ тренера. Скорость, пауза и полный экран — в проигрывателе YouTube.</p><a id="arenaOpenSource" class="arena-original-link" href="#" target="_blank" rel="noopener noreferrer">▶ Смотреть оригинал у автора</a></div>
+    <div class="arena-observe">
+      <div class="arena-observe-top"><strong>↗ Направления и движения</strong><label class="arena-show-arrows"><input id="arenaArrows" type="checkbox" checked> Показывать стрелки</label></div>
+      <div id="arenaDirectionDiagram" class="arena-direction-diagram"></div>
+      <div class="arena-phase-title" id="arenaPhaseTitle">Первое движение</div>
+      <div class="arena-phase-steps" id="arenaPhaseSteps"></div>
+      <p class="arena-note">Стрелки — учебная схема направлений, а не автоматическое отслеживание суставов. Точную технику показывает тренер.</p>
+    </div>
+    <div class="arena-final" id="arenaResult">🏁 Смотри, чем закончится действие</div>
+    <p class="arena-short-desc" id="arenaDescription"></p>
+    <p class="arena-short-tip" id="arenaTakeaway"></p>
+    <div id="arenaQuestion" hidden></div>
+  </div>
+</div>
+</section>
 <section id="academy" class="screen"><div class="section-head"><span class="eyebrow">Просто и понятно</span><h1>📚 Азбука маленького борца</h1><p>Короткие объяснения, игровые вопросы и правила, которые полезно знать каждому начинающему.</p></div><div class="abc-tools"><input class="abc-search" type="search" id="abcSearch" placeholder="🔎 Найти термин, приём или правило…" aria-label="Поиск по Азбуке борьбы"><div class="abc-filters" id="abcFilters"></div></div><p class="catalog-count" id="abcCount"></p><div class="lesson-grid" id="lessonGrid"></div><div class="card" style="margin-top:16px"><h2>🎯 План для дома</h2><p class="lead">Два-три раза в неделю по 10–15 минут, когда детям самим хочется. 3 минуты игры, 5–7 минут знакомого навыка, 3 минуты весёлого завершения.</p><p class="mentor">Дома: карточки, безопасные бесконтактные игры на движение и реакцию. На тренировке: технические приёмы, парная борьба, падения и защита — только с тренерами.</p></div></section>
 <section id="progress" class="screen"><div class="section-head"><span class="eyebrow">У каждого свой путь</span><h1>🏆 Мои маленькие победы</h1><p>Здесь нет сравнения братьев. Считаем попытки, любознательность и пройденные задания.</p></div><div class="maincol"><div class="card"><h2>Мои достижения</h2><div class="stats" style="margin-bottom:20px"><div class="stat"><strong id="pStars">0</strong><span>звёзд</span></div><div class="stat"><strong id="pSolved">0</strong><span>правильных решений</span></div><div class="stat"><strong id="pRounds">0</strong><span>игровых раундов</span></div></div><h3>Значки отважного ученика</h3><div id="badges"></div><h3 style="margin-top:20px">🧠 Мои учебные темы</h3><p class="mentor">Ошибки — подсказка, над чем позаниматься. Отдельно для каждого брата.</p><div id="topicReport"></div><button class="btn secondary" id="reviewMistakes" style="width:100%;margin:12px 0">💛 Повторить сложные вопросы</button><div class="btnrow"><button class="btn secondary" id="exportProgress">📋 Скопировать отчёт</button><button class="btn secondary" id="backupProgress">💾 Резервная копия</button><button class="btn soft" id="restoreProgress">📂 Восстановить</button><input type="file" id="restoreProgressFile" accept=".json,application/json" hidden><button class="btn soft" id="resetProgress">Сбросить мой прогресс</button></div></div><aside class="card"><h2>Папина заметка</h2><p class="mentor">Запишите маленькую победу: «Сегодня сам начал бороться» или «После ошибки продолжил». Здесь не нужен рейтинг спортсменов.</p><textarea id="parentNotes" placeholder="Что сегодня получилось у сына?" style="background:#142543;color:white;border:1px solid #4a648b;border-radius:14px;padding:12px;width:100%;height:180px;resize:vertical;font:inherit"></textarea><div class="btnrow"><button class="btn" id="saveNote">Сохранить заметку</button></div><p class="tiny">Данные остаются в браузере этого устройства. Для переноса можно скопировать отчёт; сервер и аккаунт не используются.</p></aside></div></section>
 </main><div class="footer">Семейная обучающая игра • Для детей 6–7 лет вместе со взрослым • Не заменяет тренера по вольной борьбе<br>Схемы и ситуации обучают мышлению; силовые и контактные приёмы осваиваются только с тренером.</div></div>
@@ -223,94 +296,133 @@ const arenaMedia=$('arenaPlayer');
 let arenaWatchedSeconds=0,arenaLastMediaTime=null;
 for(const k of ['older','younger']){if(!state[k].arenaDone)state[k].arenaDone={};}
 function getArenaScene(){return arenaScenes[arenaIndex]}
+
+const professionalLessons=[
+{id:'pro_angles',group:'Показ тренера',icon:'↗️',title:'Углы атаки и движение',youtube:'_E1vYOSowlo',url:'https://www.youtube.com/watch?v=_E1vYOSowlo',coach:'Кэри Колат',desc:'Тренер показывает, почему движение под углом отличается от прямого нападения.',outcome:'Меняем угол',phases:['Посмотри на стойку','Найди шаг в сторону','Проследи за поворотом корпуса','Посмотри итог']},
+{id:'pro_sprawl',group:'Показ тренера',icon:'🛡️',title:'Защита от прохода в ноги',youtube:'QMVavyxjlNU',url:'https://www.youtube.com/watch?v=QMVavyxjlNU',coach:'Кэри Колат',desc:'Настоящая демонстрация защитного положения при попытке захвата ног.',outcome:'Атака остановлена',phases:['Соперник входит в атаку','Положение бёдер','Руки и корпус в защите','Защита завершена']},
+{id:'pro_single_defense',group:'Показ тренера',icon:'🤼',title:'Защита, когда ногу уже захватили',youtube:'o7fhBCawzW8',url:'https://www.youtube.com/watch?v=o7fhBCawzW8',coach:'Кэри Колат',desc:'Разбираем ответ на захват одной ноги при неудобном положении.',outcome:'Защитное действие',phases:['Соперник удерживает ногу','Сохраняем опору','Меняем угол тела','Разбираем итог']},
+{id:'pro_duck_under',group:'Показ тренера',icon:'🔄',title:'Подныривание под руку — обход',youtube:'NHWDqs5aXwQ',url:'https://www.youtube.com/watch?v=NHWDqs5aXwQ',coach:'Кэри Колат',desc:'Тренер показывает подныривание и выход на другое положение тела. Сложное движение — только для просмотра с родителем.',outcome:'Выход за спину',phases:['Положение рук','Смена уровня','Поворот корпуса','Завершение']},
+{id:'pro_duck_under_alt',group:'Показ тренера',icon:'↪️',title:'Подныривание — другой показ',youtube:'NKl8u7yhIuc',url:'https://www.youtube.com/watch?v=NKl8u7yhIuc',coach:'Кэри Колат',desc:'Ещё один профессиональный ракурс похожего действия для визуального сравнения.',outcome:'Техника и контроль',phases:['Контакт','Уход под руку','Движение за соперника','Итог']}
+];
+arenaScenes.push(...professionalLessons);
+const arenaFeatured=['stance_basic','distance_circle','grip_basic','single_entry','single_finish','single_variant','defense_reaction','defense_stop','defense_resolution','go_behind','top_control','stand_up'];
+const arenaVisible=arenaScenes.map((scene,index)=>({...scene,index})).filter(scene=>arenaFeatured.includes(scene.id)||scene.youtube);
+const arenaCategories=['Все','Мультфильмы','Показ тренера'];
+let arenaShowArrows=true,arenaEndTimer=null;
+function getArenaScene(){return arenaScenes[arenaIndex]||arenaScenes[0]}
 function showArenaFilters(){
- $('arenaFilters').innerHTML=arenaGroups.map(group=>'<button class="abc-chip '+(group===arenaGroup?'active':'')+'" data-arena-group="'+escapeHTML(group)+'">'+escapeHTML(group)+'</button>').join('');
- $('arenaFilters').querySelectorAll('[data-arena-group]').forEach(btn=>btn.onclick=()=>{arenaGroup=btn.dataset.arenaGroup;renderArenaCatalog()});
+ $('arenaFilters').innerHTML=arenaCategories.map(cat=>'<button class="arena-filter '+(arenaGroup===cat?'active':'')+'" data-filter="'+cat+'">'+cat+'</button>').join('');
+ $('arenaFilters').querySelectorAll('[data-filter]').forEach(btn=>btn.onclick=()=>{arenaGroup=btn.dataset.filter;renderArenaCatalog()});
+}
+function visibleArenaList(){
+ const term=arenaSearchTerm.trim().toLocaleLowerCase('ru');
+ return arenaVisible.filter(sc=>(arenaGroup==='Все'||(arenaGroup==='Показ тренера'?!!sc.youtube:!sc.youtube))&&(!term||[sc.title,sc.desc,sc.outcome,sc.coach||''].join(' ').toLocaleLowerCase('ru').includes(term)));
 }
 function renderArenaCatalog(){
  showArenaFilters();
- const term=arenaSearchTerm.toLocaleLowerCase('ru');
- const items=arenaScenes.map((x,i)=>({...x,index:i})).filter(x=>(arenaGroup==='Все'||x.group===arenaGroup)&&(!term||[x.title,x.desc,x.group].join(' ').toLocaleLowerCase('ru').includes(term)));
- const viewed=Object.keys(state[kid].arenaDone||{}).filter(k=>state[kid].arenaDone[k]).length;
- $('arenaCount').textContent='Просмотрено '+viewed+' из '+arenaScenes.length+' · Показано '+items.length;
- $('arenaCatalog').innerHTML=items.map(s=>'<button class="arena-item '+(s.index===arenaIndex?'active':'')+'" data-arena="'+s.index+'"><span>'+s.icon+' '+escapeHTML(s.title)+'</span><small>'+(state[kid].arenaDone?.[s.id]?'✅ Просмотрено · ':'')+escapeHTML(s.outcome)+'</small></button>').join('')||'<p class="small">Ничего не найдено</p>';
- $('arenaCatalog').querySelectorAll('[data-arena]').forEach(btn=>btn.onclick=()=>{arenaIndex=Number(btn.dataset.arena);arenaPlaying=false;renderArena();if(window.innerWidth<850){const r=$('arenaPlayer').getBoundingClientRect();if(r.top>window.innerHeight*.74)window.scrollBy({top:r.top-110,behavior:'smooth'})}});
+ const items=visibleArenaList();
+ $('arenaCount').textContent=items.length+' видео · '+(arenaGroup==='Все'?'Мультфильмы и показы тренера':arenaGroup);
+ $('arenaCatalog').innerHTML=items.map(sc=>'<button type="button" class="arena-item '+(sc.index===arenaIndex?'active':'')+'" data-arena="'+sc.index+'"><span>'+sc.icon+' '+escapeHTML(sc.title)+'</span><small>'+(sc.youtube?'🎓 '+escapeHTML(sc.coach):'🎞 Мультфильм')+'</small></button>').join('')||'<p class="small">Ничего не найдено</p>';
+ $('arenaCatalog').querySelectorAll('[data-arena]').forEach(btn=>btn.onclick=()=>{
+  arenaIndex=Number(btn.dataset.arena);arenaPlaying=false;renderArena();
+  if(window.innerWidth<850)$('arenaPlayer').scrollIntoView({behavior:'smooth',block:'center'});
+ });
+}
+function arenaDirectionKind(sc){
+ const str=[sc.title,sc.group,sc.id].join(' ').toLowerCase();
+ if(/защит|defen|sprawl/.test(str))return 'defense';
+ if(/партер|контрол|stand_up|выход из партера/.test(str))return 'ground';
+ if(/атак|проход|single|ногу|double/.test(str))return 'attack';
+ if(/угол|поворот|округ|circle|duck|обход|behind|дистанц|движен/.test(str))return 'circle';
+ return 'stance';
+}
+function arenaDirectionSVG(kind){
+ const arrows={
+  stance:[['M66 94 L126 94','↔ ШАГ НОГАМИ'],['M220 140 Q240 108 257 84','↗ ГОТОВНОСТЬ']],
+  circle:[['M62 126 Q135 28 218 96','↶ ОБХОД'],['M214 132 Q280 140 311 83','↗ СМЕНА УГЛА']],
+  attack:[['M70 145 Q124 110 186 102','↗ ВХОД'],['M201 136 Q231 111 251 73','↗ КОРПУС']],
+  defense:[['M206 100 Q153 76 100 94','↙ ЗАЩИТА'],['M191 147 Q247 166 298 136','↗ УХОД НОГАМИ']],
+  ground:[['M90 141 Q151 133 195 104','↗ ПЕРЕХОД'],['M210 126 Q250 74 287 102','↷ ПОВОРОТ']]
+ };
+ const items=arrows[kind]||arrows.stance;
+ const paths=items.map(([path])=>'<path d="'+path+'" fill="none" stroke="#ffd164" stroke-width="7" stroke-linecap="round" marker-end="url(#a-tip)"/>').join('');
+ return '<svg viewBox="0 0 360 180" role="img" aria-label="Схематические стрелки направления движения"><defs><marker id="a-tip" markerWidth="8" markerHeight="8" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#ffd164"/></marker></defs><ellipse cx="180" cy="137" rx="145" ry="35" fill="#284b6a" stroke="#7aa5c5" stroke-width="3"/><circle cx="108" cy="91" r="15" fill="#74aeff"/><path d="M108 109 L98 133 L116 133 Z" fill="#367cd9"/><circle cx="246" cy="91" r="15" fill="#ffa4ae"/><path d="M246 109 L235 133 L258 133 Z" fill="#cf5666"/>'+(arenaShowArrows?paths:'')+'</svg><div class="arena-direction-labels">'+items.map(([_,label])=>'<span>'+escapeHTML(label)+'</span>').join('')+'</div>';
+}
+function updateArenaDirection(){
+ const sc=getArenaScene();const box=$('arenaDirectionDiagram');if(!box)return;
+ box.innerHTML=arenaDirectionSVG(arenaDirectionKind(sc));
+ box.classList.toggle('no-arrows',!arenaShowArrows);
 }
 function arenaSetPosition(p){$('arenaSeek').value=String(Math.max(0,Math.min(1000,Math.round(p))))}
 function arenaMarkViewed(){
- const sc=getArenaScene();const done=state[kid].arenaDone;
- const v=$('arenaVideo');const duration=Math.max(.01,Math.min(sc.end||v?.duration||0,v?.duration||0)-(sc.start||0));
- if(arenaWatchedSeconds<duration*.60)return;
- if(!done[sc.id]){done[sc.id]=true;state[kid].stars+=1;save();updateStats();renderArenaCatalog();toast('⭐ Новая история изучена!');}
+ const sc=getArenaScene();if(sc.youtube)return;
+ const v=$('arenaVideo');if(!v||!v.duration)return;
+ const length=Math.max(.01,Math.min(sc.end||v.duration,v.duration)-(sc.start||0));
+ if(arenaWatchedSeconds<length*.6)return;
+ state[kid].arenaDone??={};
+ if(!state[kid].arenaDone[sc.id]){state[kid].arenaDone[sc.id]=true;state[kid].stars+=1;save();updateStats();}
 }
 function arenaPhaseUpdate(){
- const v=$('arenaVideo');const sc=getArenaScene();if(!v||!v.duration)return;
- const clipStart=sc.start||0,clipEnd=Math.min(sc.end||v.duration,v.duration),length=Math.max(.01,clipEnd-clipStart);const ratio=Math.max(0,Math.min(.9999,(v.currentTime-clipStart)/length));if(sc.end&&v.currentTime>=clipEnd){v.pause();arenaPlaying=false;$('arenaPlay').textContent='▶ Играть';arenaMarkViewed();}
+ const v=$('arenaVideo'),sc=getArenaScene();if(!v||!v.duration||sc.youtube)return;
+ const start=sc.start||0,end=Math.min(sc.end||v.duration,v.duration),ratio=Math.max(0,Math.min(.9999,(v.currentTime-start)/Math.max(.01,end-start)));
  arenaSetPosition(ratio*1000);
- const phase=Math.min(sc.phases.length-1,Math.floor(ratio*sc.phases.length));
- $('arenaPhaseTitle').textContent=(phase+1)+'/'+sc.phases.length+' · '+sc.phases[phase];
- $('arenaPhaseSteps').innerHTML=sc.phases.map((_,i)=>'<button type="button" class="arena-phase-dot '+(i<=phase?'active':'')+'" data-phase="'+i+'" aria-label="Показать фазу '+(i+1)+'"></button>').join('');
- $('arenaResult').textContent=ratio>=.90?'🏁 Результат: '+sc.outcome:'👀 Смотри до конца, чтобы узнать результат';
- if(ratio>=.90)arenaMarkViewed();
+ const phases=sc.phases?.length?sc.phases:['Начало','Движение','Завершение'],i=Math.min(phases.length-1,Math.floor(ratio*phases.length));
+ $('arenaPhaseTitle').textContent=(i+1)+'/'+phases.length+' · '+phases[i];
+ $('arenaPhaseSteps').innerHTML=phases.map((_,j)=>'<button type="button" class="arena-phase-dot '+(j===i?'active':'')+'" data-phase="'+j+'" aria-label="Этап '+(j+1)+'"></button>').join('');
+ $('arenaResult').textContent=ratio>.89?'🏁 '+sc.outcome:'Смотри движение до конца';
+ if(v.currentTime>=end-.06){v.pause();arenaPlaying=false;$('arenaPlay').textContent='▶ Играть';arenaMarkViewed();}
 }
 function renderArenaPlayer(){
+ if(arenaEndTimer){clearTimeout(arenaEndTimer);arenaEndTimer=null}
  arenaWatchedSeconds=0;arenaLastMediaTime=null;
- const sc=getArenaScene();
- $('arenaTypeBadge').textContent=sc.src.includes('go_behind')?'НОВЫЙ ПРИЁМ':'ВИДЕОУРОК';
- $('arenaOutcomeBadge').textContent=sc.group;
+ const sc=getArenaScene(),external=!!sc.youtube;
+ $('arenaTypeBadge').textContent=external?'🎓 ПОКАЗ ТРЕНЕРА':'🎞 МУЛЬТФИЛЬМ';
+ $('arenaOutcomeBadge').textContent=sc.outcome;
  $('arenaTitle').textContent=sc.title;
- $('arenaDescription').textContent=sc.desc;
- $('arenaTakeaway').textContent='💡 '+sc.tip;
- $('arenaQuestion').innerHTML='<strong>🎯 Проверь себя после просмотра:</strong> '+escapeHTML(sc.quiz)+(sc.options?'<div class="arena-quiz-choices">'+sc.options.map((value,i)=>'<button type="button" class="arena-quiz-option '+(state[kid].arenaUnderstanding?.[sc.id]&&i===sc.answer?'correct':'')+'" data-answer="'+i+'">'+escapeHTML(value)+'</button>').join('')+'</div><p id="arenaQuizFeedback" class="arena-quiz-feedback">'+(state[kid].arenaUnderstanding?.[sc.id]?'🌟 Уже разобрался в этом эпизоде!':'Посмотри эпизод и выбери, что произошло.')+'</p>':'<p class="arena-quiz-feedback">Обсудите ответ вместе — это полезнее, чем просто смотреть видео.</p>');
- $('arenaPlayer').innerHTML='<video id="arenaVideo" playsinline webkit-playsinline preload="metadata" poster="" aria-label="Учебный видеоэпизод '+escapeHTML(sc.title)+'"><source src="'+sc.src+'" type="video/mp4"></video>';
- const v=$('arenaVideo');v.playbackRate=arenaSpeed;
- v.onloadedmetadata=()=>{if(sc.start)v.currentTime=sc.start;arenaPhaseUpdate()};
- v.onplay=()=>{arenaLastMediaTime=v.currentTime};
- v.onseeking=()=>{arenaLastMediaTime=null};
- v.ontimeupdate=()=>{if(!v.paused&&!v.seeking&&arenaLastMediaTime!==null){const step=v.currentTime-arenaLastMediaTime;if(step>0&&step<=1.8)arenaWatchedSeconds+=step;}arenaLastMediaTime=v.currentTime;arenaPhaseUpdate()};
- v.onended=()=>{arenaPlaying=false;$('arenaPlay').textContent='▶ Играть';arenaMarkViewed();arenaPhaseUpdate()};
- v.onerror=()=>{$('arenaPhaseTitle').textContent='Не удалось загрузить видео. Проверьте подключение и обновите приложение.'};
- $('arenaSeek').oninput=e=>{if(v.duration){v.currentTime=(sc.start||0)+(Number(e.target.value)/1000)*(Math.min(sc.end||v.duration,v.duration)-(sc.start||0));arenaPhaseUpdate()}};
- $('arenaPlay').textContent='▶ Играть';$('arenaSpeed').textContent=arenaSpeed+'×';
- $('arenaPhaseTitle').textContent='Шаг 1/'+sc.phases.length+' · '+sc.phases[0];
- $('arenaPhaseSteps').innerHTML=sc.phases.map((_,i)=>'<button type="button" class="arena-phase-dot '+(i===0?'active':'')+'" data-phase="'+i+'" aria-label="Показать фазу '+(i+1)+'"></button>').join('');
- $('arenaResult').textContent='👀 Смотри до конца, чтобы узнать результат';
- arenaSetPosition(0)
+ $('arenaDescription').textContent=sc.desc||'';
+ $('arenaTakeaway').textContent=external?'Посмотрите положение ног и корпуса. Контактные действия только с тренером.':('На что смотреть: '+(sc.tip||'Ноги, руки, корпус и итог движения.'));
+ $('arenaQuestion').innerHTML='';
+ $('arenaLocalControls').hidden=external;
+ $('arenaProfessionalControls').hidden=!external;
+ const phases=sc.phases?.length?sc.phases:['Подготовка','Основное движение','Результат'];
+ $('arenaPhaseTitle').textContent=external?'Наблюдай: '+phases[0]:'1/'+phases.length+' · '+phases[0];
+ $('arenaPhaseSteps').innerHTML=phases.map((_,i)=>'<button type="button" class="arena-phase-dot '+(i===0?'active':'')+'" data-phase="'+i+'" aria-label="Этап '+(i+1)+'"></button>').join('');
+ $('arenaResult').textContent=external?'Полный профессиональный показ в проигрывателе':'🏁 '+sc.outcome;
+ if(external){
+  $('arenaPlayer').innerHTML='<iframe id="arenaProVideo" title="'+escapeHTML(sc.title)+'" src="https://www.youtube-nocookie.com/embed/'+sc.youtube+'?rel=0&playsinline=1" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>';
+  $('arenaOpenSource').href=sc.url;
+ }else{
+  $('arenaPlayer').innerHTML='<video id="arenaVideo" playsinline webkit-playsinline preload="metadata" controls aria-label="Мультфильм: '+escapeHTML(sc.title)+'"><source src="'+sc.src+'" type="video/mp4"></video>';
+  const v=$('arenaVideo');v.playbackRate=arenaSpeed;
+  v.onloadedmetadata=()=>{if(sc.start)v.currentTime=sc.start;arenaPhaseUpdate()};
+  v.onplay=()=>{arenaLastMediaTime=v.currentTime;arenaPlaying=true;$('arenaPlay').textContent='⏸ Пауза'};
+  v.onpause=()=>{arenaPlaying=false;$('arenaPlay').textContent='▶ Играть'};
+  v.onseeking=()=>{arenaLastMediaTime=null};
+  v.ontimeupdate=()=>{if(!v.paused&&!v.seeking&&arenaLastMediaTime!==null){const delta=v.currentTime-arenaLastMediaTime;if(delta>0&&delta<1.8)arenaWatchedSeconds+=delta}arenaLastMediaTime=v.currentTime;arenaPhaseUpdate()};
+  v.onended=()=>{arenaPlaying=false;arenaMarkViewed();arenaPhaseUpdate()};
+  v.onerror=()=>{$('arenaResult').textContent='Не удалось загрузить мультфильм. Попробуй обновить страницу'};
+  $('arenaSeek').oninput=e=>{if(v.duration){v.currentTime=(sc.start||0)+(Number(e.target.value)/1000)*(Math.min(sc.end||v.duration,v.duration)-(sc.start||0));arenaPhaseUpdate()}};
+  $('arenaPlay').textContent='▶ Играть';$('arenaSpeed').textContent=arenaSpeed+'×';arenaSetPosition(0);
+ }
+ updateArenaDirection();
 }
-$('arenaQuestion').addEventListener('click',event=>{
- const btn=event.target.closest('[data-answer]');if(!btn)return;
- const sc=getArenaScene();if(!sc.options)return;
- const chosen=Number(btn.dataset.answer),correct=chosen===sc.answer;
- if(correct){state[kid].arenaUnderstanding??={};state[kid].arenaUnderstanding[sc.id]=true;save();toast('🌟 Ты правильно понял, чем закончился эпизод!')}
- else toast('💛 Посмотри ещё раз, особенно последний кадр');
- $('arenaQuestion').querySelectorAll('[data-answer]').forEach(b=>{
-  b.classList.remove('incorrect');
-  if(correct){b.disabled=true;if(Number(b.dataset.answer)===sc.answer)b.classList.add('correct')}
-  else if(Number(b.dataset.answer)===chosen)b.classList.add('incorrect');
- });
- const feedback=$('arenaQuizFeedback');if(feedback)feedback.textContent=correct?'✅ Верно! '+(sc.quizExplanation||sc.outcome):'Пока нет. Обрати внимание: '+(sc.quizExplanation||sc.outcome)+' Попробуй выбрать ответ ещё раз.';
-});
 function renderArena(){renderArenaCatalog();renderArenaPlayer()}
-$('arenaPhaseSteps').addEventListener('click',event=>{
- const button=event.target.closest('[data-phase]');if(!button)return;
- const v=$('arenaVideo'),sc=getArenaScene();if(!v||!v.duration)return;
- const start=sc.start||0,end=Math.min(sc.end||v.duration,v.duration);
- const idx=Number(button.dataset.phase),num=sc.phases.length;
- v.pause();arenaPlaying=false;$('arenaPlay').textContent='▶ Играть';
- v.currentTime=Math.min(end-.06,start+(idx/num)*(end-start)+.02);
- arenaPhaseUpdate();
-});
 $('arenaSearch').addEventListener('input',e=>{arenaSearchTerm=e.target.value;renderArenaCatalog()});
-$('arenaPlay').onclick=()=>{
- const v=$('arenaVideo');if(!v)return;
- if(v.paused){v.playbackRate=arenaSpeed;v.play().then(()=>{arenaPlaying=true;$('arenaPlay').textContent='⏸ Пауза'}).catch(()=>{arenaPlaying=false})}
- else {v.pause();arenaPlaying=false;$('arenaPlay').textContent='▶ Играть'}
-};
-$('arenaReplay').onclick=()=>{const v=$('arenaVideo');if(!v)return;v.currentTime=getArenaScene().start||0;arenaPhaseUpdate();v.play().then(()=>{arenaPlaying=true;$('arenaPlay').textContent='⏸ Пауза'}).catch(()=>{})};
-$('arenaSpeed').onclick=()=>{const speeds=[0.25,0.5,0.75,1,1.25,1.5];arenaSpeed=speeds[(speeds.indexOf(arenaSpeed)+1)%speeds.length];const v=$('arenaVideo');if(v)v.playbackRate=arenaSpeed;$('arenaSpeed').textContent=arenaSpeed+'×'};
-$('arenaBackStep').onclick=()=>{const v=$('arenaVideo');if(!v)return;v.pause();arenaPlaying=false;v.currentTime=Math.max(getArenaScene().start||0,v.currentTime-.5);$('arenaPlay').textContent='▶ Играть';arenaPhaseUpdate()};
-$('arenaForwardStep').onclick=()=>{const v=$('arenaVideo');if(!v)return;v.pause();arenaPlaying=false;v.currentTime=Math.min(getArenaScene().end||v.duration||0,v.currentTime+.5);$('arenaPlay').textContent='▶ Играть';arenaPhaseUpdate()};
-$('arenaNextFilm').onclick=()=>{arenaIndex=(arenaIndex+1)%arenaScenes.length;arenaPlaying=false;renderArena()};
+$('arenaArrows').addEventListener('change',e=>{arenaShowArrows=e.target.checked;updateArenaDirection()});
+$('arenaPhaseSteps').addEventListener('click',e=>{
+ const target=e.target.closest('[data-phase]');if(!target)return;const sc=getArenaScene();
+ if(sc.youtube){$('arenaPhaseTitle').textContent='Найди в видео: '+sc.phases[Number(target.dataset.phase)];return}
+ const v=$('arenaVideo');if(!v||!v.duration)return;
+ const start=sc.start||0,end=Math.min(sc.end||v.duration,v.duration),num=sc.phases?.length||3;
+ v.pause();v.currentTime=start+Number(target.dataset.phase)/num*(end-start);arenaPhaseUpdate();
+});
+$('arenaPlay').onclick=()=>{const v=$('arenaVideo');if(!v)return;if(v.paused)v.play().catch(()=>{});else v.pause()};
+$('arenaReplay').onclick=()=>{const v=$('arenaVideo');if(!v)return;v.currentTime=getArenaScene().start||0;v.play().catch(()=>{})};
+$('arenaSpeed').onclick=()=>{const speeds=[.25,.5,.75,1,1.25];arenaSpeed=speeds[(speeds.indexOf(arenaSpeed)+1)%speeds.length];const v=$('arenaVideo');if(v)v.playbackRate=arenaSpeed;$('arenaSpeed').textContent=arenaSpeed+'×'};
+$('arenaBackStep').onclick=()=>{const v=$('arenaVideo');if(!v)return;v.pause();v.currentTime=Math.max(getArenaScene().start||0,v.currentTime-.5);arenaPhaseUpdate()};
+$('arenaForwardStep').onclick=()=>{const v=$('arenaVideo');if(!v)return;v.pause();v.currentTime=Math.min(getArenaScene().end||v.duration||0,v.currentTime+.5);arenaPhaseUpdate()};
+$('arenaNextFilm').onclick=()=>{const items=visibleArenaList(),index=items.findIndex(sc=>sc.index===arenaIndex);arenaIndex=items[(index+1)%items.length]?.index??0;renderArena()};
+
 const basicLessons=[['🦶','Стойка борца','Ноги согнуты, руки впереди, тело готово двигаться.','Покажи стойку на 5 секунд.'],['↔️','Шаги и движение','Делай небольшие контролируемые шаги, сохраняя равновесие.','Сыграйте в зеркало.'],['👀','Смотри и замечай','Наблюдай за положением корпуса и ног соперника.','Что изменилось в движении?'],['📏','Дистанция','Чтобы действовать, нужно подходящее расстояние.','Далеко или близко?'],['⚖️','Равновесие','Когда стоишь устойчиво, легче двигаться и реагировать.','Поиграй в цаплю без партнёра.'],['🤼','Атака','Не просто хватай. Найди подходящий момент для знакомого действия.','Какой приём сейчас учит тренер?'],['🛡️','Защита','Защищаться — тоже значит активно бороться.','Какую защиту ты уже знаешь?'],['⬇️','Партер','На ковре важно понимать, где верх, низ и как защищаться.','Чем различаются задачи сверху и снизу?'],['🥇','Баллы','Баллы дают за определённые действия по правилам.','Кто объясняет правила на соревновании?'],['✋','Туше и судья','Туше фиксирует судья. По команде судьи нужно остановиться.','Почему важно слушать судью?'],['🧠','Ошибка — не конец','Даже если пропустил баллы, можно снова принимать хорошие решения.','Скажи: «Борюсь дальше».'],['❤️','Уважение','Соперник — не враг, а партнёр по спортивному испытанию.','Как поблагодарить после схватки?']];
 const lessons=(window.ACADEMY_EXTRA?.lessons||basicLessons.map(x=>({category:'Основы',icon:x[0],title:x[1],description:x[2],question:x[3],practice:x[3]})));
 let abcCategory='Все',abcTerm='';
@@ -465,7 +577,7 @@ renderElement();updateStats();
 $('startupWarning').remove();
 </script><script>
 (function(){
-const APP_VERSION='academy-5-2-20261115';
+const APP_VERSION='academy-arena-6-20261115';
 let lastChecked=0;
 async function check(){
  if(!navigator.onLine||document.visibilityState==='hidden'||Date.now()-lastChecked<120000)return;
